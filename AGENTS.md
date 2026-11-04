@@ -29,10 +29,14 @@
 - Fixed value sets are PostgreSQL enum types with a matching closed type in
   code, not text columns with a CHECK.
 - Web: server-rendered HTML built by typed functions, with no template
-  language and no string formatting for markup. Every page works without
-  JavaScript. A script only improves a form, and the server does the same
-  work when the form is sent. Merchant-facing JSON APIs and webhooks come
-  next to this, not instead of it.
+  language and no string formatting for markup. Avoid JavaScript where
+  possible: our own pages work without it, and a script only improves a
+  form whose work the server also does when the form is sent. Payment
+  provider components (card fields, wallets) need JavaScript and are
+  allowed in checkout; the server still takes the outcome from the
+  provider, never from the browser (decided 2026-11-04: a strict no-JS rule
+  is not possible with PSP card fields). Merchant-facing JSON APIs and
+  webhooks come next to this, not instead of it.
 - Language, checks, test commands: to be decided (see above). Once chosen,
   list the checks here in the order they run. A change is not done until
   they pass clean (0 errors, 0 warnings).
@@ -92,9 +96,14 @@ combinators or nested expressions.
   currencies are never added.
 - One table in code gives each currency's minor-unit exponent. Never
   hardcode "divide by 100". SEA has both 0-decimal (VND) and 2-decimal
-  (SGD, MYR, THB, PHP) currencies. IDR is 2 in ISO 4217 but is used with 0
-  decimals in practice, and PSPs differ on it: record the decision here
-  when it is made.
+  (SGD, MYR, THB, PHP) currencies. IDR uses exponent 0, a deliberate
+  departure from ISO 4217's 2 (decided 2026-11-04: sub-rupiah amounts are
+  not used in practice and Adyen uses 0; exponent 2 would only add amounts
+  we can never charge). Our table follows ISO 4217 everywhere else, and each
+  provider module converts to and from its provider's exponents. An
+  incoming provider amount that is not a whole number in our exponent (e.g.
+  a fee of IDR 1,234.56 from a 2-decimal PSP) is rounded explicitly at
+  import with a named mode, and the remainder is booked.
 - The ledger is double-entry and append-only. Every money movement is one
   journal entry whose lines sum to zero per currency. A correction is a new
   reversing entry, never an update or a delete. Balances are derived from
