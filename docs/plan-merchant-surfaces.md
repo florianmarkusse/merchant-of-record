@@ -43,9 +43,18 @@ the order (§6).
    is the same shape as Stripe Checkout or Paddle.
 3. **Platform plugins.** Shopify or another platform, which call option 2
    underneath.
-4. **Embedded checkout** inside the merchant's site. Not in v1: we have to
-   control the price build-up (tax, duties, shipping) and the seller
-   display, and a redirect does that with far less risk.
+4. **Embedded checkout** inside the merchant's site. Not in v1 (confirmed
+   2026-11-04: v1 is API sessions plus payment links). Later it would be our
+   own address, quote and payment steps in an iframe, so the price build-up
+   (tax, duties, shipping) and the seller line still come from us. It needs
+   JavaScript and a strict `frame-ancestors` policy per merchant domain.
+
+Options 1 and 2 differ only in how the buyer reaches the hosted checkout.
+With the API, the merchant's server creates one session per buyer from its
+cart (with that buyer's `return_url`, and optionally a known email and
+ship-to to prefill). With a payment link, the link is created once and
+shared, and each buyer who opens it gets a fresh session from the link's
+template. From the checkout page onwards both paths are identical.
 
 ## 3. Domain records the surfaces need
 
@@ -69,7 +78,8 @@ Product         { id, merchant_id, ItemData, active }   # optional: ItemData sav
 LineInput       = { product_id, quantity } | { ItemData, quantity }   # what the API accepts
 SoldLine        { ItemData, quantity, product_id? }   # snapshot stored on session and order
 
-PaymentLink     { id, merchant_id, lines: [LineInput], quantity_rule, active }
+PaymentLink     { id, merchant_id, lines: [LineInput], quantity_rule, active,
+                  after_payment_url? }   # one fixed URL for all buyers; else our order page
                 # a saved checkout template; opening it creates a CheckoutSession
 
 CheckoutSession { id, merchant_id, payment_link_id?, lines: [SoldLine], buyer?, ship_to?,

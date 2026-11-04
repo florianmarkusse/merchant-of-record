@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MoR Merchant Surfaces</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column; each figure is a plate with its claim, then short notes. Same system as the architecture page. */
+:root {
+  --bg: #f5f7f9;
+  --surface: #ffffff;
+  --fg: #17202b;
+  --muted: #5a6575;
+  --line: #c3ccd7;
+  --accent: #0c7a68;
+  --accent-bg: #e3f3ef;
+  --ext: #a4522b;
+  --ext-bg: #fbeee6;
+  --warn: #b7791f;
+  --warn-bg: #fdf3df;
+  --merchant: #3b5bab;
+  --merchant-bg: #e8edf9;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #19212a; --fg: #e3e8ee; --muted: #98a3b2; --line: #3a4656;
+    --accent: #43c2aa; --accent-bg: #15302b; --ext: #e58f62; --ext-bg: #33231b;
+    --warn: #e2ad55; --warn-bg: #33291a; --merchant: #8fa8ec; --merchant-bg: #1d2640; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --surface: #19212a; --fg: #e3e8ee; --muted: #98a3b2; --line: #3a4656;
+  --accent: #43c2aa; --accent-bg: #15302b; --ext: #e58f62; --ext-bg: #33231b;
+  --warn: #e2ad55; --warn-bg: #33291a; --merchant: #8fa8ec; --merchant-bg: #1d2640; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+header { display: grid; gap: 10px; max-width: 70ch; }
+.eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(30px, 5vw, 44px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 24px/1.2 var(--display); margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 16px; }
+code { font: 13px var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+section { display: grid; gap: 16px; }
+section > p, section > ul { max-width: 72ch; }
+figure { margin: 0; display: grid; gap: 10px; }
+.plate { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; padding: 12px; }
+.plate svg { display: block; width: 100%; min-width: 820px; height: auto; }
+figcaption { color: var(--muted); font-size: 14px; max-width: 72ch; }
+ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.key { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 12.5px var(--mono); color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+.sw.core { background: var(--accent-bg); border-color: var(--accent); }
+.sw.ours { background: var(--surface); border-color: var(--line); }
+.sw.mer { background: var(--merchant-bg); border-color: var(--merchant); }
+.sw.later { background: var(--surface); border-color: var(--line); border-style: dashed; }
+.ln { width: 28px; height: 0; border-top: 1.6px solid var(--fg); }
+.ln.ev { border-top: 1.6px dashed var(--muted); }
+
+.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.3; }
+.core { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.5; }
+.mod { fill: var(--surface); stroke: var(--accent); stroke-width: 1; stroke-opacity: .55; }
+.mer { fill: var(--merchant-bg); stroke: var(--merchant); stroke-width: 1.3; }
+.ext { fill: var(--ext-bg); stroke: var(--ext); stroke-width: 1.3; }
+.warnbox { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.3; }
+.later { stroke-dasharray: 5 4; }
+.t { fill: var(--fg); font: 600 13px var(--sans); }
+.tb { fill: var(--fg); font: 700 15px var(--display); }
+.s { fill: var(--muted); font: 11px var(--mono); }
+.lab { fill: var(--muted); font: 500 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.alm { fill: var(--muted); font: 11px var(--mono); }
+.alg { fill: var(--accent); font: 500 11px var(--mono); }
+.call { stroke: var(--fg); stroke-width: 1.4; fill: none; }
+.evt { stroke: var(--muted); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+.lead { stroke: var(--muted); stroke-width: 1; fill: none; }
+.ah { fill: var(--fg); } .ahm { fill: var(--muted); }
+.phone { fill: var(--surface); stroke: var(--fg); stroke-width: 1.6; }
+.screenbg { fill: var(--bg); }
+.logo { fill: var(--merchant); }
+.btn { fill: var(--merchant); }
+.btnt { fill: var(--surface); font: 600 13px var(--sans); }
+.row { fill: var(--fg); font: 12.5px var(--sans); }
+.rowb { fill: var(--fg); font: 700 13.5px var(--sans); }
+.num { fill: var(--fg); font: 12.5px var(--mono); }
+.numb { fill: var(--fg); font: 700 13.5px var(--mono); }
+.tiny { fill: var(--muted); font: 10px var(--sans); }
+.rule { stroke: var(--line); stroke-width: 1; }
+.hl { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Merchant of record · design draft · 2026-11-04</div>
+    <h1>Merchant and buyer surfaces</h1>
+    <p class="lede">What merchants and buyers touch, and how each part reaches the core. Drawn from <code>docs/plan-merchant-surfaces.md</code>. The flow stops at the core; payment providers, couriers and the bank are on the architecture page.</p>
+    <div class="key">
+      <span><i class="sw mer"></i>merchant's side</span>
+      <span><i class="sw ours"></i>our pages and API</span>
+      <span><i class="sw core"></i>core</span>
+      <span><i class="sw later"></i>later</span>
+      <span><i class="ln"></i>request</span>
+      <span><i class="ln ev"></i>event or webhook</span>
+    </div>
+  </header>
+
+  <!-- 1. Surfaces -->
+  <section>
+    <h2>1 · Every entry point ends at the same core</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 1070 470" role="img" aria-label="Merchant staff use the dashboard and the merchant's server uses the Merchant API. Buyers arrive through a payment link or the merchant's own site and land on our hosted checkout, then the order page. Plugins call the same API; Shopify is the exception with its own checkout. Every surface calls one core.">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+            <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahm" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+
+          <text class="lab" x="91" y="22" text-anchor="middle">Who</text>
+          <text class="lab" x="315" y="22" text-anchor="middle">How the buyer arrives</text>
+          <text class="lab" x="570" y="22" text-anchor="middle">Our surfaces</text>
+          <text class="lab" x="897" y="22" text-anchor="middle">Core</text>
+
+          <!-- Who -->
+          <rect class="mer" x="16" y="40" width="150" height="50" rx="6"/>
+          <text class="t" x="91" y="62" text-anchor="middle">Merchant staff</text>
+          <text class="s" x="91" y="78" text-anchor="middle">owner · fulfilment</text>
+          <rect class="mer" x="16" y="110" width="150" height="50" rx="6"/>
+          <text class="t" x="91" y="132" text-anchor="middle">Merchant's server</text>
+          <text class="s" x="91" y="148" text-anchor="middle">their shop backend</text>
+          <rect class="box" x="16" y="250" width="150" height="70" rx="6"/>
+          <text class="t" x="91" y="280" text-anchor="middle">Buyer</text>
+          <text class="s" x="91" y="298" text-anchor="middle">phone, SEA country</text>
+
+          <!-- Channels -->
+          <rect class="mer" x="220" y="200" width="190" height="46" rx="6"/>
+          <text class="t" x="315" y="220" text-anchor="middle">Payment link</text>
+          <text class="s" x="315" y="236" text-anchor="middle">shared in social / chat</text>
+          <rect class="mer" x="220" y="260" width="190" height="46" rx="6"/>
+          <text class="t" x="315" y="280" text-anchor="middle">Merchant's own site</text>
+          <text class="s" x="315" y="296" text-anchor="middle">redirects to checkout</text>
+          <rect class="mer later" x="220" y="320" width="190" height="46" rx="6"/>
+          <text class="t" x="315" y="340" text-anchor="middle">Platform plugin</text>
+          <text class="s" x="315" y="356" text-anchor="middle">thin client of our API</text>
+          <rect class="warnbox later" x="220" y="380" width="190" height="46" rx="6"/>
+          <text class="t" x="315" y="400" text-anchor="middle">Shopify</text>
+          <text class="s" x="315" y="416" text-anchor="middle">own checkout: exception</text>
+
+          <path class="call" d="M166 272 C192 272 192 223 218 223" marker-end="url(#a1)"/>
+          <line class="call" x1="166" y1="283" x2="218" y2="283" marker-end="url(#a1)"/>
+          <path class="call later" d="M166 300 C192 300 192 343 218 343" marker-end="url(#a1)"/>
+          <text class="alm" x="178" y="245">opens</text>
+
+          <!-- Surfaces -->
+          <rect class="box" x="470" y="40" width="200" height="50" rx="6"/>
+          <text class="t" x="570" y="62" text-anchor="middle">Dashboard</text>
+          <text class="s" x="570" y="78" text-anchor="middle">Vietnamese · English · 2FA</text>
+          <rect class="box" x="470" y="110" width="200" height="50" rx="6"/>
+          <text class="t" x="570" y="132" text-anchor="middle">Merchant API</text>
+          <text class="s" x="570" y="148" text-anchor="middle">/v1 · Idempotency-Key</text>
+          <rect class="box" x="470" y="172" width="200" height="40" rx="6"/>
+          <text class="t" x="570" y="190" text-anchor="middle">Merchant webhooks</text>
+          <text class="s" x="570" y="205" text-anchor="middle">order_paid · shipment_delivered</text>
+          <rect class="box" x="470" y="250" width="200" height="70" rx="6"/>
+          <text class="t" x="570" y="276" text-anchor="middle">Hosted checkout</text>
+          <text class="s" x="570" y="294" text-anchor="middle">merchant-branded</text>
+          <text class="s" x="570" y="309" text-anchor="middle">server HTML + PSP field</text>
+          <rect class="box" x="470" y="350" width="200" height="50" rx="6"/>
+          <text class="t" x="570" y="372" text-anchor="middle">Order page</text>
+          <text class="s" x="570" y="388" text-anchor="middle">tracking · invoice · returns</text>
+
+          <line class="call" x1="166" y1="65" x2="468" y2="65" marker-end="url(#a1)"/>
+          <text class="alm" x="300" y="58" text-anchor="middle">manages products, links, orders, payouts</text>
+          <line class="call" x1="166" y1="135" x2="468" y2="135" marker-end="url(#a1)"/>
+          <text class="alm" x="300" y="128" text-anchor="middle">creates checkout sessions</text>
+          <path class="evt" d="M470 192 H196 V162" marker-end="url(#m1)"/>
+          <path class="call" d="M410 223 C440 223 440 265 468 265" marker-end="url(#a1)"/>
+          <line class="call" x1="410" y1="285" x2="468" y2="285" marker-end="url(#a1)"/>
+          <line class="call" x1="570" y1="320" x2="570" y2="348" marker-end="url(#a1)"/>
+          <text class="alm" x="580" y="338">paid</text>
+
+          <!-- Core -->
+          <rect class="core" x="740" y="34" width="314" height="410" rx="8"/>
+          <text class="tb" x="897" y="58" text-anchor="middle">Core</text>
+          <rect class="mod" x="756" y="70" width="282" height="34" rx="4"/><text class="t" x="897" y="92" text-anchor="middle">Checkout sessions · quotes</text>
+          <rect class="mod" x="756" y="112" width="282" height="34" rx="4"/><text class="t" x="897" y="134" text-anchor="middle">Line snapshots · restricted-goods screening</text>
+          <rect class="mod" x="756" y="154" width="282" height="34" rx="4"/><text class="t" x="897" y="176" text-anchor="middle">Products · payment links (templates)</text>
+          <rect class="mod" x="756" y="196" width="282" height="34" rx="4"/><text class="t" x="897" y="218" text-anchor="middle">Orders · return policies</text>
+          <rect class="mod" x="756" y="238" width="282" height="34" rx="4"/><text class="t" x="897" y="260" text-anchor="middle">Merchants · users · KYB</text>
+          <rect class="mod" x="756" y="280" width="282" height="34" rx="4"/><text class="t" x="897" y="302" text-anchor="middle">Ledger · balances · statements</text>
+          <rect class="mod" x="756" y="322" width="282" height="34" rx="4"/><text class="t" x="897" y="344" text-anchor="middle">Invoices (our name)</text>
+          <rect class="box later" x="756" y="374" width="282" height="52" rx="4"/>
+          <text class="s" x="897" y="396" text-anchor="middle">PSPs · couriers · landed cost · bank</text>
+          <text class="s" x="897" y="412" text-anchor="middle">see the architecture page</text>
+
+          <line class="call" x1="670" y1="65" x2="738" y2="65" marker-end="url(#a1)"/>
+          <line class="call" x1="670" y1="135" x2="738" y2="135" marker-end="url(#a1)"/>
+          <line class="evt" x1="740" y1="192" x2="672" y2="192" marker-end="url(#m1)"/>
+          <line class="call" x1="670" y1="285" x2="738" y2="285" marker-end="url(#a1)"/>
+          <line class="call" x1="670" y1="375" x2="738" y2="375" marker-end="url(#a1)"/>
+        </svg>
+      </div>
+      <figcaption>A payment link, the merchant's own site and a future plugin all create the same checkout session, so tax, duties, the invoice and the seller identity always come from the core. Adding a channel means writing a small client of the API. Shopify is the one exception, because its own checkout computes tax and owns the order.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 2. Two ways in -->
+  <section>
+    <h2>2 · Two ways to reach the checkout</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 1070 290" role="img" aria-label="Top path: a buyer clicks checkout on the merchant's site, the merchant's server creates one checkout session from its cart, and we return a URL the buyer is redirected to. Bottom path: the merchant creates a payment link once and shares it; each buyer who opens it gets a fresh session from the link's template. Both paths land on the same hosted checkout, then end at the session's return URL with an order_paid webhook, or at the link's after-payment URL or our order page.">
+          <defs>
+            <marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <text class="lab" x="16" y="30">API: one session per buyer, from the merchant's cart</text>
+          <text class="lab" x="16" y="176">Payment link: made once, shared, reused</text>
+
+          <rect class="mer" x="16" y="44" width="170" height="60" rx="6"/>
+          <text class="t" x="101" y="68" text-anchor="middle">Buyer clicks Checkout</text>
+          <text class="s" x="101" y="86" text-anchor="middle">on the merchant's site</text>
+          <rect class="mer" x="216" y="44" width="170" height="60" rx="6"/>
+          <text class="t" x="301" y="68" text-anchor="middle">Merchant's server</text>
+          <text class="s" x="301" y="86" text-anchor="middle">POST checkout_sessions</text>
+          <rect class="box" x="416" y="44" width="170" height="60" rx="6"/>
+          <text class="t" x="501" y="68" text-anchor="middle">We return a URL</text>
+          <text class="s" x="501" y="86" text-anchor="middle">cart → one session</text>
+
+          <rect class="mer" x="16" y="190" width="170" height="60" rx="6"/>
+          <text class="t" x="101" y="214" text-anchor="middle">Merchant creates link</text>
+          <text class="s" x="101" y="232" text-anchor="middle">once: dashboard or API</text>
+          <rect class="mer" x="216" y="190" width="170" height="60" rx="6"/>
+          <text class="t" x="301" y="214" text-anchor="middle">Shares the URL</text>
+          <text class="s" x="301" y="232" text-anchor="middle">Facebook · Zalo · TikTok</text>
+          <rect class="box" x="416" y="190" width="170" height="60" rx="6"/>
+          <text class="t" x="501" y="214" text-anchor="middle">Each buyer opens it</text>
+          <text class="s" x="501" y="232" text-anchor="middle">fresh session per buyer</text>
+
+          <line class="call" x1="186" y1="74" x2="214" y2="74" marker-end="url(#a7)"/>
+          <line class="call" x1="386" y1="74" x2="414" y2="74" marker-end="url(#a7)"/>
+          <line class="call" x1="186" y1="220" x2="214" y2="220" marker-end="url(#a7)"/>
+          <line class="call" x1="386" y1="220" x2="414" y2="220" marker-end="url(#a7)"/>
+
+          <rect class="core" x="640" y="97" width="200" height="100" rx="8"/>
+          <text class="tb" x="740" y="128" text-anchor="middle">Hosted checkout</text>
+          <text class="s" x="740" y="150" text-anchor="middle">address · quote · pay</text>
+          <text class="s" x="740" y="168" text-anchor="middle">identical from here on</text>
+
+          <path class="call" d="M586 74 C615 74 610 128 638 128" marker-end="url(#a7)"/>
+          <text class="alm" x="600" y="66">redirect</text>
+          <path class="call" d="M586 220 C615 220 610 166 638 166" marker-end="url(#a7)"/>
+
+          <rect class="mer" x="880" y="44" width="174" height="60" rx="6"/>
+          <text class="t" x="967" y="68" text-anchor="middle">Session's return_url</text>
+          <text class="s" x="967" y="86" text-anchor="middle">+ order_paid webhook</text>
+          <rect class="mer" x="880" y="190" width="174" height="60" rx="6"/>
+          <text class="t" x="967" y="214" text-anchor="middle">after_payment_url</text>
+          <text class="s" x="967" y="232" text-anchor="middle">or our order page</text>
+
+          <path class="call" d="M840 128 C862 128 858 74 878 74" marker-end="url(#a7)"/>
+          <path class="call" d="M840 166 C862 166 858 220 878 220" marker-end="url(#a7)"/>
+        </svg>
+      </div>
+      <figcaption>Payment links and the API aren't two kinds of checkout. They are two ways to create a checkout session. With the API, the merchant's server turns its cart into one session for one buyer, and can prefill the buyer's email and address. A payment link is a template that makes a new session for every buyer who opens it. Embedded components come later and would add a third way in.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 3. Checkout steps -->
+  <section>
+    <h2>3 · One checkout: what the buyer sees, what the core records</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 1070 340" role="img" aria-label="Six checkout steps. Cart, address, quote, method, pay and order page on top; underneath, what the core stores at each step: the line snapshot and screening, the ship-to and country screening, an immutable quote with rule versions and expiry, the filtered methods, the payment attempt, and finally the order with our invoice and the order_paid webhook.">
+          <defs>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+            <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahm" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <text class="lab" x="16" y="22">Buyer sees</text>
+          <text class="lab" x="16" y="186">Core records</text>
+
+          <rect class="box" x="16"  y="34" width="150" height="90" rx="6"/>
+          <text class="t" x="91" y="60" text-anchor="middle">1 · Cart</text>
+          <text class="s" x="91" y="80" text-anchor="middle">lines, merchant</text>
+          <text class="s" x="91" y="95" text-anchor="middle">name and logo</text>
+          <rect class="box" x="194" y="34" width="150" height="90" rx="6"/>
+          <text class="t" x="269" y="60" text-anchor="middle">2 · Address</text>
+          <text class="s" x="269" y="80" text-anchor="middle">country first,</text>
+          <text class="s" x="269" y="95" text-anchor="middle">form per country</text>
+          <rect class="box" x="372" y="34" width="150" height="90" rx="6"/>
+          <text class="t" x="447" y="60" text-anchor="middle">3 · Quote</text>
+          <text class="s" x="447" y="80" text-anchor="middle">all-in total in</text>
+          <text class="s" x="447" y="95" text-anchor="middle">own currency</text>
+          <text class="s" x="447" y="110" text-anchor="middle">expiry shown</text>
+          <rect class="box" x="550" y="34" width="150" height="90" rx="6"/>
+          <text class="t" x="625" y="60" text-anchor="middle">4 · Method</text>
+          <text class="s" x="625" y="80" text-anchor="middle">card, QR, wallet</text>
+          <text class="s" x="625" y="95" text-anchor="middle">for this country</text>
+          <rect class="box" x="728" y="34" width="150" height="90" rx="6"/>
+          <text class="t" x="803" y="60" text-anchor="middle">5 · Pay</text>
+          <text class="s" x="803" y="80" text-anchor="middle">PSP field, QR</text>
+          <text class="s" x="803" y="95" text-anchor="middle">or app switch</text>
+          <rect class="box" x="906" y="34" width="150" height="90" rx="6"/>
+          <text class="t" x="981" y="60" text-anchor="middle">6 · Order page</text>
+          <text class="s" x="981" y="80" text-anchor="middle">invoice, tracking,</text>
+          <text class="s" x="981" y="95" text-anchor="middle">magic link email</text>
+
+          <line class="call" x1="166" y1="79" x2="192" y2="79" marker-end="url(#a2)"/>
+          <line class="call" x1="344" y1="79" x2="370" y2="79" marker-end="url(#a2)"/>
+          <line class="call" x1="522" y1="79" x2="548" y2="79" marker-end="url(#a2)"/>
+          <line class="call" x1="700" y1="79" x2="726" y2="79" marker-end="url(#a2)"/>
+          <line class="call" x1="878" y1="79" x2="904" y2="79" marker-end="url(#a2)"/>
+
+          <path class="evt" d="M447 34 C447 8 269 8 269 32" marker-end="url(#m2)"/>
+          <text class="alm" x="358" y="16" text-anchor="middle">address changed or quote expired → new quote</text>
+
+          <rect class="core" x="16"  y="198" width="150" height="120" rx="6"/>
+          <text class="s" x="91" y="222" text-anchor="middle">session open</text>
+          <text class="s" x="91" y="240" text-anchor="middle">lines → SoldLine</text>
+          <text class="s" x="91" y="255" text-anchor="middle">snapshot</text>
+          <text class="s" x="91" y="273" text-anchor="middle">customs fields</text>
+          <text class="s" x="91" y="288" text-anchor="middle">validated</text>
+          <rect class="core" x="194" y="198" width="150" height="120" rx="6"/>
+          <text class="s" x="269" y="222" text-anchor="middle">ship_to stored</text>
+          <text class="s" x="269" y="240" text-anchor="middle">screen restricted</text>
+          <text class="s" x="269" y="255" text-anchor="middle">goods for country</text>
+          <text class="s" x="269" y="273" text-anchor="middle">blocked line →</text>
+          <text class="s" x="269" y="288" text-anchor="middle">clear message</text>
+          <rect class="core" x="372" y="198" width="150" height="120" rx="6"/>
+          <text class="s" x="447" y="222" text-anchor="middle">immutable Quote</text>
+          <text class="s" x="447" y="240" text-anchor="middle">tax + duty +</text>
+          <text class="s" x="447" y="255" text-anchor="middle">shipping, FX rate</text>
+          <text class="s" x="447" y="273" text-anchor="middle">rule versions</text>
+          <text class="s" x="447" y="288" text-anchor="middle">valid ~30 min</text>
+          <rect class="core" x="550" y="198" width="150" height="120" rx="6"/>
+          <text class="s" x="625" y="222" text-anchor="middle">methods filtered</text>
+          <text class="s" x="625" y="240" text-anchor="middle">by routing rules</text>
+          <text class="s" x="625" y="255" text-anchor="middle">and capabilities</text>
+          <text class="s" x="625" y="273" text-anchor="middle">(country, amount)</text>
+          <rect class="core" x="728" y="198" width="150" height="120" rx="6"/>
+          <text class="s" x="803" y="222" text-anchor="middle">session paying</text>
+          <text class="s" x="803" y="240" text-anchor="middle">payment attempt</text>
+          <text class="s" x="803" y="255" text-anchor="middle">for exactly this</text>
+          <text class="s" x="803" y="270" text-anchor="middle">quote</text>
+          <text class="s" x="803" y="288" text-anchor="middle">(architecture §3)</text>
+          <rect class="core" x="906" y="198" width="150" height="120" rx="6"/>
+          <text class="s" x="981" y="222" text-anchor="middle">Order paid</text>
+          <text class="s" x="981" y="240" text-anchor="middle">invoice issued</text>
+          <text class="s" x="981" y="255" text-anchor="middle">in our name</text>
+          <text class="s" x="981" y="273" text-anchor="middle">order_paid</text>
+          <text class="s" x="981" y="288" text-anchor="middle">webhook queued</text>
+
+          <line class="evt" x1="91" y1="124" x2="91" y2="196" marker-end="url(#m2)"/>
+          <line class="evt" x1="269" y1="124" x2="269" y2="196" marker-end="url(#m2)"/>
+          <line class="evt" x1="447" y1="124" x2="447" y2="196" marker-end="url(#m2)"/>
+          <line class="evt" x1="625" y1="124" x2="625" y2="196" marker-end="url(#m2)"/>
+          <line class="evt" x1="803" y1="124" x2="803" y2="196" marker-end="url(#m2)"/>
+          <line class="evt" x1="981" y1="124" x2="981" y2="196" marker-end="url(#m2)"/>
+        </svg>
+      </div>
+      <figcaption>Each step is a plain server-rendered form that commits before the next page shows. The buyer pays exactly one stored quote. Changing the address, or letting the quote expire, makes a new quote rather than editing the old one, so the invoice can always be explained from what was stored.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 3. Lines -->
+  <section>
+    <h2>4 · Inline lines, saved products and payment links</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 1070 300" role="img" aria-label="A checkout line arrives inline, as a product reference, or from a payment link template. All three are resolved when the session is created: current data copied, customs fields validated, restricted goods screened. The result is a frozen SoldLine snapshot, or a typed error.">
+          <defs>
+            <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+
+          <rect class="mer" x="16" y="24" width="230" height="62" rx="6"/>
+          <text class="t" x="131" y="48" text-anchor="middle">Inline line</text>
+          <text class="s" x="131" y="68" text-anchor="middle">name · price · customs · qty</text>
+          <rect class="mer" x="16" y="114" width="230" height="62" rx="6"/>
+          <text class="t" x="131" y="138" text-anchor="middle">Product reference</text>
+          <text class="s" x="131" y="158" text-anchor="middle">{ product_id, quantity }</text>
+          <rect class="mer" x="16" y="204" width="230" height="62" rx="6"/>
+          <text class="t" x="131" y="228" text-anchor="middle">Payment link opened</text>
+          <text class="s" x="131" y="248" text-anchor="middle">template: inline or refs</text>
+
+          <rect class="core" x="320" y="114" width="180" height="62" rx="6"/>
+          <text class="t" x="410" y="138" text-anchor="middle">Product (optional)</text>
+          <text class="s" x="410" y="158" text-anchor="middle">same data, saved by id</text>
+
+          <rect class="core" x="580" y="90" width="210" height="110" rx="6"/>
+          <text class="t" x="685" y="116" text-anchor="middle">Resolve at session creation</text>
+          <text class="s" x="685" y="138" text-anchor="middle">copy current data</text>
+          <text class="s" x="685" y="156" text-anchor="middle">validate customs fields</text>
+          <text class="s" x="685" y="174" text-anchor="middle">screen restricted goods</text>
+
+          <rect class="core" x="850" y="90" width="204" height="110" rx="6"/>
+          <text class="t" x="952" y="116" text-anchor="middle">SoldLine (frozen)</text>
+          <text class="s" x="952" y="138" text-anchor="middle">stored on session + order</text>
+          <text class="s" x="952" y="156" text-anchor="middle">used for invoice and</text>
+          <text class="s" x="952" y="174" text-anchor="middle">customs declaration</text>
+
+          <rect class="warnbox" x="580" y="230" width="210" height="50" rx="6"/>
+          <text class="t" x="685" y="252" text-anchor="middle">Typed error</text>
+          <text class="s" x="685" y="269" text-anchor="middle">line_restricted_for_country</text>
+
+          <path class="call" d="M246 55 C420 55 480 120 578 120" marker-end="url(#a3)"/>
+          <line class="call" x1="246" y1="145" x2="318" y2="145" marker-end="url(#a3)"/>
+          <text class="alm" x="282" y="138" text-anchor="middle">looks up</text>
+          <line class="call" x1="500" y1="145" x2="578" y2="145" marker-end="url(#a3)"/>
+          <path class="call" d="M246 235 C420 235 480 172 578 172" marker-end="url(#a3)"/>
+          <line class="call" x1="790" y1="145" x2="848" y2="145" marker-end="url(#a3)"/>
+          <text class="alm" x="819" y="138" text-anchor="middle">ok</text>
+          <line class="call" x1="685" y1="200" x2="685" y2="228" marker-end="url(#a3)"/>
+        </svg>
+      </div>
+      <figcaption>Three ways in, one way out. The merchant chooses between sending everything with each call and saving it once as a product, and a payment link can mix both. Lines that reference a product follow later product edits, while inline lines in a link stay fixed. Either way, what was sold is frozen at checkout and never changes afterwards.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 4. Session states -->
+  <section>
+    <h2>5 · States of a checkout session</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 900 280" role="img" aria-label="A checkout session goes from open to quoted when the buyer enters an address, to paying when a method is chosen, and to completed when payment is captured. A failed payment returns it to quoted. A timeout expires it, and the merchant can cancel it through the API.">
+          <defs>
+            <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <rect class="box" x="20" y="110" width="150" height="40" rx="20"/>
+          <text class="t" x="95" y="135" text-anchor="middle">open</text>
+          <rect class="box" x="220" y="104" width="170" height="52" rx="20"/>
+          <text class="t" x="305" y="126" text-anchor="middle">quoted</text>
+          <text class="s" x="305" y="143" text-anchor="middle">re-quoted on change</text>
+          <rect class="box" x="440" y="110" width="150" height="40" rx="20"/>
+          <text class="t" x="515" y="135" text-anchor="middle">paying</text>
+          <rect class="core" x="680" y="40" width="160" height="40" rx="20"/>
+          <text class="t" x="760" y="65" text-anchor="middle">completed</text>
+          <rect class="box" x="680" y="130" width="160" height="40" rx="20"/>
+          <text class="t" x="760" y="155" text-anchor="middle">expired</text>
+          <rect class="box" x="680" y="210" width="160" height="40" rx="20"/>
+          <text class="t" x="760" y="235" text-anchor="middle">canceled</text>
+
+          <line class="call" x1="170" y1="130" x2="218" y2="130" marker-end="url(#a4)"/>
+          <text class="alm" x="194" y="98" text-anchor="middle">address</text>
+          <line class="call" x1="390" y1="130" x2="438" y2="130" marker-end="url(#a4)"/>
+          <text class="alm" x="414" y="98" text-anchor="middle">method</text>
+          <path class="call" d="M590 122 C630 122 640 60 678 60" marker-end="url(#a4)"/>
+          <text class="alm" x="604" y="72">captured</text>
+          <path class="call" d="M515 110 C515 60 330 60 318 102" marker-end="url(#a4)"/>
+          <text class="alm" x="420" y="52" text-anchor="middle">payment failed → try again</text>
+          <path class="call" d="M305 156 C305 200 600 175 678 152" marker-end="url(#a4)"/>
+          <text class="alm" x="470" y="196" text-anchor="middle">timeout</text>
+          <path class="call" d="M95 150 C95 260 600 260 678 232" marker-end="url(#a4)"/>
+          <text class="alm" x="380" y="262" text-anchor="middle">merchant expires it via API</text>
+        </svg>
+      </div>
+      <figcaption>Expired and canceled sessions send the buyer to the merchant's <code>cancel_url</code>. A completed session forwards to the order page. Timeout and cancel are drawn from one state each, but they apply to every state that isn't finished; a session that is paying waits for the payment attempt to settle first.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 5. Branding -->
+  <section>
+    <h2>6 · Where our name appears</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 1070 440" role="img" aria-label="Mock of the quote step on a phone: the merchant's name and logo at the top, an all-in total in Singapore dollars with goods, GST, duty and shipping, and one small line saying the order is sold and invoiced by us on behalf of the merchant. Beside it, the card statement shows a combined descriptor and the invoice names us as seller.">
+          <rect class="phone" x="40" y="10" width="300" height="420" rx="30"/>
+          <rect class="screenbg" x="54" y="40" width="272" height="372" rx="8"/>
+          <circle class="logo" cx="84" cy="70" r="14"/>
+          <text class="rowb" x="106" y="75">Saigon Ceramics</text>
+          <line class="rule" x1="66" y1="96" x2="314" y2="96"/>
+          <text class="row" x="66" y="120">Ceramic coffee dripper × 2</text>
+          <text class="tiny" x="66" y="137">Ships to Singapore · duties paid</text>
+          <text class="row" x="66" y="170">Goods</text><text class="num" x="314" y="170" text-anchor="end">SGD 48.60</text>
+          <text class="row" x="66" y="194">GST 9%</text><text class="num" x="314" y="194" text-anchor="end">SGD 4.37</text>
+          <text class="row" x="66" y="218">Import duty</text><text class="num" x="314" y="218" text-anchor="end">SGD 0.00</text>
+          <text class="row" x="66" y="242">Shipping</text><text class="num" x="314" y="242" text-anchor="end">SGD 9.50</text>
+          <line class="rule" x1="66" y1="256" x2="314" y2="256"/>
+          <text class="rowb" x="66" y="280">Total</text><text class="numb" x="314" y="280" text-anchor="end">SGD 62.47</text>
+          <text class="tiny" x="66" y="298">Nothing more to pay on delivery · price held until 14:30</text>
+          <rect class="btn" x="66" y="318" width="248" height="40" rx="8"/>
+          <text class="btnt" x="190" y="343" text-anchor="middle">Continue to payment</text>
+          <text class="tiny" x="190" y="388" text-anchor="middle">Sold and invoiced by OURS Pte. Ltd.</text>
+          <text class="tiny" x="190" y="401" text-anchor="middle">on behalf of Saigon Ceramics · Terms</text>
+          <rect class="hl" x="60" y="377" width="260" height="31" rx="5"/>
+
+          <!-- annotations -->
+          <line class="lead" x1="250" y1="70" x2="420" y2="70"/>
+          <text class="t" x="430" y="66">Merchant's name, logo, colour</text>
+          <text class="s" x="430" y="83">carries every buyer page</text>
+          <line class="lead" x1="320" y1="270" x2="420" y2="200"/>
+          <text class="t" x="430" y="190">All-in total, buyer's currency</text>
+          <text class="s" x="430" y="207">priced exclusive, so tax, duty and shipping are added</text>
+          <line class="lead" x1="320" y1="392" x2="420" y2="330"/>
+          <text class="t" x="430" y="320">1 · The one line naming us</text>
+          <text class="s" x="430" y="337">legal seller statement, exact wording per country</text>
+
+          <rect class="box" x="700" y="230" width="350" height="78" rx="6"/>
+          <text class="t" x="716" y="252">2 · Card statement</text>
+          <text class="num" x="716" y="280">04 NOV  OURS*SAIGONCERAMICS</text>
+          <text class="num" x="1036" y="296" text-anchor="end">SGD 62.47</text>
+          <rect class="box" x="700" y="326" width="350" height="78" rx="6"/>
+          <text class="t" x="716" y="348">3 · Invoice</text>
+          <text class="s" x="716" y="370">Seller: OURS Pte. Ltd. (GST reg. no.)</text>
+          <text class="s" x="716" y="388">For goods from Saigon Ceramics</text>
+        </svg>
+      </div>
+      <figcaption>Illustrative figures for an exclusive-priced order to Singapore: USD 36.00 converted to SGD 48.60, GST on the goods, no duty on this item, and shipping added. "OURS" and "Saigon Ceramics" are placeholders. The buyer sees the merchant everywhere. Our name appears in three places: the seller line, the card statement and the invoice. The combined descriptor is there so the buyer recognises the charge and doesn't dispute it.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 6. Support -->
+  <section>
+    <h2>7 · Who answers the buyer</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 1070 230" role="img" aria-label="A buyer question enters one contact route and is sent by topic: product, delivery and returns to the merchant; charges, invoices, tax and payment to us. Disputes and chargebacks arrive from the card network and are always ours.">
+          <defs>
+            <marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <rect class="box" x="16" y="90" width="150" height="50" rx="6"/>
+          <text class="t" x="91" y="112" text-anchor="middle">Buyer question</text>
+          <text class="s" x="91" y="128" text-anchor="middle">from any buyer page</text>
+          <rect class="box" x="240" y="90" width="200" height="50" rx="6"/>
+          <text class="t" x="340" y="112" text-anchor="middle">One contact route</text>
+          <text class="s" x="340" y="128" text-anchor="middle">buyer picks a topic</text>
+          <rect class="mer" x="600" y="20" width="250" height="60" rx="6"/>
+          <text class="t" x="725" y="44" text-anchor="middle">Merchant</text>
+          <text class="s" x="725" y="62" text-anchor="middle">under our response-time and refund policy</text>
+          <rect class="core" x="600" y="150" width="250" height="60" rx="6"/>
+          <text class="t" x="725" y="174" text-anchor="middle">Us</text>
+          <text class="s" x="725" y="192" text-anchor="middle">also own every dispute</text>
+          <rect class="ext" x="910" y="150" width="144" height="60" rx="6"/>
+          <text class="t" x="982" y="174" text-anchor="middle">Card network</text>
+          <text class="s" x="982" y="192" text-anchor="middle">dispute filed</text>
+
+          <line class="call" x1="166" y1="115" x2="238" y2="115" marker-end="url(#a6)"/>
+          <path class="call" d="M440 108 C520 108 520 50 598 50" marker-end="url(#a6)"/>
+          <text class="alm" x="470" y="58">product · delivery · returns</text>
+          <path class="call" d="M440 122 C520 122 520 180 598 180" marker-end="url(#a6)"/>
+          <text class="alm" x="470" y="188">charge · invoice · tax · payment</text>
+          <line class="call" x1="910" y1="180" x2="852" y2="180" marker-end="url(#a6)"/>
+          <text class="alm" x="881" y="172" text-anchor="middle">chargeback</text>
+        </svg>
+      </div>
+      <figcaption>Legally we are the seller, so buyers can always reach us, and the route sends each question to whoever can answer it. Returns follow each merchant's policy (window, destination, conditions), with the consumer-law minimum of the buyer's country as a floor. Return shipping and duty differences, either way, are settled through the merchant's next payout.</figcaption>
+    </figure>
+  </section>
+</main>
