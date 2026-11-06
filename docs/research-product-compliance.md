@@ -22,6 +22,7 @@ The detailed notes with every source are in `docs/research/product-compliance/`:
 | `04-apac-oceania.md` | AU, NZ (deep); JP, KR, TW (medium); CN, IN (light) |
 | `05-materials-ip-row.md` | CITES, fur, hallmarking, sunglasses, heavy metals, counterfeits, courier rules, forced labour; GCC, LatAm, ZA |
 | `06-consumer-law-liability.md` | Withdrawal rights, guarantees and price display per market; product liability; how Global-e splits duties with merchants |
+| `07-keycaps-ceramics-lacquer.md` | Added 2026-11-06 for the candidate merchants: resin keycaps and keyboards, ceramic tableware, lacquerware and wooden goods (short pass) |
 
 **How reliable this is.** The search budget shared between the six
 researchers ran out early (after 4 to 20 searches each). After that the

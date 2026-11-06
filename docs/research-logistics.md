@@ -21,6 +21,7 @@ The detailed findings with every source URL are in `docs/research/logistics/`:
 | `05-regulations-sea.md` | SG, MY, TH, ID, PH, plus VN as origin and as the destination of returns |
 | `06-regulations-apac.md` | CN, HK, TW, JP, KR, IN, AU, NZ |
 | `07-regulations-rest-of-world.md` | US, CA, EU, UK, CH, NO, GCC, BR, MX, CL, CO, ZA, NG |
+| `08-regulations-la-kh-mm.md` | Laos, Cambodia, Myanmar (added 2026-11-06, short pass) |
 
 Source labels used throughout: **[published]** carrier or authority
 document, **[calculator]** public quote tool, **[estimate]** inference or a
@@ -53,6 +54,11 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
    DHL, FedEx or UPS accounts (bring your own account) [published]. They
    sell no VN rates and offer no SEA regional carriers from VN. They only
    become useful once merchants outside VN join.
+   Correction 2026-11-06 (second search): this holds for the Western
+   orchestrators, but VN-based aggregators and resellers do sell carrier
+   rates from VN: ShipX (shipx.asia), EFEX on iChiba's Ship4P, VNPost
+   Logistics, YunExpress Vietnam. They are contract operators, so each
+   would be a courier module, and they belong in the quote round.
 5. **We should own the tax logic and rent only the duty data.** SG GST,
    MY LVG, AU/NZ GST, UK VAT, EU IOSS and NO VOEC are taxes we collect
    ourselves as registered seller. The per-country modules handle these. A
