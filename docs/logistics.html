@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MoR Logistics Research</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Same system as the architecture and surfaces pages: one reading column, plates with a claim, then short notes. */
+:root {
+  --bg: #f5f7f9;
+  --surface: #ffffff;
+  --fg: #17202b;
+  --muted: #5a6575;
+  --line: #c3ccd7;
+  --accent: #0c7a68;
+  --accent-bg: #e3f3ef;
+  --ext: #a4522b;
+  --ext-bg: #fbeee6;
+  --warn: #b7791f;
+  --warn-bg: #fdf3df;
+  --merchant: #3b5bab;
+  --merchant-bg: #e8edf9;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #19212a; --fg: #e3e8ee; --muted: #98a3b2; --line: #3a4656;
+    --accent: #43c2aa; --accent-bg: #15302b; --ext: #e58f62; --ext-bg: #33231b;
+    --warn: #e2ad55; --warn-bg: #33291a; --merchant: #8fa8ec; --merchant-bg: #1d2640; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --surface: #19212a; --fg: #e3e8ee; --muted: #98a3b2; --line: #3a4656;
+  --accent: #43c2aa; --accent-bg: #15302b; --ext: #e58f62; --ext-bg: #33231b;
+  --warn: #e2ad55; --warn-bg: #33291a; --merchant: #8fa8ec; --merchant-bg: #1d2640; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+header { display: grid; gap: 10px; max-width: 72ch; }
+.eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(30px, 5vw, 44px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 24px/1.2 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 700 17px/1.3 var(--display); margin: 0; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 16px; }
+code { font: 13px var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+section { display: grid; gap: 16px; min-width: 0; }
+section > p, section > ul { max-width: 72ch; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.plate { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; padding: 12px; }
+.plate svg { display: block; width: 100%; height: auto; }
+.plate svg.wide { min-width: 820px; }
+figcaption { color: var(--muted); font-size: 14px; max-width: 72ch; }
+ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.key { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 12.5px var(--mono); color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+.sw.core { background: var(--accent-bg); border-color: var(--accent); }
+.sw.ours { background: var(--surface); border-color: var(--line); }
+.sw.mer { background: var(--merchant-bg); border-color: var(--merchant); }
+.sw.ext { background: var(--ext-bg); border-color: var(--ext); }
+.ln { width: 28px; height: 0; border-top: 1.6px solid var(--fg); }
+.ln.ev { border-top: 1.6px dashed var(--muted); }
+
+/* findings */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.card .n { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.card p { font-size: 14px; color: var(--muted); }
+.card b { color: var(--fg); font-weight: 600; }
+
+/* tables */
+.tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; background: var(--bg); }
+td.m, th.m { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+td .sub { display: block; color: var(--muted); font-size: 12.5px; }
+.chip { display: inline-block; font: 500 11px/1 var(--mono); padding: 4px 7px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+.chip.easy { color: var(--accent); background: var(--accent-bg); border-color: var(--accent); }
+.chip.med { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+.chip.hard { color: var(--ext); background: var(--ext-bg); border-color: var(--ext); }
+.chip.no { color: var(--surface); background: var(--ext); border-color: var(--ext); }
+.chip.na { color: var(--muted); background: var(--bg); border-color: var(--line); }
+
+/* market grid */
+.regions { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.region { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; }
+.region h3 { font-size: 15px; }
+.mk { display: grid; grid-template-columns: 44px auto 1fr; gap: 4px 10px; align-items: baseline; font-size: 13px; }
+.mk .cc { font: 600 12.5px var(--mono); }
+.mk .why { color: var(--muted); font-size: 12.5px; }
+
+/* svg classes */
+.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.3; }
+.core { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.5; }
+.mer { fill: var(--merchant-bg); stroke: var(--merchant); stroke-width: 1.3; }
+.ext { fill: var(--ext-bg); stroke: var(--ext); stroke-width: 1.3; }
+.later { stroke-dasharray: 5 4; }
+.t { fill: var(--fg); font: 600 13px var(--sans); }
+.s { fill: var(--muted); font: 11px var(--mono); }
+.lab { fill: var(--muted); font: 500 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.alm { fill: var(--muted); font: 11px var(--mono); }
+.call { stroke: var(--fg); stroke-width: 1.4; fill: none; }
+.evt { stroke: var(--muted); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+.ah { fill: var(--fg); } .ahm { fill: var(--muted); }
+.bar { fill: var(--accent); }
+.bar:hover { fill-opacity: .8; }
+.band { fill: var(--accent); fill-opacity: .28; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; }
+.grid { stroke: var(--line); stroke-width: 1; }
+.axis { fill: var(--muted); font: 11px var(--mono); }
+.rl { fill: var(--fg); font: 12.5px var(--sans); }
+.val { fill: var(--fg); font: 500 12px var(--mono); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 2px; }
+.stat .v { font: 700 26px/1.1 var(--display); }
+.stat .k { color: var(--muted); font-size: 13px; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Merchant of record · research · 2026-11-06</div>
+    <h1>Logistics, customs and returns</h1>
+    <p class="lede">Which couriers can carry parcels from our Vietnamese merchants to buyers in SEA and the rest of the world, what that costs and how fast it is, and what each destination's customs rules ask of us as the seller. Summary of <code>docs/research-logistics.md</code>; every source is in <code>docs/research/logistics/</code>. Nothing here is decided yet, and most prices need sales quotes.</p>
+  </header>
+
+  <section>
+    <h2>What we found</h2>
+    <div class="cards">
+      <div class="card"><span class="n">Reach</span><h3>One integrator reaches about 220 countries</h3><p>DHL Express, FedEx and UPS all ship <b>duty-paid from VN with a REST API</b>. Where a merchant can sell is limited by our tax registrations and product rules, not by couriers.</p></div>
+      <div class="card"><span class="n">Price</span><h3>Express is too expensive for SEA orders</h3><p>A 0.5 kg parcel to SEA costs about <b>US$58–64 at list price</b>, plus 50% fuel (DHL) and a duty-paid fee of about <b>US$23</b>. SEA needs a consolidated line at an estimated US$4–9.</p></div>
+      <div class="card"><span class="n">SEA lines</span><h3>The cheap options from VN have thinned out</h3><p>Ninja Van (2025), DHL eCommerce (2021) and LEX (2026) left VN. What remains (<b>Janio, Boxme, J&T</b>) sells DDP only on contract, with thin API documentation.</p></div>
+      <div class="card"><span class="n">Orchestrators</span><h3>No help from VN today</h3><p>Easyship, EasyPost, Shippo and ShipStation sell no VN rates; they work only on our own DHL, FedEx or UPS accounts. Revisit them when merchants outside VN join.</p></div>
+      <div class="card"><span class="n">Rules</span><h3>Low-value exemptions are closing</h3><p>TH has no de minimis since 2026, the US since 2025 with <b>+12.5% on VN goods</b>, the EU charges €3 per item plus €2, the UK ends its duty relief by 2028 and JP changes its rules in 2028. The duty now falls on <b>us</b>.</p></div>
+      <div class="card"><span class="n">Indonesia</span><h3>On hold until an adviser looks at it</h3><p>A <b>US$100 minimum price per unit</b> for direct cross-border sales, 25% duty plus taxes on apparel (about +45–50% in total), and a representative required above 1,000 parcels a year.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>1 · Recommended setup: two shipping tiers behind one router</h2>
+    <div class="key">
+      <span><i class="sw mer"></i>merchant</span>
+      <span><i class="sw core"></i>our system</span>
+      <span><i class="sw ext"></i>logistics partner</span>
+      <span><i class="sw ours"></i>buyers, hub</span>
+      <span><i class="ln"></i>parcel or request</span>
+      <span><i class="ln ev"></i>event, invoice or return</span>
+    </div>
+    <figure>
+      <div class="plate">
+        <svg class="wide" viewBox="0 0 1070 420" role="img" aria-label="The VN merchant creates a shipment through our system, which quotes duty and tax at checkout, picks a provider per lane and books the label. The parcel goes by first mile to either a SEA cross-border operator for SG, MY, TH and PH, or to one integrator for express and the rest of the world. Tracking events and duty invoices come back to us. Returns under about 40 dollars are refunded without the item; above that they go to a local hub, then monthly back to the merchant in Vietnam or are sold locally.">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+            <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahm" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <text class="lab" x="105" y="22" text-anchor="middle">Origin</text>
+          <text class="lab" x="365" y="22" text-anchor="middle">Us</text>
+          <text class="lab" x="670" y="22" text-anchor="middle">Carriers (RFQ)</text>
+          <text class="lab" x="950" y="22" text-anchor="middle">Buyers</text>
+
+          <rect class="mer" x="20" y="150" width="170" height="60" rx="6"/>
+          <text class="t" x="105" y="175" text-anchor="middle">VN merchant</text>
+          <text class="s" x="105" y="193" text-anchor="middle">packs, prints our label</text>
+
+          <rect class="core" x="250" y="36" width="230" height="124" rx="6"/>
+          <text class="t" x="365" y="60" text-anchor="middle">Checkout and shipments</text>
+          <text class="s" x="365" y="82" text-anchor="middle">tax modules: SG, MY, AU, UK…</text>
+          <text class="s" x="365" y="100" text-anchor="middle">landed-cost API: border duty</text>
+          <text class="s" x="365" y="118" text-anchor="middle">router: provider per lane</text>
+          <text class="s" x="365" y="136" text-anchor="middle">our tax IDs on every parcel</text>
+
+          <rect class="box" x="250" y="222" width="230" height="50" rx="6"/>
+          <text class="t" x="365" y="243" text-anchor="middle">First mile</text>
+          <text class="s" x="365" y="260" text-anchor="middle">operator pickup or GHN</text>
+
+          <rect class="ext" x="560" y="36" width="220" height="74" rx="6"/>
+          <text class="t" x="670" y="58" text-anchor="middle">SEA cross-border operator</text>
+          <text class="s" x="670" y="76" text-anchor="middle">Janio · Boxme · J&amp;T</text>
+          <text class="s" x="670" y="94" text-anchor="middle">~US$4–9 · 3–9 days (est.)</text>
+
+          <rect class="ext" x="560" y="150" width="220" height="74" rx="6"/>
+          <text class="t" x="670" y="172" text-anchor="middle">One integrator</text>
+          <text class="s" x="670" y="190" text-anchor="middle">FedEx or DHL Express</text>
+          <text class="s" x="670" y="208" text-anchor="middle">~US$25–60+ · 1–4 days</text>
+
+          <rect class="box" x="850" y="36" width="200" height="74" rx="6"/>
+          <text class="t" x="950" y="58" text-anchor="middle">SEA buyers</text>
+          <text class="s" x="950" y="76" text-anchor="middle">SG · MY · TH · PH · HK</text>
+          <text class="s" x="950" y="94" text-anchor="middle">ID on hold</text>
+
+          <rect class="box" x="850" y="150" width="200" height="74" rx="6"/>
+          <text class="t" x="950" y="172" text-anchor="middle">Rest of the world</text>
+          <text class="s" x="950" y="190" text-anchor="middle">AU · NZ · UK · EU · US …</text>
+          <text class="s" x="950" y="208" text-anchor="middle">express, duty-paid</text>
+
+          <rect class="box later" x="560" y="318" width="220" height="62" rx="6"/>
+          <text class="t" x="670" y="342" text-anchor="middle">Local return address / hub</text>
+          <text class="s" x="670" y="360" text-anchor="middle">grade · hold · sell locally</text>
+
+          <!-- requests and parcels -->
+          <path class="call" d="M190 168 C220 168 220 110 248 110" marker-end="url(#a1)"/>
+          <text class="alm" x="196" y="100">create</text>
+          <path class="call" d="M190 196 C220 196 220 247 248 247" marker-end="url(#a1)"/>
+          <text class="alm" x="140" y="232">parcel</text>
+          <path class="call" d="M480 238 C520 238 520 80 558 80" marker-end="url(#a1)"/>
+          <path class="call" d="M480 254 C520 254 520 196 558 196" marker-end="url(#a1)"/>
+          <line class="call" x1="480" y1="70" x2="558" y2="62" marker-end="url(#a1)"/>
+          <text class="alm" x="486" y="48">label, DDP</text>
+          <line class="call" x1="780" y1="73" x2="848" y2="73" marker-end="url(#a1)"/>
+          <line class="call" x1="780" y1="187" x2="848" y2="187" marker-end="url(#a1)"/>
+          <path class="call" d="M780 166 C815 166 815 104 848 104" marker-end="url(#a1)"/>
+
+          <!-- events back -->
+          <path class="evt" d="M560 100 C530 100 510 140 482 140" marker-end="url(#m1)"/>
+          <path class="evt" d="M560 210 C520 210 510 150 482 150" marker-end="url(#m1)"/>
+          <text class="alm" x="365" y="182" text-anchor="middle">tracking · duty invoices</text>
+
+          <!-- returns -->
+          <path class="evt" d="M1050 84 C1066 84 1066 350 1020 350 L782 350" marker-end="url(#m1)"/>
+          <text class="alm" x="800" y="300">returns &gt; ~US$40</text>
+          <text class="alm" x="800" y="316">below: refund, no return</text>
+          <path class="evt" d="M560 362 C330 362 105 330 105 212" marker-end="url(#m1)"/>
+          <text class="alm" x="250" y="398">monthly consolidated · duty-free re-import (A31)</text>
+        </svg>
+      </div>
+      <figcaption>Each carrier is one courier module behind the interface in <code>plan-psp-integration.md</code> §6.5. One place picks a provider per lane from origin, destination, weight band and service level. DHL Express has no tracking webhooks, so a poll worker writes the same inbox messages a webhook would. The integrator also covers SEA when the buyer wants express.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>2 · Express list prices: SEA is the cheapest zone and still too expensive</h2>
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 860 410" role="img" aria-label="Horizontal bar chart of UPS Worldwide Express Saver list prices from Vietnam for a 0.5 kilogram parcel, 2025, before discount and fuel: SG, TH and HK 58 dollars; MY, ID and PH 64; CN, JP, KR, TW, AU and NZ 70; India 74; EU, UK and CH 85; US and CA 90; GCC 94; LatAm 100; Africa 111. For comparison, the estimated SEA consolidated economy line costs 4 to 9 dollars.">
+          <g class="grid">
+            <line x1="220" y1="30" x2="220" y2="380"/><line x1="320" y1="30" x2="320" y2="380"/><line x1="420" y1="30" x2="420" y2="380"/><line x1="520" y1="30" x2="520" y2="380"/><line x1="620" y1="30" x2="620" y2="380"/><line x1="720" y1="30" x2="720" y2="380"/><line x1="820" y1="30" x2="820" y2="380"/>
+          </g>
+          <g class="axis" text-anchor="middle">
+            <text x="220" y="398">$0</text><text x="320" y="398">$20</text><text x="420" y="398">$40</text><text x="520" y="398">$60</text><text x="620" y="398">$80</text><text x="720" y="398">$100</text><text x="820" y="398">$120</text>
+          </g>
+          <g text-anchor="end">
+            <text class="rl" x="208" y="51">SG · TH · HK</text>
+            <text class="rl" x="208" y="85">MY · ID · PH</text>
+            <text class="rl" x="208" y="119">E. Asia · AU · NZ</text>
+            <text class="rl" x="208" y="153">India</text>
+            <text class="rl" x="208" y="187">EU · UK · CH</text>
+            <text class="rl" x="208" y="221">US · CA</text>
+            <text class="rl" x="208" y="255">GCC</text>
+            <text class="rl" x="208" y="289">LatAm</text>
+            <text class="rl" x="208" y="323">Africa</text>
+            <text class="rl" x="208" y="363">SEA line (estimate)</text>
+          </g>
+          <!-- 5 px per dollar from x=220 -->
+          <rect class="bar" x="220" y="36" width="290" height="22" rx="4"><title>SG, TH, HK: US$58 list</title></rect>
+          <rect class="bar" x="220" y="70" width="320" height="22" rx="4"><title>MY, ID, PH: US$64 list</title></rect>
+          <rect class="bar" x="220" y="104" width="350" height="22" rx="4"><title>CN, JP, KR, TW, AU, NZ: US$70 list</title></rect>
+          <rect class="bar" x="220" y="138" width="370" height="22" rx="4"><title>India: US$74 list</title></rect>
+          <rect class="bar" x="220" y="172" width="425" height="22" rx="4"><title>EU, UK, CH: US$85 list</title></rect>
+          <rect class="bar" x="220" y="206" width="450" height="22" rx="4"><title>US, CA: US$90 list</title></rect>
+          <rect class="bar" x="220" y="240" width="470" height="22" rx="4"><title>GCC: US$94 list</title></rect>
+          <rect class="bar" x="220" y="274" width="500" height="22" rx="4"><title>LatAm: US$100 list</title></rect>
+          <rect class="bar" x="220" y="308" width="555" height="22" rx="4"><title>Africa: US$111 list</title></rect>
+          <rect class="band" x="240" y="348" width="25" height="22" rx="4"><title>SEA consolidated DDP line: US$4–9 (estimate, needs quotes)</title></rect>
+          <g>
+            <text class="val" x="516" y="51">$58</text>
+            <text class="val" x="546" y="85">$64</text>
+            <text class="val" x="576" y="119">$70</text>
+            <text class="val" x="596" y="153">$74</text>
+            <text class="val" x="651" y="187">$85</text>
+            <text class="val" x="676" y="221">$90</text>
+            <text class="val" x="696" y="255">$94</text>
+            <text class="val" x="726" y="289">$100</text>
+            <text class="val" x="781" y="323">$111</text>
+            <text class="val" x="273" y="363">$4–9</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>UPS Worldwide Express Saver, 0.5 kg, list price before discount, fuel and VAT, from the published 2025 Vietnam guide; expect about +6% for 2026. FedEx International Priority promo rates are somewhat lower (about $47 to SG, $64 to the US). The SEA line is an estimate: no provider publishes VN→SEA rates. On top of the integrator price: fuel, a duty-paid fee of about $23 per shipment, and residential and remote-area surcharges, minus a 30–50% discount we might get at 500 parcels a month. The table for all parcel sizes is in the markdown file.</figcaption>
+    </figure>
+    <div class="stats">
+      <div class="stat"><span class="v">+50%</span><span class="k">DHL VN fuel surcharge, November 2026</span></div>
+      <div class="stat"><span class="v">~US$23</span><span class="k">duty-paid fee per shipment (DHL, UPS)</span></div>
+      <div class="stat"><span class="v">1.5 kg</span><span class="k">billed weight of a 1 kg parcel in a 30×20×10 box</span></div>
+      <div class="stat"><span class="v">8–15 days</span><span class="k">engineering per courier module (estimate)</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Destinations: how hard each one is for us as the seller</h2>
+    <p>For DDP B2C apparel from VN, sold by a foreign merchant of record. "Register" means we charge the tax at checkout and file returns ourselves, usually only above a turnover threshold that counts all merchants together.</p>
+    <div class="key">
+      <span><i class="chip easy">easy</i>clear rules, little or no duty</span>
+      <span><i class="chip med">medium</i>duty, data or registration work</span>
+      <span><i class="chip hard">hard</i>high duty or heavy setup</span>
+      <span><i class="chip no">hold</i>blocked until advice</span>
+    </div>
+    <div class="regions">
+      <div class="region">
+        <h3>Southeast Asia</h3>
+        <div class="mk">
+          <span class="cc">SG</span><span class="chip easy">easy</span><span class="why">9% GST, register above S$100k; no duty</span>
+          <span class="cc">MY</span><span class="chip easy">easy</span><span class="why">10% LVG, register above RM 500k</span>
+          <span class="cc">PH</span><span class="chip med">medium</span><span class="why">free to PHP 10k; under pressure</span>
+          <span class="cc">TH</span><span class="chip med">medium</span><span class="why">duty ~30% + 7% VAT from the first baht</span>
+          <span class="cc">ID</span><span class="chip no">hold</span><span class="why">US$100 minimum per unit; +45–50% landed</span>
+        </div>
+      </div>
+      <div class="region">
+        <h3>East and South Asia</h3>
+        <div class="mk">
+          <span class="cc">HK</span><span class="chip easy">easy</span><span class="why">no duty, no tax</span>
+          <span class="cc">TW</span><span class="chip med">medium</span><span class="why">free to NT$2,000; EZ WAY per buyer</span>
+          <span class="cc">KR</span><span class="chip med">medium</span><span class="why">free to US$150; PCCC mandatory</span>
+          <span class="cc">JP</span><span class="chip med">medium</span><span class="why">knit and leather taxed; we register from 2028</span>
+          <span class="cc">IN</span><span class="chip hard">hard</span><span class="why">no de minimis; 30–45%; KYC</span>
+          <span class="cc">CN</span><span class="chip hard">hard</span><span class="why">needs a Chinese platform, agent and payments</span>
+        </div>
+      </div>
+      <div class="region">
+        <h3>Oceania and Europe</h3>
+        <div class="mk">
+          <span class="cc">AU</span><span class="chip easy">easy</span><span class="why">10% GST, register above A$75k</span>
+          <span class="cc">NZ</span><span class="chip easy">easy</span><span class="why">15% GST, register above NZ$60k</span>
+          <span class="cc">UK</span><span class="chip easy">easy</span><span class="why">VAT ≤ £135 from the first sale; duty from 2028</span>
+          <span class="cc">CH</span><span class="chip easy">easy</span><span class="why">0% duty; courier VAT to CHF 100k</span>
+          <span class="cc">NO</span><span class="chip easy">easy</span><span class="why">VOEC 25%, no representative</span>
+          <span class="cc">EU</span><span class="chip med">medium</span><span class="why">IOSS + €3/item + €2; NL BV much easier</span>
+        </div>
+      </div>
+      <div class="region">
+        <h3>Americas, Gulf, Africa</h3>
+        <div class="mk">
+          <span class="cc">CL</span><span class="chip easy">easy</span><span class="why">19% at checkout, no duty to US$500</span>
+          <span class="cc">CA</span><span class="chip med">medium</span><span class="why">from CAD 20; 17–18% duty</span>
+          <span class="cc">AE SA</span><span class="chip med">medium</span><span class="why">5% duty; VAT registration unclear</span>
+          <span class="cc">US</span><span class="chip hard">hard</span><span class="why">no de minimis; MFN + 12.5% §301; express only</span>
+          <span class="cc">BR</span><span class="chip hard">hard</span><span class="why">0% to US$50 but certification + 17–20% state tax</span>
+          <span class="cc">MX ZA</span><span class="chip hard">hard</span><span class="why">33.5% flat (MX), 40–45% (ZA)</span>
+          <span class="cc">NG</span><span class="chip no">no</span><span class="why">garments on the import prohibition list</span>
+        </div>
+      </div>
+    </div>
+    <p>Suggested order: <b>launch</b> SG, MY, PH, HK, AU, NZ, UK, CH and NO; <b>next</b> TH, TW, KR, JP, CL and CA; the <b>EU</b> once the entity is chosen; the <b>US</b> by express only; ID, BR, IN, CN, MX and ZA <b>after advice or through a partner</b>.</p>
+  </section>
+
+  <section>
+    <h2>4 · Providers checked</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Type</th><th>Providers</th><th>From VN today</th><th>Fit</th></tr></thead>
+        <tbody>
+          <tr><td>Global integrators</td><td>DHL Express, FedEx, UPS</td><td>Yes: DDP, REST API, sandbox</td><td><span class="chip easy">use one</span><span class="sub">express tier and rest of world</span></td></tr>
+          <tr><td>SEA cross-border operators</td><td>Janio, Boxme, J&amp;T International</td><td>Claimed; DDP on contract; J&amp;T not to ID</td><td><span class="chip med">RFQ</span><span class="sub">main SEA economy line</span></td></tr>
+          <tr><td>Exited VN</td><td>Ninja Van, DHL eCommerce, LEX, Flash</td><td>No</td><td><span class="chip na">drop</span><span class="sub">Ninja Van possibly as last mile behind a 4PL</span></td></tr>
+          <tr><td>Postal / e-commerce</td><td>Asendia, YunExpress, VN Post EMS, Cainiao, 4PX, SingPost</td><td>Asendia yes (DDP); EMS duties unpaid; rest unconfirmed</td><td><span class="chip med">RFQ</span><span class="sub">Asendia for EU, UK, US economy and returns</span></td></tr>
+          <tr><td>Orchestrators</td><td>Easyship, EasyPost, Shippo, ShipStation API, AfterShip</td><td>Only with our own carrier accounts</td><td><span class="chip na">later</span><span class="sub">once merchants outside VN join</span></td></tr>
+          <tr><td>VN first mile</td><td>GHN, GHTK, Viettel Post</td><td>Domestic only, good APIs</td><td><span class="chip easy">if needed</span></td></tr>
+          <tr><td>Landed cost</td><td>Easyship T&amp;D, Zonos, Dutify, Avalara</td><td>n/a</td><td><span class="chip easy">Easyship or Zonos</span><span class="sub">without the guarantee: the Zonos guarantee makes Zonos the tax remitter</span></td></tr>
+          <tr><td>Returns</td><td>ZigZag + Janio, ReBound, Asendia e-PAQ Returns, integrator return labels</td><td>Partly</td><td><span class="chip med">RFQ</span><span class="sub">local hub, monthly consolidation</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>5 · Returns: rarely one parcel back to Vietnam</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>When</th><th>What happens</th><th class="m">Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Below ~US$40, or return shipping &gt; 40% of the price</td><td>Refund without return, photo evidence, cap per buyer</td><td class="m">the goods</td></tr>
+          <tr><td>Above the threshold, SEA</td><td>Local return address or hub; grade; monthly consolidated shipment to VN under A31 (duty-free re-import) or local liquidation</td><td class="m">~$4–10 / item (est.)</td></tr>
+          <tr><td>High-value goods; outside SEA</td><td>Integrator return label straight to VN</td><td class="m">~$15–40+ (est.)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>We refund the goods and the tax we collected ourselves (by credit note or an adjustment on the next return). Duty paid at the border may be kept only on voluntary change-of-mind returns where that was disclosed before purchase. A withdrawal in the EU, UK, Norway, Taiwan and probably Korea, and every refund for defective goods, must include duties and tax (corrected 2026-11-06; see the product compliance research).</p>
+  </section>
+
+  <section>
+    <h2>6 · Open before we decide</h2>
+    <ul>
+      <li><b>Quotes in the same week:</b> Janio, Boxme, J&amp;T; DHL, FedEx, UPS Vietnam; Asendia, YunExpress. Ask for rates for the five reference parcels, DDP with duties billed to us, the duty invoice format, our tax IDs on the label, API docs and webhook signing.</li>
+      <li><b>Can we skip the US$23 duty-paid fee</b> on lanes where nothing is collected at the border (SG and MY once registered, AU, NZ, UK, NO, HK)?</li>
+      <li><b>Entity and exporter of record:</b> can an SG or NL entity hold VN export accounts, and whose name goes in the shipper field? A compliance question; do not assume the answer.</li>
+      <li><b>Advisers:</b> ID minimum price and representative; TH duty plan; PH VAT below the threshold; MY per-item test; VN export VAT and re-import VAT; EU entity choice; US importer of record and the Section 301 decision due 2026-11-29; JP registration for 2028.</li>
+      <li><b>Personal data:</b> KR PCCC, ID NIK, IN KYC and CN IDs fall under local privacy laws.</li>
+    </ul>
+  </section>
+</main>

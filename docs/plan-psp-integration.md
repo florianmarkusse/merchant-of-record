@@ -494,6 +494,21 @@ module):
 - **PH:** de minimis PHP 10,000; VAT treatment below it disputed (CAO
   02-2025).
 
+Update 2026-11-06 (research, see `docs/research-logistics.md`; nothing
+decided yet):
+
+- Candidates: Ninja Van stopped VN express on 2025-09-30 and DHL eCommerce
+  left VN in 2021, so both are out as VN-origin carriers. Remaining SEA
+  candidates: Janio, Boxme, J&T International (J&T VN does not list ID).
+  DHL Express, FedEx or UPS cover express and the rest of the world.
+- SG: the S$400 test is per item, on sales value excluding shipping; GST is
+  charged on the price including shipping (IRAS guide, 5th ed.).
+- ID: VAT is 12% on an 11/12 base (11% effective). Apparel, bags and shoes
+  pay 25% duty plus 5% income tax (PMK 4/2025). Permendag 31/2023 (US$100
+  minimum price per unit) may block direct cross-border sales: adviser.
+- PH: CAO 02-2025 is a fee schedule, not a VAT ruling. The statute exempts
+  duties and taxes below PHP 10,000.
+
 Data needed. A courier clears customs but only declares what we send:
 
 - **Product (merchant enters; contract makes the merchant guarantee

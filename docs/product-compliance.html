@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MoR Product Compliance</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Same system as the architecture and surfaces pages: one reading column, plates with a claim, then short notes. */
+:root {
+  --bg: #f5f7f9;
+  --surface: #ffffff;
+  --fg: #17202b;
+  --muted: #5a6575;
+  --line: #c3ccd7;
+  --accent: #0c7a68;
+  --accent-bg: #e3f3ef;
+  --ext: #a4522b;
+  --ext-bg: #fbeee6;
+  --warn: #b7791f;
+  --warn-bg: #fdf3df;
+  --merchant: #3b5bab;
+  --merchant-bg: #e8edf9;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #19212a; --fg: #e3e8ee; --muted: #98a3b2; --line: #3a4656;
+    --accent: #43c2aa; --accent-bg: #15302b; --ext: #e58f62; --ext-bg: #33231b;
+    --warn: #e2ad55; --warn-bg: #33291a; --merchant: #8fa8ec; --merchant-bg: #1d2640; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --surface: #19212a; --fg: #e3e8ee; --muted: #98a3b2; --line: #3a4656;
+  --accent: #43c2aa; --accent-bg: #15302b; --ext: #e58f62; --ext-bg: #33231b;
+  --warn: #e2ad55; --warn-bg: #33291a; --merchant: #8fa8ec; --merchant-bg: #1d2640; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+header { display: grid; gap: 10px; max-width: 72ch; }
+.eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(30px, 5vw, 44px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 24px/1.2 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 700 17px/1.3 var(--display); margin: 0; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 16px; }
+code { font: 13px var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+section { display: grid; gap: 16px; min-width: 0; }
+section > p, section > ul { max-width: 72ch; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.plate { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; padding: 12px; }
+.plate svg { display: block; width: 100%; height: auto; }
+.plate svg.wide { min-width: 820px; }
+figcaption { color: var(--muted); font-size: 14px; max-width: 72ch; }
+ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.key { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 12.5px var(--mono); color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+.sw.core { background: var(--accent-bg); border-color: var(--accent); }
+.sw.ours { background: var(--surface); border-color: var(--line); }
+.sw.mer { background: var(--merchant-bg); border-color: var(--merchant); }
+.sw.ext { background: var(--ext-bg); border-color: var(--ext); }
+.ln { width: 28px; height: 0; border-top: 1.6px solid var(--fg); }
+.ln.ev { border-top: 1.6px dashed var(--muted); }
+
+/* findings */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.card .n { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.card p { font-size: 14px; color: var(--muted); }
+.card b { color: var(--fg); font-weight: 600; }
+
+/* tables */
+.tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; background: var(--bg); }
+td.m, th.m { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+td .sub { display: block; color: var(--muted); font-size: 12.5px; }
+.chip { display: inline-block; font: 500 11px/1 var(--mono); padding: 4px 7px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+.chip.easy { color: var(--accent); background: var(--accent-bg); border-color: var(--accent); }
+.chip.med { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+.chip.hard { color: var(--ext); background: var(--ext-bg); border-color: var(--ext); }
+.chip.no { color: var(--surface); background: var(--ext); border-color: var(--ext); }
+.chip.na { color: var(--muted); background: var(--bg); border-color: var(--line); }
+
+/* market grid */
+.regions { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.region { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; }
+.region h3 { font-size: 15px; }
+.mk { display: grid; grid-template-columns: 44px auto 1fr; gap: 4px 10px; align-items: baseline; font-size: 13px; }
+.mk .cc { font: 600 12.5px var(--mono); }
+.mk .why { color: var(--muted); font-size: 12.5px; }
+
+/* svg classes */
+.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.3; }
+.core { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.5; }
+.mer { fill: var(--merchant-bg); stroke: var(--merchant); stroke-width: 1.3; }
+.ext { fill: var(--ext-bg); stroke: var(--ext); stroke-width: 1.3; }
+.later { stroke-dasharray: 5 4; }
+.t { fill: var(--fg); font: 600 13px var(--sans); }
+.s { fill: var(--muted); font: 11px var(--mono); }
+.lab { fill: var(--muted); font: 500 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.alm { fill: var(--muted); font: 11px var(--mono); }
+.call { stroke: var(--fg); stroke-width: 1.4; fill: none; }
+.evt { stroke: var(--muted); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+.ah { fill: var(--fg); } .ahm { fill: var(--muted); }
+.bar { fill: var(--accent); }
+.bar:hover { fill-opacity: .8; }
+.band { fill: var(--accent); fill-opacity: .28; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; }
+.grid { stroke: var(--line); stroke-width: 1; }
+.axis { fill: var(--muted); font: 11px var(--mono); }
+.rl { fill: var(--fg); font: 12.5px var(--sans); }
+.val { fill: var(--fg); font: 500 12px var(--mono); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 2px; }
+.stat .v { font: 700 26px/1.1 var(--display); }
+.stat .k { color: var(--muted); font-size: 13px; }
+.chip.gate { color: var(--merchant); background: var(--merchant-bg); border-color: var(--merchant); }
+.note { background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 8px; padding: 12px 16px; font-size: 14px; max-width: 80ch; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Merchant of record · research · 2026-11-06</div>
+    <h1>Product rules, consumer law and liability</h1>
+    <p class="lede">What adult apparel, footwear, bags, fashion jewellery and accessories must meet to be sold to consumers in each destination, which return rights the buyer has, and what we are liable for as the seller. Summary of <code>docs/research-product-compliance.md</code>; every source is in <code>docs/research/product-compliance/</code>. Customs, tax and couriers are on the logistics page. Nothing here is decided yet.</p>
+    <p class="note"><b>Reliability.</b> The search budget ran out early, so much of Thailand, Malaysia, Hong Kong, Korea, Taiwan, China, India, the Gulf, Latin America, the US state rules and per-market consumer law is from the researchers' own knowledge and marked UNVERIFIED in the notes. Everything needs counsel before launch.</p>
+  </header>
+
+  <section>
+    <h2>What we found</h2>
+    <div class="cards">
+      <div class="card"><span class="n">Who owes it</span><h3>The duties land on us, not the merchant</h3><p>As seller, and usually importer, we are the party the law reaches: confirmed for AU, PH, SG, the US, Canada and, with a Dutch BV, the EU. The merchant's duties to us are <b>contractual</b>.</p></div>
+      <div class="card"><span class="n">Key decision</span><h3>Who is importer of record</h3><p>If we are, we certify and eFile in the US, are the EU responsible person (Dutch BV) and the <b>strictly liable importer</b> in most markets. If the buyer is, as with Global-e, some of this falls away.</p></div>
+      <div class="card"><span class="n">Returns</span><h3>Keeping duties on returns is unlawful in key markets</h3><p>A withdrawal in the <b>EU, UK, Norway and Taiwan</b> (and probably Korea) refunds everything paid, duties included. Every market requires a full refund for defects.</p></div>
+      <div class="card"><span class="n">Catalogue</span><h3>Gate a few categories at launch</h3><p>Exclude children's clothing, exotic leathers, real fur. Gate <b>sunglasses</b> per market. Jewellery and leather need <b>lab reports</b>. No bare "gold" or "silver".</p></div>
+      <div class="card"><span class="n">Cotton</span><h3>US forced-labour risk</h3><p>Vietnamese garments often use Chinese yarn. Under UFLPA the importer proves cotton origin from <b>bale to garment</b>. The EU follows from 2027-12-14.</p></div>
+      <div class="card"><span class="n">Heaviest markets</span><h3>EU and US need the most setup</h3><p>EU: responsible person, REACH incl. PFAS, producer registrations, withdrawal button. US: <b>CPSC eFiling per variant</b> since 2026-07-08, "imported" on every page, Prop 65, state PFAS bans.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>1 · The importer-of-record choice decides who carries what</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Duty</th><th>We are importer</th><th>Buyer is importer</th></tr></thead>
+        <tbody>
+          <tr><td>US CPSC certificate and eFiling</td><td>We certify and file</td><td>Unclear for a DDP seller; carriers still ask for the data</td></tr>
+          <tr><td>US textile labels, Prop 65</td><td>Ours</td><td>Ours as seller</td></tr>
+          <tr><td>EU responsible person, REACH importer</td><td>Ours with a Dutch BV; not possible with an SG entity</td><td>Unclear; an EU representative per merchant becomes the target</td></tr>
+          <tr><td>Product liability (EU, UK, AU, CH, NO, JP, KR, TW, TH)</td><td><span class="chip hard">strict</span><span class="sub">importer treated as manufacturer</span></td><td><span class="chip med">fallback</span><span class="sub">liable if we cannot name the maker within 1 month (EU) or 30 days (AU)</span></td></tr>
+          <tr><td>Thai and Indonesian label duties</td><td>Ours</td><td>The buyer's, unenforced in practice</td></tr>
+          <tr><td>Canada incident reports and records</td><td>Ours; records "at a Canadian place of business"</td><td>Unclear</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Either way, keep the manufacturer's legal name and address and the batch per SKU, so we can always name the maker in time. Which option to choose is the first question for counsel.</p>
+  </section>
+
+  <section>
+    <h2>2 · Catalogue gating at launch</h2>
+    <div class="key">
+      <span><i class="chip no">exclude</i>not sold at launch</span>
+      <span><i class="chip gate">gate</i>per SKU and market, on documents</span>
+      <span><i class="chip med">evidence</i>allowed with lab report or declaration</span>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Category or attribute</th><th>Rule</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Children's clothing</td><td><span class="chip no">exclude</span></td><td>US third-party testing per SKU; drawstrings, flammability, small parts everywhere</td></tr>
+          <tr><td>Python, crocodile, cobra, coral, giant clam</td><td><span class="chip no">exclude</span></td><td>VN export permit per shipment, EU import permit, US wildlife licence, courier pre-approval</td></tr>
+          <tr><td>Real fur, including trims</td><td><span class="chip no">exclude</span></td><td>California and Israel sale bans; FedEx and UPS restrict it</td></tr>
+          <tr><td>Ivory, tortoiseshell, shark, whale</td><td><span class="chip no">block</span></td><td>Banned nearly everywhere</td></tr>
+          <tr><td>Sunglasses</td><td><span class="chip gate">gate</span></td><td>EU: CE under PPE rules, EN ISO 12312-1. AU: AS/NZS 1067.1. US: FDA device, drop-ball test. No document: block that market</td></tr>
+          <tr><td>"Gold", "silver", "925"</td><td><span class="chip gate">gate</span></td><td>Only with fineness and weight; otherwise "gold-tone" or "plated" (UK Hallmarking Act and others)</td></tr>
+          <tr><td>Jewellery and metal parts</td><td><span class="chip med">lab report</span></td><td>EU nickel, lead, cadmium; California jewellery law; SG names ASTM F2999</td></tr>
+          <tr><td>Leather</td><td><span class="chip med">lab report</span></td><td>EU chromium VI under 3 mg/kg; azo dyes</td></tr>
+          <tr><td>Water-repellent finishes</td><td><span class="chip med">PFAS-free</span></td><td>EU PFHxA from 2026-10-10; FR and DK bans; US state bans</td></tr>
+          <tr><td>Cotton items to the US</td><td><span class="chip med">supply chain</span></td><td>UFLPA: documents on request, cotton origin by tier</td></tr>
+          <tr><td>Third-party brands</td><td><span class="chip gate">proof</span></td><td>As seller and importer we are the direct infringer; card-scheme programmes put our acquiring at risk</td></tr>
+          <tr><td>"Dupe", "replica"; unproven green claims</td><td><span class="chip no">block copy</span></td><td>Trademark use; EU ban on generic green claims from 2026-09-27</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · What each market asks of us</h2>
+    <div class="regions">
+      <div class="region">
+        <h3>SEA and Hong Kong</h3>
+        <div class="mk">
+          <span class="cc">SG</span><span class="chip easy">light</span><span class="why">post-market safety; jewellery to ASTM F2999; all-in prices</span>
+          <span class="cc">MY</span><span class="chip easy">light</span><span class="why">online seller disclosures (identity, total price, delivery)</span>
+          <span class="cc">PH</span><span class="chip med">register</span><span class="why">E-Commerce Bureau; merchant primarily liable</span>
+          <span class="cc">HK</span><span class="chip easy">light</span><span class="why">warnings in English and Chinese</span>
+          <span class="cc">TH</span><span class="chip med">labels</span><span class="why">Thai labels likely; 7-day withdrawal, maybe 14</span>
+          <span class="cc">ID</span><span class="chip no">hold</span><span class="why">US$100 floor; halal for clothing from 2028-10-17</span>
+        </div>
+      </div>
+      <div class="region">
+        <h3>Oceania, UK, CH, NO</h3>
+        <div class="mk">
+          <span class="cc">AU</span><span class="chip med">labels</span><span class="why">care label on apparel; sunglasses standard; injury report in 2 days</span>
+          <span class="cc">NZ</span><span class="chip med">labels</span><span class="why">care, fibre and origin labels, ≥1.5 mm</span>
+          <span class="cc">UK</span><span class="chip easy">light</span><span class="why">14-day cancellation; no UK returns address (packaging EPR)</span>
+          <span class="cc">CH</span><span class="chip easy">light</span><span class="why">EU-like limits; fur declaration</span>
+          <span class="cc">NO</span><span class="chip med">withdrawal</span><span class="why">14 days; up to 5-year defect period</span>
+        </div>
+      </div>
+      <div class="region">
+        <h3>EU, US, Canada</h3>
+        <div class="mk">
+          <span class="cc">EU</span><span class="chip hard">heavy</span><span class="why">responsible person, listing data, REACH and PFAS, EPR, withdrawal button</span>
+          <span class="cc">US</span><span class="chip hard">heavy</span><span class="why">CPSC eFiling, "imported" per page, Prop 65, PFAS, UFLPA</span>
+          <span class="cc">CA</span><span class="chip med">medium</span><span class="why">bilingual labels; records in Canada; incident reports</span>
+        </div>
+      </div>
+      <div class="region">
+        <h3>North Asia</h3>
+        <div class="mk">
+          <span class="cc">JP</span><span class="chip med">grey</span><span class="why">labeler with Japanese address? seller page; counterfeit seizures</span>
+          <span class="cc">KR</span><span class="chip med">withdrawal</span><span class="why">no KC for direct purchase; 7 days; refund in 3 days</span>
+          <span class="cc">TW</span><span class="chip med">withdrawal</span><span class="why">7 days, return at our cost</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · Returns: the minimum the policy must allow</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Market</th><th>Minimum</th><th>Keep duties?</th></tr></thead>
+        <tbody>
+          <tr><td>EU, NO</td><td>14-day withdrawal from delivery; buyer pays postage only if told; refund in 14 days incl. outbound shipping; EU withdrawal button; 2-year defect period (NO up to 5)</td><td><span class="chip hard">no</span></td></tr>
+          <tr><td>UK</td><td>14-day cancellation; 30-day right to reject defects</td><td><span class="chip hard">no</span></td></tr>
+          <tr><td>TW</td><td>7-day withdrawal, we pay the return; collect in 15 days, refund in 15</td><td><span class="chip hard">no</span></td></tr>
+          <tr><td>KR</td><td>7-day withdrawal; 3 months for defects at our cost; refund in 3 business days</td><td><span class="chip hard">likely no</span></td></tr>
+          <tr><td>TH</td><td>Probably 7-day cancellation, refund in 15 days; draft for 14 days</td><td><span class="chip med">assume no</span></td></tr>
+          <tr><td>JP</td><td>Any policy shown on the seller page and final screen; otherwise 8 days at the buyer's cost</td><td><span class="chip easy">yes, if shown</span></td></tr>
+          <tr><td>US, CA, AU, NZ, SG, MY, ID, PH, HK, CH</td><td>No change-of-mind right; post the policy before purchase; full refund for defects</td><td><span class="chip easy">change of mind only</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Refunds without return and local return hubs are lawful everywhere. The SG-or-NL entity choice does not change which consumer law applies: the buyer's home rules apply whenever we target their country.</p>
+  </section>
+
+  <section>
+    <h2>5 · Product data per SKU</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Group</th><th>Fields</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td>Identity</td><td>manufacturer name and address, merchant, model, batch, photo, GTIN</td><td>EU listings, US certificate, liability deadlines, recalls</td></tr>
+          <tr><td>Materials</td><td>fibre % per component, fabric weight and surface, leather type, animal species, real fur, footwear material codes</td><td>labels, US flammability, CITES, fur bans, halal</td></tr>
+          <tr><td>Origin</td><td>country of manufacture, fabric country, work done in VN, cotton origin by tier</td><td>"Made in Vietnam", UFLPA, EU forced labour</td></tr>
+          <tr><td>Labels</td><td>care symbols (ISO, JIS, KS), label photos, local-language label text</td><td>AU, NZ, US, CA, JP, TH</td></tr>
+          <tr><td>Chemicals</td><td>restricted-substances declaration, lab reports per material, PFAS-free, Prop 65 decision</td><td>EU, US states, SG, JP</td></tr>
+          <tr><td>Certificates</td><td>CPSC certificate or disclaim code; sunglasses DoC, AS/NZS and FDA documents</td><td>US entries, sunglasses gating</td></tr>
+          <tr><td>Claims</td><td>brand and relationship with proof; metal fineness and weight; green claim certificate</td><td>IP, hallmarking, green claims</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>From these fields the catalogue computes which markets each SKU may be sold in, the same way the tax modules decide per country: effective-dated rules, with the version applied stored.</p>
+  </section>
+
+  <section>
+    <h2>6 · Liability and the merchant contract</h2>
+    <div class="cols">
+      <div class="card"><span class="n">Global-e's split</span><p>The merchant warrants compliance, labelling, origin and IP, owns product-data errors, indemnifies including product liability, and carries worldwide insurance. <b>Refunds including duties</b> and chargebacks come off payouts. Global-e caps its own liability at 12 months of fees.</p></div>
+      <div class="card"><span class="n">Our additions</span><p>Arbitration in Singapore (enforceable in VN); a <b>5–10% rolling reserve</b> for 90–180 days; merchant cover of at least US$1m with us as additional insured, or a master policy; traceability answers within 5 business days; indemnity surviving 10 years.</p></div>
+      <div class="card"><span class="n">What we do ourselves</span><p>The consumer contract and all statutory remedies, merchant identity checks, category gating, lab reports, counterfeit screening, recall monitoring, incident deadlines (AU 2 days, CA 2 and 10 days), and our own product liability policy (US$1–2m, estimate only).</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>7 · Open questions for counsel</h2>
+    <ul>
+      <li><b>Importer of record</b> in the US, CA, EU and AU: us, or the buyer as with Global-e?</li>
+      <li><b>EU:</b> Dutch BV as responsible person; whether returns count as "unsold" under the destruction ban; bags under textile EPR.</li>
+      <li><b>JP:</b> does the labelling act reach a foreign seller with a Japanese storefront, and who can be labeler?</li>
+      <li><b>TH:</b> Thai labels and who is importer on a DDP parcel; direct-marketing registration; the 14-day draft.</li>
+      <li><b>US:</b> Prop 65 employee count for a foreign company; state PFAS dates; CPSC enforcement on express parcels.</li>
+      <li><b>CA, KR, ID:</b> records in Canada; whether Korean withdrawals include duties; Indonesian halal date for leather goods.</li>
+      <li><b>Insurance:</b> broker quotes for our policy and a merchant master policy.</li>
+    </ul>
+  </section>
+</main>
