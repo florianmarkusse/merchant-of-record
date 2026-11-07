@@ -2,7 +2,7 @@ provider,name,kind,website,relationship,notes
 dhl_express,DHL Express,integrator,https://mydhl.express.dhl/vn/en,rfq_sent,first-carrier candidate (plan-logistics.md §2)
 fedex,FedEx,integrator,https://www.fedex.com/en-vn,account_planned,first-carrier candidate; HMAC-signed webhooks
 ups,UPS,integrator,https://www.ups.com/vn,account_planned,complete published VN rate guide
-asendia,Asendia,economy_postal,https://vn.asendia.com/homepage,rfq_planned,"e-PAQ, DDP and DAP, best returns product"
+asendia,Asendia,economy_postal,https://vn.asendia.com/homepage,rfq_sent,"e-PAQ, DDP and DAP, best returns product"
 yunexpress_vn,YunExpress Vietnam (VIO Shipping),economy_postal,,rfq_planned,"VN-origin lines claimed, no public rates"
 janio,Janio,sea_line,https://janio.asia,rfq_sent,SG 4PL; VN as origin unverified
 boxme,Boxme,sea_line,https://boxme.asia,rfq_sent,VN-HQ; DDP 'upon agreement'
