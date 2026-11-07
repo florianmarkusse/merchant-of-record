@@ -1,12 +1,12 @@
 provider,name,kind,website,relationship,notes
-dhl_express,DHL Express,integrator,https://mydhl.express.dhl/vn/en,rfq_planned,first-carrier candidate (plan-logistics.md §2)
-fedex,FedEx,integrator,https://www.fedex.com/en-vn,rfq_planned,first-carrier candidate; HMAC-signed webhooks
-ups,UPS,integrator,https://www.ups.com/vn,rfq_planned,complete published VN rate guide
+dhl_express,DHL Express,integrator,https://mydhl.express.dhl/vn/en,rfq_sent,first-carrier candidate (plan-logistics.md §2)
+fedex,FedEx,integrator,https://www.fedex.com/en-vn,account_planned,first-carrier candidate; HMAC-signed webhooks
+ups,UPS,integrator,https://www.ups.com/vn,account_planned,complete published VN rate guide
 asendia,Asendia,economy_postal,https://vn.asendia.com/homepage,rfq_planned,"e-PAQ, DDP and DAP, best returns product"
 yunexpress_vn,YunExpress Vietnam (VIO Shipping),economy_postal,,rfq_planned,"VN-origin lines claimed, no public rates"
-janio,Janio,sea_line,https://janio.asia,rfq_planned,SG 4PL; VN as origin unverified
+janio,Janio,sea_line,https://janio.asia,rfq_sent,SG 4PL; VN as origin unverified
 boxme,Boxme,sea_line,https://boxme.asia,rfq_planned,VN-HQ; DDP 'upon agreement'
-jt_intl,J&T Express VN International,sea_line,,rfq_planned,"SG, MY, TH, PH; not ID"
+jt_intl,J&T Express VN International,sea_line,https://www.jtexpress.vn,rfq_sent,VN entity Thuan Phong; international express to ~225 destinations incl. ID (2024 card); duties unpaid; contact@jet-logistics.com
 vnpost,Vietnam Post (EMS),postal,,none,duties unpaid; no international API
 aramex,Aramex (VN agent),integrator,,none,"later, GCC last mile"
 shipx,ShipX (shipx.asia),aggregator,https://shipx.asia,none,VN aggregator reselling carrier rates; add to the quote round
