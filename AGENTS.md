@@ -14,10 +14,14 @@
   their decisions go in `docs/plan-*.md`.
 - Decided so far (2026-11-03): PostgreSQL, data-oriented code, server-rendered
   HTML, message-oriented design from the start (see Messaging).
-- Not decided yet: the programming language and everything that follows from
-  it (package manager, web layer, checks, test runner). Do not pick one
-  implicitly by scaffolding code. When the first feature needs it, propose
-  the choice and record it here under Chosen Stack with its date.
+- Language: Python with strict static type checking (decided 2026-11-05:
+  the team is fast in it, its libraries cover PSP crypto, JWE, PDF and
+  PostgreSQL, and pyright strict checks closed sets and exhaustive `match`.
+  C was ruled out because an internet-facing payment service parses
+  untrusted input all day and would need its HTTP, JSON, JWT and HTML
+  layers built or vetted by hand. Rust stays the alternative if Python's
+  lack of runtime type checks ever becomes the bottleneck). See Chosen
+  Stack.
 
 ### Chosen Stack
 
@@ -37,9 +41,31 @@
   provider, never from the browser (decided 2026-11-04: a strict no-JS rule
   is not possible with PSP card fields). Merchant-facing JSON APIs and
   webhooks come next to this, not instead of it.
-- Language, checks, test commands: to be decided (see above). Once chosen,
-  list the checks here in the order they run. A change is not done until
-  they pass clean (0 errors, 0 warnings).
+- Language: Python 3.14, packages and lock file managed with `uv`
+  (decided 2026-11-05, see Project Rules).
+- Libraries (decided 2026-11-05):
+  - Web: Starlette with plain handlers; the request is an argument, never
+    hidden global state. HTML: htpy (typed functions, escaped by default).
+  - Database: psycopg 3 with hand-written SQL, rows read into frozen
+    dataclasses. Migrations are run by a small runner of our own.
+  - Parsing at the edges: msgspec. Every input (API body, webhook, form,
+    settlement file) is decoded into a typed, frozen record at the edge
+    before anything else sees it, because Python does not check types at
+    runtime.
+  - Outgoing HTTP: httpx. Crypto: `cryptography` and joserfc (HMAC,
+    JWT/JWE). Invoices as PDF: WeasyPrint, from the same HTML functions.
+  - Money: `int` minor units with a currency enum; exact rates as
+    `fractions.Fraction`. Never `float` or `Decimal` for amounts.
+- Records are frozen dataclasses or msgspec structs, closed sets are
+  `StrEnum` or `Literal`, results are unions of records matched with
+  `match` and `assert_never` for exhaustiveness.
+- Checks, in the order they run:
+  1. `uv run ruff format --check`
+  2. `uv run ruff check`
+  3. `uv run pyright` (strict mode)
+  4. `uv run pytest`
+
+  A change is not done until they pass clean (0 errors, 0 warnings).
 
 ### Do Not Touch
 
