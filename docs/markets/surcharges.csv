@@ -64,3 +64,12 @@ jt_intl,document_correction,per_shipment,,333000,,VND,,verified,"J&T Express VN 
 jt_intl,invoice_print,per_shipment,,50000,,VND,,verified,"J&T Express VN international express rate card JTF/JTG/JTL2024, sources/jt_intl/664196dba695b677401074.pdf p. 7",,sources/jt_intl/README.md,2026-11-07,,
 jt_intl,insurance,percent_of_value,1.5,,315000,VND,optional,verified,"J&T Express VN international express rate card JTF/JTG/JTL2024, sources/jt_intl/664196dba695b677401074.pdf p. 7",,sources/jt_intl/README.md,2026-11-07,,
 jt_intl,fuel,percent_of_freight,,,,VND,,to_fetch,"J&T rate card: updated monthly, not published in it",,sources/jt_intl/README.md,2026-11-07,q06,
+yunexpress_vn,fuel,percent_of_freight,0,,,VND,,verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,included in the rates
+yunexpress_vn,eu_customs_fee,per_line,,500,,EUR,"EU-27 parcels, per distinct 6-digit HS code; from 2026-11-01",verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,"EUR 3 duty + EUR 2 handling; not for UK, CH, NO, IL"
+yunexpress_vn,remote_area_uk,per_shipment,,37000,,VND,UK remote areas,verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,
+yunexpress_vn,remote_area_se,per_shipment,,300000,,VND,Sweden remote areas,verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,
+yunexpress_vn,irregular_shape,per_piece,,530000,,VND,,verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,
+yunexpress_vn,third_party_ioss_vat_fee,percent_of_duties,2,,,VND,only if our IOSS is invalid and VIO uses its own,verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,full VAT plus 2% of the VAT
+yunexpress_vn,pickup,per_shipment,,50000,,VND,pickup under 5 kg and under 10 orders; free pickup only in Da Nang and Hanoi,verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,
+yunexpress_vn_us_saver,fuel,percent_of_freight,0,,,VND,,verified,VIO ePacket terms,https://www.vioepacket.com/en/routes,sources/yunexpress_vn/README.md,2026-11-07,,included in the rates
+yunexpress_vn_extra,fuel,percent_of_freight,,,,VND,,to_fetch,VIO ePacket terms,https://www.vioepacket.com/en/epacket-extra,sources/yunexpress_vn/README.md,2026-11-07,q08,not stated for Extra

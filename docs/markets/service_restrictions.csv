@@ -4,3 +4,5 @@ fedex_ficp,keycaps,allowed,secondary,research/logistics/02-global-carriers.md §
 dhl_ew,ceramics,unknown,to_fetch,,2026-11-06,fragile goods: packaging rules and liability limits
 fedex_ip,ceramics,unknown,to_fetch,,2026-11-06,fragile goods: packaging rules and liability limits
 ups_saver,ceramics,unknown,to_fetch,,2026-11-06,fragile goods: packaging rules and liability limits
+yunexpress_vn_us_saver,wood,prohibited,verified,sources/yunexpress_vn/README.md,2026-11-07,US-Saver refuses raw wood or wood-containing products
+yunexpress_vn_us_saver,lacquerware,prohibited,verified,sources/yunexpress_vn/README.md,2026-11-07,US-Saver refuses raw wood or wood-containing products
