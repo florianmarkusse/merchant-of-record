@@ -10,6 +10,10 @@ rest of the world, DDP sales, low volume at the start (about 500 parcels a
 month, growing to 5k–50k). Goal: a merchant can use our integration alone
 and still reach all of its customers.
 
+The same findings as tables (one row per fact, with source and status) are in
+`docs/markets/`, viewed through `docs/markets.html`; see
+`docs/plan-markets-data.md`.
+
 The detailed findings with every source URL are in `docs/research/logistics/`:
 
 | File | Covers |

@@ -1,0 +1,7 @@
+category,label,hs_hint,notes
+apparel,Apparel and knitwear,"HS 61 (knit), 62 (woven)",JP and others treat knitwear differently from woven: say so in the fact
+leather_footwear,Leather shoes,HS 6403,
+ceramics,Ceramics (tableware and decorative),HS 6911-6913,say in the fact whether it is about food-contact pieces
+keycaps,Keycaps and wired keyboards,HS 8473.30 or 3926 (disputed),boards with batteries or radios are excluded at launch
+lacquerware,Lacquerware (son mai),"HS 4420, 9602 or by base material",
+wood,Wooden and bamboo goods,"HS 44, 46",

@@ -1,0 +1,28 @@
+topic,group,label,description
+ease,summary,Ease (research rating),"How hard the market is for us as foreign MoR selling DDP from VN, per the research"
+market_access,summary,Market access blockers,Rules that block or limit selling there at all
+duty_free_limit,customs,Duty-free limit,Border de minimis for customs duty
+tax_free_limit,customs,Import tax-free limit,Border de minimis for import VAT/GST
+threshold_basis,customs,How limits are tested,Per item or consignment; CIF or FOB; shipping in or out; all-or-nothing
+import_tax,customs,Import VAT/GST rate,
+duty_rate,customs,Duty rate (indicative),MFN unless stated; per category where known; check per HS line before launch
+other_charges,customs,Other border charges,"Flat duties, handling fees, surtaxes"
+fta_origin,customs,Preference for origin goods,FTA preference for goods of the origin country; only for goods truly made there
+entry_limits,customs,Courier entry limits,"Value bands for simplified, informal and formal entry"
+upcoming_changes,customs,Announced or pending changes,
+seller_scheme,registration,Seller collection scheme,A scheme where the seller charges the tax at checkout
+registration_threshold,registration,When we must register,Turnover is summed across all our merchants
+tax_id_on_shipment,registration,Our tax ID on the shipment,What must travel with the parcel to avoid a second tax at the border
+local_presence,registration,Local representative or importer,"Representative, agent, fiscal representative or local importer needed"
+buyer_data,shipping,Buyer data required,IDs or confirmations the buyer must give
+prohibited,shipping,Prohibited or restricted goods,
+sanctions,shipping,Sanctions,
+product_rules,product,Product safety and chemical rules,
+labelling,product,Labelling and language,
+product_safety_rep,product,Responsible person,A local operator responsible for product safety
+epr,product,Producer registrations (EPR),"Packaging, textile and other producer responsibility"
+seller_duties,consumer,Seller duties,"Disclosure, registration, price display, incident reporting"
+withdrawal_right,consumer,Change-of-mind withdrawal,Statutory right to return without a reason
+duties_on_refund,consumer,Refund must include duties?,Whether a refund must include duties and tax the buyer paid
+defect_remedy,consumer,Legal guarantee for defects,
+returns_relief,consumer,Tax or duty back on returns,How tax or duty is recovered when goods come back

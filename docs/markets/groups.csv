@@ -1,0 +1,13 @@
+group,label,kind,members
+EU,European Union,legal,AT BE BG CY CZ DE DK EE ES FI FR GR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK
+ASEAN,"ASEAN members (Timor-Leste admitted 2025; its ATIGA status not checked, so not listed)",legal,BN ID KH LA MM MY PH SG TH VN
+GCC,Gulf Cooperation Council,legal,AE BH KW OM QA SA
+SEA,Research region: South-East Asia,region,BN ID KH LA MM MY PH SG TH TL VN
+EAST_ASIA,Research region: East Asia,region,CN HK JP KR MN MO TW
+SOUTH_ASIA,Research region: South Asia,region,AF BD BT IN IR LK MV NP PK
+OCEANIA,Research region: Oceania,region,AS AU CC CK CX FJ FM GU HM KI MH MP NC NF NR NU NZ PF PG PN PW SB TK TO TV UM VU WF WS
+NORTH_AMERICA,"Research region: US, CA (MX is in LATAM)",region,CA US
+EUROPE,Research region: Europe,region,AD AL AT AX BA BE BG BY CH CZ DE DK EE ES FI FO FR GB GG GI GR HR HU IE IM IS IT JE LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS RU SE SI SJ SK SM UA VA
+MIDDLE_EAST,Research region: Western Asia,region,AE AM AZ BH CY GE IL IQ JO KW LB OM PS QA SA SY TR YE
+LATAM,Research region: Latin America and the Caribbean,region,AG AI AR AW BB BL BO BQ BR BS BV BZ CL CO CR CU CW DM DO EC FK GD GF GP GS GT GY HN HT JM KN KY LC MF MQ MS MX NI PA PE PR PY SR SV SX TC TT UY VC VE VG VI
+AFRICA,Research region: Africa,region,AO BF BI BJ BW CD CF CG CI CM CV DJ DZ EG EH ER ET GA GH GM GN GQ GW IO KE KM LR LS LY MA MG ML MR MU MW MZ NA NE NG RE RW SC SD SH SL SN SO SS ST SZ TD TF TG TN TZ UG YT ZA ZM ZW

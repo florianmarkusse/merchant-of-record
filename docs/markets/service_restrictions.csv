@@ -1,0 +1,6 @@
+service,category,rule,status,research_ref,checked_on,notes
+dhl_ew,apparel,allowed,secondary,research/logistics/02-global-carriers.md §3.1,2026-11-06,apparel and accessories unrestricted; watch exotic leathers (CITES) and brand-name goods
+fedex_ficp,keycaps,allowed,secondary,research/logistics/02-global-carriers.md §3.2; research/product-compliance/07-keycaps-ceramics-lacquer.md,2026-11-06,no dangerous goods on FICP: wired only; boards with lithium batteries (UN3481) excluded
+dhl_ew,ceramics,unknown,to_fetch,,2026-11-06,fragile goods: packaging rules and liability limits
+fedex_ip,ceramics,unknown,to_fetch,,2026-11-06,fragile goods: packaging rules and liability limits
+ups_saver,ceramics,unknown,to_fetch,,2026-11-06,fragile goods: packaging rules and liability limits

@@ -23,3 +23,6 @@ logs/
 .ai/handoff-*
 
 # Language-specific entries are added when the language is chosen.
+
+# Generated markets workbook (docs/markets/out/), upload to Drive instead
+docs/markets/out/
