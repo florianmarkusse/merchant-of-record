@@ -53,3 +53,8 @@ sea_line_estimate,TH,4,7,estimate,research estimate for a consolidated air DDP l
 sea_line_estimate,PH,5,8,estimate,research estimate for a consolidated air DDP line,research/logistics/01-sea-carriers.md §4,2026-11-06,
 sea_line_estimate,ID,5,9,estimate,research estimate for a consolidated air DDP line,research/logistics/01-sea-carriers.md §4,2026-11-06,ID outer islands +3-7
 yunexpress_vn,US,7,12,secondary,advertised,plan-logistics.md §4,2026-11-06,"also UK, EU, AU, JP, KR"
+fedex_ie,SEA,2,5,secondary,FedEx VN IE page: typically 2-5 business days to major markets,sources/fedex/README.md,2026-11-07,per-lane times from FedEx Customer Service
+fedex_ie,EAST_ASIA,2,5,secondary,FedEx VN IE page: typically 2-5 business days to major markets,sources/fedex/README.md,2026-11-07,per-lane times from FedEx Customer Service
+fedex_ie,OCEANIA,2,5,secondary,FedEx VN IE page: typically 2-5 business days to major markets,sources/fedex/README.md,2026-11-07,per-lane times from FedEx Customer Service
+fedex_ie,NORTH_AMERICA,2,5,secondary,FedEx VN IE page: typically 2-5 business days to major markets,sources/fedex/README.md,2026-11-07,per-lane times from FedEx Customer Service
+fedex_ie,EUROPE,2,5,secondary,FedEx VN IE page: typically 2-5 business days to major markets,sources/fedex/README.md,2026-11-07,per-lane times from FedEx Customer Service
