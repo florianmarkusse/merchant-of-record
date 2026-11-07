@@ -29,7 +29,7 @@ q27,adviser,Counsel (cross-market),Importer of record,"Should we be importer of 
 q28,fetch,,DHL Express VN Service & Rate Guide 2026,"Find the PDF again, record its URL, and replace the converted USD figures with the original VND for 0.5-20 kg; capture the demand surcharge per kg",answered,,2026-11-07,"Guide saved in sources/dhl_express/; zones, VND rates and surcharges loaded",plan-logistics.md §4
 q29,fetch,,FedEx VN 2026 rate PDFs,Open fedex-rates-exp/ficp/box-en-vn-2026.pdf in a browser (automated fetch is blocked) and record the IP and FICP rates by weight and the zone index,draft,,,,research/logistics/02-global-carriers.md §2a
 q30,fetch,,Norway VOEC registration threshold,"Confirm NOK 50,000 on skatteetaten.no and the 2026-07-01 postal changes on toll.no",draft,,,,research/logistics/07-regulations-rest-of-world.md §6
-q31,fetch,,UPS VN 2026 rate guide,Download the 2026 guide (effective 2025-12-21) and replace the 2025 rates,draft,,,,research/logistics/02-global-carriers.md
+q31,fetch,,UPS VN 2026 rate guide,Download the 2026 guide (effective 2025-12-21) and replace the 2025 rates,answered,,2026-11-07,"2026 guide saved in sources/ups/; Saver and Expedited zones, rates and surcharges loaded",research/logistics/02-global-carriers.md
 q32,fetch,,Taiwan de minimis reform,"Check whether the MOF changed the NT$2,000 / 6-per-half-year rule",draft,,,,research/logistics/06-regulations-apac.md §3
 q33,fetch,,Colombia courier regime,Confirm Decreto 1474/2025 and the IVA-free cap,draft,,,,research/logistics/07-regulations-rest-of-world.md §8.4
 q34,fetch,,Brazil above US$50,"Confirm the federal rate for US$50.01-3,000 under the 2026 law (60% with US$30 deduction or 30%)",draft,,,,research/logistics/07-regulations-rest-of-world.md §8.1
