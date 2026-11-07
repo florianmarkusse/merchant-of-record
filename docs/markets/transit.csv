@@ -293,3 +293,4 @@ yunexpress_vn_extra,YT,9,26,secondary,VIO ePacket Extra (group range),sources/yu
 yunexpress_vn_extra,ZA,212,20,secondary,VIO ePacket Extra (group range),sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
 yunexpress_vn_extra,ZM,9,26,secondary,VIO ePacket Extra (group range),sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
 yunexpress_vn_extra,ZW,112,26,secondary,VIO ePacket Extra (group range),sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+vnpost_ems,DE,3,4,verified,"EMS calculator, ems.com.vn, Hanoi/HCMC to the capital",research/logistics/02-global-carriers.md §2b,2026-11-07,calculator estimate for 1 kg goods

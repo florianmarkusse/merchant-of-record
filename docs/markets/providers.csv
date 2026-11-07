@@ -3,7 +3,7 @@ dhl_express,DHL Express,integrator,https://mydhl.express.dhl/vn/en,rfq_sent,firs
 fedex,FedEx,integrator,https://www.fedex.com/en-vn,account_planned,first-carrier candidate; HMAC-signed webhooks
 ups,UPS,integrator,https://www.ups.com/vn,account_planned,complete published VN rate guide
 asendia,Asendia,economy_postal,https://vn.asendia.com/homepage,rfq_sent,"e-PAQ, DDP and DAP, best returns product"
-yunexpress_vn,"VIO ePacket / VIO Shipping (YunExpress network, VN)",economy_postal,https://www.vioepacket.com/en,rfq_planned,"Da Nang HQ, branches Hanoi and HCMC; published rates from 2026-11-01; admin@vioshipping.com, WhatsApp/Zalo +84 943 978 891"
+yunexpress_vn,"VIO ePacket / VIO Shipping (YunExpress network, VN)",economy_postal,https://www.vioepacket.com/en,rfq_sent,"Da Nang HQ, branches Hanoi and HCMC; published rates from 2026-11-01; admin@vioshipping.com, WhatsApp/Zalo +84 943 978 891"
 janio,Janio,sea_line,https://janio.asia,rfq_sent,SG 4PL; VN as origin unverified
 boxme,Boxme,sea_line,https://boxme.asia,rfq_sent,VN-HQ; DDP 'upon agreement'
 jt_intl,J&T Express VN International,sea_line,https://www.jtexpress.vn,rfq_sent,VN entity Thuan Phong; international express to ~225 destinations incl. ID (2024 card); duties unpaid; contact@jet-logistics.com
