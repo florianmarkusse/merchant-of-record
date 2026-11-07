@@ -1896,9 +1896,11 @@ def section_rate_cards(data: Data) -> h.Element:
                 h.div(style="padding:8px 10px")[
                     h.p[
                         chip(as_status(card["status"])),
-                        f" Valid {card['effective_from'] or '?'} to "
-                        f"{card['effective_to'] or 'open'}. "
-                        f"Excludes: {card['excludes'] or 'not stated'}. ",
+                        (
+                            f" Valid {card['effective_from'] or '?'} to "
+                            f"{card['effective_to'] or 'open'}. "
+                            f"Excludes: {card['excludes'] or 'not stated'}. "
+                        ),
                         source_link(card),
                         f" · {card['research_ref']}",
                         f" · question {card['question']}" if card["question"] else "",
@@ -2202,14 +2204,18 @@ def sheet_readme(book: Workbook, today: date) -> None:
     sheet.append(["Markets and logistics data"])
     sheet.append(
         [
-            f"Generated {today.isoformat()} from docs/markets/*.csv "
-            "(scripts/markets.py). The CSVs in the repo are the source of truth."
+            (
+                f"Generated {today.isoformat()} from docs/markets/*.csv "
+                "(scripts/markets.py). The CSVs in the repo are the source of truth."
+            )
         ]
     )
     sheet.append(
         [
-            "Sheets after 'Prices' are the CSVs with the same columns, so edits "
-            "here can be read back later."
+            (
+                "Sheets after 'Prices' are the CSVs with the same columns, so edits "
+                "here can be read back later."
+            )
         ]
     )
     sheet.append([])
