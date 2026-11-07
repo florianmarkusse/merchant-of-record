@@ -27,3 +27,8 @@ logs/
 # Generated markets workbook (docs/markets/out/), upload to Drive instead
 docs/markets/out/
 __pycache__/
+
+# Provider documents (rate guides etc.): only the READMEs are committed
+docs/markets/sources/**
+!docs/markets/sources/**/
+!docs/markets/sources/**/README.md

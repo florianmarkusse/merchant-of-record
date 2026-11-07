@@ -45,6 +45,12 @@ a value waits on a re-fetch, an email or an adviser.
 - **Sources are inline** on each row (`source`, `source_url`,
   `research_ref`), not in a separate table, so a hand edit needs no
   lookup.
+- **Provider documents go in `docs/markets/sources/<provider>/`**, named
+  after the provider id (decided 2026-11-07: one place per provider for
+  rate guides, zone charts and quote emails). The documents are
+  gitignored because carrier rate files are often for registered
+  customers only; each folder's committed `README.md` lists the files and
+  where to get them.
 - **Open work is in `questions.csv`**: emails to carriers, adviser
   questions and re-fetches. A fact waiting on one has status
   `awaiting_answer` and the question id.
