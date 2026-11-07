@@ -72,20 +72,55 @@ cards:
 
 Save every quote in `docs/markets/sources/<provider>/`.
 
-### 3. Build an all-in cost comparison (Claude, no waiting needed)
+### 3. Build an all-in cost comparison (done 2026-11-07)
 
-Today's comparison is freight only. Add per country and weight: fuel,
-the duty-paid fee (e.g. DHL 2% of duties, minimum VND 600,000; UPS VND
-600,425 per shipment), residential and US/EU processing surcharges, and
-VIO's EUR 5 per HS code. This shows how large a big-three discount has
-to be before it matters against the economy lines.
+`markets.html#all-in` and the `All-in` sheet: per reference parcel
+(`scenarios.csv`: 0.25, 0.5, 1, 2, 5 kg at US$25, 40, 60, 100, 200),
+destination and rate card, the list price of freight + fuel + per-parcel
+fees + the duty-paid fee where `border_charges.csv` says duty or tax is
+due. Each cell's tooltip lists its parts. A second table per parcel gives
+the freight discount DHL, FedEx IP and UPS Saver list prices need to match
+the cheapest economy line that is published, complete and duty-paid.
 
-### 4. Check product rules per carrier (Claude)
+What it shows (list prices, fuel of 2026-11-09):
 
-Fill `service_restrictions.csv` for the six categories: lithium
-batteries in keyboards (keycaps), fragile ceramics (packing and
-liability), wood and lacquerware (US-Saver already refuses them; check
-fumigation and other carriers), leather.
+- Where an economy line works (SG, JP, AU, GB via VIO), the big three
+  need a freight discount of about 84-99%. No sales discount gets there;
+  the big three are a premium or fallback option, not the default.
+- To the EU the duty-paid fee decides: since 2026-07-01 every EU parcel
+  pays the EUR 3 flat duty, so DHL's VND 600,000 minimum (about US$23) or
+  UPS's VND 600,425 always applies. Up to 1 kg that fee alone is more
+  than VIO's whole price, so no freight discount is enough; at 2 kg the
+  need is 92-99%. The minimum is what to negotiate (q01), more than the
+  freight discount. The same fee applies on every US parcel.
+- No usable economy line yet to the US, MY, TH, PH, ID or KR: VIO's US
+  lines and Extra are not duty-paid (DAP), and J&T's fuel and duty-paid
+  terms are unknown. To the US today only the big three (and UPS
+  Worldwide Economy at about US$62 for 0.5 kg) are duty-paid. These lanes
+  wait on q04 to q08.
+
+Not modelled yet: volumetric weight (actual weight is assumed), remote
+areas, returns, discounts (no quotes yet).
+
+### 4. Check product rules per carrier (partly done 2026-11-07)
+
+`service_restrictions.csv` now has DHL (VN pages), FedEx and UPS (from the
+VN rate PDFs; their web pages block automated reads) and VIO. Findings:
+
+- Wired keyboards and keycaps are fine everywhere. Boards with lithium
+  batteries need a pre-approved DHL account, cannot go FedEx International
+  Economy, and are checked case by case at VIO.
+- Apparel in poly mailers pays an additional handling fee at FedEx
+  (VND 679,700) and UPS (VND 423,940): ship in cardboard with them.
+- Ceramics: liability is low (DHL 9 SDR/kg in the VN annex, FedEx about
+  US$20/kg or US$100, VIO Extra at most VND 1,150,000); no one states a
+  fragile exclusion. US-Saver refuses food-contact ceramics (FDA).
+- Wood and lacquerware: VIO wants to check them first; DHL, FedEx and UPS
+  say nothing. Destination rules (AU) apply either way.
+
+Open: J&T and Asendia could not be read, and DHL wood rules, VIO battery
+and compensation terms are unknown. Asked in q35 (draft, to send with the
+2026-11-14 follow-ups) and added to the FedEx and UPS drafts (q02, q03).
 
 ### 5. Follow up on the requests in flight
 
@@ -100,7 +135,9 @@ pickup in Ho Chi Minh City, and returns.
 ### 6. Keep weekly values current before any comparison
 
 Fuel for DHL, FedEx and UPS (their surcharge pages, readable in
-Chrome), and the demand surcharges for DHL and FedEx (not loaded yet).
+Chrome), the demand surcharges (loaded 2026-11-07: DHL from 2026-10-01 to
+2027-02-05, FedEx from 2026-11-02; both can change on notice) and the ECB
+display rates in `scripts/markets.py` (2026-11-06).
 
 ## Not now
 

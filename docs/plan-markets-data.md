@@ -51,6 +51,24 @@ a value waits on a re-fetch, an email or an adviser.
   gitignored because carrier rate files are often for registered
   customers only; each folder's committed `README.md` lists the files and
   where to get them.
+- **All-in cost is computed, not typed** (decided 2026-11-07: a total per
+  carrier, destination and reference parcel changes whenever fuel or a fee
+  changes, so it is derived from the tables). Inputs: `scenarios.csv` (the
+  reference parcels: weight, goods value, category), `border_charges.csv`
+  (when a destination collects duty or tax at the border, with us
+  registered in its seller scheme where one exists) and three surcharge
+  columns: `trigger` (`always`, `duties_paid`, `passthrough`, `optional`,
+  `on_event`), `destinations` (blank = all) and `fuel_applies`. The total
+  counts freight, fuel, `always` fees, and `duties_paid` fees where the
+  border rule says duty or tax is due. Duties and taxes themselves, and
+  pass-through duties such as VIO's EUR 3, are left out because they are
+  the same whichever carrier carries the parcel. A missing amount makes the
+  total a lower bound (shown as ≥), never zero.
+- **Display rates are ECB reference rates** (decided 2026-11-07: an
+  official, dated source for every currency we meet; VND stays at the
+  research estimate of 26,300 because the ECB does not publish it). They
+  live in `ECB_PER_EUR` in the script with their date; refresh them with
+  the fuel values before a comparison.
 - **Open work is in `questions.csv`**: emails to carriers, adviser
   questions and re-fetches. A fact waiting on one has status
   `awaiting_answer` and the question id.
@@ -85,6 +103,8 @@ a value waits on a re-fetch, an email or an adviser.
 | `surcharges.csv` | fee per service |
 | `transit.csv` | transit days per service × destination |
 | `service_restrictions.csv` | what a service allows per product category |
+| `scenarios.csv` | reference parcel for the all-in cost: weight, goods value, category |
+| `border_charges.csv` | country or group (× category): duty or tax collected at the border always, never, or above a limit |
 
 ## Commands
 

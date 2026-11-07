@@ -1,0 +1,6 @@
+scenario,label,weight_kg,goods_value_minor,currency,category,hs_lines,notes
+xs,XS parcel,0.25,2500,USD,,1,"e.g. a keycap set; actual weight, assumed at or above volumetric weight"
+s,S parcel,0.5,4000,USD,,1,
+m,M parcel,1,6000,USD,,1,
+l,L parcel,2,10000,USD,,1,
+xl,XL parcel,5,20000,USD,,1,

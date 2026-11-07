@@ -14,7 +14,7 @@ Rate files need a FedEx account registered for Tariff Pricing
 | `fedex-rates-ficp-cm-en-vn-2026.pdf` | FICP zone index | wanted |
 | `fedex-rates-g3p-en-vn-2026.pdf`, `-g3pip-`, `-g3pipe-`, `-g3pie-`, `-g3pif-`, `-g3pbox-` | Global Third-Party regions, zones and IP/IPE/IE/IEF/box rates, VND, from 2026-01-05 | saved 2026-11-07; **not VN exports**: they price shipments between two non-VN countries paid by a VN account. Not loaded; relevant once we add other SEA origins |
 | `fedex-apac-service-guide-en-vn.pdf` | APAC service guide | wanted |
-| `fedex-ds-2026-*-638-en-vn.pdf` | demand surcharge notices | wanted |
+| `fedex-ds-2026-nov2-638-en-vn.pdf` | demand surcharge notice from 2026-11-02 (export from VN per kg by region, Priority vs Economy, min VND 6,400) | read in Chrome 2026-11-07 (automated fetch is blocked), not saved; loaded as `demand_surcharge_*` rows for IP, FICP and IE. Later notices replace it |
 
 The list cards are `verified`. The promo and FICP cards are still
 `unverified` (read from search extracts); question q29. Fuel is a weekly percentage from the fuel page, not in any PDF.
