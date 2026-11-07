@@ -5,7 +5,7 @@ ups,UPS,integrator,https://www.ups.com/vn,account_planned,complete published VN 
 asendia,Asendia,economy_postal,https://vn.asendia.com/homepage,rfq_planned,"e-PAQ, DDP and DAP, best returns product"
 yunexpress_vn,YunExpress Vietnam (VIO Shipping),economy_postal,,rfq_planned,"VN-origin lines claimed, no public rates"
 janio,Janio,sea_line,https://janio.asia,rfq_sent,SG 4PL; VN as origin unverified
-boxme,Boxme,sea_line,https://boxme.asia,rfq_planned,VN-HQ; DDP 'upon agreement'
+boxme,Boxme,sea_line,https://boxme.asia,rfq_sent,VN-HQ; DDP 'upon agreement'
 jt_intl,J&T Express VN International,sea_line,https://www.jtexpress.vn,rfq_sent,VN entity Thuan Phong; international express to ~225 destinations incl. ID (2024 card); duties unpaid; contact@jet-logistics.com
 vnpost,Vietnam Post (EMS),postal,,none,duties unpaid; no international API
 aramex,Aramex (VN agent),integrator,,none,"later, GCC last mile"
