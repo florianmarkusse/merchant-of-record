@@ -26,3 +26,4 @@ logs/
 
 # Generated markets workbook (docs/markets/out/), upload to Drive instead
 docs/markets/out/
+__pycache__/
