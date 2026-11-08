@@ -5,7 +5,8 @@ confirmation. It replaces the first draft from the same day, which capped
 order values to stay under every country's duty-free limit. That draft
 did not fit the candidate merchants: they sell at US$80–2,000 and ship
 worldwide, and most of them already use DHL. No code is written until
-this is confirmed.
+this is confirmed. Revised 2026-11-08: §4 now decides indirect tax and
+duty separately (see there), also waiting for confirmation.
 
 Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
 (including the new `07-keycaps-ceramics-lacquer.md`),
@@ -50,8 +51,11 @@ before the first sale.
 is no duty or GST at the border, and below A$75k a year we don't have to
 register. Step 3 adds no tax line.
 
-So for every order and country, exactly one of three things is true. That
-is the whole tax logic of v1 (§4).
+So for every order and country, the indirect tax (VAT, GST) takes exactly
+one of three paths, and the import duty one of two: not due, or paid at
+the border. The two are decided separately, because a cheap order can
+have its VAT collected by us and still owe duty at the border (EU €3 flat
+duty, §4). That is the whole tax logic of v1 (§4).
 
 ## 2. What we build in v1
 
@@ -60,10 +64,11 @@ is the whole tax logic of v1 (§4).
    its limit and our turnover threshold, the fields the waybill needs.
    Effective-dated, versioned, and stored on every quote.
 2. **Tax path rule.** One function that reads the row and the order and
-   returns `NotDue`, `SellerCollected` or `BorderPaid` (§4).
+   returns a pair: the indirect-tax path (`NotDue`, `SellerCollected` or
+   `BorderPaid`) and the duty path (`NotDue` or `BorderPaid`) (§4).
 3. **Duty source.** A vendor API (Zonos in estimate mode at about US$2 per
    order, or Easyship Taxes & Duties at about US$0.10 per call) behind an
-   interface, with a mock. Used only when the tax path is `BorderPaid`.
+   interface, with a mock. Used only when either path is `BorderPaid`.
 4. **One integrator module: DHL or FedEx, decided on quotes** (decided
    2026-11-06). Rates, shipment with label and commercial invoice
    (duties billed to us), pickup, tracking (DHL by polling, FedEx by
@@ -116,16 +121,52 @@ review), NG, and every comprehensively sanctioned country.
 
 ## 4. The tax path rule
 
-```python
-type TaxPath = NotDue | SellerCollected | BorderPaid
+Indirect tax and import duty are decided separately (decided 2026-11-08:
+the earlier single `TaxPath` assumed every order takes exactly one path,
+but seller schemes cover only VAT/GST, never duty. A cheap order can have
+its VAT collected by us and still owe duty at the border, e.g. an EU order
+under IOSS that pays the €3 flat duty, so one order needs both answers).
 
-def tax_path(row: CountryRow, order: OrderValue, us: Registrations) -> TaxPath:
+```python
+type IndirectTaxPath = NotDue | SellerCollected | BorderPaid
+type DutyPath = NotDue | BorderPaid
+
+@dataclass(frozen=True)
+class TaxPaths:
+    indirect_tax: IndirectTaxPath  # VAT, GST, SST, JCT
+    duty: DutyPath
+
+def tax_paths(row: CountryRow, order: OrderValue, us: Registrations) -> TaxPaths:
+    # Indirect tax:
     # 1. A seller scheme covers this order and we are (or must be) registered
-    #    → we charge it at checkout and print our number on the waybill.
-    # 2. Else, the order is under the border duty-free limit → nothing due.
-    # 3. Else → BorderPaid: the duty source estimates duty and import tax,
-    #    DHL pays at the border, we charge the estimate at checkout.
+    #    → SellerCollected: we charge it at checkout and print our number on
+    #    the waybill. Once registered this is mandatory for every order in
+    #    scope; there is no per-order choice.
+    # 2. Else, the order is under the border VAT/GST-free limit → NotDue.
+    # 3. Else → BorderPaid: import VAT/GST charged by customs.
+    # Duty, independently:
+    # 1. Under the duty-free limit (which can differ from the VAT/GST limit),
+    #    or a 0% rate for this HS code and origin → NotDue.
+    # 2. Else → BorderPaid. There is no seller scheme for duty.
+    # If either is BorderPaid: the duty source estimates what customs will
+    # charge (import VAT is usually on value + duty), DHL pays at the border,
+    # we charge the estimate at checkout, and the duty-paid fee applies.
 ```
+
+The four combinations that occur:
+
+| Indirect tax | Duty | Example |
+|---|---|---|
+| `NotDue` | `NotDue` | AU order under A$1,000, below our A$75k |
+| `SellerCollected` | `NotDue` | UK order under £135 |
+| `SellerCollected` | `BorderPaid` | EU order under €150 once we use IOSS (€3 flat duty) |
+| `BorderPaid` | `BorderPaid` or `NotDue` | TH at any value; SG over S$400 (0% duty on apparel) |
+
+The duty-paid fee has a minimum (below), so in the third row the seller
+scheme does not save the fee: it only makes the VAT part exact. It costs
+no extra tax either (the rate is the same whoever collects it), only the
+filing work. This is why IOSS saves little while the EU flat duty lasts
+(2026-07-01 to 2028-07-01, then full duty).
 
 | Country | Seller scheme (limit) | We register when | Border duty-free limit |
 |---|---|---|---|
@@ -159,13 +200,14 @@ Found 2026-11-06 while checking whether US$23 is competitive:
   Confirmed in the DHL Express Service & Rate Guide 2026: Vietnam (p. 10,
   21): "Duty Tax Paid: 2% of fiscal charges with minimum of 600,000 VND",
   and "charges apply whenever duties, taxes or other regulatory fees
-  occur". So it only hits `BorderPaid` orders, not `NotDue` or
-  `SellerCollected` ones. The same page says duties can be billed "to the
+  occur". So it only hits orders where the indirect tax or the duty is
+  `BorderPaid`, not orders where both are `NotDue` or `SellerCollected`. The same page says duties can be billed "to the
   shipper or a third party", which is what we need (our account, the
   merchant as shipper).
 - Registering for a seller scheme (UK, later SG, AU, the EU's IOSS)
   removes the border charge and with it the fee, for the cheap orders
-  where the fee hurts most.
+  where the fee hurts most, but only where those orders owe no duty. In
+  the EU the €3 flat duty keeps the fee on every parcel until 2028-07-01.
 
 Negotiating the minimum is the first question for DHL.
 
