@@ -168,6 +168,37 @@ no extra tax either (the rate is the same whoever collects it), only the
 filing work. This is why IOSS saves little while the EU flat duty lasts
 (2026-07-01 to 2028-07-01, then full duty).
 
+IOSS can even cost duty (found 2026-11-08, from TAXUD guidance of
+2026-06-08 in `docs/research/logistics/07-regulations-rest-of-world.md`):
+goods with EVFTA preferential origin escape the €3 only if VAT is **not**
+collected through IOSS and the parcel goes on a full H1 declaration. So
+for VN-made goods with VN or EU fabric under €150, IOSS turns 0% duty into
+€3 per tariff line. Whether goods with a 0% MFN rate (no preference
+needed) also escape the €3 is UNVERIFIED. The choice between IOSS and
+border VAT in the EU is therefore per product origin, not only per order
+value, and stays open until the entity decision.
+
+**Which services an order may use** follows from its `TaxPaths` (decided
+2026-11-08: customs charges whoever declares the parcel at the
+destination and holds it until paid, so on a duties-unpaid (DAP) line the
+buyer is billed at the door, and from VN we cannot pay each country's
+customs ourselves; a duty-paid service is exactly that arrangement. But
+when nothing is due at the border, there is nothing to collect, and a DAP
+line behaves like a duty-paid one):
+
+- Both paths `NotDue` or `SellerCollected` (nothing due at the border):
+  any service on the lane, duty-paid or DAP, as long as it passes our
+  scheme number (UK VAT, IOSS, OVR, LVG, ARN) in its customs data. A line
+  that cannot carry the number counts as unusable for these orders, or
+  customs taxes the parcel again.
+- Either path `BorderPaid`: duty-paid services only.
+
+So the routing table filters services per order, not only per lane. For
+example, a UK order under £135 (VAT collected by us, no duty) can go on a
+DAP economy line such as VIO's, while a UK order over £135 on the same
+lane cannot. Paying the buyer back after a door charge is ruled out: a
+bill at the door leads to refused parcels.
+
 | Country | Seller scheme (limit) | We register when | Border duty-free limit |
 |---|---|---|---|
 | UK | VAT, up to £135 | first sale | — (the scheme covers it) |
