@@ -67,7 +67,8 @@ duty, §4). That is the whole tax logic of v1 (§4).
    returns a pair: the indirect-tax path (`NotDue`, `SellerCollected` or
    `BorderPaid`) and the duty path (`NotDue` or `BorderPaid`) (§4).
 3. **Duty source.** A vendor API (Zonos in estimate mode at about US$2 per
-   order, or Easyship Taxes & Duties at about US$0.10 per call) behind an
+   order; Easyship Taxes & Duties was ruled out on 2026-11-10 because it has
+   no tax records for parcels shipping from Vietnam) behind an
    interface, with a mock. Used only when either path is `BorderPaid`.
 4. **One integrator module: DHL or FedEx, decided on quotes** (decided
    2026-11-06). Rates, shipment with label and commercial invoice
@@ -428,7 +429,7 @@ needs anything in VN is the open VN adviser question in §6.
 | Entity: SG or NL BV | us | the DHL account, registrations |
 | DHL and FedEx quotes in the same week (UPS as a third): rates at 500 and 5k parcels a month for express **and** each cheaper service (FedEx FICP and International Economy, UPS Expedited), FICP lane pairs, the duty-paid fee and its minimum, billing a foreign entity for VN exports, invoice format (EDI or CSV), API access | us | everything |
 | Asendia VN and YunExpress VN quotes: economy duty-paid rates to EU, UK, US, AU; API; returns | us | the economy lines, not launch |
-| Duty-source contract (Zonos estimate mode or Easyship) | us | `BorderPaid` countries |
+| Duty-source contract (Zonos estimate mode; Easyship ruled out) | us | `BorderPaid` countries |
 | UK VAT registration | us | UK |
 | EU product-safety representative, DE packaging registration | us | EU |
 | Merchant contract: warranties, indemnity, deductions, reserve, arbitration | us + counsel | first merchant |

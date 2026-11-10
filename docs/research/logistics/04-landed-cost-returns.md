@@ -336,7 +336,7 @@ our per-jurisdiction tax module, not inside the vendor.
 | Vendor | API | SEA depth | Guarantee | Price @ 500 orders/mo | Fit |
 |---|---|---|---|---|---|
 | Zonos | GraphQL, good docs | Guides for all 5; ID data inconsistent | Yes, only if duties billed to Zonos | ~USD 1,000 (USD 2/order estimate) + Classify USD 0–500 [estimate] | Best feature set; MoR conflict on guarantee path |
-| Easyship T&D | REST, simple | SEA home market | Only bundled with its labels (UNVERIFIED) | ~USD 55 [estimate] | Cheapest; good v1 |
+| Easyship T&D | REST, simple | SEA home market | Only bundled with its labels (UNVERIFIED) | ~USD 60 [in-app price] | Ruled out 2026-11-10: no tax records for ship-from VN |
 | Dutify | REST | UNVERIFIED | No | USD 75 flat | Cheap backup |
 | Avalara | REST (AvaTax) | SG/MY filing service | No | Quote-only | Overkill v1; consider for filing |
 | SimplyDuty | REST | UNVERIFIED | No | ~GBP 50 | Second opinion |
@@ -351,11 +351,11 @@ Recommendation for v1:
 2. Use a vendor only for (a) HS duty rates by destination and (b)
    restricted-item flags. Start with Zonos Landed Cost in non-guaranteed
    mode with our own tax IDs if Zonos will contract it at ~USD 2/order
-   without Zonos remitting; else Easyship T&D (USD 0.09–0.11/call) — which
-   is also cheap enough to call on every quote and shadow-compare against
-   our own figures.
+   without Zonos remitting. Easyship T&D was the cheap fallback but is
+   ruled out (2026-11-10: no tax records for ship-from VN); the fallback
+   is now Dutify, SimplyDuty or Avalara (not yet checked for VN origin).
 3. HS classification: at a few hundred SKUs, use Zonos Classify's free
-   1,000 / Easyship HS lookup to PROPOSE codes, merchant confirms, we
+   1,000 to PROPOSE codes, merchant confirms, we
    store per SKU with source + confidence. Apparel classification (knit vs
    woven, fibre content, gender) is decided by facts the merchant must
    supply; collect them as structured fields, not free text.
