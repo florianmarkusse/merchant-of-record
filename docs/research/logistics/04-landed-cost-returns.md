@@ -238,8 +238,39 @@ our per-jurisdiction tax module, not inside the vendor.
   Asia-origin detail found.
   https://passportglobal.com/blog/ior-vs-mor-vs-sor-which-global-ecommerce-model-does-your-brand-need/
 
+#### FlavorCloud (checked 2026-11-10, Vietnam origin only)
+- DDP shipping network with guaranteed landed cost at checkout, 220+
+  destinations over 300+ carriers [published]. Origins named publicly:
+  the US and, since July 2025, Canada (a dedicated outbound DDP network for
+  Canadian merchants) [published]. Fulfilment centres in the US, CA, EU, UK
+  and AU (ShipBob partnership) [published].
+- **Vietnam origin: none found.** VN appears only on its destination list.
+  No page lists origin countries [published, UNVERIFIED beyond that].
+  https://flavorcloud.com/resources/knowledge-base/where-flavorcloud-will-ship-to-global-origin ;
+  https://flavorcloud.com/press-release/flavorcloud-launches-dedicated-outbound-shipping-network-for-canadian-merchants
+- Same position as Passport: its guaranteed DDP has it pay the border
+  taxes, and it sells to merchants who would otherwise use us. Not a supplier.
+
 #### Flexport
 - Not relevant for B2C parcels at our volume (freight forwarding); skipped.
+
+#### SEKO Logistics (checked 2026-11-10, Vietnam origin only)
+- Has its own offices in Ho Chi Minh City (near Tan Son Nhat) and Hanoi:
+  air and ocean freight, customs clearance, intra-Asia trucking, inbound
+  and outbound [published].
+- Markets an APAC direct-to-consumer offer for brands manufacturing in
+  Greater China and **Vietnam**, delivering to HK, SEA and AU, with DDP
+  listed for Asia-bound lanes [published, marketing copy].
+- Its cross-border e-commerce product is built mainly for US imports
+  (Section 321, Type 86) [published].
+- **Vietnam origin: yes, as a freight forwarder; as a per-parcel B2C
+  service from VN, UNVERIFIED.** No VN-origin parcel product, API or
+  price found. It would fit a later consolidation design (bulk air to a
+  hub, then local last-mile), not v1 per-parcel shipping. Worth a sales
+  question only when that design comes up.
+  https://www.sekologistics.com/asia-en/regions/asia/vietnam/seko-logistics-ho-chi-minh-city/ ;
+  https://www.sekologistics.com/hk-en/industries/direct-to-consumer-brands/ ;
+  https://www.sekologistics.com/en/ppc/cross-border-ecommerce
 
 ### A.4 Comparison and recommendation
 

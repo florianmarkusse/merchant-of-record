@@ -61,6 +61,21 @@ payouts stay with us. The companies that do offer MoR as a product (Paddle,
 Lemon Squeezy, FastSpring, Global-e, Stripe's "Managed Payments") compete
 with us. They are not suppliers.
 
+Who we compete with for Vietnamese merchants (noted 2026-11-10, from a
+review of the "MoR / landed-cost / DDP" vendor categories): the
+physical-goods MoRs (Global-e, Reach, Digital River, ESW, Passport's Seller
+of Record) and DDP networks that pay the border tax for the merchant
+(FlavorCloud, Zonos's guarantee mode) are competitors, not suppliers. None
+of them shows support for a Vietnamese seller entity or for goods shipped
+from Vietnam (`docs/research/logistics/04-landed-cost-returns.md`). A
+Vietnamese merchant's way in is a Singapore or US holding company plus
+enterprise volume; Global-e is said to want about US$5M+ a year. Both the
+entity limit and the volume figure come from a third-party summary and are
+UNVERIFIED. If they hold, small and mid-size Vietnamese sellers cannot take
+that route, and they are our market. What we do buy from this space is only
+calculation (a duty source in estimate mode) and carrier DDP with duties
+billed to us (`docs/plan-logistics.md` §2).
+
 Consequences:
 
 - We use each provider's **plain merchant/checkout API** and do not use its
