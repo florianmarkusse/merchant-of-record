@@ -14,4 +14,4 @@ efex,EFEX / iChiba Ship4P,aggregator,https://efex.vn,rfq_sent,"VN cross-border s
 mts,MTS Logistics (Viettel Post partnership),aggregator,,none,reported VN→US small-parcel line with Viettel Post; duty-paid terms unknown; no contact yet (research-logistics.md §3.2)
 benchmark,Benchmark (our estimates),estimate,,n/a,not a provider: holds estimated price ranges
 zonos,Zonos,landed_cost,https://zonos.com,rfq_planned,landed cost US$2 per order in estimate mode
-easyship_td,Easyship Taxes & Duties API,landed_cost,https://www.easyship.com,rfq_planned,US$0.09-0.11 per call
+easyship_td,Easyship Taxes & Duties API,landed_cost,https://www.easyship.com,rfq_planned,"VN account opened 2026-11-10; no shipping rates from VN; T&D has no tax record for ship-from VN in sandbox and production (SG/HK/US origins work, SG→NL returns the EU €3 duty); T&D ₫2,048-2,503 per call over plan quota (research/logistics/04-landed-cost-returns.md)"

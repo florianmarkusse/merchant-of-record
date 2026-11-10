@@ -173,6 +173,49 @@ our per-jurisdiction tax module, not inside the vendor.
   At 500 orders/month: ~USD 55/month for quotes pay-as-you-go
   [estimate]. HS "lookup" returns candidate codes, not a classification
   [published, 3rd party].
+- Vietnam account plans page, read in the app on 2026-11-10 (prices in
+  VND, so the signup accepted a Vietnam account) [published, in-app]:
+
+  | Plan | VND a month | T&D calls included | T&D overage | HS calls incl. / overage | Shipments a month |
+  |---|---|---|---|---|---|
+  | Free | 0 | 0 | ₫2,503 | 0 / ₫1,138 | 50 |
+  | Plus | 660,000 | 125 | ₫2,503 | 125 / ₫910 | 500 |
+  | Premier | 1,570,000 | 625 | ₫2,276 | 625 / ₫910 | 2,500 |
+  | Scale | 2,400,000 | 1,250 | ₫2,048 | 1,250 / ₫683 | 5,000 |
+
+  At 26,300 VND per US$: T&D overage US$0.078–0.095 a call; plans
+  US$25, 60 and 91 a month. One call per order [estimate]: 500 orders
+  ≈ ₫1.57M (US$60, Premier); 5,000 ≈ ₫10.1M (US$383, Scale); 50,000
+  ≈ ₫102M (US$3,890, Scale), about US$0.08 an order against Zonos's
+  US$2. More calls than orders if checkout re-quotes, so cache per cart.
+  The developer docs say T&D is "paid plans only", yet Free lists an
+  overage price: UNVERIFIED which applies. Still open (q39): duty data
+  for VN origin, our own tax numbers, whether the trial includes T&D.
+- Tested 2026-11-10 with a VN account (sandbox `POST /2024-09/taxes_and_duties`,
+  HS 61091000, US$40 goods, US$10 shipping):
+  - Origin VN to NL, DE, US, SG, AU, GB: all HTTP 422 "No import tax
+    record was found for the specified origin and destination".
+  - Origin SG, HK or US with goods made in VN: HTTP 200 (NL, DE, US, AU).
+    Origin GB to NL: 422 as well.
+  - The amounts are sample data (every line 50% duty, HS "0000000000"),
+    as the sandbox docs say, so they prove nothing about rate quality.
+    The origin check is real: Easyship keys its tax records by
+    ship-from × destination and has none for ship-from Vietnam, matching
+    its ship-from list (US, CA, UK, HK, Europe, AU, SG).
+  - The rate calculator in the app says "We don't offer rates from
+    Vietnam" (own DHL, FedEx or UPS accounts only).
+  - => Easyship T&D does not work for our shipments as they are. Sending
+    origin SG for a parcel that leaves from VN would be a workaround
+    that misstates the shipment; only acceptable if Easyship confirms
+    the tax record depends on the destination alone. Ask (q39) whether
+    VN origin is planned. Zonos (q09) is again the main duty source.
+  - Production, same day, same input (VN account on its trial; 1 billable
+    call): origin VN to NL, US and SG still 422 "No import tax record".
+    Origin SG to NL (made in VN): HTTP 200, duty US$3.37 (≈ €3.02, i.e.
+    the EU's €3-per-line duty on low-value parcels from 2026-07-01) and
+    tax US$8.21. So production data is real and current, the trial
+    includes T&D (no 402), and VN as ship-from is missing in production
+    too.
 - Easyship is also a shipping aggregator with a Singapore base; DDP quote
   is "charged" when you buy an Easyship DDP label — i.e. guaranteed only
   if Easyship ships it (UNVERIFIED in contract terms). Dev forum reports a
