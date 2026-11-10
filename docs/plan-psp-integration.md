@@ -64,7 +64,7 @@ with us. They are not suppliers.
 Who we compete with for Vietnamese merchants (noted 2026-11-10, from a
 review of the "MoR / landed-cost / DDP" vendor categories): the
 physical-goods MoRs (Global-e, Reach, Digital River, ESW, Passport's Seller
-of Record) and DDP networks that pay the border tax for the merchant
+of Record, OpenBorder) and DDP networks that pay the border tax for the merchant
 (FlavorCloud, Zonos's guarantee mode) are competitors, not suppliers. None
 of them shows support for a Vietnamese seller entity or for goods shipped
 from Vietnam (`docs/research/logistics/04-landed-cost-returns.md`). A

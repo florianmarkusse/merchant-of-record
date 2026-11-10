@@ -251,6 +251,22 @@ our per-jurisdiction tax module, not inside the vendor.
 - Same position as Passport: its guaranteed DDP has it pay the border
   taxes, and it sells to merchants who would otherwise use us. Not a supplier.
 
+#### OpenBorder (checked 2026-11-10, Vietnam origin only)
+- US cross-border e-commerce platform that acts as Merchant, Seller or
+  Importer of Record where a market needs one, and also handles duties
+  and taxes, returns and in-country fulfilment. Pitched for TikTok Shop
+  US/UK, which requires a registered seller there [published].
+- Claims a 1–2.5% fee against 4–9% for others; 30+ launch countries on one
+  page and 180+ on another [published, own marketing, inconsistent].
+- Spun off in March 2023, US$10M seed in February 2024 led by Peak XV;
+  about 70 merchants at that time [published, TechCrunch].
+- **Vietnam origin: none found.** No page names the countries merchants
+  may be based in or ship from. Its examples are US and UK brands
+  [UNVERIFIED beyond that].
+  https://openborder.com/merchant-of-record ;
+  https://techcrunch.com/2024/02/20/openborders-e-commerce-software/
+- An MoR selling to merchants, so a competitor, not a supplier.
+
 #### Flexport
 - Not relevant for B2C parcels at our volume (freight forwarding); skipped.
 
