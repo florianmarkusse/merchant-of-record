@@ -138,6 +138,10 @@ our per-jurisdiction tax module, not inside the vendor.
   Good if we want filing outsourced; but AvaTax is US-sales-tax-centric
   and enterprise-priced. Estimated vs guaranteed: estimate only (no
   guarantee product found).
+- Vietnam (checked 2026-11-10): no public ship-from list or duty request
+  schema on developer.avalara.com (the cross-border docs URLs are 404);
+  cross-border must be enabled on the account by Avalara (WooCommerce and
+  Violet integration guides), so it starts with sales (q43).
 - Audit: AvaTax stores committed transactions (good for audit). Detail of
   which duty rule version is returned: UNVERIFIED.
 
@@ -229,6 +233,10 @@ our per-jurisdiction tax module, not inside the vendor.
   GBP 9.99 (100 calls) to 499.99 (5,000) [published but pricing page
   dated 2019 per 3rd-party comparison]. Small UK vendor; fine as a
   second-opinion/backtest source. https://www.simplyduty.com/about
+- Vietnam (checked 2026-11-10): not answerable from public pages; the API
+  docs are in the account area after a free registration (username and
+  email); /api-docs/ is 404. Public text names only destination, HS code
+  and value as inputs (q42).
 
 #### Dutify
 
@@ -237,6 +245,21 @@ our per-jurisdiction tax module, not inside the vendor.
   (5,000) [published, via comparison + docs]. No guarantee.
   https://docs.dutify.com/docs/landed-cost-calculator-api
   At 500/month: USD 75/month flat [estimate].
+- Vietnam (checked 2026-11-10 in the docs): ship-from is
+  `data.export_country_code` (required, ISO 3166-1), made-in is per-line
+  `origin_country_code` with a `certificate_of_origin` flag. The
+  supported-countries page lists VN as origin and destination (214
+  origins, 138 destinations, incl. SG, MY, TH, PH, ID, AU, GB, US)
+  [published]. https://docs.dutify.com/docs/supported-countries ;
+  https://docs.dutify.com/reference/post_api-v1-landed-cost-calculator
+- FTA: MFN by default; preferential only where duty is eliminated, only
+  with a certificate of origin, for 24 agreements incl. AFTA and AANZFTA;
+  EVFTA, CPTPP and RCEP are not listed [published].
+  https://docs.dutify.com/docs/fta-coverage
+- No sales tax for US destinations; response has duty, excise, sales tax,
+  other charges and a result id, but no rule or rate version [published].
+- Free plan: 3 calculations and 3 HS lookups a month, no card; API only
+  from Plus (EUR 75). No sandbox. Not yet tested (q41).
 
 #### 3CE / Classify
 

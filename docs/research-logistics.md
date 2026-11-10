@@ -97,7 +97,7 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
 | VN first mile | Only if the chosen operator does not collect from merchants: **GHN** (good API, domestic only) | Merchants are spread across provinces | GHTK, Viettel Post |
 | Orchestrator | **None for now.** Revisit Easyship when VN origin goes live there, or when merchants outside VN join | Adds no rates from VN, and hides duty billing we must reconcile | — |
 | Tracking aggregator | None at first. Add 17TRACK or AfterShip Tracking once we have more than 3 carriers | Main carriers push or are polled directly | — |
-| Landed cost | Our own per-country modules for taxes we collect. For border duty, **Zonos without its guarantee** (US$2 per order). **Easyship Taxes & Duties API is not possible**: no tax records for ship-from VN (tested in sandbox and production, 2026-11-10) | The Zonos guarantee makes Zonos the tax remitter, which conflicts with us being the merchant of record | Dutify (US$75 a month) as a cheap second opinion |
+| Landed cost | Our own per-country modules for taxes we collect. For border duty, **Zonos without its guarantee** (US$2 per order) once we have a website to apply with. **Easyship Taxes & Duties API is not possible**: no tax records for ship-from VN (tested in sandbox and production, 2026-11-10). Until Zonos: **Dutify**, whose docs list VN as ship-from and origin (2026-11-10); test with its free plan (q41) | The Zonos guarantee makes Zonos the tax remitter, which conflicts with us being the merchant of record | SimplyDuty (q42) or Avalara (q43) if Dutify fails |
 | HS codes | Propose with Zonos Classify (1,000 free); the merchant confirms; we store per SKU with source and confidence | The merchant guarantees accuracy (§6.5 of the PSP plan) | — |
 | Returns | Refund without return below a threshold (about US$40, or when return shipping is more than 40% of the price). Above it: a local return address or hub (Janio, Boxme or ZigZag), then a monthly consolidated shipment to VN or local liquidation. Integrator return labels for high-value goods and for outside SEA | Single return parcels to VN cost US$15–40 and need customs paperwork each | Asendia e-PAQ Returns (local return addresses) for the EU, UK and US later |
 
@@ -121,7 +121,7 @@ belongs to exactly one module.
 | Orchestrators | Easyship, EasyPost, Shippo, ShipStation API, AfterShip Shipping | Only with our own DHL, FedEx or UPS account | Not now |
 | Regional aggregators | EasyParcel (MY), Biteship and Shipper (ID), Sendcloud and nShift (EU) | No VN origin | Only for domestic return legs or later origins |
 | Tracking | AfterShip Tracking, 17TRACK, Parcel Perform | Track VN carriers | Later |
-| Landed cost | Zonos, Easyship T&D, Avalara, Dutify, SimplyDuty, Hurricane, Descartes | n/a | Zonos (estimate mode); Easyship not possible from VN (2026-11-10) |
+| Landed cost | Zonos, Easyship T&D, Avalara, Dutify, SimplyDuty, Hurricane, Descartes | n/a | Zonos (estimate mode); Dutify until then (VN supported by docs, test q41); Easyship not possible from VN (2026-11-10); SimplyDuty and Avalara VN support unknown (docs behind login or sales) |
 
 ### 3.1 VN → SEA lane matrix
 
