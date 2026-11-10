@@ -9,8 +9,8 @@ boxme,Boxme,sea_line,https://boxme.asia,rfq_sent,VN-HQ; DDP 'upon agreement'
 jt_intl,J&T Express VN International,sea_line,https://www.jtexpress.vn,rfq_sent,VN entity Thuan Phong; international express to ~225 destinations incl. ID (2024 card); duties unpaid; contact@jet-logistics.com
 vnpost,Vietnam Post (EMS),postal,,none,duties unpaid; no international API
 aramex,Aramex (VN agent),integrator,,none,"later, GCC last mile"
-shipx,ShipX (shipx.asia),aggregator,https://shipx.asia,none,VN aggregator reselling carrier rates; add to the quote round
-efex,EFEX / iChiba Ship4P,aggregator,,none,VN reseller of carrier rates
+shipx,ShipX (shipx.asia),aggregator,https://shipx.asia,none,"VN aggregator; own VN→US linehaul (Type 11 entry, USPS last mile), resold UPS/FedEx from VN, postal via YUN and Belgium Post; published ""from"" prices (research-logistics.md §3.2)"
+efex,EFEX / iChiba Ship4P,aggregator,https://efex.vn,none,"VN cross-border seller platform; claims DDP for qualifying exports, no published prices (research-logistics.md §3.2)"
 benchmark,Benchmark (our estimates),estimate,,n/a,not a provider: holds estimated price ranges
 zonos,Zonos,landed_cost,https://zonos.com,rfq_planned,landed cost US$2 per order in estimate mode
 easyship_td,Easyship Taxes & Duties API,landed_cost,https://www.easyship.com,none,US$0.09-0.11 per call

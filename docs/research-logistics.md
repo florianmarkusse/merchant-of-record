@@ -134,6 +134,80 @@ belongs to exactly one module.
 | VN Post EMS | yes | yes | yes | yes | yes | no (duties unpaid) | none international |
 | Ninja Van, DHL eCommerce, LEX | exited VN | | | | | | |
 
+### 3.2 Duty-paid economy lines to the US, MY, TH, PH, ID and KR (checked 2026-11-10)
+
+The gap from `plan-logistics-next.md` §3: VIO's US lines and Extra are
+not duty-paid, so to these six countries only DHL, FedEx and UPS are
+duty-paid today. A second search for Vietnamese providers found the
+following. No one publishes a confirmed duty-paid economy line to MY, TH,
+PH, ID or KR from Vietnam; every lead needs a quote.
+
+- **ShipX** (shipx.asia, formerly SGLINK, backed by Amilo; HQ Bay Hien
+  Ward, HCMC; sales +65 8184 9589, info@shipx.asia) is the strongest
+  lead. Its pricing page lists "from" prices in USD [published, 2026-11-10]:
+
+  | Service | Origin | From | Unit |
+  |---|---|---|---|
+  | Direct US B2C (own linehaul VN→US, USPS last mile, 6–9 days) | VN | US$6.54 | 0.05 kg |
+  | Economy YUN Standard / YUN US Fast | VN | US$3.96 / 5.85 | 0.10 kg |
+  | Economy Belgium Post | VN | US$7.73 | 0.10 kg |
+  | Economy SingPost Standard | SG | US$3.88 | 0.05 kg |
+  | Special Line (food, cosmetics; EU, AU, CA, US) | VN | US$10.19 | 0.5 kg |
+  | UPS Saver (VN direct) | VN | US$25.96 | 0.5 kg |
+  | FedEx Economy (VN direct) | VN | US$26.69 | 0.5 kg |
+  | FedEx Regular (via SG) | SG | US$17.77 | 0.5 kg |
+  | DHL Priority (via SG) / DHL Premium (via MY) | SG / MY | US$26.85 / 25.62 | 0.5 kg |
+
+  - The US line clears as a US Type 11 informal customs entry, not a postal CN22.
+    That means duties are paid at entry by the filer, which suggests a
+    duty-paid line. Who files and how the duty is billed to us is
+    UNVERIFIED.
+  - Express is "DDP and DDU options available". The postal lines don't
+    say, and are probably duties-unpaid like VIO.
+  - Origin is "Vietnam, Singapore, Malaysia", so some express is forwarded
+    to SG or MY first and shipped on their accounts there.
+  - The resold UPS Saver price from VN is about 70% below our UPS list
+    price ($85–90 for 0.5 kg to the US or EU), but it is a "from" price
+    for an unnamed zone.
+  - The "per 0.05 kg" unit is unclear: probably the first weight step,
+    not a linear rate.
+  - An API is claimed (Shopify and WooCommerce named); no docs are public.
+  - SEA (MY, TH, PH, ID) is named only as "markets at launch", and KR is
+    not mentioned at all.
+
+- **EFEX** (efex.vn, US address Garland TX; Zalo and Messenger only).
+  Claims 220+ countries in 5–10 days and "DDP for qualifying exports" in
+  a blog post. No prices, no country list, no pickup; sellers send parcels
+  to an unnamed warehouse. Its fulfilment price table expired on
+  2024-12-31 [published]. A weak lead.
+- **MTS Logistics with Viettel Post**: a dedicated small-parcel and
+  e-commerce line from VN to the US, announced only in a LinkedIn post by
+  an MTS employee [secondary]. No terms. Viettel Post is also FedEx's
+  network provider in VN [secondary].
+- **Vantage Logistics** (HCMC, info@vlc.com.vn): a 2025-07 article promises
+  US delivery in 5 business days at "all-inclusive rates covering taxes".
+  No prices [published, marketing].
+- **Gateway Express** (gatewayexpress-vn.pages.dev): VN→ID air from
+  VND 75,000/kg in 3–5 days, Form D for ATIGA duty. Low credibility
+  (hosted on a free pages site) [published, unverified].
+- **US postal routes are closed**: USPS lists DDP as not available from VN,
+  and VN Post suspended US mail after the US de minimis ended on
+  2025-08-29 [published, USPS; DHL]. To the US, only the integrators and
+  linehaul operators like ShipX are left.
+- **KR**: no duty-paid economy line from VN found. Integrators only.
+- **Ninja Van** runs duty-paid end-to-end lines into MY, PH and VN from
+  HK, CN and KR only, not from VN (see 01-sea-carriers.md §2.1).
+
+Next: ask ShipX (q36), EFEX (q37) and MTS (q38) for quotes in the
+standard shape (`plan-logistics-next.md` §2), with duty-paid terms per
+lane. Sources:
+https://shipx.asia/toolkit/pricing-wizard ; https://shipx.asia/services ;
+https://efex.vn/en/solutions/cross-border-shipping ;
+https://vn.linkedin.com/in/amy-phan-292938150 ;
+https://pe.usps.com/text/IMM/tz_024.htm ;
+https://www.dhl.com/discover/en-vn/ship-with-dhl/export-with-dhl/how-postal-suspensions-affect-us-shipping ;
+https://gatewayexpress-vn.pages.dev/en/shipping-to-indonesia
+
 ## 4. Cost
 
 ### 4.1 Per parcel
