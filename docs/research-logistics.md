@@ -246,10 +246,36 @@ higher; UPS: VND 600,425), residential delivery (DHL VND 150,000), and
 remote-area surcharges. Discounts at about 500 parcels a month are
 estimated at 30–50% off list, and 60–75% at 5k or more [estimate].
 
-**Open question that could save the US$23:** on lanes where nothing is
-collected at the border because we charge the tax at checkout (SG and MY
-once registered, AU, NZ, UK ≤ £135, NO, HK), is the duty-paid service and
-its fee needed at all? Ask each integrator (UNVERIFIED).
+**Is the US$23 duty-paid fee charged on lanes where nothing is due at the
+border?** (Partly answered 2026-11-10 from the 2026 VN guides in
+`markets/sources/`.) These are the lanes where we charge the tax at
+checkout and no duty applies: SG and MY once registered, AU, NZ, UK up to
+£135, NO, HK, and KR and JP below their limits (`border_charges.csv`). The
+EU and the US are not among them: the EU's €3 duty and US duties are
+due on every parcel.
+
+- **DHL:** the 2026 VN guide says Duty Tax Paid charges "apply whenever
+  duties, taxes or other regulatory fees occur" [published]. So we can
+  book DTP on every shipment and pay the VND 600,000 minimum only when
+  something is due. Our cost model already applies it that way. q01 asks
+  DHL to confirm in writing.
+- **UPS:** the 2026 guide bills the VND 600,425 Duty/Tax Forwarding
+  surcharge "when the billing option is selected" [published], so it
+  looks like a charge per shipment either way. Choose the option per
+  shipment: forwarding only where `border_charges.csv` says something is
+  due, receiver billing elsewhere. The cost model assumes this per-shipment
+  choice.
+- **FedEx:** the VN surcharge sheet keeps "ancillary clearance service
+  fees" outside its charges and gives no amount. UNVERIFIED (q02).
+- **Condition for "nothing due":** our registration number has to be on
+  the waybill: IOSS, UK VAT, AU ARN, NZ GST, NO VOEC, SG OVR, MY LVG.
+  Without it, customs collects import tax as well, and with DTP that tax
+  lands on our duty invoice, so we pay the tax twice. The carrier module
+  must send these fields.
+- **Risk of receiver billing (UPS without the option):** if customs
+  charges something unexpected, the buyer gets a bill plus the carrier's
+  disbursement fee. We would refund it to keep the duty-paid promise, so
+  any such bill must be traceable to its order.
 
 SEA consolidated DDP line, **estimate only** (no provider publishes VN→SEA
 rates), before duties and tax:
