@@ -189,6 +189,32 @@ rates), before duties and tax:
 
 Janio adds a platform fee from US$0.50 per shipment [published].
 
+**Benchmark: how other shops price shipping (checked 2026-11-10).**
+
+- Spincess (spincess.store), a household business in Binh Tan, HCMC,
+  selling dancewear at US$15–48 an item: flat **US$10** to Europe, the US
+  and Canada, free above US$200; US$10 to Asia and Oceania, free above
+  US$150 [published, shipping-guide image on its shipping policy]. It names
+  USPS, YunExpress and "regional partners", and EMS or DHL only on request.
+  Duties and taxes are paid by the buyer (DDU), IOSS is not mentioned, and
+  the policy says items are declared "at $1 USD (Asia) and low value as
+  possible for other countries" [published].
+  Nothing special in its logistics: an economy postal line (VIO ePacket on
+  the YunExpress network lists VND 298,000, about US$11, for 0.5 kg to DE,
+  against VND 1,928,000 for DHL Express zone 8 before fuel), a threshold paid
+  from margin, and tax left to the buyer or avoided by under-declaring. We
+  cannot copy the last part: as MoR we owe the tax, and under-valuation is
+  customs fraud. Our legal equivalent is the same ePacket line with our own
+  IOSS number, which adds EU VAT at checkout, the €3 duty per tariff line,
+  the €2 handling fee and VIO's €5 per HS code, roughly €10–12 on a US$40
+  item, with no charges at the door in return.
+- Revolve (US retailer, ships from the US, so not a VN benchmark): duties
+  and taxes prepaid at checkout; Croatia page lists express €8 under €80,
+  free above [published]; UK free above about US$100 [secondary]. Cheap
+  through volume-negotiated express contracts and shipping built into
+  prices; its contract terms are not public. The site blocks automated
+  reads, so other countries were not checked.
+
 ### 4.2 Integration and software
 
 | Item | Cost |
