@@ -13,3 +13,14 @@ https://www.jtexpress.com/en/contactUs), question q06.
 Not in the files: fuel surcharge (updated monthly), transit times, DDP.
 The 2024 card excludes import duties and taxes, so the service is duties
 unpaid unless J&T offers DDP (asked in q06).
+
+Goods rules (read in Chrome 2026-11-10; the site works in a browser, the
+earlier certificate error was only for automated reads), loaded into
+`service_restrictions.csv`:
+
+- refused-goods list: https://jtexpress.vn/vi/tracking?type=prohibited-goods
+  (16 groups; batteries are refused under item 2)
+- general terms: https://jtexpress.vn/vi/dieu-khoan-chung (§3.1b
+  international packing, §4 refusal, §7 exemptions)
+- compensation policy: https://jtexpress.vn/vi/chinh-sach (§III.B
+  international: US$100 undeclared, VND 30,000,000 declared)

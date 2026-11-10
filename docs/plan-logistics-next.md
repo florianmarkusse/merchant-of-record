@@ -118,9 +118,24 @@ VN rate PDFs; their web pages block automated reads) and VIO. Findings:
 - Wood and lacquerware: VIO wants to check them first; DHL, FedEx and UPS
   say nothing. Destination rules (AU) apply either way.
 
-Open: J&T and Asendia could not be read, and DHL wood rules, VIO battery
-and compensation terms are unknown. Asked in q35 (draft, to send with the
-2026-11-14 follow-ups) and added to the FedEx and UPS drafts (q02, q03).
+J&T and Asendia were read in Chrome on 2026-11-10 (J&T refused-goods
+list, terms and compensation policy; Asendia Singapore GTC May 2025,
+which Asendia VN links as its terms):
+
+- J&T refuses batteries outright (refused list item 2): no boards with
+  lithium batteries. International compensation is capped at US$100
+  undeclared or VND 30,000,000 declared.
+- Asendia GTC §7.2 treats glass, porcelain and other fragile goods as
+  valuables: only by written agreement, otherwise at our own risk with no
+  liability at all. Ceramics need that agreement before e-PAQ is usable
+  for them.
+- Neither says anything about wood, bamboo or lacquerware.
+
+Open: wood and lacquerware everywhere, VIO battery and compensation
+terms, J&T Section II batteries, and Asendia's contracting entity,
+fragile-goods agreement and packing specifications. q35 now asks only
+these (draft, to send with the 2026-11-14 follow-ups); FedEx and UPS are
+in their drafts (q02, q03).
 
 ### 5. Follow up on the requests in flight
 
