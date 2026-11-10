@@ -508,7 +508,8 @@ in CH).
 
 - **VOEC (since 2020-04-01):** foreign sellers and marketplaces of LVG
   register in the VOEC register once sales to Norway exceed **NOK 50,000
-  over 12 months** (recalled, UNVERIFIED in 2026).
+  over 12 months**; voluntary registration from the first sale is allowed
+  [P: Skatteetaten VOEC register page, checked 2026-11-10].
   - Items under **NOK 3,000 per item** carry **25% Norwegian VAT at the
     point of sale**.
   - VAT is filed and paid **quarterly**.
@@ -519,9 +520,13 @@ in CH).
   customs duty**. Above that, apparel is dutiable (Norway keeps duties on
   some textiles, roughly up to 10.7%, UNVERIFIED) and import VAT is paid at
   the border.
-- Changes from **2026-07-01** affecting postal collection were reported
-  (customs threshold, VAT-exempt LVG regime): UNVERIFIED with Tolletaten
-  primary.
+- Changes from **2026-07-01** affecting postal collection were reported.
+  Checked 2026-11-10: the 2026-07-01 change found on toll.no is the EU's
+  €3 duty on parcels entering the EU, which affects Norwegian exports, not
+  imports into Norway. No change to Norway's own NOK 3,000 VOEC limit or
+  postal collection was found [P: toll.no; regjeringen.no Finance Ministry
+  changes from 2026-07-01]. A consumer site reports Posten's clearance fee
+  is waived for VOEC parcels under NOK 3,000 [S: bytt.no].
 - Returns: VAT credit in the VOEC return for refunded sales.
 - Compliance: EEA, so GPSR applies via the EEA Agreement (UNVERIFIED
   incorporation status). Norwegian-language labelling for consumer
@@ -583,8 +588,10 @@ SG vs NL: **no difference.**
     - the MP was **converted into law: approved by Congress on 2026-09-03,
       sanctioned on 2026-09-10** [S, several Brazilian outlets];
     - **before that** the rate was 20% from 2024-08-01 to 2026-05-11.
-  - US$50.01–3,000: sources conflict. Either **60% with a US$30
-    deduction** (Portaria 1.342) or 30% after the law. **UNVERIFIED.**
+  - US$50.01–3,000: **60% with a US$30 deduction** (raised from US$20 by
+    Portaria MF 1.342/2026) [S: DHL Brazil, Senado, Econet; checked
+    2026-11-10]. DHL says the act for a 30% rate has not been published;
+    one column claims 30% for RC companies. Treat 60% − US$30 as current.
   - **ICMS (state): 17–20%** depending on the state, charged "por dentro"
     (grossed up). Ten states raised it to 20% in April 2025.
   - A purchase in the name of a company (CNPJ) falls under the general
@@ -642,10 +649,14 @@ SG vs NL: **no difference.**
 ### 8.4 Colombia
 - The long-standing courier/postal regime: ≤ US$200, duty-exempt with a
   single 10% rate, IVA 19%.
-  - In 2025–2026 the IVA exclusion was cut: Decreto 1474/2025 reportedly
-    lowers the IVA-free cap to **US$50**.
-  - The US$200 limit is kept for US goods under the TPA.
-  - [S, conflicting; UNVERIFIED].
+  - Decreto Legislativo 1474/2025 cut the IVA-free cap to **US$50** for
+    2026, but the Constitutional Court suspended it provisionally on
+    2026-01-29 (Auto 082/2026). Since then DIAN applies the **US$200 IVA
+    exclusion again** (Oficio DIAN 1470/2026). The decree never touched
+    the duty: the 10% single rate up to US$200 FOB stands (Oficio DIAN
+    407/2026) [P: DIAN normograma, checked 2026-11-10]. A final Court
+    ruling could change this again; whether the US$200 is FOB or customs
+    value is still being asked of DIAN.
 - There is no specific foreign seller VAT registration for goods. The
   courier collects.
 - **Rating: MEDIUM** (frequent changes, but courier DDP works).
@@ -690,7 +701,7 @@ SG vs NL: **no difference.**
 | Brazil | US$50 (RC): 0% federal II since 2026-05-12, law 2026-09-10; ICMS 17–20% | Yes (RC) | RC certification (via partner) | Above US$50: 60% (or 30%, UNVERIFIED) + ICMS | No | Taxa das blusinhas abolished | **Medium-Hard** | Same |
 | Mexico | None: courier flat 33.5% ≤ US$2,500 (from 2025-08-15) | No | NOM labelling needs importer RFC | 33.5% flat; MFN up to 35–50% non-FTA | CPTPP only via formal entry (UNVERIFIED) | 19% → 33.5% in 2025; MFN hikes 2026 | **Hard** | Same |
 | Chile | Duty-free ≤ US$500 | Yes, 19% IVA (since 2025-10-25) | SII simplified, no domicile | 0 ≤ US$500; 6% above | VCFTA/CPTPP for formal | New regime Oct 2025 | **Easy-Medium** | Same |
-| Colombia | Courier ≤ US$200 (non-US) at 10%; IVA cap cut to US$50? | No | None | 10% courier single rate | No | Decreto 1474/2025 (UNVERIFIED) | **Medium** | Same |
+| Colombia | Courier ≤ US$200 at 10%; IVA-free up to US$200 again since 2026-01-29 | No | None | 10% courier single rate | No | Decreto 1474/2025 (US$50 IVA cap) suspended by the Constitutional Court; final ruling pending | **Medium** | Same |
 | South Africa | None (20% flat + 15% VAT ≤ R500 since 2024-09-01) | No | None | ~40–45% above R500 | No | 2024 change | **Hard** | Same |
 | Nigeria | n/a | n/a | VAT for non-residents | Garments on import prohibition list (UNVERIFIED) | No | Nigeria Tax Act 2025 | **Hard / not viable** | Same |
 

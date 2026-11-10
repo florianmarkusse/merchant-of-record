@@ -102,7 +102,7 @@ registration):
 | SEA | SG, MY, PH, TH, LA, KH | TH and LA have no duty-free limit, so every parcel is `BorderPaid`. ATIGA 0% duty for goods truly made in VN. ID closed (below) |
 | East Asia | HK, TW, KR, JP | KR needs the buyer's customs code (PCCC) on the waybill. JP knitwear and leather are dutiable at any value. JP seller registration only from 2028-04-01 |
 | Oceania | AU, NZ | nothing due below A$1,000 / NZ$1,000 until our turnover thresholds |
-| Europe (non-EU) | CH, NO | border VAT through DHL. NO's VOEC scheme becomes mandatory above about NOK 50k a year (to confirm) |
+| Europe (non-EU) | CH, NO | border VAT through DHL. NO's VOEC scheme becomes mandatory from NOK 50k a year (confirmed 2026-11-10) |
 | Americas | CA | duty and tax from CAD 20, border-paid |
 
 **Open with one condition each:**
@@ -206,7 +206,7 @@ bill at the door leads to refused parcels.
 | MY | LVG, up to RM 500 | RM 500k in 12 months | RM 500 |
 | AU | GST, up to A$1,000 | A$75k a year | A$1,000 |
 | NZ | GST, up to NZ$1,000 | NZ$60k a year | NZ$1,000 |
-| NO | VOEC, under NOK 3,000 per item | NOK 50k (to confirm) | — |
+| NO | VOEC, under NOK 3,000 per item | NOK 50k (confirmed 2026-11-10) | — |
 | CH | — | CHF 100k (then VAT registration with a representative) | VAT under CHF 5 |
 | others in §3 | none | — | per row |
 

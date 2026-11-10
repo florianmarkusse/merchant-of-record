@@ -225,6 +225,11 @@ under NT$2,000 (about US$62) and pay no tax. The friction is EZ WAY
 onboarding for each buyer, the 6-per-half-year counter, and the risk of a
 reform. Above NT$2,000 the duty is only moderate.
 
+- Checked 2026-11-10: NT$2,000 and six duty-free parcels per half-year
+  still apply. The Finance Minister promised in April 2025 to consider
+  changes, and a Taipei Times editorial of 2026-02-03 says none has been
+  made [S: Taipei Times; Kaohsiung Customs notice via search].
+
 ---
 
 ## 4. Japan
