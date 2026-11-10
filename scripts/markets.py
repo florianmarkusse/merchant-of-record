@@ -69,9 +69,13 @@ SCHEMA: dict[str, tuple[str, ...]] = {
     "questions": (
         "question",
         "kind",
+        "providers",
         "to",
         "subject",
         "text",
+        "priority",
+        "due_on",
+        "blocked_by",
         "status",
         "sent_on",
         "answered_on",
@@ -230,6 +234,25 @@ STATUS_FILL: dict[Status, str] = {
 MARKET_STATUSES = ("open", "conditional", "closed", "undecided", "not_assessed")
 QUESTION_KINDS = ("email", "adviser", "fetch")
 QUESTION_STATUSES = ("draft", "sent", "answered", "dropped")
+OPEN_QUESTION_STATUSES = ("draft", "sent")
+# How soon an open question must be settled, most urgent first.
+PRIORITIES = ("now", "before_launch", "later")
+PRIORITY_LABEL: dict[str, str] = {
+    "now": "Now",
+    "before_launch": "Before launch",
+    "later": "Later",
+}
+RELATIONSHIPS = (
+    "none",
+    "rfq_planned",
+    "rfq_sent",
+    "quoted",
+    "account_planned",
+    "account_open",
+    "contracted",
+    "not_pursued",
+    "n/a",
+)
 RATE_CARD_KINDS = ("list", "promo", "quote", "contract", "estimate")
 SURCHARGE_BASES = (
     "percent_of_freight",
@@ -415,7 +438,8 @@ def check(data: Data) -> list[str]:
     errors: list[str] = []
     errors.extend(check_countries(data))
     errors.extend(check_groups(data, known))
-    errors.extend(check_questions(data))
+    errors.extend(check_questions(data, known))
+    errors.extend(check_providers(data))
     errors.extend(check_facts(data, known))
     errors.extend(check_inheritance(data, known))
     errors.extend(check_services(data, known))
@@ -494,14 +518,35 @@ def check_groups(data: Data, known: Known) -> list[str]:
     return errors
 
 
-def check_questions(data: Data) -> list[str]:
+def check_questions(data: Data, known: Known) -> list[str]:
     errors: list[str] = []
     for i, row in enumerate(data.rows("questions")):
+        here = where("questions", i)
         errors.extend(one_of("questions", i, row, "kind", QUESTION_KINDS))
         errors.extend(one_of("questions", i, row, "status", QUESTION_STATUSES))
         if row["status"] == "answered" and not row["answer"]:
-            errors.append(f"{where('questions', i)}: answered without an answer")
-        errors.extend(check_dates("questions", i, row, ("sent_on", "answered_on")))
+            errors.append(f"{here}: answered without an answer")
+        if row["status"] == "sent" and not row["sent_on"]:
+            errors.append(f"{here}: sent without sent_on")
+        # Open questions need a priority; closed ones may keep theirs.
+        if row["status"] in OPEN_QUESTION_STATUSES or row["priority"]:
+            errors.extend(one_of("questions", i, row, "priority", PRIORITIES))
+        for provider in row["providers"].split():
+            if provider not in known.providers:
+                errors.append(f"{here}: unknown provider {provider}")
+        dates = ("sent_on", "answered_on", "due_on")
+        errors.extend(check_dates("questions", i, row, dates))
+    return errors
+
+
+def check_providers(data: Data) -> list[str]:
+    errors: list[str] = []
+    seen: set[str] = set()
+    for i, row in enumerate(data.rows("providers")):
+        errors.extend(one_of("providers", i, row, "relationship", RELATIONSHIPS))
+        if row["provider"] in seen:
+            errors.append(f"{where('providers', i)}: duplicate {row['provider']}")
+        seen.add(row["provider"])
     return errors
 
 
@@ -1516,13 +1561,218 @@ def section_details(data: Data) -> h.Element:
     return h.section[h.h2(id="details")["All facts per country"], blocks]
 
 
-def section_questions(data: Data) -> h.Element:
+QUESTION_LINKED_TABLES = (
+    "facts",
+    "services",
+    "rate_cards",
+    "surcharges",
+    "border_charges",
+)
+
+
+def rows_waiting(data: Data) -> dict[str, int]:
+    """How many data rows point to each question."""
     waiting: dict[str, int] = {}
-    for table in ("facts", "services", "rate_cards", "surcharges"):
+    for table in QUESTION_LINKED_TABLES:
         for row in data.rows(table):
             question = row.get("question", "")
             if question:
                 waiting[question] = waiting.get(question, 0) + 1
+    return waiting
+
+
+@dataclass(frozen=True)
+class TodoItem:
+    question: Row
+    waiting: int  # data rows this question would settle
+    overdue: bool
+
+
+def is_open(question: Row) -> bool:
+    return question["status"] in OPEN_QUESTION_STATUSES
+
+
+def urgency(question: Row) -> tuple[int, str, str]:
+    """Sort key: priority, then due date (none last), then id."""
+    rank = PRIORITIES.index(question["priority"])
+    due = question["due_on"] or "9999-12-31"
+    return (rank, due, question["question"])
+
+
+def todo_items(data: Data, today: date) -> list[TodoItem]:
+    waiting = rows_waiting(data)
+    items: list[TodoItem] = []
+    for question in data.rows("questions"):
+        if not is_open(question):
+            continue
+        due = question["due_on"]
+        overdue = bool(due) and date.fromisoformat(due) < today
+        items.append(TodoItem(question, waiting.get(question["question"], 0), overdue))
+    items.sort(key=lambda item: urgency(item.question))
+    return items
+
+
+def next_step(question: Row) -> str:
+    """What to do next about one open question."""
+    if question["blocked_by"]:
+        return f"{question['question']} blocked: {question['blocked_by']}"
+    if question["status"] == "sent":
+        step = f"{question['question']}: waiting since {question['sent_on']}"
+        if question["due_on"]:
+            step += f", follow up {question['due_on']}"
+        return step
+    step = f"Send {question['question']} ({question['subject']})"
+    if question["due_on"]:
+        step += f" by {question['due_on']}"
+    return step
+
+
+@dataclass(frozen=True)
+class Contact:
+    provider: Row
+    questions: list[Row]  # every question that names this provider
+    last_sent: str  # latest sent_on, "" when nothing was sent
+    answered: int
+    next_step: str
+
+
+def contacts(data: Data) -> list[Contact]:
+    result: list[Contact] = []
+    for provider in data.rows("providers"):
+        mine: list[Row] = []
+        for question in data.rows("questions"):
+            if provider["provider"] in question["providers"].split():
+                mine.append(question)
+        last_sent = ""
+        answered = 0
+        open_questions: list[Row] = []
+        for question in mine:
+            last_sent = max(last_sent, question["sent_on"])
+            if question["status"] == "answered":
+                answered += 1
+            if is_open(question):
+                open_questions.append(question)
+        if open_questions:
+            step = next_step(min(open_questions, key=urgency))
+        elif provider["relationship"] in ("not_pursued", "n/a"):
+            step = "None: not pursued (see notes)"
+        elif mine:
+            step = "Nothing open"
+        else:
+            step = "No question written"
+        result.append(Contact(provider, mine, last_sent, answered, step))
+    return result
+
+
+def question_trail(questions: list[Row]) -> list[str]:
+    """One line per question: id, status and its dates."""
+    lines: list[str] = []
+    for question in questions:
+        line = f"{question['question']} {question['status']}"
+        if question["sent_on"]:
+            line += f" {question['sent_on']}"
+        if question["answered_on"]:
+            line += f", answered {question['answered_on']}"
+        lines.append(line)
+    return lines
+
+
+def section_todo(data: Data, today: date) -> h.Element:
+    rows: list[h.Node] = []
+    for item in todo_items(data, today):
+        q = item.question
+        due: h.Node = q["due_on"]
+        if item.overdue:
+            due = [q["due_on"], h.div[chip("unverified", "overdue")]]
+        status: h.Node = q["status"]
+        if q["sent_on"]:
+            status = [q["status"], h.div(class_="via")[q["sent_on"]]]
+        rows.append(
+            h.tr[
+                h.td[PRIORITY_LABEL[q["priority"]]],
+                h.td(class_="num")[due],
+                h.td[q["question"]],
+                h.td[q["to"]],
+                h.td[h.strong[q["subject"]], h.div(class_="via")[q["text"]]],
+                h.td[status],
+                h.td[q["blocked_by"]],
+                h.td(class_="num")[str(item.waiting)],
+            ]
+        )
+    return h.section[
+        h.h2(id="todo")["To do"],
+        h.p(class_="muted")[
+            "Open questions (draft or sent), most urgent first: priority, then due "
+            "date. 'Now' is needed for the next decisions, 'Before launch' before "
+            "the first live order, 'Later' for later markets. 'Rows' counts the "
+            "data rows the answer would settle. Set priority, due_on and "
+            "blocked_by in questions.csv."
+        ],
+        h.div(class_="scroll")[
+            h.table[
+                h.thead[
+                    h.tr[
+                        h.th["Priority"],
+                        h.th(class_="num")["Due"],
+                        h.th["Id"],
+                        h.th["To"],
+                        h.th["Question"],
+                        h.th["Status"],
+                        h.th["Blocked by"],
+                        h.th(class_="num")["Rows"],
+                    ]
+                ],
+                h.tbody[rows],
+            ]
+        ],
+    ]
+
+
+def section_contacts(data: Data) -> h.Element:
+    rows: list[h.Node] = []
+    for contact in contacts(data):
+        p = contact.provider
+        name: h.Node = h.a(href=p["website"])[p["name"]] if p["website"] else p["name"]
+        trail: list[h.Node] = []
+        for line in question_trail(contact.questions):
+            trail.append(h.div[line])
+        rows.append(
+            h.tr[
+                h.td[name, h.div(class_="via")[p["provider"]]],
+                h.td[p["kind"]],
+                h.td[p["relationship"]],
+                h.td(class_="num")[contact.last_sent],
+                h.td[trail],
+                h.td[contact.next_step],
+            ]
+        )
+    return h.section[
+        h.h2(id="contacts")["Contacts"],
+        h.p(class_="muted")[
+            "One row per provider: our relationship (providers.csv), the questions "
+            "that name it (questions.csv, column providers) and the next step, "
+            "taken from its most urgent open question."
+        ],
+        h.div(class_="scroll")[
+            h.table[
+                h.thead[
+                    h.tr[
+                        h.th["Provider"],
+                        h.th["Kind"],
+                        h.th["Relationship"],
+                        h.th(class_="num")["Last sent"],
+                        h.th["Questions"],
+                        h.th["Next step"],
+                    ]
+                ],
+                h.tbody[rows],
+            ]
+        ],
+    ]
+
+
+def section_questions(data: Data) -> h.Element:
+    waiting = rows_waiting(data)
     rows: list[h.Node] = []
     for row in data.rows("questions"):
         rows.append(
@@ -2123,6 +2373,8 @@ def build_html(data: Data, today: date) -> str:
                 section_legend(data),
                 h.nav[
                     h.a(href="#overview")["Overview"],
+                    h.a(href="#todo")["To do"],
+                    h.a(href="#contacts")["Contacts"],
                     h.a(href="#details")["Facts per country"],
                     h.a(href="#questions")["Open questions"],
                     h.a(href="#compare")["Price comparison"],
@@ -2134,6 +2386,8 @@ def build_html(data: Data, today: date) -> str:
                     h.a(href="#countries")["All countries"],
                 ],
                 section_overview(data),
+                section_todo(data, today),
+                section_contacts(data),
                 section_details(data),
                 section_questions(data),
                 section_compare(data),
@@ -2266,6 +2520,83 @@ def sheet_overview(book: Workbook, data: Data) -> None:
         sheet.column_dimensions[get_column_letter(j)].width = 34
 
 
+TODO_WIDTHS = (14, 12, 8, 34, 40, 70, 16, 40, 8)
+CONTACT_WIDTHS = (34, 16, 16, 12, 40, 60)
+
+
+def set_widths(sheet: Worksheet, widths: Sequence[int]) -> None:
+    for j, width in enumerate(widths, start=1):
+        sheet.column_dimensions[get_column_letter(j)].width = width
+
+
+def wrap_row(sheet: Worksheet, row: int) -> None:
+    for cell in sheet[row]:
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+
+def sheet_todo(book: Workbook, data: Data, today: date) -> None:
+    sheet = book.create_sheet("To do")
+    sheet.append(
+        [
+            "Priority",
+            "Due",
+            "Id",
+            "To",
+            "Subject",
+            "Question",
+            "Status",
+            "Blocked by",
+            "Rows",
+        ]
+    )
+    bold_row(sheet, 1)
+    for item in todo_items(data, today):
+        q = item.question
+        status = f"{q['status']} {q['sent_on']}".strip()
+        due = f"{q['due_on']} (overdue)" if item.overdue else q["due_on"]
+        sheet.append(
+            [
+                PRIORITY_LABEL[q["priority"]],
+                due,
+                q["question"],
+                q["to"],
+                q["subject"],
+                q["text"],
+                status,
+                q["blocked_by"],
+                item.waiting,
+            ]
+        )
+        wrap_row(sheet, sheet.max_row)
+        if item.overdue:
+            sheet.cell(row=sheet.max_row, column=2).fill = fill("unverified")
+    sheet.freeze_panes = "D2"
+    set_widths(sheet, TODO_WIDTHS)
+
+
+def sheet_contacts(book: Workbook, data: Data) -> None:
+    sheet = book.create_sheet("Contacts")
+    sheet.append(
+        ["Provider", "Kind", "Relationship", "Last sent", "Questions", "Next step"]
+    )
+    bold_row(sheet, 1)
+    for contact in contacts(data):
+        p = contact.provider
+        sheet.append(
+            [
+                f"{p['name']} ({p['provider']})",
+                p["kind"],
+                p["relationship"],
+                contact.last_sent,
+                "\n".join(question_trail(contact.questions)),
+                contact.next_step,
+            ]
+        )
+        wrap_row(sheet, sheet.max_row)
+    sheet.freeze_panes = "B2"
+    set_widths(sheet, CONTACT_WIDTHS)
+
+
 def sheet_prices(book: Workbook, data: Data) -> None:
     cards = data.rows("rate_cards")
     sheet = book.create_sheet("Prices")
@@ -2350,6 +2681,8 @@ def build_xlsx(data: Data, today: date) -> Workbook:
     book.remove(book.worksheets[0])  # the default empty sheet
     sheet_readme(book, today)
     sheet_overview(book, data)
+    sheet_todo(book, data, today)
+    sheet_contacts(book, data)
     sheet_prices(book, data)
     sheet_all_in(book, data)
     for name, columns in SCHEMA.items():

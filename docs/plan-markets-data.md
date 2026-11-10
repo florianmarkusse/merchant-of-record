@@ -72,6 +72,19 @@ a value waits on a re-fetch, an email or an adviser.
 - **Open work is in `questions.csv`**: emails to carriers, adviser
   questions and re-fetches. A fact waiting on one has status
   `awaiting_answer` and the question id.
+- **Every open question has a priority, and names its providers**
+  (decided 2026-11-10: the list had grown to 40 and nothing said what to
+  chase first). `priority` is `now` (needed for the next decisions),
+  `before_launch` (before the first live order) or `later` (later
+  markets); `due_on` is the reply or follow-up date; `blocked_by` says
+  what stops it being sent; `providers` holds the ids from
+  `providers.csv` it goes to, space-separated. `check` fails on an open
+  question without a priority or with an unknown provider.
+  `providers.csv` `relationship` is a closed set: `none`, `rfq_planned`,
+  `rfq_sent`, `quoted`, `account_planned`, `account_open`, `contracted`,
+  `not_pursued`, `n/a`. The views add **To do** (open questions by
+  priority, then due date) and **Contacts** (one row per provider: the
+  questions sent, the last send date and the next step).
 
 ## Status values
 
@@ -94,7 +107,7 @@ a value waits on a re-fetch, an email or an adviser.
 | `categories.csv` | product category |
 | `topics.csv` | fact topic: what a column of the overview means |
 | `facts.csv` | fact: country or group × topic × category × origin |
-| `questions.csv` | open question: email, adviser question or re-fetch |
+| `questions.csv` | question: email, adviser question or re-fetch, with priority, due date, blocker and providers |
 | `providers.csv` | logistics or landed-cost provider and our contact status |
 | `services.csv` | carrier service from an origin |
 | `rate_cards.csv` | price list of a service: kind, currency, validity |
