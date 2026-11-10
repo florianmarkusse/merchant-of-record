@@ -1,44 +1,4 @@
 rate_card,destination,zone,notes
-fedex_ip_vn_2026_promo,HK,A,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,SG,A,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,CN,B,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,JP,B,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,TW,B,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,AU,C,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,IN,C,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,NZ,C,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,US,D,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,CA,D,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,MX,D,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,DE,E,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,FR,E,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,GB,E,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,RU,F,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,BR,G,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,CL,G,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,ZA,H,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,SA,H,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ip_vn_2026_promo,NG,H,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,HK,A,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,SG,A,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,CN,B,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,JP,B,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,TW,B,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,AU,C,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,IN,C,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,NZ,C,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,US,D,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,CA,D,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,MX,D,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,DE,E,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,FR,E,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,GB,E,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,RU,F,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,BR,G,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,CL,G,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,ZA,H,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,SA,H,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
-fedex_ficp_vn_2026_promo,NG,H,"from the box sheet's major-destination list; MY, TH, ID, PH, KR, AE unknown"
 ups_wwe_vn_us_list,US,US,48 contiguous states only
 vnpost_ems_2026_calc,GB,GB,
 vnpost_ems_2026_calc,AU,AU,
@@ -1479,3 +1439,556 @@ yunexpress_vn_extra_2026_list,YT,rest_of_world,
 yunexpress_vn_extra_2026_list,ZA,group_2,
 yunexpress_vn_extra_2026_list,ZM,rest_of_world,
 yunexpress_vn_extra_2026_list,ZW,group_1,
+fedex_ip_vn_2026_promo,AD,F,
+fedex_ip_vn_2026_promo,AE,H,
+fedex_ip_vn_2026_promo,AF,H,
+fedex_ip_vn_2026_promo,AG,G,
+fedex_ip_vn_2026_promo,AI,G,
+fedex_ip_vn_2026_promo,AL,F,
+fedex_ip_vn_2026_promo,AM,F,
+fedex_ip_vn_2026_promo,AO,H,
+fedex_ip_vn_2026_promo,AR,G,
+fedex_ip_vn_2026_promo,AS,G,
+fedex_ip_vn_2026_promo,AT,E,
+fedex_ip_vn_2026_promo,AU,C,
+fedex_ip_vn_2026_promo,AW,G,
+fedex_ip_vn_2026_promo,AZ,F,
+fedex_ip_vn_2026_promo,BA,F,
+fedex_ip_vn_2026_promo,BB,G,
+fedex_ip_vn_2026_promo,BD,H,
+fedex_ip_vn_2026_promo,BE,E,
+fedex_ip_vn_2026_promo,BF,H,
+fedex_ip_vn_2026_promo,BG,F,
+fedex_ip_vn_2026_promo,BH,H,
+fedex_ip_vn_2026_promo,BI,H,
+fedex_ip_vn_2026_promo,BJ,H,
+fedex_ip_vn_2026_promo,BL,G,
+fedex_ip_vn_2026_promo,BM,G,
+fedex_ip_vn_2026_promo,BN,B,
+fedex_ip_vn_2026_promo,BO,G,
+fedex_ip_vn_2026_promo,BQ,G,
+fedex_ip_vn_2026_promo,BR,G,
+fedex_ip_vn_2026_promo,BS,G,
+fedex_ip_vn_2026_promo,BT,H,
+fedex_ip_vn_2026_promo,BW,H,
+fedex_ip_vn_2026_promo,BY,F,
+fedex_ip_vn_2026_promo,BZ,G,
+fedex_ip_vn_2026_promo,CA,D,
+fedex_ip_vn_2026_promo,CD,H,
+fedex_ip_vn_2026_promo,CG,H,
+fedex_ip_vn_2026_promo,CH,E,
+fedex_ip_vn_2026_promo,CI,H,
+fedex_ip_vn_2026_promo,CK,G,
+fedex_ip_vn_2026_promo,CL,G,
+fedex_ip_vn_2026_promo,CM,H,
+fedex_ip_vn_2026_promo,CN,B,
+fedex_ip_vn_2026_promo,CO,G,
+fedex_ip_vn_2026_promo,CR,G,
+fedex_ip_vn_2026_promo,CV,H,
+fedex_ip_vn_2026_promo,CW,G,
+fedex_ip_vn_2026_promo,CY,F,
+fedex_ip_vn_2026_promo,CZ,F,
+fedex_ip_vn_2026_promo,DE,E,
+fedex_ip_vn_2026_promo,DJ,H,
+fedex_ip_vn_2026_promo,DK,E,
+fedex_ip_vn_2026_promo,DM,G,
+fedex_ip_vn_2026_promo,DO,G,
+fedex_ip_vn_2026_promo,DZ,H,
+fedex_ip_vn_2026_promo,EC,G,
+fedex_ip_vn_2026_promo,EE,F,
+fedex_ip_vn_2026_promo,EG,H,
+fedex_ip_vn_2026_promo,ER,H,
+fedex_ip_vn_2026_promo,ES,E,
+fedex_ip_vn_2026_promo,ET,H,
+fedex_ip_vn_2026_promo,FI,E,
+fedex_ip_vn_2026_promo,FJ,G,
+fedex_ip_vn_2026_promo,FM,G,
+fedex_ip_vn_2026_promo,FO,F,
+fedex_ip_vn_2026_promo,FR,E,
+fedex_ip_vn_2026_promo,GA,H,
+fedex_ip_vn_2026_promo,GB,E,
+fedex_ip_vn_2026_promo,GD,G,
+fedex_ip_vn_2026_promo,GE,F,
+fedex_ip_vn_2026_promo,GF,G,
+fedex_ip_vn_2026_promo,GH,H,
+fedex_ip_vn_2026_promo,GI,F,
+fedex_ip_vn_2026_promo,GL,F,
+fedex_ip_vn_2026_promo,GM,H,
+fedex_ip_vn_2026_promo,GN,H,
+fedex_ip_vn_2026_promo,GP,G,
+fedex_ip_vn_2026_promo,GR,E,
+fedex_ip_vn_2026_promo,GT,G,
+fedex_ip_vn_2026_promo,GU,G,
+fedex_ip_vn_2026_promo,GY,G,
+fedex_ip_vn_2026_promo,HK,A,
+fedex_ip_vn_2026_promo,HN,G,
+fedex_ip_vn_2026_promo,HR,F,
+fedex_ip_vn_2026_promo,HT,G,
+fedex_ip_vn_2026_promo,HU,F,
+fedex_ip_vn_2026_promo,ID,A,
+fedex_ip_vn_2026_promo,IE,E,
+fedex_ip_vn_2026_promo,IL,F,
+fedex_ip_vn_2026_promo,IN,C,
+fedex_ip_vn_2026_promo,IQ,H,
+fedex_ip_vn_2026_promo,IS,F,
+fedex_ip_vn_2026_promo,IT,E,
+fedex_ip_vn_2026_promo,JM,G,
+fedex_ip_vn_2026_promo,JO,H,
+fedex_ip_vn_2026_promo,JP,B,
+fedex_ip_vn_2026_promo,KE,H,
+fedex_ip_vn_2026_promo,KG,F,
+fedex_ip_vn_2026_promo,KH,C,
+fedex_ip_vn_2026_promo,KN,G,
+fedex_ip_vn_2026_promo,KR,B,
+fedex_ip_vn_2026_promo,KW,H,
+fedex_ip_vn_2026_promo,KY,G,
+fedex_ip_vn_2026_promo,KZ,F,
+fedex_ip_vn_2026_promo,LA,C,
+fedex_ip_vn_2026_promo,LB,H,
+fedex_ip_vn_2026_promo,LC,G,
+fedex_ip_vn_2026_promo,LI,E,
+fedex_ip_vn_2026_promo,LK,H,
+fedex_ip_vn_2026_promo,LR,H,
+fedex_ip_vn_2026_promo,LS,H,
+fedex_ip_vn_2026_promo,LT,F,
+fedex_ip_vn_2026_promo,LU,E,
+fedex_ip_vn_2026_promo,LV,F,
+fedex_ip_vn_2026_promo,LY,H,
+fedex_ip_vn_2026_promo,MA,H,
+fedex_ip_vn_2026_promo,MC,E,
+fedex_ip_vn_2026_promo,MD,F,
+fedex_ip_vn_2026_promo,ME,F,
+fedex_ip_vn_2026_promo,MF,G,
+fedex_ip_vn_2026_promo,MG,H,
+fedex_ip_vn_2026_promo,MH,G,
+fedex_ip_vn_2026_promo,MK,F,
+fedex_ip_vn_2026_promo,ML,H,
+fedex_ip_vn_2026_promo,MN,C,
+fedex_ip_vn_2026_promo,MO,A,
+fedex_ip_vn_2026_promo,MP,G,
+fedex_ip_vn_2026_promo,MQ,G,
+fedex_ip_vn_2026_promo,MR,H,
+fedex_ip_vn_2026_promo,MS,G,
+fedex_ip_vn_2026_promo,MT,F,
+fedex_ip_vn_2026_promo,MU,H,
+fedex_ip_vn_2026_promo,MV,H,
+fedex_ip_vn_2026_promo,MW,H,
+fedex_ip_vn_2026_promo,MX,D,
+fedex_ip_vn_2026_promo,MY,A,
+fedex_ip_vn_2026_promo,MZ,H,
+fedex_ip_vn_2026_promo,NA,H,
+fedex_ip_vn_2026_promo,NC,G,
+fedex_ip_vn_2026_promo,NE,H,
+fedex_ip_vn_2026_promo,NF,C,
+fedex_ip_vn_2026_promo,NG,H,
+fedex_ip_vn_2026_promo,NI,G,
+fedex_ip_vn_2026_promo,NL,E,
+fedex_ip_vn_2026_promo,NO,E,
+fedex_ip_vn_2026_promo,NP,H,
+fedex_ip_vn_2026_promo,NZ,C,
+fedex_ip_vn_2026_promo,OM,H,
+fedex_ip_vn_2026_promo,PA,G,
+fedex_ip_vn_2026_promo,PE,G,
+fedex_ip_vn_2026_promo,PF,G,
+fedex_ip_vn_2026_promo,PG,G,
+fedex_ip_vn_2026_promo,PH,A,
+fedex_ip_vn_2026_promo,PK,H,
+fedex_ip_vn_2026_promo,PL,F,
+fedex_ip_vn_2026_promo,PR,D,
+fedex_ip_vn_2026_promo,PS,H,
+fedex_ip_vn_2026_promo,PT,E,
+fedex_ip_vn_2026_promo,PW,G,
+fedex_ip_vn_2026_promo,PY,G,
+fedex_ip_vn_2026_promo,QA,H,
+fedex_ip_vn_2026_promo,RE,H,
+fedex_ip_vn_2026_promo,RO,F,
+fedex_ip_vn_2026_promo,RS,F,
+fedex_ip_vn_2026_promo,RU,F,
+fedex_ip_vn_2026_promo,RW,H,
+fedex_ip_vn_2026_promo,SA,H,
+fedex_ip_vn_2026_promo,SC,H,
+fedex_ip_vn_2026_promo,SE,E,
+fedex_ip_vn_2026_promo,SG,A,
+fedex_ip_vn_2026_promo,SI,F,
+fedex_ip_vn_2026_promo,SK,F,
+fedex_ip_vn_2026_promo,SM,E,
+fedex_ip_vn_2026_promo,SN,H,
+fedex_ip_vn_2026_promo,SR,G,
+fedex_ip_vn_2026_promo,SV,G,
+fedex_ip_vn_2026_promo,SX,G,
+fedex_ip_vn_2026_promo,SY,H,
+fedex_ip_vn_2026_promo,SZ,H,
+fedex_ip_vn_2026_promo,TC,G,
+fedex_ip_vn_2026_promo,TD,H,
+fedex_ip_vn_2026_promo,TG,H,
+fedex_ip_vn_2026_promo,TH,A,
+fedex_ip_vn_2026_promo,TL,G,
+fedex_ip_vn_2026_promo,TN,H,
+fedex_ip_vn_2026_promo,TO,G,
+fedex_ip_vn_2026_promo,TR,F,
+fedex_ip_vn_2026_promo,TT,G,
+fedex_ip_vn_2026_promo,TW,B,
+fedex_ip_vn_2026_promo,TZ,H,
+fedex_ip_vn_2026_promo,UA,F,
+fedex_ip_vn_2026_promo,UG,H,
+fedex_ip_vn_2026_promo,US,D,
+fedex_ip_vn_2026_promo,UY,G,
+fedex_ip_vn_2026_promo,UZ,F,
+fedex_ip_vn_2026_promo,VA,E,
+fedex_ip_vn_2026_promo,VC,G,
+fedex_ip_vn_2026_promo,VE,G,
+fedex_ip_vn_2026_promo,VG,G,
+fedex_ip_vn_2026_promo,VI,G,
+fedex_ip_vn_2026_promo,VU,G,
+fedex_ip_vn_2026_promo,WF,G,
+fedex_ip_vn_2026_promo,WS,G,
+fedex_ip_vn_2026_promo,ZA,H,
+fedex_ip_vn_2026_promo,ZM,H,
+fedex_ip_vn_2026_promo,ZW,H,
+fedex_ficp_vn_2026_promo,AD,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AE,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AF,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AG,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AI,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AL,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AM,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AO,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AR,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AS,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AT,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AU,C,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AW,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,AZ,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BA,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BB,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BD,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BE,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BF,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BG,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BH,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BI,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BJ,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BL,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BM,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BN,B,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BO,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BQ,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BR,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BS,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BT,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BW,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BY,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,BZ,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CA,D,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CD,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CG,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CH,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CI,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CK,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CL,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CM,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CN,B,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CO,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CR,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CV,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CW,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CY,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,CZ,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,DE,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,DJ,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,DK,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,DM,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,DO,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,DZ,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,EC,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,EE,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,EG,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ER,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ES,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ET,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,FI,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,FJ,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,FM,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,FO,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,FR,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GA,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GB,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GD,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GE,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GF,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GH,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GI,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GL,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GM,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GN,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GP,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GR,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GT,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GU,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,GY,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,HK,A,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,HN,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,HR,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,HT,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,HU,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ID,A,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,IE,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,IL,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,IN,C,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,IQ,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,IS,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,IT,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,JM,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,JO,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,JP,B,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KE,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KG,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KH,C,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KN,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KR,B,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KW,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KY,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,KZ,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LA,C,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LB,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LC,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LI,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LK,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LR,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LS,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LT,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LU,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LV,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,LY,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MA,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MC,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MD,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ME,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MF,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MG,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MH,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MK,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ML,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MN,C,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MO,A,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MP,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MQ,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MR,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MS,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MT,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MU,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MV,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MW,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MX,D,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MY,A,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,MZ,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NA,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NC,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NE,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NF,C,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NG,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NI,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NL,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NO,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NP,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,NZ,C,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,OM,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PA,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PE,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PF,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PG,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PH,A,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PK,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PL,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PR,D,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PS,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PT,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PW,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,PY,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,QA,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,RE,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,RO,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,RS,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,RU,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,RW,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SA,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SC,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SE,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SG,A,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SI,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SK,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SM,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SN,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SR,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SV,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SX,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SY,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,SZ,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TC,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TD,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TG,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TH,A,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TL,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TN,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TO,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TR,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TT,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TW,B,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,TZ,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,UA,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,UG,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,US,D,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,UY,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,UZ,F,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,VA,E,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,VC,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,VE,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,VG,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,VI,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,VU,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,WF,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,WS,G,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ZA,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ZM,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ficp_vn_2026_promo,ZW,H,"zone from the IP column of fedex-rates-zi-en-vn-2026.pdf; the FICP sheet refers to the same Zone Index, which has no FICP column"
+fedex_ie_vn_2026_promo,AE,H,
+fedex_ie_vn_2026_promo,AL,F,
+fedex_ie_vn_2026_promo,AO,H,
+fedex_ie_vn_2026_promo,AR,G,
+fedex_ie_vn_2026_promo,AS,G,
+fedex_ie_vn_2026_promo,AT,E,
+fedex_ie_vn_2026_promo,AU,C,
+fedex_ie_vn_2026_promo,BA,F,
+fedex_ie_vn_2026_promo,BD,H,
+fedex_ie_vn_2026_promo,BE,E,
+fedex_ie_vn_2026_promo,BF,H,
+fedex_ie_vn_2026_promo,BG,F,
+fedex_ie_vn_2026_promo,BH,H,
+fedex_ie_vn_2026_promo,BJ,H,
+fedex_ie_vn_2026_promo,BN,B,
+fedex_ie_vn_2026_promo,BO,G,
+fedex_ie_vn_2026_promo,BQ,G,
+fedex_ie_vn_2026_promo,BR,G,
+fedex_ie_vn_2026_promo,BW,H,
+fedex_ie_vn_2026_promo,BY,F,
+fedex_ie_vn_2026_promo,CA,D,
+fedex_ie_vn_2026_promo,CH,E,
+fedex_ie_vn_2026_promo,CI,H,
+fedex_ie_vn_2026_promo,CK,G,
+fedex_ie_vn_2026_promo,CL,G,
+fedex_ie_vn_2026_promo,CN,B,
+fedex_ie_vn_2026_promo,CO,G,
+fedex_ie_vn_2026_promo,CR,G,
+fedex_ie_vn_2026_promo,CW,G,
+fedex_ie_vn_2026_promo,CY,F,
+fedex_ie_vn_2026_promo,CZ,F,
+fedex_ie_vn_2026_promo,DE,E,
+fedex_ie_vn_2026_promo,DK,E,
+fedex_ie_vn_2026_promo,DO,G,
+fedex_ie_vn_2026_promo,DZ,H,
+fedex_ie_vn_2026_promo,EC,G,
+fedex_ie_vn_2026_promo,EG,H,
+fedex_ie_vn_2026_promo,ES,E,
+fedex_ie_vn_2026_promo,ET,H,
+fedex_ie_vn_2026_promo,FI,E,
+fedex_ie_vn_2026_promo,FJ,G,
+fedex_ie_vn_2026_promo,FM,G,
+fedex_ie_vn_2026_promo,FR,E,
+fedex_ie_vn_2026_promo,GB,E,
+fedex_ie_vn_2026_promo,GD,G,
+fedex_ie_vn_2026_promo,GE,F,
+fedex_ie_vn_2026_promo,GH,H,
+fedex_ie_vn_2026_promo,GR,E,
+fedex_ie_vn_2026_promo,GT,G,
+fedex_ie_vn_2026_promo,GU,G,
+fedex_ie_vn_2026_promo,HK,A,
+fedex_ie_vn_2026_promo,HN,G,
+fedex_ie_vn_2026_promo,HR,F,
+fedex_ie_vn_2026_promo,HU,F,
+fedex_ie_vn_2026_promo,ID,A,
+fedex_ie_vn_2026_promo,IE,E,
+fedex_ie_vn_2026_promo,IL,F,
+fedex_ie_vn_2026_promo,IN,C,
+fedex_ie_vn_2026_promo,IS,F,
+fedex_ie_vn_2026_promo,IT,E,
+fedex_ie_vn_2026_promo,JO,H,
+fedex_ie_vn_2026_promo,JP,B,
+fedex_ie_vn_2026_promo,KE,H,
+fedex_ie_vn_2026_promo,KH,C,
+fedex_ie_vn_2026_promo,KR,B,
+fedex_ie_vn_2026_promo,KW,H,
+fedex_ie_vn_2026_promo,LA,C,
+fedex_ie_vn_2026_promo,LB,H,
+fedex_ie_vn_2026_promo,LI,E,
+fedex_ie_vn_2026_promo,LK,H,
+fedex_ie_vn_2026_promo,LU,E,
+fedex_ie_vn_2026_promo,LY,H,
+fedex_ie_vn_2026_promo,MA,H,
+fedex_ie_vn_2026_promo,MC,E,
+fedex_ie_vn_2026_promo,MD,F,
+fedex_ie_vn_2026_promo,ME,F,
+fedex_ie_vn_2026_promo,MF,G,
+fedex_ie_vn_2026_promo,MG,H,
+fedex_ie_vn_2026_promo,MH,G,
+fedex_ie_vn_2026_promo,MK,F,
+fedex_ie_vn_2026_promo,MN,C,
+fedex_ie_vn_2026_promo,MO,A,
+fedex_ie_vn_2026_promo,MP,G,
+fedex_ie_vn_2026_promo,MT,F,
+fedex_ie_vn_2026_promo,MU,H,
+fedex_ie_vn_2026_promo,MW,H,
+fedex_ie_vn_2026_promo,MX,D,
+fedex_ie_vn_2026_promo,MY,A,
+fedex_ie_vn_2026_promo,MZ,H,
+fedex_ie_vn_2026_promo,NC,G,
+fedex_ie_vn_2026_promo,NF,C,
+fedex_ie_vn_2026_promo,NG,H,
+fedex_ie_vn_2026_promo,NL,E,
+fedex_ie_vn_2026_promo,NO,E,
+fedex_ie_vn_2026_promo,NP,H,
+fedex_ie_vn_2026_promo,NZ,C,
+fedex_ie_vn_2026_promo,OM,H,
+fedex_ie_vn_2026_promo,PA,G,
+fedex_ie_vn_2026_promo,PE,G,
+fedex_ie_vn_2026_promo,PF,G,
+fedex_ie_vn_2026_promo,PG,G,
+fedex_ie_vn_2026_promo,PH,A,
+fedex_ie_vn_2026_promo,PK,H,
+fedex_ie_vn_2026_promo,PL,F,
+fedex_ie_vn_2026_promo,PR,D,
+fedex_ie_vn_2026_promo,PT,E,
+fedex_ie_vn_2026_promo,PW,G,
+fedex_ie_vn_2026_promo,PY,G,
+fedex_ie_vn_2026_promo,QA,H,
+fedex_ie_vn_2026_promo,RE,H,
+fedex_ie_vn_2026_promo,RO,F,
+fedex_ie_vn_2026_promo,RS,F,
+fedex_ie_vn_2026_promo,RU,F,
+fedex_ie_vn_2026_promo,SA,H,
+fedex_ie_vn_2026_promo,SE,E,
+fedex_ie_vn_2026_promo,SG,A,
+fedex_ie_vn_2026_promo,SI,F,
+fedex_ie_vn_2026_promo,SK,F,
+fedex_ie_vn_2026_promo,SM,E,
+fedex_ie_vn_2026_promo,SN,H,
+fedex_ie_vn_2026_promo,SV,G,
+fedex_ie_vn_2026_promo,SX,G,
+fedex_ie_vn_2026_promo,TH,A,
+fedex_ie_vn_2026_promo,TL,G,
+fedex_ie_vn_2026_promo,TN,H,
+fedex_ie_vn_2026_promo,TO,G,
+fedex_ie_vn_2026_promo,TR,F,
+fedex_ie_vn_2026_promo,TT,G,
+fedex_ie_vn_2026_promo,TW,B,
+fedex_ie_vn_2026_promo,TZ,H,
+fedex_ie_vn_2026_promo,UA,F,
+fedex_ie_vn_2026_promo,UG,H,
+fedex_ie_vn_2026_promo,US,D,
+fedex_ie_vn_2026_promo,UY,G,
+fedex_ie_vn_2026_promo,VA,E,
+fedex_ie_vn_2026_promo,VE,G,
+fedex_ie_vn_2026_promo,VU,G,
+fedex_ie_vn_2026_promo,WF,G,
+fedex_ie_vn_2026_promo,WS,G,
+fedex_ie_vn_2026_promo,ZA,H,
+fedex_ie_vn_2026_promo,ZM,H,

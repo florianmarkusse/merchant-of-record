@@ -124,18 +124,24 @@ Notes on the table:
   - z8: BR and LatAm
   - z9: ZA, NG, KE
   - z10: Southern China
-- **FedEx zone letters** come from the 2026 VN 10/25 kg Box rate sheet's "major destinations"
-  mapping (A: S.China/HK/SG; B: CN/JP/TW; C: AU/IN/NZ; D: US/CA/MX; E: DE/FR/UK; F: RU;
-  G: BR/CL; H: ZA/SA/NG). The IP and FICP zone index may differ. MY, TH, ID, PH, KR and
-  AE zones are UNVERIFIED.
+- **FedEx zone letters** (A to H) come from the 2026 VN zone index
+  (`sources/fedex/fedex-rates-zi-en-vn-2026.pdf`), the same letters for the list
+  tariff and the promo sheets: MY, TH, ID, PH, SG A; JP, KR B; AU C; US D; DE, NL,
+  GB E; AE H [published, verified 2026-11-10]. The index has no FICP column; FICP
+  zones are assumed equal to IP.
   - Sources: [fedex-rates-exp-en-vn-2026.pdf](https://www.fedex.com/content/dam/fedex/international/rates/fedex-rates-exp-en-vn-2026.pdf),
     [fedex-rates-ficp-exp-en-vn-2026.pdf](https://www.fedex.com/content/dam/fedex/international/rates/fedex-rates-ficp-exp-en-vn-2026.pdf),
     [fedex-rates-box-en-vn-2026.pdf](https://www.fedex.com/content/dam/fedex/international/rates/fedex-rates-box-en-vn-2026.pdf).
-  - All three are effective 2026-01-05, for payers in Vietnam, and exclude fuel and
-    special fees.
-- **FedEx FICP**: the extracted 1 kg FICP promo rate (A 1,274,000) is barely below the
-  0.5 kg IP promo rate. That suggests FICP is not dramatically cheaper than IP at low
-  weights from VN. Verify against the PDF.
+  - All three are effective 2026-01-05 and exclude fuel and special fees. Saved by hand
+    2026-11-10 and loaded 0.5–20 kg as `fedex_ip_vn_2026_promo`, `fedex_ie_vn_2026_promo`
+    and `fedex_ficp_vn_2026_promo` (verified). "Qualified customers" means any VN FedEx
+    account holder in good standing who settles invoices promptly in Vietnam
+    (Miscellaneous Information in the surcharge PDF).
+- **FedEx FICP is about 18–20% below the IP promo rate at every weight** (verified
+  2026-11-10): 0.5 kg zone A VND 1,137,400 vs IP 1,407,800; 1 kg zone D 1,854,500 vs
+  2,291,100. The earlier "barely cheaper" reading compared FICP 1 kg with the FedEx
+  Envelope rate, which our unverified data had loaded as IP 0.5 kg. IE promo is only
+  1–3% below IP promo. FICP has no Envelope or Pak rates and takes no dangerous goods.
 - **FedEx has two sheets per service.** A separate FICP "tariff" sheet
   ([fedex-rates-ficp-cm-en-vn-2026.pdf](https://www.fedex.com/content/dam/fedex/international/rates/fedex-rates-ficp-cm-en-vn-2026.pdf))
   shows 0.5 kg values of "84.30 … 151.50". These look like USD, which would put the tariff
@@ -564,7 +570,7 @@ centres in EU / North and South America". UPS Worldwide Economy VN → US: 5–8
   FedEx (needs sales quotes).
 - Whether a SG or NL entity can hold VN export accounts directly, or must use
   third-party billing (needs carrier sales and legal input).
-- FedEx VN bill-duties-to-sender fee amount; FedEx and FICP zone index for MY/TH/ID/PH;
+- FedEx VN bill-duties-to-sender fee amount; whether FICP serves every IP zone country;
   FedEx tariff sheet currency.
 - Duty invoice formats (EDI/CSV) for reconciliation, and how each carrier takes our IOSS
   / UK VAT / AU GST IDs.

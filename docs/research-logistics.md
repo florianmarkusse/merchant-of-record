@@ -113,7 +113,7 @@ belongs to exactly one module.
 | Type | Providers checked | From VN today | Fit |
 |---|---|---|---|
 | Global integrators | DHL Express, FedEx, UPS | Yes, DDP, REST API, sandbox (DHL test 500 calls a day) | Express and rest of world. Expensive in SEA |
-| Integrator economy tiers | FedEx International Connect Plus (since 2025-02), UPS Worldwide Economy (US only) | FICP yes; UPS WWE US only | FICP barely cheaper than International Priority at low weights |
+| Integrator economy tiers | FedEx International Connect Plus (since 2025-02), UPS Worldwide Economy (US only) | FICP yes; UPS WWE US only | FICP about 18–20% below FedEx's IP account rate (verified 2026-11-10) |
 | SEA cross-border operators (4PL) | Janio (SG), Boxme (VN) | Claimed; VN as origin UNVERIFIED for Janio. Boxme does DDP "upon agreement" | Main SEA candidates, RFQ needed |
 | SEA regional carriers | J&T International (VN), Ninja Van, Flash, SPX, LEX, Kerry VN, BEST VN | J&T VN to SG, MY, TH, PH, **not ID**. Ninja Van and LEX exited VN. SPX and LEX only inside their marketplaces. Flash none | J&T: RFQ for DDP and API. Ninja Van: possibly last mile behind a 4PL |
 | E-commerce postal | VN Post EMS, Asendia, SingPost, Cainiao, YunExpress, 4PX | EMS is duties-unpaid and has no international API. Asendia sells in VN with DDP. The others are unconfirmed or unlikely | Asendia for EU, UK and US economy and returns (RFQ). YunExpress VN worth an RFQ |
@@ -236,9 +236,10 @@ and VAT [published, 2025 guide; expect about +6% for 2026]:
 | 3.0 kg (L) | $89 | $96 | $126 | $125 | $183 | $178 | $203 | $211 | $234 |
 | 5.0 kg (XL) | $112 | $119 | $169 | $168 | $256 | $242 | $290 | $300 | $323 |
 
-FedEx International Priority 0.5 kg promo rates for VN payers are about
-US$47 (SG) to US$90 (GCC, Africa) [published 2026, read from search
-extracts of the PDFs; open them to confirm]. DHL VN publishes no rate card.
+FedEx International Priority 0.5 kg promo rates for VN account holders
+are US$54 (zone A: SG, MY, TH, ID, PH) to US$101 (zone H: GCC, Africa);
+FICP is US$43 to US$81 [published 2026, verified from the PDFs
+2026-11-10].
 
 Add for integrators: fuel (DHL VN 50% in November 2026), a duty-paid fee of
 about US$23 per shipment (DHL: VND 600,000 or 2% of duties, whichever is

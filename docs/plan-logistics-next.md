@@ -15,7 +15,7 @@ Rates loaded, all list prices (no account discount):
 | UPS | Worldwide Express Saver, Expedited | 2026 VN rate guide (PDF) | verified |
 | UPS | Worldwide Economy (US only) | 2025 guide | verified, old |
 | FedEx | International Priority, International Economy | 2026 VN export tariff (PDF) | verified |
-| FedEx | IP promo, FICP | search extracts | unverified |
+| FedEx | IP, IE and FICP promo (VN account rates) | 2026 promo PDFs, saved 2026-11-10 | verified; FICP zones assumed equal to IP |
 | J&T Express VN | international express | 2024 card, MY/CN confirmed by April 2026 sheet | verified |
 | VIO ePacket (YunExpress network) | main routes, US-Saver, Extra | vioepacket.com, from 2026-11-01 | verified |
 | Vietnam Post EMS | EMS | third-party read of the calculator, DE 1 kg re-checked | secondary |

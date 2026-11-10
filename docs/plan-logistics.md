@@ -269,16 +269,16 @@ Express is the only DHL product from VN, which is why a cheaper lane
 (§9) matters for cheap orders.
 
 **Cheaper integrator services from VN** (1 kg list prices before fuel
-and discount; FedEx figures are search extracts of its 2026 VN promo
-sheets "for qualified customers", which FedEx blocks from automated
-download, so UNVERIFIED; UPS from its 2025 VN guide):
+and discount; FedEx figures are its 2026 VN promo sheets for VN account
+holders in good standing, verified from the PDFs 2026-11-10; UPS from its
+2025 VN guide):
 
 | To | DHL Express Worldwide | FedEx FICP | UPS Worldwide Expedited |
 |---|---|---|---|
-| SG | $61 | ~$48 | $51 |
-| US | $86 | ~$71 | $75 |
-| DE, UK | $90 | ~$67 | $78 |
-| AU | $85 | ~$64 | $71 |
+| SG | $61 | $48 | $51 |
+| US | $86 | $71 | $75 |
+| DE, UK | $90 | $67 | $78 |
+| AU | $85 | $64 | $71 |
 
 The cheaper tier saves about 20–25% and keeps the integrator's duty-paid
 billing, tracking and API. FICP lane pairs are confirmed per contract.
