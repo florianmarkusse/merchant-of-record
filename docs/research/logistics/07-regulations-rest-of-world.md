@@ -254,8 +254,24 @@ needed. SG vs NL: **no difference.**
 - **Union handling fee: €2** from **2026-11-01**, set by Delegated
   Regulation (EU) 2026/2152 and Implementing Regulation 2026/2403 for
   guarantees and data [P: TAXUD customs reform page].
-  - Per item vs per category, applicability above €150, and VAT on the fee:
-    sources conflict, UNVERIFIED.
+  - It applies per item like the €3, regardless of value, so consignments
+    above €150 sold in distance sales pay it too, and it is permanent
+    [P: TAXUD guidance of 5-Oct-2026, §3.2].
+  - **VAT on the fee** (checked 11-Nov-2026): the €2 is part of the VAT
+    taxable amount as an incidental expense (VAT Directive Arts. 73,
+    78(b), 86(1)(b)). Under the special arrangements and the standard
+    procedure, import VAT is charged on it; under IOSS there is no import
+    VAT, but if the fee is charged to the buyer it goes into the IOSS
+    return [P: TAXUD guidance "The temporary EUR 3 customs duty and the
+    Union handling fee", version of 5-Oct-2026, §9.2].
+  - **VAT on the €3 duty:** the guidance (§9.1) leaves the VAT schemes
+    unchanged. Without IOSS, import VAT is charged on customs value plus
+    duties due by reason of importation (VAT Directive Art. 86(1)(a)),
+    so the €3 is in the base. Under IOSS, VAT is collected at sale on the
+    price and the €3 is not added [P: Art. 86(1)(a); S: Studio Savia,
+    citing an Italian customs notice of 9-Sep-2026].
+    https://taxation-customs.ec.europa.eu/customs/eu-customs-reform_en ;
+    https://studiosavia.com/en/eu-3-euro-customs-duty-low-value-parcels/
   - Reportedly **not refunded on returns** [S].
   - Italy's own €2 national fee was postponed to 2027-01-01, with repeal
     pending [S, UNVERIFIED].

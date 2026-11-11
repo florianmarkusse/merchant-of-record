@@ -259,7 +259,35 @@ our per-jurisdiction tax module, not inside the vendor.
 - No sales tax for US destinations; response has duty, excise, sales tax,
   other charges and a result id, but no rule or rate version [published].
 - Free plan: 3 calculations and 3 HS lookups a month, no card; API only
-  from Plus (EUR 75). No sandbox. Not yet tested (q41).
+  from Plus (EUR 75). No sandbox.
+- Tested on 11-Nov-2026 with the web calculator (q41): four
+  calculations, VN origin, cotton blouse HS 6206.30, no IOSS. The plain
+  parts are right; the two harder parts are wrong. Basic duty and VAT we
+  can compute ourselves, so the harder parts are what we would pay for.
+  - VN→DE, goods EUR 75 + shipping 15 + insurance 5, no certificate of
+    origin: EUR 3 flat duty and EUR 2 handling fee both shown (as
+    "additional charges", not as import duty), so the 2026 EU rules are
+    in its data. **VAT is wrong**: 19% of EUR 95 = EUR 18.05. Without
+    IOSS the base must include the EUR 3 duty (VAT Directive Art. 86(1)(a))
+    and the EUR 2 fee (TAXUD guidance §9.2.3), so 19% of EUR 100 =
+    EUR 19.00; EUR 0.95 short per parcel. Its note still cites the
+    abolished "EUR 150 duty de minimis".
+  - VN→TH, goods EUR 40 + shipping 15, no certificate: 30% duty
+    (EUR 16.50) and 7% VAT on value plus duty (EUR 5.00); TH has no de
+    minimis. Correct, and here duty is in the VAT base.
+  - VN→TH, the same with a certificate (entered as USD 40 + 15): duty 0,
+    VAT EUR 3.47, correct amounts, but **the agreement cited is AANZFTA**,
+    not ATIGA. Both may give 0%, but each needs its own proof of origin,
+    and we store the rule applied with each order, so the label matters.
+  - VN→DE above EUR 150 (goods EUR 200 + shipping 15, no certificate):
+    12% duty on EUR 215 = EUR 25.80 and the EUR 2 fee, both right. VAT
+    19% of EUR 240.80 = EUR 45.75; correct is 19% of EUR 242.80 (TAXUD
+    guidance §9.2.3) = EUR 46.13. Same fault as below EUR 150: anything
+    it files under "additional charges" stays out of the VAT base, while
+    ad-valorem duty goes in.
+  - Verdict: usable as a cross-check, not as the source of truth for the
+    EU fee stack or for the FTA applied. Not worth Plus (EUR 75/month)
+    on this evidence.
 
 #### 3CE / Classify
 
@@ -360,7 +388,7 @@ our per-jurisdiction tax module, not inside the vendor.
 |---|---|---|---|---|---|
 | Zonos | GraphQL, good docs | Guides for all 5; ID data inconsistent | Yes, only if duties billed to Zonos | ~USD 1,000 (USD 2/order estimate) + Classify USD 0–500 [estimate] | Best feature set; MoR conflict on guarantee path |
 | Easyship T&D | REST, simple | SEA home market | Only bundled with its labels (UNVERIFIED) | ~USD 60 [in-app price] | Ruled out 2026-11-10: no tax records for ship-from VN |
-| Dutify | REST | UNVERIFIED | No | USD 75 flat | Cheap backup |
+| Dutify | REST | VN origin works; tested DE, TH (11-Nov-2026) | No | USD 75 flat | Cross-check only: EU VAT base leaves out the €3 duty and €2 fee, wrong FTA label |
 | Avalara | REST (AvaTax) | SG/MY filing service | No | Quote-only | Overkill v1; consider for filing |
 | SimplyDuty | REST | UNVERIFIED | No | ~GBP 50 | Second opinion |
 | Hurricane / Descartes | Enterprise | UNVERIFIED | Carrier-grade | Quote-only | Later |
