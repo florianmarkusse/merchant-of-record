@@ -418,6 +418,27 @@ UNVERIFIED and all need an adviser before launch. Payment licences are in
 | **EU** | product-safety responsible person (GPSR); packaging EPR in DE (before the first parcel) and in each country as sales start; textile EPR in FR and NL | IOSS (optional; removes border VAT on orders up to €150); EUDR operator for wooden goods from 2026-12-30 |
 | **US** | none to sell. As importer of record (if chosen): CBP importer number (Form 5106) and a bond, unless DHL's duty-paid covers it; CPSC eFiling data per product | state sales tax per state at economic nexus (often US$100k a year) |
 
+**Filing and paying the tax we collect** (decided 12-Nov-2026: we only
+file where an order is `SellerCollected`. For `BorderPaid` orders DHL pays
+customs and invoices us, so DHL is the remitter and we only reconcile):
+
+- We calculate the tax at checkout and book it to `tax_payable:{country}`
+  (§7). Each filing period, a report per registration comes out of the
+  ledger. Paying the authority is its own journal entry that clears
+  `tax_payable:{country}`.
+- Who files is decided per registration, not for all countries at once.
+  The UK alone (quarterly, from the first sale) we file ourselves through
+  HMRC-recognised MTD software. Countries added at a threshold go to a
+  filing service, first choice Taxually.
+- Taxually (read 12-Nov-2026, `support.taxually.com` coverage article
+  dated 02-Apr-2025, `taxually.com/llms.txt` dated Nov 2026): registration
+  and filing for physical goods and non-resident sellers in UK, SG, MY,
+  AU, NZ, NO, CH, AE and EU IOSS. JP and TH are digital services only,
+  so JP's 2028 goods registration still needs a tax agent. It arranges a
+  fiscal representative where required (CH) and can pay the authorities
+  from one bulk payment (OneTax, €5 per payment). Prices are quote-only,
+  and no registration or filing API is documented (q44).
+
 **On the VN side:** the merchant needs a VN tax code and must be
 registered as an exporter (DHL VN guide). Whether our foreign entity
 needs anything in VN is the open VN adviser question in §6.
