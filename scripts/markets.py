@@ -343,7 +343,7 @@ EXPONENT: dict[str, int] = {
     "GBP": 2,
     "CHF": 2,
 }
-# ECB euro reference rates of 2026-11-06 (units per EUR), for display only.
+# ECB euro reference rates of 06-Nov-2026 (units per EUR), for display only.
 ECB_PER_EUR: dict[str, str] = {
     "USD": "1.1165",
     "JPY": "176.77",
@@ -375,7 +375,7 @@ def usd_per_unit() -> dict[str, Fraction]:
 USD_PER_UNIT: dict[str, Fraction] = usd_per_unit()
 USD_RATE_NOTE = (
     "VND converted at 26,300 per US$ (research/logistics/02, estimate), other "
-    "currencies at the ECB reference rates of 2026-11-06, "
+    "currencies at the ECB reference rates of 06-Nov-2026, "
     "rounded half up to whole dollars"
 )
 
@@ -1862,7 +1862,9 @@ MONTHS = (
 
 
 def date_text(iso: str) -> str:
-    """An ISO date as people read it: 14-Nov-2026."""
+    """An ISO date as people read it: 14-Nov-2026 ("" stays "")."""
+    if not iso:
+        return ""
     day = date.fromisoformat(iso)
     return f"{day.day:02d}-{MONTHS[day.month - 1]}-{day.year}"
 
@@ -2173,13 +2175,13 @@ def next_step(question: Row) -> str:
     if question["blocked_by"]:
         return f"{question['question']} blocked: {question['blocked_by']}"
     if question["status"] == "sent":
-        step = f"{question['question']}: waiting since {question['sent_on']}"
+        step = f"{question['question']}: waiting since {date_text(question['sent_on'])}"
         if question["due_on"]:
-            step += f", follow up {question['due_on']}"
+            step += f", follow up {date_text(question['due_on'])}"
         return step
     step = f"Send {question['question']} ({question['subject']})"
     if question["due_on"]:
-        step += f" by {question['due_on']}"
+        step += f" by {date_text(question['due_on'])}"
     return step
 
 
@@ -2226,9 +2228,9 @@ def question_trail(questions: list[Row]) -> list[str]:
     for question in questions:
         line = f"{question['question']} {question['status']}"
         if question["sent_on"]:
-            line += f" {question['sent_on']}"
+            line += f" {date_text(question['sent_on'])}"
         if question["answered_on"]:
-            line += f", answered {question['answered_on']}"
+            line += f", answered {date_text(question['answered_on'])}"
         lines.append(line)
     return lines
 
@@ -2237,12 +2239,12 @@ def section_todo(data: Data, today: date) -> h.Element:
     rows: list[h.Node] = []
     for item in todo_items(data, today):
         q = item.question
-        due: h.Node = q["due_on"]
+        due: h.Node = date_text(q["due_on"])
         if item.overdue:
-            due = [q["due_on"], h.div[chip("unverified", "overdue")]]
+            due = [date_text(q["due_on"]), h.div[chip("unverified", "overdue")]]
         status: h.Node = q["status"]
         if q["sent_on"]:
-            status = [q["status"], h.div(class_="via")[q["sent_on"]]]
+            status = [q["status"], h.div(class_="via")[date_text(q["sent_on"])]]
         rows.append(
             h.tr[
                 h.td[PRIORITY_LABEL[q["priority"]]],
@@ -2297,7 +2299,7 @@ def section_contacts(data: Data) -> h.Element:
                 h.td[name, h.div(class_="via")[p["provider"]]],
                 h.td[p["kind"]],
                 h.td[p["relationship"]],
-                h.td(class_="num")[contact.last_sent],
+                h.td(class_="num")[date_text(contact.last_sent)],
                 h.td[trail],
                 h.td[contact.next_step],
             ]
@@ -2335,7 +2337,7 @@ def section_questions(data: Data) -> h.Element:
             h.tr[
                 h.td[row["question"]],
                 h.td[row["kind"]],
-                h.td[row["status"], h.div(class_="via")[row["sent_on"]]],
+                h.td[row["status"], h.div(class_="via")[date_text(row["sent_on"])]],
                 h.td[row["to"]],
                 h.td[h.strong[row["subject"]], h.div[row["text"]]],
                 h.td(class_="num")[str(waiting.get(row["question"], 0))],
@@ -3005,8 +3007,8 @@ def section_rate_cards(data: Data) -> h.Element:
                     h.p[
                         chip(as_status(card["status"])),
                         (
-                            f" Valid {card['effective_from'] or '?'} to "
-                            f"{card['effective_to'] or 'open'}. "
+                            f" Valid {date_text(card['effective_from']) or '?'} to "
+                            f"{date_text(card['effective_to']) or 'open'}. "
                             f"{offer_text(card)} "
                             f"Fuel: {FUEL_TEXT[fuel_of(card)]}. "
                             f"VAT: {VAT_TEXT[vat_of(card)]}. "
@@ -3240,8 +3242,9 @@ def build_html(data: Data, today: date) -> str:
             h.main[
                 h.h1["Markets and logistics data"],
                 h.p(class_="muted")[
-                    f"Generated {today.isoformat()} from docs/markets/*.csv by "
-                    "scripts/markets.py. Do not edit this page; edit the CSVs. "
+                    f"Generated {date_text(today.isoformat())} from "
+                    "docs/markets/*.csv by scripts/markets.py. "
+                    "Do not edit this page; edit the CSVs. "
                     "Origin: Vietnam. Plan: docs/plan-markets-data.md."
                 ],
                 section_legend(data),
@@ -3337,7 +3340,7 @@ def sheet_readme(book: Workbook, today: date) -> None:
     sheet.append(
         [
             (
-                f"Generated {today.isoformat()} from docs/markets/*.csv "
+                f"Generated {date_text(today.isoformat())} from docs/markets/*.csv "
                 "(scripts/markets.py). The CSVs in the repo are the source of truth."
             )
         ]
@@ -3430,8 +3433,10 @@ def sheet_todo(book: Workbook, data: Data, today: date) -> None:
     bold_row(sheet, 1)
     for item in todo_items(data, today):
         q = item.question
-        status = f"{q['status']} {q['sent_on']}".strip()
-        due = f"{q['due_on']} (overdue)" if item.overdue else q["due_on"]
+        status = f"{q['status']} {date_text(q['sent_on'])}".strip()
+        due = date_text(q["due_on"])
+        if item.overdue:
+            due += " (overdue)"
         sheet.append(
             [
                 PRIORITY_LABEL[q["priority"]],
@@ -3465,7 +3470,7 @@ def sheet_contacts(book: Workbook, data: Data) -> None:
                 f"{p['name']} ({p['provider']})",
                 p["kind"],
                 p["relationship"],
-                contact.last_sent,
+                date_text(contact.last_sent),
                 "\n".join(question_trail(contact.questions)),
                 contact.next_step,
             ]

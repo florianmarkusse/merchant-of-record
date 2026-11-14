@@ -326,8 +326,10 @@ not cover, so a gap is visible instead of silently missing from a table.
   about them. The weight check runs once the other rate checks pass.
 - The all-in section lists, per current card, the reference destinations
   it has no price for.
-- Dates added by this phase are shown as 14-Nov-2026; older text on the
-  page still prints ISO dates and is converted when next touched.
+- Dates on the page and in the workbook's own sheets are shown as
+  14-Nov-2026 (one helper, `date_text`); free-text CSV columns (notes,
+  values, answers, sources) were rewritten the same way on 14-Nov-2026.
+  Date columns (`checked_on`, `due_on`, ...), file names and URLs keep ISO.
 
 ## Project rules applied
 
