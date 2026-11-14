@@ -1,6 +1,6 @@
 # 06 — Consumer law per market and product liability for the MoR
 
-Researched 2026-11-06. Scope: adult apparel, footwear, bags, fashion jewellery and accessories, sold B2C from Vietnam, with us (SG company or NL BV) as merchant of record and seller, DDP.
+Researched 06-Nov-2026. Scope: adult apparel, footwear, bags, fashion jewellery and accessories, sold B2C from Vietnam, with us (SG company or NL BV) as merchant of record and seller, DDP.
 
 **How to read the sources.** [P] means a primary or official source I fetched this session, [A] an adviser or law firm, [N] news or a vendor. [K] means the claim comes from the researcher's prior knowledge of the statute and was **not re-checked this session**. The shared web-search budget ran out after 4 searches, so most per-market detail is [K]. Read [K] as UNVERIFIED until counsel or a primary text confirms it. UNVERIFIED on its own marks claims I am least sure of.
 
@@ -64,7 +64,7 @@ Researched 2026-11-06. Scope: adult apparel, footwear, bags, fashion jewellery a
   - The model withdrawal form (Annex I(B)). Using the model instructions (Annex I(A)) gives a safe harbour.
   - Who bears return costs (Art 6(1)(i)). If the goods cannot normally go back by post, an estimate of the cost.
 
-**Withdrawal function or "button" (Art 11a, inserted by Directive 2023/2673, applies from 2026-06-19, so it applies now)** [A/N: Hogan Lovells, iubenda, Andersen; I could not fetch the EUR-Lex text]
+**Withdrawal function or "button" (Art 11a, inserted by Directive 2023/2673, applies from 19-Jun-2026, so it applies now)** [A/N: Hogan Lovells, iubenda, Andersen; I could not fetch the EUR-Lex text]
 - **Scope:** every distance contract concluded through an online interface, where a withdrawal right exists.
 - **The function:** a withdrawal function that is prominent, continuously available during the withdrawal period and labelled "withdraw from contract here" or equivalent unambiguous wording. The consumer gives or confirms their name, contract identification and electronic communication channel. They then press a confirmation function labelled "confirm withdrawal" or equivalent.
 - **Acknowledgement:** we acknowledge receipt on a durable medium without undue delay, including the content and the date and time of the withdrawal.
@@ -167,7 +167,7 @@ Researched 2026-11-06. Scope: adult apparel, footwear, bags, fashion jewellery a
   - FL Stat §501.142: if no policy is posted, the buyer may return within 20 days.
   - Whether these reach out-of-state online sellers is UNVERIFIED. The safe practice is to post the policy before purchase.
 - **Price display:**
-  - CA SB 478 (Civ 1770(a)(29), from 2024-07-01): advertised prices must include all mandatory fees, apart from government taxes and shipping.
+  - CA SB 478 (Civ 1770(a)(29), from 01-Jul-2024): advertised prices must include all mandatory fees, apart from government taxes and shipping.
   - The FTC fees rule (16 CFR 464, from May 2025) covers live events and lodging only.
   - The FTC Consumer Reviews and Testimonials Rule (16 CFR 465, from Oct 2024) bans fake reviews.
 - **Warranties:**
@@ -187,7 +187,7 @@ Researched 2026-11-06. Scope: adult apparel, footwear, bags, fashion jewellery a
   - Similar rules: cancel within 7 days if the disclosure or copy was missing, or 30 days after the delivery date passes; refund within 15 days.
   - The card issuer must reverse the charge on request (s 54.14).
   - The legal warranty of reasonable durability (s 37–38) cannot be excluded.
-  - The Charter of the French Language, as amended by Bill 96 (packaging and labelling rules from 2025-06-01), requires the website, contracts of adhesion and invoices to be in French, or in French first.
+  - The Charter of the French Language, as amended by Bill 96 (packaging and labelling rules from 01-Jun-2025), requires the website, contracts of adhesion and invoices to be in French, or in French first.
 - **Coverage:** the provincial Acts apply where the consumer is in the province.
 
 ### A9. Singapore [K]
@@ -267,7 +267,7 @@ Researched 2026-11-06. Scope: adult apparel, footwear, bags, fashion jewellery a
 
 ### B1. Are we strictly liable as seller of record?
 
-**EU: new Product Liability Directive 2024/2853** (transposition by 2026-12-09; applies to products placed on the market after that date) [P streamlex Art 8; A Bird & Bird, Reed Smith]
+**EU: new Product Liability Directive 2024/2853** (transposition by 09-Dec-2026; applies to products placed on the market after that date) [P streamlex Art 8; A Bird & Bird, Reed Smith]
 - **Liable parties (Art 8(1)):** the manufacturer, and, for manufacturers outside the Union, "the importer", "the authorised representative" and, if neither is in the EU, the "fulfilment service provider". Liability is strict, for defects causing death, injury, damage to property or data loss.
 - **Distributor fallback (Art 8(3)):** if no EU-established operator can be identified, **each distributor** is liable, unless it names an EU operator or its own supplier within **one month** of the injured person's request.
 - **Online platforms:** Art 8(4) extends the fallback to platforms that present themselves as the seller (DSA Art 6(3) conditions).
@@ -316,7 +316,7 @@ The common pattern is that **the importer into the country is treated as manufac
 
 ### B2. How existing MoRs split compliance and liability
 
-**Global-e (Shopify Managed Markets Service Terms, v3, updated 2026-01-26)** [P, s3.global-e.com]
+**Global-e (Shopify Managed Markets Service Terms, v3, updated 26-Jan-2026)** [P, s3.global-e.com]
 - **Role:** Global-e acts as merchant of record and exporter of record (§1.1); the **shopper** is importer of record (§1.3).
 - **Merchant warranties (§5.1):**
   - compliance with "applicable safety, environmental, and ethical standards";
@@ -419,7 +419,7 @@ The common pattern is that **the importer into the country is treated as manufac
 - Refunding duties creates a booked loss or a recoverable receivable (a duty drawback claim, or a deduction from the merchant), never a dropped remainder.
 
 ## Sources
-- [P] Global-e Managed Markets Service Terms v3 (2026-01-26): https://s3.global-e.com/policies/shopify/ww-merchant-terms-v3.html (v1: https://content.global-e.com/merchant-terms)
+- [P] Global-e Managed Markets Service Terms v3 (26-Jan-2026): https://s3.global-e.com/policies/shopify/ww-merchant-terms-v3.html (v1: https://content.global-e.com/merchant-terms)
 - [P] Shopify Managed Markets prohibited items: https://help.shopify.com/en/manual/markets/markets-pro/prohibited-items ; Global-e restrict product: https://docs.global-e.com/restrict-product
 - [P] PLD 2024/2853 Art 8 (text via StreamLex): https://streamlex.eu/articles/pld-en-art-8/ ; EUR-Lex: https://eur-lex.europa.eu/eli/dir/2024/2853/en
 - [A] Bird & Bird on PLD and non-EU manufacturers: https://cm.twobirds.com/en/insights/2025/eu-revised-product-liability-directive-2024-navigating-the-new-liability-framework-for-noneu-manufac ; Reed Smith: https://www.reedsmith.com/en/perspectives/2025/11/eu-product-liability-directive

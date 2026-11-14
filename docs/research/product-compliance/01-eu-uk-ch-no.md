@@ -2,7 +2,7 @@
 
 Scope: adult apparel, footwear, bags and leather goods, fashion jewellery and
 accessories, sold B2C cross-border from Vietnam, DDP, with us as merchant of
-record (MoR) and seller on the invoice. Research date 2026-11-06.
+record (MoR) and seller on the invoice. Research date 06-Nov-2026.
 
 Source labels: [P] primary or official, [A] adviser or law firm, [N] news or
 vendor. [R] means a primary legal text cited from the researcher's own
@@ -21,29 +21,29 @@ legislative train) and on [R] knowledge. Thin spots are marked.
 
 | Rule | Applies to us? | Who owes it | Date | Per-SKU data from merchant |
 |---|---|---|---|---|
-| EU GPSR 2023/988: an EU-established responsible person (Art 16) | Yes. Every non-harmonised consumer product sold to EU consumers, distance sales included | **NL BV**: we are the *importer*, so we are the responsible person. **SG entity**: the VN manufacturer must mandate an EU authorised representative (our EU affiliate or a third party) | Since 2024-12-13 | Manufacturer name, postal and e-mail address; type, batch or serial id; photo; warnings |
-| GPSR Art 19 listing information | Yes, on our checkout and listing pages | Us, as the distance seller | Since 2024-12-13 | Same as above, plus safety information in the local language |
-| GPSR traceability, accidents, recalls (Art 9, 11, 18, 20, 35-37) | Yes | Manufacturer (VN) and importer (us, if NL BV). We report accidents via Safety Business Gateway and run recalls | Since 2024-12-13 | Batch id, risk analysis, technical documentation (kept 10 years) |
-| Market Surveillance Reg 2019/1020 Art 4 | **Mostly no**. Art 4 covers only listed harmonisation acts (toys, PPE, electrical goods…). Fashion is not listed, except PPE such as sunglasses, which are PPE category I | n/a (sunglasses: the manufacturer, or an EU representative) | Since 2021-07-16 | Sunglasses: EU DoC to EN ISO 12312-1, CE mark |
-| Textile Labelling Reg 1007/2011 | Yes. Fibre composition label on apparel, textile parts of bags and accessories | Manufacturer labels; importer/distributor (us) must ensure label present; listing must show composition before purchase | In force; revision proposal **not yet published** (EP train, 2025-10-25: "blocked", planned Q2 2026) | Fibre composition in % using EU names; "contains non-textile parts of animal origin" |
+| EU GPSR 2023/988: an EU-established responsible person (Art 16) | Yes. Every non-harmonised consumer product sold to EU consumers, distance sales included | **NL BV**: we are the *importer*, so we are the responsible person. **SG entity**: the VN manufacturer must mandate an EU authorised representative (our EU affiliate or a third party) | Since 13-Dec-2024 | Manufacturer name, postal and e-mail address; type, batch or serial id; photo; warnings |
+| GPSR Art 19 listing information | Yes, on our checkout and listing pages | Us, as the distance seller | Since 13-Dec-2024 | Same as above, plus safety information in the local language |
+| GPSR traceability, accidents, recalls (Art 9, 11, 18, 20, 35-37) | Yes | Manufacturer (VN) and importer (us, if NL BV). We report accidents via Safety Business Gateway and run recalls | Since 13-Dec-2024 | Batch id, risk analysis, technical documentation (kept 10 years) |
+| Market Surveillance Reg 2019/1020 Art 4 | **Mostly no**. Art 4 covers only listed harmonisation acts (toys, PPE, electrical goods…). Fashion is not listed, except PPE such as sunglasses, which are PPE category I | n/a (sunglasses: the manufacturer, or an EU representative) | Since 16-Jul-2021 | Sunglasses: EU DoC to EN ISO 12312-1, CE mark |
+| Textile Labelling Reg 1007/2011 | Yes. Fibre composition label on apparel, textile parts of bags and accessories | Manufacturer labels; importer/distributor (us) must ensure label present; listing must show composition before purchase | In force; revision proposal **not yet published** (EP train, 25-Oct-2025: "blocked", planned Q2 2026) | Fibre composition in % using EU names; "contains non-textile parts of animal origin" |
 | Language of labels | Yes | Us (seller into the member state) | In force | Translations per market (FR Loi Toubon etc.) |
 | Care labelling | Voluntary in EU, FR, UK, CH, NO (GINETEX symbols customary) | Merchant | n/a | Care symbols (recommended) |
 | Footwear Directive 94/11/EC | Yes for footwear | Manufacturer labels, distributor ensures | In force | Material of upper, lining+sock, outer sole (leather/coated leather/textile/other) |
-| REACH Annex XVII: azo (43), Cr VI (47), Ni (27), Cd (23), Pb (63), PAHs (50), DMFu (61), phthalates (51), NPE (46a), CMRs in textiles (72) | Yes, every SKU by material | Importer (us, if NL BV) is liable at placing on market; merchant supplies test evidence | In force (NPE since 2021-02-03; CMR 72 since 2020-11-01) | Test reports per material/colour from an accredited lab, or supplier declarations, by risk |
-| REACH entry 79 PFHxA | Yes for consumer apparel, accessories, footwear (water/stain-repellent finishes) | Importer | **2026-10-10** (consumer clothing, accessories, footwear); other textiles 2027-10-10 | PFAS-free declaration, test on DWR-treated items |
-| FR PFAS ban (Law 2025-188) and DK PFAS ban (BEK 464) | Yes for FR and DK sales | Importer / seller | FR 2026-01-01 (sell-through of earlier stock to 2026-12-31 per [N]); DK 2026-07-01 (total F ≥ 50 mg/kg) | PFAS-free declaration, total fluorine test |
+| REACH Annex XVII: azo (43), Cr VI (47), Ni (27), Cd (23), Pb (63), PAHs (50), DMFu (61), phthalates (51), NPE (46a), CMRs in textiles (72) | Yes, every SKU by material | Importer (us, if NL BV) is liable at placing on market; merchant supplies test evidence | In force (NPE since 03-Feb-2021; CMR 72 since 01-Nov-2020) | Test reports per material/colour from an accredited lab, or supplier declarations, by risk |
+| REACH entry 79 PFHxA | Yes for consumer apparel, accessories, footwear (water/stain-repellent finishes) | Importer | **10-Oct-2026** (consumer clothing, accessories, footwear); other textiles 10-Oct-2027 | PFAS-free declaration, test on DWR-treated items |
+| FR PFAS ban (Law 2025-188) and DK PFAS ban (BEK 464) | Yes for FR and DK sales | Importer / seller | FR 01-Jan-2026 (sell-through of earlier stock to 31-Dec-2026 per [N]); DK 01-Jul-2026 (total F ≥ 50 mg/kg) | PFAS-free declaration, total fluorine test |
 | REACH SVHC Art 33, SCIP | Yes, if any article contains SVHC > 0.1 % w/w | Importer (us, if NL BV): inform consumers within 45 days on request; SCIP notification as supplier | In force | SVHC declaration against the current Candidate List |
 | POPs Reg 2019/1021 | Yes (PFOA, PFHxS, SCCPs, PBDEs…) | Importer | In force | Usually covered by the same RSL declaration |
-| Textile EPR, EU (Dir 2025/1892) | Yes when transposed; distance sellers must appoint a representative in each member state | Producer = whoever first makes it available in that MS, distance seller included (us) | Transposition 2027-06-17; schemes by 2028-04-17 | Unit count and weight per product category per country |
-| FR Refashion EPR + Triman/Info-tri + AGEC product sheet | Yes for FR | Us as "metteur sur le marché"; non-FR producer needs FR representative | In force; FR law 2026-602 (2026-07-08) adds anti-fast-fashion rules | Units/weight per category; country of weaving/dyeing/making; % recycled; synthetic > 50 % (microfibres) |
-| NL UPV Textiel | Yes for NL | Producer, distance seller included. NL BV registers directly; SG entity via authorised representative | Since 2023-07-01 | Units per category |
-| Packaging EPR: PPWR 2025/40 + national (DE VerpackG/LUCID, FR Citeo/Triman, NL Afvalfonds…) | Yes. Shipping boxes, polybags, swing tags | Us as distance seller/producer; authorised representative in each MS where not established | PPWR general application **2026-08-12**; harmonised labelling 2028; e-commerce empty-space limit 2030 [R] | Packaging material and weight per SKU and parcel type |
-| ESPR 2024/1781 destruction ban, unsold apparel and footwear | Yes, **if we are a large enterprise** (medium from 2030; micro and small exempt). Customer returns count as "unsold" [R] | Economic operator holding the stock (us, if we hold returns) | Large: **2026-07-19**; disclosure format applies 2027-03-02 | Per return: disposition, reason, derogation used, evidence (kept 5 years) |
+| Textile EPR, EU (Dir 2025/1892) | Yes when transposed; distance sellers must appoint a representative in each member state | Producer = whoever first makes it available in that MS, distance seller included (us) | Transposition 17-Jun-2027; schemes by 17-Apr-2028 | Unit count and weight per product category per country |
+| FR Refashion EPR + Triman/Info-tri + AGEC product sheet | Yes for FR | Us as "metteur sur le marché"; non-FR producer needs FR representative | In force; FR law 2026-602 (08-Jul-2026) adds anti-fast-fashion rules | Units/weight per category; country of weaving/dyeing/making; % recycled; synthetic > 50 % (microfibres) |
+| NL UPV Textiel | Yes for NL | Producer, distance seller included. NL BV registers directly; SG entity via authorised representative | Since 01-Jul-2023 | Units per category |
+| Packaging EPR: PPWR 2025/40 + national (DE VerpackG/LUCID, FR Citeo/Triman, NL Afvalfonds…) | Yes. Shipping boxes, polybags, swing tags | Us as distance seller/producer; authorised representative in each MS where not established | PPWR general application **12-Aug-2026**; harmonised labelling 2028; e-commerce empty-space limit 2030 [R] | Packaging material and weight per SKU and parcel type |
+| ESPR 2024/1781 destruction ban, unsold apparel and footwear | Yes, **if we are a large enterprise** (medium from 2030; micro and small exempt). Customer returns count as "unsold" [R] | Economic operator holding the stock (us, if we hold returns) | Large: **19-Jul-2026**; disclosure format applies 02-Mar-2027 | Per return: disposition, reason, derogation used, evidence (kept 5 years) |
 | ESPR textiles DPP | Coming; delegated act not yet adopted | Manufacturer (with importer checks) | Adoption expected ~2027, applying about 18 months later (UNVERIFIED) | Will be large: materials, origin, substances, durability |
-| Empowering Consumers Dir 2024/825 | Yes, for any green claim on our pages | Us, as trader | **2026-09-27** | Proof behind any claim; certified labels only |
-| Green Claims Directive | Stalled, not law | n/a | Withdrawal announced 2025-06-20, status unclear | n/a |
-| Forced Labour Reg 2024/3015 | Yes, distance sales included | Every economic operator (us and merchant) | **2027-12-14** | Supply-chain map: fibre origin (cotton!), mills |
-| EUDR 2023/1115 (leather) | **No** for finished goods. Cattle leather HS 4101/4104/4107 removed by Del. Reg. 2026/2102 [N]; HS 4202/6403 were never in Annex I [R] | n/a | Leather out of scope since 2026-09-18 [N]; review 2030 | None (watch the 2030 review) |
+| Empowering Consumers Dir 2024/825 | Yes, for any green claim on our pages | Us, as trader | **27-Sep-2026** | Proof behind any claim; certified labels only |
+| Green Claims Directive | Stalled, not law | n/a | Withdrawal announced 20-Jun-2025, status unclear | n/a |
+| Forced Labour Reg 2024/3015 | Yes, distance sales included | Every economic operator (us and merchant) | **14-Dec-2027** | Supply-chain map: fibre origin (cotton!), mills |
+| EUDR 2023/1115 (leather) | **No** for finished goods. Cattle leather HS 4101/4104/4107 removed by Del. Reg. 2026/2102 [N]; HS 4202/6403 were never in Annex I [R] | n/a | Leather out of scope since 18-Sep-2026 [N]; review 2030 | None (watch the 2030 review) |
 | Fur and exotic skins | CITES for exotic leathers everywhere; CH mandatory fur declaration; no EU/UK sales ban on fur | Us as seller | In force | Species (Latin name), origin, CITES permit; CH: species, origin, keeping method |
 | UK GPSR 2005 (GB) / EU GPSR (NI) | Yes | Producer/importer (us, if importer of record); no UK responsible person for general goods yet | In force; PRaM Act 2025 secondary legislation pending | Same as EU GPSR |
 | UK REACH, UK textile and footwear labelling | Yes | Importer (GB-established) / seller | In force; UK REACH has diverged (no PFHxA restriction) [R] | Same tests; GB fibre labelling |
@@ -113,7 +113,7 @@ placing on the market (Art 4 GPSR / Art 6 MSR). [R]
 - Either way we are the distance seller, so the Art 19 listing duties sit on
   our pages.
 
-**(d) Dates.** Applies since 2024-12-13. EEA incorporation is still pending
+**(d) Dates.** Applies since 13-Dec-2024. EEA incorporation is still pending
 (see Norway). Commission guidance: the GPSR Q&A exists, but the EC webgate
 blocked fetching, so it was not re-read.
 
@@ -169,7 +169,7 @@ blocked fetching, so it was not re-read.
   check. Bags and accessories with at least 80 % textile by weight count as
   textile products. [R]
 - **Revision:** the Commission's proposal to revise 1007/2011 is **not
-  published**. The EP legislative train (updated 2026-10-25) shows it as
+  published**. The EP legislative train (updated 25-Oct-2026) shows it as
   "blocked" by the Commission, planned "by Q2 2026" [P]. Expected content:
   a physical plus digital label, possibly folding in care, size, origin and
   sustainability information [N] (EuroCommerce, ECOS). Design the catalogue
@@ -194,15 +194,15 @@ blocked fetching, so it was not re-read.
     threshold (≥ €10 M and ≥ 10,000 units from 2025) [R].
   - **Our case:** probably below threshold at first, but merchants above it
     would put the duty on us as the importer.
-- New FR law 2026-602 of 2026-07-08 [P] (ecologie.gouv.fr):
+- New FR law 2026-602 of 08-Jul-2026 [P] (ecologie.gouv.fr):
   - Defines ultra fast fashion; the thresholds await a decree.
-  - Malus of up to 50 % of the price from 2026-09-01.
-  - Advertising ban from 2027-01-01.
+  - Malus of up to 50 % of the price from 01-Sep-2026.
+  - Advertising ban from 01-Jan-2027.
   - Messages on sales websites about textile impact and reuse/repair (scope
     unclear).
   - Display of manufacturing locations (scope unclear).
   - [N] says a France-established representative is required for foreign
-    EPR producers from 2026-07-10. UNVERIFIED on the official page.
+    EPR producers from 10-Jul-2026. UNVERIFIED on the official page.
 - Low risk that our VN merchants hit the ultra fast fashion thresholds, but
   check once the decree is out.
 
@@ -233,9 +233,9 @@ merchant must supply evidence.
 | 50 | 8 PAHs | 1 mg/kg in rubber/plastic parts in skin contact (0.5 for children/toys) | Shoe soles, sunglass frames, bag handles |
 | 51 | DEHP, DBP, BBP, DIBP | 0.1 % combined in plasticised material | PVC bags, shoes, belts |
 | 61 | DMFu | 0.1 mg/kg | Leather and sachets, historically shoes and furniture |
-| 46a | Nonylphenol ethoxylates | 0.01 % in textiles meant to be washed in water | All textiles (since 2021-02-03) |
-| 72 | 33 CMR substances (formaldehyde 75 mg/kg, ...) | Various | Clothing, textiles, footwear (since 2020-11-01; formaldehyde in jackets/coats/upholstery since 2023-11-01) |
-| 79 | PFHxA, salts and related substances | 25 ppb PFHxA; 1,000 ppb related | Consumer clothing, accessories and footwear from **2026-10-10**; other consumer textiles 2027-10-10 [N] (BV, Trace One, SGS: check EUR-Lex Reg 2024/2462) |
+| 46a | Nonylphenol ethoxylates | 0.01 % in textiles meant to be washed in water | All textiles (since 03-Feb-2021) |
+| 72 | 33 CMR substances (formaldehyde 75 mg/kg, ...) | Various | Clothing, textiles, footwear (since 01-Nov-2020; formaldehyde in jackets/coats/upholstery since 01-Nov-2023) |
+| 79 | PFHxA, salts and related substances | 25 ppb PFHxA; 1,000 ppb related | Consumer clothing, accessories and footwear from **10-Oct-2026**; other consumer textiles 10-Oct-2027 [N] (BV, Trace One, SGS: check EUR-Lex Reg 2024/2462) |
 
 Sources: [R] for the entry texts; PFHxA dates from [N] testing houses.
 DMAC/NEP in textiles and leather: a restriction was adopted in 2025
@@ -245,11 +245,11 @@ DMAC/NEP in textiles and leather: a restriction was adopted in 2025
 - **Universal PFAS restriction:** still at ECHA [R]. Expect it to cover all
   textiles in the future.
 - **France:** Law 2025-188 and Decree 2025-1376 ban PFAS-containing consumer
-  textiles, footwear and waterproofing agents from 2026-01-01. Stock made
-  earlier can be sold until 2026-12-31 [N]. All textiles are covered from
+  textiles, footwear and waterproofing agents from 01-Jan-2026. Stock made
+  earlier can be sold until 31-Dec-2026 [N]. All textiles are covered from
   2030 [N] (SGS, Compliance & Risks).
 - **Denmark:** BEK 464 bans clothing and footwear with total fluorine ≥ 50
-  mg/kg from 2026-07-01 [N].
+  mg/kg from 01-Jul-2026 [N].
 - **What this means for us:** require PFAS-free declarations from all
   merchants, and test any water-repellent product.
 
@@ -295,8 +295,8 @@ substance list version.
 
 **EU Directive (EU) 2025/1892, amending the Waste Framework Directive, new
 Art 22a.** [A] Debevoise, Cuatrecasas, Charles Russell Speechlys
-- In force since 2025-10-16; transposition by **2027-06-17**.
-- Mandatory textile EPR schemes in every member state by **2028-04-17**
+- In force since 16-Oct-2025; transposition by **17-Jun-2027**.
+- Mandatory textile EPR schemes in every member state by **17-Apr-2028**
   (micro-enterprises later, 2029 per [N]).
 - Products in Annex IVc: clothing and accessories, footwear, household
   textiles. Whether bags and leather goods are in scope: UNVERIFIED; check
@@ -319,7 +319,7 @@ Art 22a.** [A] Debevoise, Cuatrecasas, Charles Russell Speechlys
   identifier (IDU) and, since AGEC, appoint a French authorised
   representative [R]. Units are reported every year, and the IDU appears in
   the terms of sale and on the website [R].
-- **Netherlands, UPV Textiel** (Besluit UPV textiel), since 2023-07-01. The
+- **Netherlands, UPV Textiel** (Besluit UPV textiel), since 01-Jul-2023. The
   producer is whoever first makes the goods available on the Dutch market,
   foreign webshops included. Registration and reporting go through
   Stichting UPV Textiel. Foreign producers may appoint an authorised
@@ -341,7 +341,7 @@ and weight per country per year.
 
 **PPWR (EU) 2025/40.** [R] Searches were exhausted before primary
 confirmation, so check EUR-Lex.
-- General application from **2026-08-12**.
+- General application from **12-Aug-2026**.
 - Producer definitions include distance sellers to end users in another
   member state. A producer must register in each member state's producer
   register, and **must appoint an authorised representative for EPR in each
@@ -372,12 +372,12 @@ declaration for any food-contact item (none expected).
 
 **Destruction ban (Art 25 and Annex VII).**
 - Large enterprises may not destroy unsold apparel, clothing accessories and
-  footwear from **2026-07-19**. Medium enterprises follow from 2030-07-19.
+  footwear from **19-Jul-2026**. Medium enterprises follow from 19-Jul-2030.
   Micro and small enterprises are exempt [A] (Linklaters) [P]
   (circulareconomy.europa.eu).
 - **Derogations:** Commission Delegated Regulation **(EU) 2026/296**,
-  adopted 2026-02-09 and published in the OJ 2026-04-22 [P] (EUR-Lex ELI,
-  europalov.no), applying from 2026-07-19. Ten derogations [A], including:
+  adopted 09-Feb-2026 and published in the OJ 22-Apr-2026 [P] (EUR-Lex ELI,
+  europalov.no), applying from 19-Jul-2026. Ten derogations [A], including:
   - dangerous or non-compliant with mandatory chemical law;
   - IP infringement;
   - licensing restrictions;
@@ -401,7 +401,7 @@ declaration for any food-contact item (none expected).
 - Annual disclosure of the number and weight of discarded unsold products
   per CN code, the reasons and the derogation used.
 - Large companies from financial year 2025; standard format under
-  Implementing Reg (EU) 2026/2 from **2027-03-02** [A].
+  Implementing Reg (EU) 2026/2 from **02-Mar-2027** [A].
 
 **Who owes it.**
 - The economic operator that discards. For returns held by us in the EU (NL
@@ -426,7 +426,7 @@ declaration for any food-contact item (none expected).
 ## 7. Green claims
 
 - **Empowering Consumers for the Green Transition, Dir (EU) 2024/825.**
-  Applies from **2026-09-27**; transposition was due 2026-03-27 [N]. It adds
+  Applies from **27-Sep-2026**; transposition was due 27-Mar-2026 [N]. It adds
   to the UCPD blacklist:
   - generic environmental claims ("eco-friendly", "sustainable", "green")
     without recognised excellent environmental performance;
@@ -441,7 +441,7 @@ declaration for any food-contact item (none expected).
   from merchant copy. Each claim or label needs its certificate, stored per
   SKU.
 - **Green Claims Directive:** the Commission announced withdrawal on
-  2025-06-20, then said it was not formally withdrawn. Status unclear, not
+  20-Jun-2025, then said it was not formally withdrawn. Status unclear, not
   law [A] (CMS, Mondaq). Ignore for build; watch.
 
 ## 8. EU Forced Labour Regulation (EU) 2024/3015
@@ -451,7 +451,7 @@ declaration for any food-contact item (none expected).
   Authorities investigate risk-based. When a breach is found: withdrawal,
   disposal (donation, recycling or destruction) at the operator's cost, and
   a block at customs.
-- **Dates:** applies from **2027-12-14** [R]. Commission guidelines and a
+- **Dates:** applies from **14-Dec-2027** [R]. Commission guidelines and a
   risk database are due beforehand. UNVERIFIED whether they are published.
 - **Who owes it:** every economic operator, us included. There is no
   formal due-diligence duty, but evidence of due diligence matters in an
@@ -466,10 +466,10 @@ declaration for any food-contact item (none expected).
 - Annex I covered cattle hides and leather (HS 4101, 4104, 4107) and never
   finished leather goods: bags (4202), footwear (6403) and belts (4203) were
   not in it [R].
-- **Delegated Regulation (EU) 2026/2102:** adopted 2026-07-13, published in
-  the OJ 2026-09-17, in force 2026-09-18. It **removes 4101, 4104 and 4107**
+- **Delegated Regulation (EU) 2026/2102:** adopted 13-Jul-2026, published in
+  the OJ 17-Sep-2026, in force 18-Sep-2026. It **removes 4101, 4104 and 4107**
   [N] (Coolset; Linklaters headline). Leather may return at the 2030 review.
-- Main application: 2026-12-30 for large and medium operators, 2027-06-30
+- Main application: 30-Dec-2026 for large and medium operators, 30-Jun-2027
   for micro and small [N].
 - **Conclusion:** EUDR does not apply to our goods today. If a merchant ever
   ships rubber-soled footwear: natural rubber is in Annex I, but HS 6406 and
@@ -510,7 +510,7 @@ declaration for any food-contact item (none expected).
 - **Northern Ireland:** the EU GPSR applies under the Windsor Framework
   [R], so NI consumers need an EU responsible person. GB-established
   operators may be accepted (UNVERIFIED).
-- **Product Regulation and Metrology Act 2025:** Royal Assent 2025-07-21
+- **Product Regulation and Metrology Act 2025:** Royal Assent 21-Jul-2025
   [A] (Fieldfisher, Lewis Silkin, Freshfields). It gives powers to impose
   duties on online marketplaces and others. Commentators expected online
   marketplace secondary legislation to be consulted on first, possibly in
@@ -533,7 +533,7 @@ declaration for any food-contact item (none expected).
   mirroring 1007/2011, in English.
 - Footwear (Indication of Composition) Labelling Regulations 1995 [R].
 
-**UK packaging EPR** [P] (GOV.UK, updated 2026-08-19).
+**UK packaging EPR** [P] (GOV.UK, updated 19-Aug-2026).
 - Obligated only if **established in the UK**: registered office or
   principal place of business in the UK. A foreign HQ counts as established
   if it has a **UK branch, warehouse, or UK postal or returns address**.
@@ -582,7 +582,7 @@ declaration for any food-contact item (none expected).
   - **REACH** (with Annex XVII) and the **Textile Labelling Regulation**
     apply through the EEA Agreement [R].
   - **GPSR 2023/988 is not yet incorporated into the EEA Agreement**,
-    according to the Norwegian ministry's EEA note (updated 2026-06-18) [P]
+    according to the Norwegian ministry's EEA note (updated 18-Jun-2026) [P]
     (europalov.no).
   - **ESPR 2024/1781 is not yet incorporated either**; it will be
     implemented via the Sustainable Products Act (bærekraftige
@@ -620,11 +620,11 @@ declaration for any food-contact item (none expected).
 ## 15. Sources
 
 **[P] Primary or official**
-- EP Legislative Train, revision of textile labelling regulation (updated 2026-10-25): https://www.europarl.europa.eu/legislative-train/theme-a-european-green-deal/file-textile-labeling-regulation
+- EP Legislative Train, revision of textile labelling regulation (updated 25-Oct-2026): https://www.europarl.europa.eu/legislative-train/theme-a-european-green-deal/file-textile-labeling-regulation
 - EUR-Lex, Delegated Regulation (EU) 2026/296: https://eur-lex.europa.eu/eli/reg_del/2026/296/oj (content did not render; existence confirmed via search)
 - Commission / Circular Economy Platform, new rules to stop destruction of unsold clothes and shoes: https://circulareconomy.europa.eu/platform/en/news-and-events/all-news/new-eu-rules-stop-destruction-unsold-clothes-and-shoes ; https://environment.ec.europa.eu/news/new-eu-rules-stop-destruction-unsold-clothes-and-shoes-2026-02-09_en
 - europalov.no, EEA status of 2026/296, ESPR and GPSR: https://europalov.no/rettsakt/okodesignforordningen-2024-utfyllende-bestemmelser-om-unntak-fra-forbudet-om-destruksjon-av-usolgte/id-33881
-- GOV.UK, EPR for packaging, who is affected (updated 2026-08-19): https://www.gov.uk/guidance/extended-producer-responsibility-for-packaging-who-is-affected-and-what-to-do
+- GOV.UK, EPR for packaging, who is affected (updated 19-Aug-2026): https://www.gov.uk/guidance/extended-producer-responsibility-for-packaging-who-is-affected-and-what-to-do
 - ecologie.gouv.fr, Loi du 8 juillet 2026 (textile): https://www.ecologie.gouv.fr/politiques-publiques/reduire-limpact-environnemental-lindustrie-textile-loi-du-8-juillet-2026
 
 **[A] Advisers and law firms**
@@ -650,4 +650,4 @@ declaration for any food-contact item (none expected).
 - EuroCommerce, TLR revision: https://www.eurocommerce.eu/2026/06/joint-call-for-a-timely-and-targeted-revision-of-the-textile-labelling-regulation-tlr/
 - Projet Celsius, FR fast-fashion law: https://projetcelsius.com/en/blog/france-fast-fashion-law/
 - Bureau Veritas, FR ultra fast fashion law: https://www.cps.bureauveritas.com/newsroom/introduction-ultra-fast-fashion-law-france
-- ShippyPro, ECGT 2026-09-27: https://www.shippypro.com/blog/en/the-green-claims-directive-greenwashing-obligations-from-september-27-2026
+- ShippyPro, ECGT 27-Sep-2026: https://www.shippypro.com/blog/en/the-green-claims-directive-greenwashing-obligations-from-september-27-2026

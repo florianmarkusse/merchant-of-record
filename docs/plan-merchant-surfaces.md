@@ -1,6 +1,6 @@
 # Plan: merchant and buyer surfaces
 
-Status: design proposal (2026-11-04), awaiting confirmation. No code yet.
+Status: design proposal (04-Nov-2026), awaiting confirmation. No code yet.
 This builds on `docs/plan-psp-integration.md` (core, PSP port, ledger,
 couriers, payouts) and only covers what merchants and buyers touch.
 
@@ -26,7 +26,7 @@ component needs it, on the payment step.
 ## 2. Ways a merchant can sell through us
 
 Ordered by how much work it is for the merchant. **Every channel is a thin
-client of the same public API** (decided 2026-11-04): it creates a checkout
+client of the same public API** (decided 04-Nov-2026): it creates a checkout
 session, sends the buyer to the same hosted checkout and reacts to the same
 webhooks. Tax, landed cost, invoicing and the seller identity therefore
 always come from the core. A new channel is a small adapter, not a change
@@ -44,7 +44,7 @@ the order (§6).
 3. **Platform plugins.** Shopify or another platform, which call option 2
    underneath.
 4. **Embedded checkout** inside the merchant's site. Not in v1 (confirmed
-   2026-11-04: v1 is API sessions plus payment links). Later it would be our
+   04-Nov-2026: v1 is API sessions plus payment links). Later it would be our
    own address, quote and payment steps in an iframe, so the price build-up
    (tax, duties, shipping) and the seller line still come from us. It needs
    JavaScript and a strict `frame-ancestors` policy per merchant domain.
@@ -94,7 +94,7 @@ Order           { id, session_id, merchant_id, buyer, ship_to, invoice_id, state
   state: paid | fulfilling | shipped | delivered | return_requested | returned | refunded | closed
 ```
 
-- **No required catalog** (decided 2026-11-04: a mandatory catalog is too
+- **No required catalog** (decided 04-Nov-2026: a mandatory catalog is too
   restrictive). The merchant's server sends the lines with their price and
   customs data on each checkout, like Stripe's inline `price_data`. The
   price is trusted because a secret-key call creates the session; prices
@@ -109,26 +109,26 @@ Order           { id, session_id, merchant_id, buyer, ship_to, invoice_id, state
     the invoice and the customs declaration need it. With a
     `merchant_sku`, an HS code we suggested once is reused for later
     sessions with that SKU.
-  - **Inline or by reference** (decided 2026-11-04). Each line is either
+  - **Inline or by reference** (decided 04-Nov-2026). Each line is either
     full inline data or a `product_id`. A stored `Product` is the same
     data under an id: it saves resending the customs data and gives one
     place to correct it. Both resolve to a `SoldLine` snapshot at session
     creation, so a later product edit never changes what was sold.
-  - **Payment links need no product** (decided 2026-11-04). A link is a
+  - **Payment links need no product** (decided 04-Nov-2026). A link is a
     saved checkout template with its own lines, inline or by reference.
     Lines by reference follow product edits (a new price applies without a
     new URL). Inline lines are frozen until the link is edited.
 - **Price currency:** whatever currency the merchant sends (decided
-  2026-11-04). If the buyer pays in another currency, the quote converts
+  04-Nov-2026). If the buyer pays in another currency, the quote converts
   with a stored exact rate.
-- **Duty estimate differences are the merchant's** (decided 2026-11-04).
+- **Duty estimate differences are the merchant's** (decided 04-Nov-2026).
   When the courier's duty bill differs from the duty in the quote, the
   difference is booked against `merchant_payable` and settles with the
   next payout. It is symmetric: an overestimate is credited to the
   merchant too. Each case is a ledger entry that references the
   shipment and the courier invoice line, so the statement can show it.
 - **Tax behaviour per line:** with `exclusive` (the default, decided
-  2026-11-04) we add tax, duties and shipping on top, so the merchant's
+  04-Nov-2026) we add tax, duties and shipping on top, so the merchant's
   amount is predictable.
   With `inclusive` the buyer total stays fixed and we back tax and duties
   out, so the merchant's net varies by country. The back-out rounding mode
@@ -224,7 +224,7 @@ returns the landed price for showing on the merchant's own product pages.
 ```
 
 - **Branding: the merchant's, ours nearly invisible** (decided
-  2026-11-04: our brand confuses buyers). The merchant's name, logo and
+  04-Nov-2026: our brand confuses buyers). The merchant's name, logo and
   accent colour carry every buyer page. Ours appears only where law or the
   card networks require it:
   1. one small line at checkout and in the terms, "Sold and invoiced by
@@ -261,14 +261,14 @@ returns the landed price for showing on the merchant's own product pages.
 - **Order page:** the buyer gets a magic link by email (no account). It
   shows tracking from courier events, the invoice download, and a return or
   refund request inside the policy window.
-- **Buyer support is split by topic** (decided 2026-11-04). The
+- **Buyer support is split by topic** (decided 04-Nov-2026). The
   **merchant** answers product, shipping, delivery and return questions,
   under our policy for response times and refunds. **We** answer charge,
   invoice, tax and payment questions, and own disputes and chargebacks.
   Legally we are the seller, so buyers must be able to reach us. One
   contact route on every buyer page and on the invoice sends each question
   to the right side by topic.
-- **Return policy is a merchant setting** (decided 2026-11-04: it depends
+- **Return policy is a merchant setting** (decided 04-Nov-2026: it depends
   on what the seller wants). It can be set per buyer country:
   ```
   ReturnPolicy { window_days, destination, conditions }
@@ -278,13 +278,13 @@ returns the landed price for showing on the merchant's own product pages.
   minimum; the system enforces that floor from the per-country rules.
   `refund_without_return` suits cheap items whose return shipping costs
   more than the goods.
-- **Returns:** the merchant pays return shipping (decided 2026-11-04). It is
+- **Returns:** the merchant pays return shipping (decided 04-Nov-2026). It is
   deducted from the next payout. If the balance cannot cover it, the
   reserve does, or the balance goes negative and the merchant is invoiced.
   Where consumer law forbids charging the buyer (e.g. defective goods),
   the buyer is not charged; it is still the merchant's cost.
 - **Shipping labels:** in v1, cross-border shipments use labels booked
-  through our courier partners (decided 2026-11-04). Only then do we get
+  through our courier partners (decided 04-Nov-2026). Only then do we get
   DDP duty billing, our SG/MY tax registration numbers on the declaration
   (otherwise buyers can be taxed twice), and delivery events for payout
   timing. Later, an "own courier" mode for routes where the merchant's
@@ -357,7 +357,7 @@ Server-rendered pages for each record above, in Vietnamese and English:
 
 ## 9. Open questions
 
-Answered 2026-11-04: the merchant sends the price and currency per call;
+Answered 04-Nov-2026: the merchant sends the price and currency per call;
 there is no required catalog; lines are inline or by product reference;
 payment links need no product; `exclusive` is the default; duty estimate
 differences are the merchant's, both ways (§3). Every channel is a thin API

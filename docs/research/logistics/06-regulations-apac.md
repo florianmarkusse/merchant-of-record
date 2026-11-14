@@ -1,6 +1,6 @@
 # 06 — Destination rules: East Asia, South Asia, Oceania
 
-Researched 2026-11-06. Scope: B2C apparel and fashion accessories (HS 61, 62,
+Researched 06-Nov-2026. Scope: B2C apparel and fashion accessories (HS 61, 62,
 64, 42) shipped from Vietnam by express courier or e-commerce post, sold DDP by
 a foreign merchant of record (MoR, a SG entity or a Dutch BV), with volume
 added up across all merchants.
@@ -38,20 +38,20 @@ foreign MoR shipping from its own checkout.**
   parcels from other countries, so the sources conflict). A single
   indivisible item above the limit can still clear. The postal articles tax
   (行邮税) is one rate that replaces duty, VAT and consumption tax. Since
-  2019-04-09 textiles and clothing pay **20%** [A: China Daily 2019-04;
+  09-Apr-2019 textiles and clothing pay **20%** [A: China Daily 2019-04;
   official 2026 schedule not found]. The base is the customs "complete tax
   price" list (完税价格表), not the invoice. The channel is meant for goods
   for personal use "in reasonable quantity", not for commercial sales.
 - **Cross-border e-commerce retail import (CBEC, 跨境电商零售进口, customs
   codes 9610 direct mail and 1210 bonded)**: limit of **RMB 5,000 per
   transaction and RMB 26,000 per person per year** (财关税〔2018〕49号,
-  effective 2019-01-01) [A: China Law & Practice; Mondaq]. Within the limit:
+  effective 01-Jan-2019) [A: China Law & Practice; Mondaq]. Within the limit:
   **0% duty**, and import VAT and consumption tax at **70%** of the normal
   amount. Clothing has no consumption tax, so the cost is 13% × 70% =
   **9.1%** (derived from the 2016/2018 notices). A single item above
   RMB 5,000 can still enter if the buyer's annual limit is not exceeded,
   but then it pays full general-trade tax.
-  - One trade-press article (JCtrans, 2026-04-24) reports the limits raised
+  - One trade-press article (JCtrans, 24-Apr-2026) reports the limits raised
     to **RMB 8,000 and RMB 40,000**. No MOF or GAC notice was found and the
     page now returns 404. **UNVERIFIED. Treat 5,000 and 26,000 as current.**
   - Returns: MOF/GAC/STA notice **No. 16 of 2026** covers *export* CBEC
@@ -178,8 +178,8 @@ trade-description risk.
 - **2025–2026 reform status:** the MOF said in April 2025 that it was
   studying changes, including a lower NT$1,000 threshold for goods from
   China and other dumping-prone origins. In January 2026 the Finance
-  Minister said cross-ministry review was ongoing [A: CTEE 2025-04-17,
-  TechNews 2025-04-10, Want Daily 2026-01-07]. **No enacted change found as
+  Minister said cross-ministry review was ongoing [A: CTEE 17-Apr-2025,
+  TechNews 10-Apr-2025, Want Daily 07-Jan-2026]. **No enacted change found as
   of the latest sources (early to mid 2026). Assume NT$2,000 + 6/half-year
   is still in force, but re-check before launch.** Any differential change
   would most likely target CN and HK, not VN (UNVERIFIED).
@@ -225,16 +225,16 @@ under NT$2,000 (about US$62) and pay no tax. The friction is EZ WAY
 onboarding for each buyer, the 6-per-half-year counter, and the risk of a
 reform. Above NT$2,000 the duty is only moderate.
 
-- Checked 2026-11-10: NT$2,000 and six duty-free parcels per half-year
+- Checked 10-Nov-2026: NT$2,000 and six duty-free parcels per half-year
   still apply. The Finance Minister promised in April 2025 to consider
-  changes, and a Taipei Times editorial of 2026-02-03 says none has been
+  changes, and a Taipei Times editorial of 03-Feb-2026 says none has been
   made [S: Taipei Times; Kaohsiung Customs notice via search].
 
 ---
 
 ## 4. Japan
 
-### 4.1 De minimis and valuation (current, until 2028-03-31)
+### 4.1 De minimis and valuation (current, until 31-Mar-2028)
 - Goods with a total customs value **≤ ¥10,000** are exempt from **both
   customs duty and consumption tax** [O: Japan Customs FAQ 1006,
   customs.go.jp].
@@ -248,12 +248,12 @@ reform. Above NT$2,000 the duty is only moderate.
   transaction value.
 - Consumption tax 10% (7.8% national + 2.2% local) on CIF + duty.
 
-### 4.2 Reform: FY2026 tax reform (announced, effective 2028-04-01)
-- Ruling-party proposals of **2025-12-19** [A: BDO, PwC JTU 2026-01-14,
+### 4.2 Reform: FY2026 tax reform (announced, effective 01-Apr-2028)
+- Ruling-party proposals of **19-Dec-2025** [A: BDO, PwC JTU 14-Jan-2026,
   VATupdate 2026-01]:
   - Mail-order goods shipped from abroad to Japan at **≤ ¥10,000 per item**
     (excluding JCT) become a taxable transfer in Japan from
-    **2028-04-01**. The seller charges JCT at the point of sale.
+    **01-Apr-2028**. The seller charges JCT at the point of sale.
   - Foreign sellers register as **"Specified Low-Value Asset Sellers"**.
     Their goods are then exempt from JCT at importation if the import
     declaration carries the seller's registration number and a statement
@@ -330,13 +330,13 @@ for parcels ≤ ¥10,000. Labelling expectations are high.
   limit is **USD 200** under list clearance (KORUS), not relevant for
   VN-origin shipments [O: Korea Customs Service, customs.go.kr cntntsId
   2733; Customs Act Enforcement Rules Art. 45(2)1, version in force from
-  2026-07-31].
+  31-Jul-2026].
 - **Above USD 150 the whole value is taxed**, not just the excess [O/A:
   KCS example]. Duty is on CIF and **VAT 10%** on CIF + duty.
 - **Combined taxation (합산과세)**: the rule taxing items that arrive on the
-  same day was narrowed on 2022-11-17. Goods from different suppliers are
+  same day was narrowed on 17-Nov-2022. Goods from different suppliers are
   not combined. Same-supplier, same-day or split shipments can be combined
-  [A: braindetox.kr citing KCS press release 2022-11-16]. A MoR that serves
+  [A: braindetox.kr citing KCS press release 16-Nov-2022]. A MoR that serves
   many merchants looks like **one supplier** to KCS, so a buyer's two
   orders from two of our merchants could be combined (risk, UNVERIFIED).
 
@@ -368,11 +368,11 @@ for parcels ≤ ¥10,000. Labelling expectations are high.
   Aug 2026]:
   - **One-year validity** from 2026. Existing codes expire on the holder's
     birthday in 2027, with renewal needed each year.
-  - From **2026-02-02** the **delivery postal code must match** the
+  - From **02-Feb-2026** the **delivery postal code must match** the
     registered address, or one of up to 20 pre-registered delivery
     addresses.
   - The name and phone number must match (already enforced).
-  - A one-time verification number pilot started 2026-08-28.
+  - A one-time verification number pilot started 28-Aug-2026.
 - So checkout must collect the PCCC, the consignee name exactly as
   registered, the phone number and the postal code, and should validate the
   PCCC format. KCS offers a verification API to e-commerce operators
@@ -426,7 +426,7 @@ risk because the MoR looks like one supplier.
     higher, on many lines (UNVERIFIED for 2026 after the Feb 2025 and Feb
     2026 budget rationalisations). Footwear 20–35%, bags 20%.
   - IGST after GST 2.0 (Notification 9/2025-CT(R), effective
-    **2025-09-22**): apparel and footwear **5% if the value per piece or
+    **22-Sep-2025**): apparel and footwear **5% if the value per piece or
     pair is ≤ Rs 2,500, 18% above** [A: Bata compliance note, Amazon Seller
     Central, Khaitan & Co]. How the per-piece test works for imports
     (assessable value against retail price) is unclear (UNVERIFIED).
@@ -435,7 +435,7 @@ risk because the MoR looks like one supplier.
 ### 6.2 LVG and foreign seller registration
 - No LVG or foreign-seller GST regime for goods. Tax is collected at
   import. (The 2% equalisation levy on e-commerce operators was abolished
-  from 2024-08-01, background.) A foreign MoR does not register for GST to
+  from 01-Aug-2024, background.) A foreign MoR does not register for GST to
   sell goods by courier DDP. Duty and IGST go through the courier.
 
 ### 6.3 FTAs
@@ -468,8 +468,8 @@ risk because the MoR looks like one supplier.
   Regulations, 2010**: Class A documents, Class B gifts and samples, and
   **Class C dutiable goods**, with a per-consignment value cap (commonly
   cited as Rs 10 lakh for imports; UNVERIFIED). Notification
-  33/2026-Customs (NT), effective 2026-04-01, removed the Rs 10 lakh cap
-  on courier **exports** [A: Tribune India, The Week 2026-03-31]. Above the
+  33/2026-Customs (NT), effective 01-Apr-2026, removed the Rs 10 lakh cap
+  on courier **exports** [A: Tribune India, The Week 31-Mar-2026]. Above the
   cap, a formal Bill of Entry.
 - DHL, FedEx and UPS offer DTP to India. Post (India Post via VNPost/EMS)
   is cheaper but slow and duty-on-delivery is common. Many express couriers
@@ -493,8 +493,8 @@ that cannot be used.
 ### 7.1 De minimis and valuation
 - Goods in a consignment with a **customs value ≤ A$1,000**: no duty or
   import GST at the border. Instead, **GST 10% is charged at sale by the
-  foreign supplier** (LVG regime, in force since **2018-07-01**) [O: ATO
-  page "GST on low value imported goods", updated 2025-09-11]. Customs
+  foreign supplier** (LVG regime, in force since **01-Jul-2018**) [O: ATO
+  page "GST on low value imported goods", updated 11-Sep-2025]. Customs
   value is the price less freight and insurance from the place of export,
   so roughly FOB. Note that **GST is charged on the full price including
   shipping** to the customer, while the A$1,000 test uses customs value.
@@ -534,7 +534,7 @@ that cannot be used.
 ### 7.5 Restrictions
 - **Care labelling is mandatory** for textile apparel and footwear
   (Consumer Goods (Care Labelling) Information Standard 2023, transition
-  ended 2025-06-01?) (**UNVERIFIED**: date and coverage of imports sold
+  ended 01-Jun-2025?) (**UNVERIFIED**: date and coverage of imports sold
   B2C). Customs seizes counterfeits under the Trade Marks Act. The
   Australian Consumer Law (ACL) gives buyers guarantees, so refunds for
   faulty goods are mandatory.
@@ -576,7 +576,7 @@ the border either, below A$1,000).
 
 ### 8.2 LVG and foreign seller registration
 - Overseas suppliers must register when supplies to NZ exceed **NZ$60,000
-  in 12 months** (rules in force from **2019-12-01**) [A: calculate.co.nz.
+  in 12 months** (rules in force from **01-Dec-2019**) [A: calculate.co.nz.
   The official page says registration depends on total supplies without
   naming the figure. NZ$60,000 matches the general GST threshold; treat as
   confirmed by background]. The supplier gets an IRD number, files GST
@@ -620,9 +620,9 @@ once aggregated sales pass NZ$60,000.
 | China | Personal articles: tax waived if ≤ RMB 50 tax. CBEC: 0 duty, 70% VAT within RMB 5,000/26,000 [8,000/40,000 UNVERIFIED] | None, but CBEC needs a domestic agent plus a platform registered with customs | Postal articles tax 20% (textiles); CBEC 9.1% | MFN about 6–8% | No | Real name + Chinese ID; payer = buyer (CBEC) | CBEC limit raise reported, UNVERIFIED | **Hard** |
 | Hong Kong | Everything (no tax; duty only on 4 excise groups) | None | 0% | 0% | n/a | None | None | **Easy** |
 | Taiwan | ≤ NT$2,000, max 6 per buyer per half-year | None for goods | 5% business tax | about 10–12% (UNVERIFIED) | No FTA | EZ WAY real-name consent | Lower threshold under review (NT$1,000 for CN talked about); not enacted | **Medium-easy** |
-| Japan | ≤ ¥10,000 (duty + JCT), **but knitwear, leather bags, leather shoes excluded**; 60% valuation for personal use | None today. **From 2028-04-01 the seller registers for JCT on ≤ ¥10,000 goods** | 10% JCT | knit about 7–11%, woven about 4–13%, leather shoes about 30% | VJEPA/CPTPP/RCEP, origin-dependent; small consignment waiver (UNVERIFIED) | Name, address, phone | FY2026 reform, LVG from 2028-04-01 (likely enacted) | **Medium** |
-| South Korea | ≤ USD 150 total customs value (all-or-nothing) | None for goods | 10% VAT | 13% | VKFTA/AKFTA/RCEP, origin-dependent; ≤ USD 1,000 waiver (UNVERIFIED) | **PCCC mandatory**; name/phone/postal code must match (2026) | PCCC 1-year validity (2026–27), postal code match from 2026-02-02 | **Medium-easy** |
-| India | None for sales (Rs 5,000 only for gifts) | None for goods | IGST 5% (≤ Rs 2,500/piece) or 18%, + BCD + SWS | BCD about 20% + 10% SWS | AIFTA impractical | **Consignee KYC** (Aadhaar/PAN/passport/DL/Voter ID) | GST 2.0 slabs from 2025-09-22 | **Hard** |
+| Japan | ≤ ¥10,000 (duty + JCT), **but knitwear, leather bags, leather shoes excluded**; 60% valuation for personal use | None today. **From 01-Apr-2028 the seller registers for JCT on ≤ ¥10,000 goods** | 10% JCT | knit about 7–11%, woven about 4–13%, leather shoes about 30% | VJEPA/CPTPP/RCEP, origin-dependent; small consignment waiver (UNVERIFIED) | Name, address, phone | FY2026 reform, LVG from 01-Apr-2028 (likely enacted) | **Medium** |
+| South Korea | ≤ USD 150 total customs value (all-or-nothing) | None for goods | 10% VAT | 13% | VKFTA/AKFTA/RCEP, origin-dependent; ≤ USD 1,000 waiver (UNVERIFIED) | **PCCC mandatory**; name/phone/postal code must match (2026) | PCCC 1-year validity (2026–27), postal code match from 02-Feb-2026 | **Medium-easy** |
+| India | None for sales (Rs 5,000 only for gifts) | None for goods | IGST 5% (≤ Rs 2,500/piece) or 18%, + BCD + SWS | BCD about 20% + 10% SWS | AIFTA impractical | **Consignee KYC** (Aadhaar/PAN/passport/DL/Voter ID) | GST 2.0 slabs from 22-Sep-2025 | **Hard** |
 | Australia | No duty or border GST ≤ A$1,000 (customs value) | **Seller registers above A$75,000** (simplified, quarterly, ARN on docs) | 10% GST at sale | 5% (only above A$1,000) | Not needed | None | None found | **Easy** |
 | New Zealand | No duty ≤ NZ$1,000 per item | **Seller registers above NZ$60,000** (IRD number) | 15% GST at sale | about 10% (only above NZ$1,000) | Not needed | None | None found | **Easy** |
 
@@ -631,7 +631,7 @@ once aggregated sales pass NZ$60,000.
 - **Tax jurisdiction modules** needed first: AU GST LVG and NZ GST LVG
   (collect at sale, aggregated turnover tracking against A$75,000 and
   NZ$60,000, quarterly or 2-monthly returns, ARN or IRD number printed on
-  the commercial invoice). JP JCT LVG module for 2028-04-01. KR, TW and
+  the commercial invoice). JP JCT LVG module for 01-Apr-2028. KR, TW and
   IN: border-collected duty and VAT estimates (landed-cost quote, not our
   output tax).
 - **Per-item threshold tests** differ: AU per consignment on customs value;
@@ -664,7 +664,7 @@ Official:
 
 Advisers and secondary:
 - BDO, Japan 2026 tax reform JCT: https://www.bdo.global/en-gb/insights/tax/indirect-tax/japan-2026-tax-reform-includes-jct-changes-that-affect-nonresident-sellers
-- PwC Japan Tax Update 2026-01-14: https://www.pwc.com/jp/en/taxnews/pdf/jtu-20260114-en.pdf
+- PwC Japan Tax Update 14-Jan-2026: https://www.pwc.com/jp/en/taxnews/pdf/jtu-20260114-en.pdf
 - VATupdate, Japan ¥10,000 removal from April 2028: https://www.vatupdate.com/2026/01/07/japan-to-remove-%C2%A510000-tax-exemption-for-e-commerce-imports-from-april-2028/
 - lookuptax, Japan 2028 (marked enacted): https://lookuptax.com/tax-changes/japan/low-value-import-platform-rules-2028
 - Baker McKenzie, Japan de minimis customs review: https://globalimportblog.bakermckenzie.com/2026/01/15/japan-considers-revising-de-minimis-customs-threshold-to-address-e-commerce-surge/
@@ -679,6 +679,6 @@ Advisers and secondary:
   https://wantrich.chinatimes.com/news/20260107900289-420501
 - Comgateway, TW NT$2,000 and 6/half-year: https://www.comgateway.com/sv/blogs/how-much-tax-and-duty-will-i-pay-for-shipping-from-the-usa-to-taiwan/
 - The Core, India de minimis: https://www.thecore.in/business/shein-temu-hit-as-us-ends-de-minimis-what-are-indias-rules-like-820262
-- Khaitan & Co, India GST rate change (retail) 2025-09-19: https://www.khaitanco.com/sites/default/files/2025-09/Ergo - GST Rate Change-LM-Retail sector - 19 September 2025.pdf
+- Khaitan & Co, India GST rate change (retail) 19-Sep-2025: https://www.khaitanco.com/sites/default/files/2025-09/Ergo - GST Rate Change-LM-Retail sector - 19 September 2025.pdf
 - Tribune India, Notification 33/2026-Customs (NT): https://www.tribuneindia.com/news/business/cbic-operationalises-reforms-to-boost-e-com-exports-from-april-1/
 - PwC Australia GST update 2017-11 (ARN on documents): https://www.pwc.com.au/tax/taxtalk/assets/alerts/gst-update-14nov17.pdf

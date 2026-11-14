@@ -1,6 +1,6 @@
 # 04 — Landed-cost / customs compliance APIs, and cross-border returns
 
-Research date: 2026-11-06. Labels: [published] = vendor or government page,
+Research date: 06-Nov-2026. Labels: [published] = vendor or government page,
 [calculator] = output of a vendor tool, [estimate] = our own or a third-party
 rule of thumb. UNVERIFIED = could not confirm from a primary source in this
 session. No vendor was contacted; all prices are list or public prices, and
@@ -36,13 +36,13 @@ would make THEM the tax-registered supplier, conflicting with our MoR role.
 | Country | Regime as found | Source |
 |---|---|---|
 | SG | GST 9% on LVG ≤ S$400 (sales value, excl. shipping/insurance per Customs) collected by registered overseas vendor (OVR) if global turnover > S$1m and LVG B2C > S$100k/yr [published]. Above S$400 or by sea: import GST at border. | https://www.customs.gov.sg/personal-shipment/buying-from-overseas/gst-on-low-value-goods/ ; IRAS e-Tax guide (below) |
-| MY | 10% sales tax on LVG ≤ RM500 (price excl. shipping/insurance), seller registers when LVG sales > RM500k in 12 months; quarterly returns; since 2024-01-01 [published]. No 2025–26 change found (UNVERIFIED that none exists). | https://bdo.global/en-gb/insights/tax/indirect-tax/malaysia-sales-tax-now-levied-on-low-value-goods ; https://rsm.global/malaysia/node/93 |
-| TH | THB 1,500 duty exemption abolished from 2026-01-01 (Customs Notification 219/2568); VAT 7% on low-value parcels since July 2024; duty now from first baht [published, secondary]. Further duty increases announced 2026-03-30 (UNVERIFIED for apparel). | https://www.forvismazars.com/th/en/insights/doing-business-in-thailand/tax/thailand-e-commerce-import-duty-2026 ; https://www.tilleke.com/insights/thailand-announces-customs-duty-hikes-for-key-consumer-goods |
-| ID | Duty de minimis USD 3 FOB; tax de minimis 0 (VAT on everything). Textiles/apparel, bags, shoes carved out with higher duty (textiles 15–25%, bags 15–20%, shoes 25–30%) and apparel limited to 5 pcs/shipment per Zonos guide [published, vendor]. PMK 4/2025 (effective 2025-03-05) reportedly restructured tiers (0/15/25%) [published, secondary, UNVERIFIED against DJBC text]. Zonos's ID page shows VAT 12% CIF and an inconsistent PPh figure, so treat vendor ID data as needing verification. | https://zonos.com/docs/guides/country-guides/indonesia ; https://www.cekindo.com/blog/import-duty-indonesia |
-| PH | De minimis PHP 10,000 (CMTA). A 2025 CAO (reportedly CAO 02-2025, effective 2025-05-07, B2C air only) — scope of VAT waiver disputed between sources (UNVERIFIED). Retailers lobbying to scrap it. | https://janio.asia/articles/philippines-de-minimis-rate/ ; https://business.inquirer.net/525027/boc-urged-to-scrap-de-minimis-rule ; https://treayo.com/en/de-minimis |
-| VN (inbound, for returns) | VND 1m express de minimis (Decision 78/2010) repealed by Decision 01/2025/QD-TTg, effective 2025-02-18: low-value express imports now pay duty+VAT [published, gov't news]. Matters for returns shipped back to VN. | https://en.baochinhphu.vn/viet-nam-to-levy-low-value-imports-from-february-18-11125010609453845.htm |
-| EU (later) | €150 duty relief ends; flat €3 customs duty on low-value parcels from 2026-07-01 (per item vs per parcel disputed); transitional to ~2028; ~€2 handling fee proposed (UNVERIFIED). | https://help.easproject.com/hc/en-gb/articles/5276913150495 ; https://marosavat.com/vat-news/eu-removal-of-customs-duty-relief-for-low-value-consignments |
-| US (later) | Section 321 $800 de minimis suspended for all origins from 2025-08-29 (EO 14324) [published, secondary]. | https://www.claimlane.com/resources/blog/section-321-and-duty-drawback-for-ecommerce-2026 |
+| MY | 10% sales tax on LVG ≤ RM500 (price excl. shipping/insurance), seller registers when LVG sales > RM500k in 12 months; quarterly returns; since 01-Jan-2024 [published]. No 2025–26 change found (UNVERIFIED that none exists). | https://bdo.global/en-gb/insights/tax/indirect-tax/malaysia-sales-tax-now-levied-on-low-value-goods ; https://rsm.global/malaysia/node/93 |
+| TH | THB 1,500 duty exemption abolished from 01-Jan-2026 (Customs Notification 219/2568); VAT 7% on low-value parcels since July 2024; duty now from first baht [published, secondary]. Further duty increases announced 30-Mar-2026 (UNVERIFIED for apparel). | https://www.forvismazars.com/th/en/insights/doing-business-in-thailand/tax/thailand-e-commerce-import-duty-2026 ; https://www.tilleke.com/insights/thailand-announces-customs-duty-hikes-for-key-consumer-goods |
+| ID | Duty de minimis USD 3 FOB; tax de minimis 0 (VAT on everything). Textiles/apparel, bags, shoes carved out with higher duty (textiles 15–25%, bags 15–20%, shoes 25–30%) and apparel limited to 5 pcs/shipment per Zonos guide [published, vendor]. PMK 4/2025 (effective 05-Mar-2025) reportedly restructured tiers (0/15/25%) [published, secondary, UNVERIFIED against DJBC text]. Zonos's ID page shows VAT 12% CIF and an inconsistent PPh figure, so treat vendor ID data as needing verification. | https://zonos.com/docs/guides/country-guides/indonesia ; https://www.cekindo.com/blog/import-duty-indonesia |
+| PH | De minimis PHP 10,000 (CMTA). A 2025 CAO (reportedly CAO 02-2025, effective 07-May-2025, B2C air only) — scope of VAT waiver disputed between sources (UNVERIFIED). Retailers lobbying to scrap it. | https://janio.asia/articles/philippines-de-minimis-rate/ ; https://business.inquirer.net/525027/boc-urged-to-scrap-de-minimis-rule ; https://treayo.com/en/de-minimis |
+| VN (inbound, for returns) | VND 1m express de minimis (Decision 78/2010) repealed by Decision 01/2025/QD-TTg, effective 18-Feb-2025: low-value express imports now pay duty+VAT [published, gov't news]. Matters for returns shipped back to VN. | https://en.baochinhphu.vn/viet-nam-to-levy-low-value-imports-from-february-18-11125010609453845.htm |
+| EU (later) | €150 duty relief ends; flat €3 customs duty on low-value parcels from 01-Jul-2026 (per item vs per parcel disputed); transitional to ~2028; ~€2 handling fee proposed (UNVERIFIED). | https://help.easproject.com/hc/en-gb/articles/5276913150495 ; https://marosavat.com/vat-news/eu-removal-of-customs-duty-relief-for-low-value-consignments |
+| US (later) | Section 321 $800 de minimis suspended for all origins from 29-Aug-2025 (EO 14324) [published, secondary]. | https://www.claimlane.com/resources/blog/section-321-and-duty-drawback-for-ecommerce-2026 |
 
 Conclusion: SEA rules moved in 2024–2026 (TH, ID, PH, VN all changed).
 Whichever vendor we use, we must be able to see the rule it applied, and
@@ -138,7 +138,7 @@ our per-jurisdiction tax module, not inside the vendor.
   Good if we want filing outsourced; but AvaTax is US-sales-tax-centric
   and enterprise-priced. Estimated vs guaranteed: estimate only (no
   guarantee product found).
-- Vietnam (checked 2026-11-10): no public ship-from list or duty request
+- Vietnam (checked 10-Nov-2026): no public ship-from list or duty request
   schema on developer.avalara.com (the cross-border docs URLs are 404);
   cross-border must be enabled on the account by Avalara (WooCommerce and
   Violet integration guides), so it starts with sales (q43).
@@ -177,7 +177,7 @@ our per-jurisdiction tax module, not inside the vendor.
   At 500 orders/month: ~USD 55/month for quotes pay-as-you-go
   [estimate]. HS "lookup" returns candidate codes, not a classification
   [published, 3rd party].
-- Vietnam account plans page, read in the app on 2026-11-10 (prices in
+- Vietnam account plans page, read in the app on 10-Nov-2026 (prices in
   VND, so the signup accepted a Vietnam account) [published, in-app]:
 
   | Plan | VND a month | T&D calls included | T&D overage | HS calls incl. / overage | Shipments a month |
@@ -195,7 +195,7 @@ our per-jurisdiction tax module, not inside the vendor.
   The developer docs say T&D is "paid plans only", yet Free lists an
   overage price: UNVERIFIED which applies. Still open (q39): duty data
   for VN origin, our own tax numbers, whether the trial includes T&D.
-- Tested 2026-11-10 with a VN account (sandbox `POST /2024-09/taxes_and_duties`,
+- Tested 10-Nov-2026 with a VN account (sandbox `POST /2024-09/taxes_and_duties`,
   HS 61091000, US$40 goods, US$10 shipping):
   - Origin VN to NL, DE, US, SG, AU, GB: all HTTP 422 "No import tax
     record was found for the specified origin and destination".
@@ -216,7 +216,7 @@ our per-jurisdiction tax module, not inside the vendor.
   - Production, same day, same input (VN account on its trial; 1 billable
     call): origin VN to NL, US and SG still 422 "No import tax record".
     Origin SG to NL (made in VN): HTTP 200, duty US$3.37 (≈ €3.02, i.e.
-    the EU's €3-per-line duty on low-value parcels from 2026-07-01) and
+    the EU's €3-per-line duty on low-value parcels from 01-Jul-2026) and
     tax US$8.21. So production data is real and current, the trial
     includes T&D (no 402), and VN as ship-from is missing in production
     too.
@@ -233,7 +233,7 @@ our per-jurisdiction tax module, not inside the vendor.
   GBP 9.99 (100 calls) to 499.99 (5,000) [published but pricing page
   dated 2019 per 3rd-party comparison]. Small UK vendor; fine as a
   second-opinion/backtest source. https://www.simplyduty.com/about
-- Vietnam (checked 2026-11-10): not answerable from public pages; the API
+- Vietnam (checked 10-Nov-2026): not answerable from public pages; the API
   docs are in the account area after a free registration (username and
   email); /api-docs/ is 404. Public text names only destination, HS code
   and value as inputs (q42).
@@ -245,7 +245,7 @@ our per-jurisdiction tax module, not inside the vendor.
   (5,000) [published, via comparison + docs]. No guarantee.
   https://docs.dutify.com/docs/landed-cost-calculator-api
   At 500/month: USD 75/month flat [estimate].
-- Vietnam (checked 2026-11-10 in the docs): ship-from is
+- Vietnam (checked 10-Nov-2026 in the docs): ship-from is
   `data.export_country_code` (required, ISO 3166-1), made-in is per-line
   `origin_country_code` with a `certificate_of_origin` flag. The
   supported-countries page lists VN as origin and destination (214
@@ -332,7 +332,7 @@ our per-jurisdiction tax module, not inside the vendor.
   Asia-origin detail found.
   https://passportglobal.com/blog/ior-vs-mor-vs-sor-which-global-ecommerce-model-does-your-brand-need/
 
-#### FlavorCloud (checked 2026-11-10, Vietnam origin only)
+#### FlavorCloud (checked 10-Nov-2026, Vietnam origin only)
 - DDP shipping network with guaranteed landed cost at checkout, 220+
   destinations over 300+ carriers [published]. Origins named publicly:
   the US and, since July 2025, Canada (a dedicated outbound DDP network for
@@ -345,7 +345,7 @@ our per-jurisdiction tax module, not inside the vendor.
 - Same position as Passport: its guaranteed DDP has it pay the border
   taxes, and it sells to merchants who would otherwise use us. Not a supplier.
 
-#### OpenBorder (checked 2026-11-10, Vietnam origin only)
+#### OpenBorder (checked 10-Nov-2026, Vietnam origin only)
 - US cross-border e-commerce platform that acts as Merchant, Seller or
   Importer of Record where a market needs one, and also handles duties
   and taxes, returns and in-country fulfilment. Pitched for TikTok Shop
@@ -364,7 +364,7 @@ our per-jurisdiction tax module, not inside the vendor.
 #### Flexport
 - Not relevant for B2C parcels at our volume (freight forwarding); skipped.
 
-#### SEKO Logistics (checked 2026-11-10, Vietnam origin only)
+#### SEKO Logistics (checked 10-Nov-2026, Vietnam origin only)
 - Has its own offices in Ho Chi Minh City (near Tan Son Nhat) and Hanoi:
   air and ocean freight, customs clearance, intra-Asia trucking, inbound
   and outbound [published].
@@ -387,7 +387,7 @@ our per-jurisdiction tax module, not inside the vendor.
 | Vendor | API | SEA depth | Guarantee | Price @ 500 orders/mo | Fit |
 |---|---|---|---|---|---|
 | Zonos | GraphQL, good docs | Guides for all 5; ID data inconsistent | Yes, only if duties billed to Zonos | ~USD 1,000 (USD 2/order estimate) + Classify USD 0–500 [estimate] | Best feature set; MoR conflict on guarantee path |
-| Easyship T&D | REST, simple | SEA home market | Only bundled with its labels (UNVERIFIED) | ~USD 60 [in-app price] | Ruled out 2026-11-10: no tax records for ship-from VN |
+| Easyship T&D | REST, simple | SEA home market | Only bundled with its labels (UNVERIFIED) | ~USD 60 [in-app price] | Ruled out 10-Nov-2026: no tax records for ship-from VN |
 | Dutify | REST | VN origin works; tested DE, TH (11-Nov-2026) | No | USD 75 flat | Cross-check only: EU VAT base leaves out the €3 duty and €2 fee, wrong FTA label |
 | Avalara | REST (AvaTax) | SG/MY filing service | No | Quote-only | Overkill v1; consider for filing |
 | SimplyDuty | REST | UNVERIFIED | No | ~GBP 50 | Second opinion |
@@ -403,7 +403,7 @@ Recommendation for v1:
    restricted-item flags. Start with Zonos Landed Cost in non-guaranteed
    mode with our own tax IDs if Zonos will contract it at ~USD 2/order
    without Zonos remitting. Easyship T&D was the cheap fallback but is
-   ruled out (2026-11-10: no tax records for ship-from VN); the fallback
+   ruled out (10-Nov-2026: no tax records for ship-from VN); the fallback
    is now Dutify, SimplyDuty or Avalara (not yet checked for VN origin).
 3. HS classification: at a few hundred SKUs, use Zonos Classify's free
    1,000 to PROPOSE codes, merchant confirms, we
@@ -520,7 +520,7 @@ Origin side (VN re-import):
 - If customs cannot link the goods to the export declaration, import duty
   is charged and export duty not refunded [published, secondary].
 - Import VAT on re-imported returns: UNVERIFIED (not found). Since
-  2025-02-18 the VND 1m express exemption no longer applies, so single
+  18-Feb-2025 the VND 1m express exemption no longer applies, so single
   returned parcels without the A31 dossier will be taxed.
 - Practical: per-parcel A31 dossiers are heavy; another reason to batch
   returns at a hub and re-import monthly under one declaration, or not

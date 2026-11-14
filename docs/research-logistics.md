@@ -1,10 +1,10 @@
 # Research: logistics providers, customs and returns
 
-Status: desk research, 2026-11-06. No decisions are made in this file yet.
+Status: desk research, 06-Nov-2026. No decisions are made in this file yet.
 The recommendations in §2 wait for confirmation, and most prices wait for
 sales quotes (§9). The visual summary is in `docs/logistics.html`.
 
-Scope (agreed 2026-11-06): merchants in Vietnam (other origins are a plus),
+Scope (agreed 06-Nov-2026): merchants in Vietnam (other origins are a plus),
 apparel and fashion accessories first, buyers in SEA first and then the
 rest of the world, DDP sales, low volume at the start (about 500 parcels a
 month, growing to 5k–50k). Goal: a merchant can use our integration alone
@@ -25,7 +25,7 @@ The detailed findings with every source URL are in `docs/research/logistics/`:
 | `05-regulations-sea.md` | SG, MY, TH, ID, PH, plus VN as origin and as the destination of returns |
 | `06-regulations-apac.md` | CN, HK, TW, JP, KR, IN, AU, NZ |
 | `07-regulations-rest-of-world.md` | US, CA, EU, UK, CH, NO, GCC, BR, MX, CL, CO, ZA, NG |
-| `08-regulations-la-kh-mm.md` | Laos, Cambodia, Myanmar (added 2026-11-06, short pass) |
+| `08-regulations-la-kh-mm.md` | Laos, Cambodia, Myanmar (added 06-Nov-2026, short pass) |
 
 Source labels used throughout: **[published]** carrier or authority
 document, **[calculator]** public quote tool, **[estimate]** inference or a
@@ -47,8 +47,8 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
    discount, this is too much for a US$30–60 order. **SEA needs a cheaper
    consolidated DDP line** (estimated US$4–9 for a small parcel).
 3. **The cheap SEA lines from VN have thinned out.** Ninja Van stopped its
-   VN express business on 2025-09-30. DHL eCommerce left VN in 2021. LEX
-   stopped VN last mile on 2026-03-31. Flash has no VN origin and left MY in
+   VN express business on 30-Sep-2025. DHL eCommerce left VN in 2021. LEX
+   stopped VN last mile on 31-Mar-2026. Flash has no VN origin and left MY in
    January 2026 [published]. The remaining candidates (Janio, Boxme, J&T
    International) sell DDP only on contract, have thin or unconfirmed API
    docs, and publish no rates. Whether VN is a live origin for Janio is
@@ -58,7 +58,7 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
    DHL, FedEx or UPS accounts (bring your own account) [published]. They
    sell no VN rates and offer no SEA regional carriers from VN. They only
    become useful once merchants outside VN join.
-   Correction 2026-11-06 (second search): this holds for the Western
+   Correction 06-Nov-2026 (second search): this holds for the Western
    orchestrators, but VN-based aggregators and resellers do sell carrier
    rates from VN: ShipX (shipx.asia), EFEX on iChiba's Ship4P, VNPost
    Logistics, YunExpress Vietnam. They are contract operators, so each
@@ -69,12 +69,12 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
    vendor is needed only for border duty rates and HS classification.
 6. **The rules on low-value imports tightened almost everywhere in
    2025–2026, and liability moved to the seller, which is us:**
-   - TH removed its de minimis on 2026-01-01.
+   - TH removed its de minimis on 01-Jan-2026.
    - ID charges 25% duty plus VAT and income tax on apparel.
-   - The US de minimis ended (indefinitely since 2026-06-24) and a 12.5%
-     Section 301 duty applies to VN goods since 2026-07-24.
-   - The EU charges €3 per item from 2026-07-01, plus a €2 handling fee from
-     2026-11-01.
+   - The US de minimis ended (indefinitely since 24-Jun-2026) and a 12.5%
+     Section 301 duty applies to VN goods since 24-Jul-2026.
+   - The EU charges €3 per item from 01-Jul-2026, plus a €2 handling fee from
+     01-Nov-2026.
    - The UK duty relief ends by October 2028.
    - JP moves its tax to the seller in April 2028.
 7. **Indonesia is blocked until an adviser has looked at it.** Permendag
@@ -82,7 +82,7 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
    cross-border e-commerce sales. If it applies to us, most of the range is
    blocked. A foreign e-commerce operator with more than 1,000 parcels a
    year must also appoint a representative in ID.
-8. **Returns cannot go back to VN one parcel at a time.** Since 2025-02-18
+8. **Returns cannot go back to VN one parcel at a time.** Since 18-Feb-2025
    VN taxes even small express imports, and duty-free re-import needs an
    A31 file per original export. Workable instead: refund without return
    below a threshold, and a hub in the destination region with monthly
@@ -97,7 +97,7 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
 | VN first mile | Only if the chosen operator does not collect from merchants: **GHN** (good API, domestic only) | Merchants are spread across provinces | GHTK, Viettel Post |
 | Orchestrator | **None for now.** Revisit Easyship when VN origin goes live there, or when merchants outside VN join | Adds no rates from VN, and hides duty billing we must reconcile | — |
 | Tracking aggregator | None at first. Add 17TRACK or AfterShip Tracking once we have more than 3 carriers | Main carriers push or are polled directly | — |
-| Landed cost | Our own per-country modules for taxes we collect. For border duty, **Zonos without its guarantee** (US$2 per order) once we have a website to apply with. **Easyship Taxes & Duties API is not possible**: no tax records for ship-from VN (tested in sandbox and production, 2026-11-10). Until Zonos: **Dutify**, whose docs list VN as ship-from and origin (2026-11-10); test with its free plan (q41) | The Zonos guarantee makes Zonos the tax remitter, which conflicts with us being the merchant of record | SimplyDuty (q42) or Avalara (q43) if Dutify fails |
+| Landed cost | Our own per-country modules for taxes we collect. For border duty, **Zonos without its guarantee** (US$2 per order) once we have a website to apply with. **Easyship Taxes & Duties API is not possible**: no tax records for ship-from VN (tested in sandbox and production, 10-Nov-2026). Until Zonos: **Dutify**, whose docs list VN as ship-from and origin (10-Nov-2026); test with its free plan (q41) | The Zonos guarantee makes Zonos the tax remitter, which conflicts with us being the merchant of record | SimplyDuty (q42) or Avalara (q43) if Dutify fails |
 | HS codes | Propose with Zonos Classify (1,000 free); the merchant confirms; we store per SKU with source and confidence | The merchant guarantees accuracy (§6.5 of the PSP plan) | — |
 | Returns | Refund without return below a threshold (about US$40, or when return shipping is more than 40% of the price). Above it: a local return address or hub (Janio, Boxme or ZigZag), then a monthly consolidated shipment to VN or local liquidation. Integrator return labels for high-value goods and for outside SEA | Single return parcels to VN cost US$15–40 and need customs paperwork each | Asendia e-PAQ Returns (local return addresses) for the EU, UK and US later |
 
@@ -113,7 +113,7 @@ belongs to exactly one module.
 | Type | Providers checked | From VN today | Fit |
 |---|---|---|---|
 | Global integrators | DHL Express, FedEx, UPS | Yes, DDP, REST API, sandbox (DHL test 500 calls a day) | Express and rest of world. Expensive in SEA |
-| Integrator economy tiers | FedEx International Connect Plus (since 2025-02), UPS Worldwide Economy (US only) | FICP yes; UPS WWE US only | FICP about 18–20% below FedEx's IP account rate (verified 2026-11-10) |
+| Integrator economy tiers | FedEx International Connect Plus (since 2025-02), UPS Worldwide Economy (US only) | FICP yes; UPS WWE US only | FICP about 18–20% below FedEx's IP account rate (verified 10-Nov-2026) |
 | SEA cross-border operators (4PL) | Janio (SG), Boxme (VN) | Claimed; VN as origin UNVERIFIED for Janio. Boxme does DDP "upon agreement" | Main SEA candidates, RFQ needed |
 | SEA regional carriers | J&T International (VN), Ninja Van, Flash, SPX, LEX, Kerry VN, BEST VN | J&T VN to SG, MY, TH, PH, **not ID**. Ninja Van and LEX exited VN. SPX and LEX only inside their marketplaces. Flash none | J&T: RFQ for DDP and API. Ninja Van: possibly last mile behind a 4PL |
 | E-commerce postal | VN Post EMS, Asendia, SingPost, Cainiao, YunExpress, 4PX | EMS is duties-unpaid and has no international API. Asendia sells in VN with DDP. The others are unconfirmed or unlikely | Asendia for EU, UK and US economy and returns (RFQ). YunExpress VN worth an RFQ |
@@ -121,7 +121,7 @@ belongs to exactly one module.
 | Orchestrators | Easyship, EasyPost, Shippo, ShipStation API, AfterShip Shipping | Only with our own DHL, FedEx or UPS account | Not now |
 | Regional aggregators | EasyParcel (MY), Biteship and Shipper (ID), Sendcloud and nShift (EU) | No VN origin | Only for domestic return legs or later origins |
 | Tracking | AfterShip Tracking, 17TRACK, Parcel Perform | Track VN carriers | Later |
-| Landed cost | Zonos, Easyship T&D, Avalara, Dutify, SimplyDuty, Hurricane, Descartes | n/a | Zonos (estimate mode); Dutify until then (VN supported by docs, test q41); Easyship not possible from VN (2026-11-10); SimplyDuty and Avalara VN support unknown (docs behind login or sales) |
+| Landed cost | Zonos, Easyship T&D, Avalara, Dutify, SimplyDuty, Hurricane, Descartes | n/a | Zonos (estimate mode); Dutify until then (VN supported by docs, test q41); Easyship not possible from VN (10-Nov-2026); SimplyDuty and Avalara VN support unknown (docs behind login or sales) |
 
 ### 3.1 VN → SEA lane matrix
 
@@ -134,7 +134,7 @@ belongs to exactly one module.
 | VN Post EMS | yes | yes | yes | yes | yes | no (duties unpaid) | none international |
 | Ninja Van, DHL eCommerce, LEX | exited VN | | | | | | |
 
-### 3.2 Duty-paid economy lines to the US, MY, TH, PH, ID and KR (checked 2026-11-10)
+### 3.2 Duty-paid economy lines to the US, MY, TH, PH, ID and KR (checked 10-Nov-2026)
 
 The gap from `plan-logistics-next.md` §3: VIO's US lines and Extra are
 not duty-paid, so to these six countries only DHL, FedEx and UPS are
@@ -144,7 +144,7 @@ PH, ID or KR from Vietnam; every lead needs a quote.
 
 - **ShipX** (shipx.asia, formerly SGLINK, backed by Amilo; HQ Bay Hien
   Ward, HCMC; sales +65 8184 9589, info@shipx.asia) is the strongest
-  lead. Its pricing page lists "from" prices in USD [published, 2026-11-10]:
+  lead. Its pricing page lists "from" prices in USD [published, 10-Nov-2026]:
 
   | Service | Origin | From | Unit |
   |---|---|---|---|
@@ -179,7 +179,7 @@ PH, ID or KR from Vietnam; every lead needs a quote.
   Claims 220+ countries in 5–10 days and "DDP for qualifying exports" in
   a blog post. No prices, no country list, no pickup; sellers send parcels
   to an unnamed warehouse. Its fulfilment price table expired on
-  2024-12-31 [published]. A weak lead.
+  31-Dec-2024 [published]. A weak lead.
 - **MTS Logistics with Viettel Post**: a dedicated small-parcel and
   e-commerce line from VN to the US, announced only in a LinkedIn post by
   an MTS employee [secondary]. No terms. Viettel Post is also FedEx's
@@ -192,7 +192,7 @@ PH, ID or KR from Vietnam; every lead needs a quote.
   (hosted on a free pages site) [published, unverified].
 - **US postal routes are closed**: USPS lists DDP as not available from VN,
   and VN Post suspended US mail after the US de minimis ended on
-  2025-08-29 [published, USPS; DHL]. To the US, only the integrators and
+  29-Aug-2025 [published, USPS; DHL]. To the US, only the integrators and
   linehaul operators like ShipX are left.
 - **KR**: no duty-paid economy line from VN found. Integrators only.
 - **Ninja Van** runs duty-paid end-to-end lines into MY, PH and VN from
@@ -239,7 +239,7 @@ and VAT [published, 2025 guide; expect about +6% for 2026]:
 FedEx International Priority 0.5 kg promo rates for VN account holders
 are US$54 (zone A: SG, MY, TH, ID, PH) to US$101 (zone H: GCC, Africa);
 FICP is US$43 to US$81 [published 2026, verified from the PDFs
-2026-11-10].
+10-Nov-2026].
 
 Add for integrators: fuel (DHL VN 50% in November 2026), a duty-paid fee of
 about US$23 per shipment (DHL: VND 600,000 or 2% of duties, whichever is
@@ -248,7 +248,7 @@ remote-area surcharges. Discounts at about 500 parcels a month are
 estimated at 30–50% off list, and 60–75% at 5k or more [estimate].
 
 **Is the US$23 duty-paid fee charged on lanes where nothing is due at the
-border?** (Partly answered 2026-11-10 from the 2026 VN guides in
+border?** (Partly answered 10-Nov-2026 from the 2026 VN guides in
 `markets/sources/`.) These are the lanes where we charge the tax at
 checkout and no duty applies: SG and MY once registered, AU, NZ, UK up to
 £135, NO, HK, and KR and JP below their limits (`border_charges.csv`). The
@@ -290,7 +290,7 @@ rates), before duties and tax:
 
 Janio adds a platform fee from US$0.50 per shipment [published].
 
-**Benchmark: how other shops price shipping (checked 2026-11-10).**
+**Benchmark: how other shops price shipping (checked 10-Nov-2026).**
 
 - Spincess (spincess.store), a household business in Binh Tan, HCMC,
   selling dancewear at US$15–48 an item: flat **US$10** to Europe, the US
@@ -325,7 +325,7 @@ Janio adds a platform fee from US$0.50 per shipment [published].
 | VN first-mile module (GHN, GHTK) | 3–5 days [estimate] |
 | Integrator platform fees | none [published] |
 | Janio Platform Access | from US$0.50 per shipment, no minimum, month to month; Enterprise "typically US$10k+ a month" at 50k+ parcels [published] |
-| Easyship Taxes & Duties API | **Not usable from VN** (no tax records for ship-from VN, 2026-11-10). VN account price for reference: ₫2,048–2,503 (US$0.08–0.095) per call over the plan quota; Premier ₫1.57M a month (US$60) covers 625 calls, so about US$60 a month at 500 orders [published in-app/estimate] |
+| Easyship Taxes & Duties API | **Not usable from VN** (no tax records for ship-from VN, 10-Nov-2026). VN account price for reference: ₫2,048–2,503 (US$0.08–0.095) per call over the plan quota; Premier ₫1.57M a month (US$60) covers 625 calls, so about US$60 a month at 500 orders [published in-app/estimate] |
 | Zonos Landed Cost | US$2 per order (estimate mode); guarantee adds 10% of duties and tax [published] |
 | Zonos Classify | 1,000 free; from US$500 a month for 10,000 [published] |
 | Orchestrator, if ever | US$0.05–0.15 per label at 500 a month, under 2% of shipping cost [estimate] |
@@ -358,9 +358,9 @@ module.
 |---|---|---|---|---|
 | SG | Easy | No duty on apparel. GST relief up to S$400 CIF by air | OVR above S$1m global and S$100k to SG: 9% GST, quarterly | Threshold per item, on sales value excluding shipping, but GST is charged on the price including shipping. Our GST number and a "GST-paid" flag must reach the courier, or Customs taxes the parcel again |
 | MY | Easy | Free up to RM 500 CIF per consignment (air courier) | LVG above RM 500k in 12 months: 10%, quarterly | LVG number on the consignment note. Per item or per order: UNVERIFIED |
-| TH | Medium | **No de minimis since 2026-01-01** (Notification 219/2568): duty up to about 30% on apparel plus 7% VAT | none for goods | A plan to raise duties to 30–40% and a possible flat parcel rate are pending. ATIGA 0% is worth claiming |
+| TH | Medium | **No de minimis since 01-Jan-2026** (Notification 219/2568): duty up to about 30% on apparel plus 7% VAT | none for goods | A plan to raise duties to 30–40% and a possible flat parcel rate are pending. ATIGA 0% is worth claiming |
 | PH | Medium | Free up to PHP 10,000 FOB; informal entry up to PHP 50,000; accredited importer above | none for goods | CAO 02-2025 is a fee schedule, not a VAT ruling (corrects our earlier note). Pressure to scrap the de minimis |
-| ID | **Hard, blocked** | Duty free under US$3 only. Apparel, bags and shoes: **25% duty + 11% effective VAT + 5% income tax**, about +45–50% | none, but a foreign e-commerce operator with more than 1,000 parcels a year must appoint a representative | **Permendag 31/2023: minimum FOB US$100 per unit** for direct cross-border sales. Halal certification for clothing, headwear and accessories from 2028-10-17 (moved by PP 40/2026; leather goods, footwear and bags unconfirmed). Used clothing banned |
+| ID | **Hard, blocked** | Duty free under US$3 only. Apparel, bags and shoes: **25% duty + 11% effective VAT + 5% income tax**, about +45–50% | none, but a foreign e-commerce operator with more than 1,000 parcels a year must appoint a representative | **Permendag 31/2023: minimum FOB US$100 per unit** for direct cross-border sales. Halal certification for clothing, headwear and accessories from 17-Oct-2028 (moved by PP 40/2026; leather goods, footwear and bags unconfirmed). Used clothing banned |
 
 ATIGA preference (0% on VN-origin goods): consignments up to FOB US$200
 need only a simplified origin declaration, no Form D. This only applies to
@@ -375,7 +375,7 @@ goods actually made in VN, so it is decided per merchant and per SKU.
 | NZ | Easy | No duty up to NZ$1,000 per item. We register above NZ$60k and collect 15% |
 | TW | Medium-easy | Free up to NT$2,000, at most 6 per buyer per half-year. Buyers confirm through the EZ WAY app. A reform is under review |
 | KR | Medium-easy | Free up to US$150 including shipping; above that the whole value is taxed. **PCCC mandatory** per parcel, with name, phone and postal code matching (2026). Risk: customs may combine orders from different merchants because we are one supplier |
-| JP | Medium | Free up to ¥10,000, **but knitwear, leather bags and leather shoes are taxed at any value**. From 2028-04-01 we register and charge 10% JCT (likely through a tax agent) |
+| JP | Medium | Free up to ¥10,000, **but knitwear, leather bags and leather shoes are taxed at any value**. From 01-Apr-2028 we register and charge 10% JCT (likely through a tax agent) |
 | IN | Hard | No de minimis for sales; about 30–45% landed on apparel; consignee KYC (avoid storing Aadhaar) |
 | CN | Hard | The cross-border e-commerce channel needs a registered platform, a Chinese agent and Chinese payment providers, plus the buyer's ID (PIPL). Personal parcels are taxed at 20% and are not meant for sales |
 
@@ -386,13 +386,13 @@ goods actually made in VN, so it is decided per merchant and per SKU.
 | UK | Easy, Medium from 2028 | We charge VAT on orders up to £135, registering from the first sale. No duty until October 2028 at the latest | No |
 | CH | Easy | 0% duty on apparel since 2024. VAT through the courier until CHF 100k, then registration and a tax representative | No |
 | NO | Easy | VOEC: 25% VAT at checkout, no representative | No |
-| CL | Easy-medium | 19% VAT at checkout up to US$500 since 2025-10-25, simple registration, no duty | No |
-| EU | Medium | IOSS up to €150. **€3 duty per tariff line** from 2026-07-01 to 2028-07-01, then full duty (12% on apparel; EVFTA 0% only with VN or EU fabric). **€2 handling fee** from 2026-11-01. GPSR responsible person, textile EPR (FR and NL now, all EU countries by 2028-04) | **Yes: an NL BV needs no IOSS intermediary and can itself be the GPSR responsible person and EU importer** |
+| CL | Easy-medium | 19% VAT at checkout up to US$500 since 25-Oct-2025, simple registration, no duty | No |
+| EU | Medium | IOSS up to €150. **€3 duty per tariff line** from 01-Jul-2026 to 01-Jul-2028, then full duty (12% on apparel; EVFTA 0% only with VN or EU fabric). **€2 handling fee** from 01-Nov-2026. GPSR responsible person, textile EPR (FR and NL now, all EU countries by 2028-04) | **Yes: an NL BV needs no IOSS intermediary and can itself be the GPSR responsible person and EU importer** |
 | CA | Medium | Duty and tax from CAD 20; 17–18% apparel duty; CPTPP hard to claim (yarn-forward rule); bilingual labels | No |
 | UAE, SA | Medium | 5% duty; courier DDP works; VAT registration for a non-resident unclear | No |
 | CO | Medium | Courier regime, changes often | No |
-| US | Hard | **No de minimis** (indefinite since 2026-06-24). MFN 16–32% **plus 12.5% Section 301** on VN goods since 2026-07-24, about 30–45% in total. Another Section 301 determination due **2026-11-29**. From 2027-01-20 VN goods by post need formal entry, so express only | No |
-| BR | Medium-hard | 0% federal tax up to US$50 (law since 2026-09-10) but 17–20% state tax; needs Remessa Conforme certification through a partner | No |
+| US | Hard | **No de minimis** (indefinite since 24-Jun-2026). MFN 16–32% **plus 12.5% Section 301** on VN goods since 24-Jul-2026, about 30–45% in total. Another Section 301 determination due **29-Nov-2026**. From 20-Jan-2027 VN goods by post need formal entry, so express only | No |
+| BR | Medium-hard | 0% federal tax up to US$50 (law since 10-Sep-2026) but 17–20% state tax; needs Remessa Conforme certification through a partner | No |
 | MX | Hard | 33.5% flat rate on courier imports; NOM labelling needs a Mexican importer tax ID | No |
 | ZA | Hard | About 40–45% duty on clothing | No |
 | NG | Not viable | Garments appear on the import prohibition list | No |
@@ -407,7 +407,7 @@ Combining logistics cost, rules and our registrations:
 2. **Next:** TH (high duty but clear), TW, KR (PCCC field), JP (watch the
    exclusions; register before 2028-04), CL, CA.
 3. **With the entity decision:** EU (NL BV strongly preferred).
-4. **Express only, priced carefully:** US (re-price after 2026-11-29).
+4. **Express only, priced carefully:** US (re-price after 29-Nov-2026).
 5. **After advice or through a partner:** ID, BR, IN, CN, MX, ZA. Not NG.
 
 So a merchant can sell to "all customers": the integrator covers every
@@ -426,7 +426,7 @@ reasons, and checkout should say so per country.
 What we refund: the goods price plus the tax we collected ourselves (SG and
 MY by credit note, AU/NZ/UK/IOSS by adjustment on the next return).
 Duties paid at the border are kept only on voluntary change-of-mind
-returns where that was disclosed before purchase. Correction 2026-11-06
+returns where that was disclosed before purchase. Correction 06-Nov-2026
 (see `research-product-compliance.md` §5): a withdrawal in the EU, UK, NO,
 TW and probably KR, and every refund for defective goods, must include
 duties and tax. Global-e also refunds duties to shoppers and charges them
@@ -505,7 +505,7 @@ Send in the same week so the rates can be compared:
 7. **EU:** the choice of entity (NL BV favoured); refund of the €3 and €2 on
    returns; EPR registrations.
 8. **US:** importer of record under carrier DDP; the Section 301 result due
-   2026-11-29; state sales tax nexus as a remote seller.
-9. **JP:** registration and tax agent for 2028-04-01.
+   29-Nov-2026; state sales tax nexus as a remote seller.
+9. **JP:** registration and tax agent for 01-Apr-2028.
 10. **All:** consumer-law return rights per country when we are the seller;
     data-protection rules for buyer IDs (KR, CN, IN, ID).

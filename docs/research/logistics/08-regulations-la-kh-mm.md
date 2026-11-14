@@ -1,6 +1,6 @@
 # 08 — Laos, Cambodia, Myanmar as buyer markets (VN origin)
 
-Researched 2026-11-06, a short pass (5 searches, no official customs page
+Researched 06-Nov-2026, a short pass (5 searches, no official customs page
 read directly). Same labels as the other slices: [published] authority or
 carrier page, [3rd-party] guide or calculator, UNVERIFIED = could not
 confirm. **Every threshold below conflicts between sources and needs a
@@ -51,8 +51,8 @@ local broker or the courier to confirm.**
 ## Myanmar (MM)
 
 - **Commercial tax on import:** 5% on CIF + duty. Specific Goods Tax on
-  some categories. Union Tax Law 2025 covers the fiscal year 2025-04-01 to
-  2026-03-31 [published, Lincoln Myanmar and VDB Loi booklets].
+  some categories. Union Tax Law 2025 covers the fiscal year 01-Apr-2025 to
+  31-Mar-2026 [published, Lincoln Myanmar and VDB Loi booklets].
 - **Duty:** 0–40% by HS code.
 - **De minimis:** a local adviser's deck (Oct 2025) says parcels under
   US$50 are exempt from duty and commercial tax, and that courier parcels

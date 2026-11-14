@@ -1,11 +1,11 @@
 # Plan: first logistics integration
 
-Status: design proposal, second draft (2026-11-06), waiting for
+Status: design proposal, second draft (06-Nov-2026), waiting for
 confirmation. It replaces the first draft from the same day, which capped
 order values to stay under every country's duty-free limit. That draft
 did not fit the candidate merchants: they sell at US$80–2,000 and ship
 worldwide, and most of them already use DHL. No code is written until
-this is confirmed. Revised 2026-11-08: §4 now decides indirect tax and
+this is confirmed. Revised 08-Nov-2026: §4 now decides indirect tax and
 duty separately (see there), also waiting for confirmation.
 
 Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
@@ -17,7 +17,7 @@ Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
 ## 1. How it works: one order from start to finish
 
 The first carrier is **DHL or FedEx, decided on quotes** (§2, decided
-2026-11-06). DHL is used in this walkthrough; FedEx works the same way.
+06-Nov-2026). DHL is used in this walkthrough; FedEx works the same way.
 
 **The idea in one sentence:** we have one DHL Express account. Every
 parcel goes out on it with "duties and taxes paid by shipper", and our
@@ -38,7 +38,7 @@ Example: a buyer in Singapore orders CNES shoes for US$350.
 | 8. Import | DHL | SG customs charges 9% GST. DHL pays it and delivers. The buyer pays nothing at the door |
 | 9. Tracking | us ← DHL | We poll DHL's tracking API (DHL Express has no tracking webhooks). The events move our shipment to `delivered` |
 | 10. Payout | us → merchant | After delivery plus the payout delay, the merchant's balance is released: US$350 minus our fee |
-| 11. Invoice | DHL → us | Monthly invoice per waybill: freight, the GST paid, the duty-paid fee. We match each line to its shipment. A difference from our estimate goes to the merchant's balance (decided 2026-11-04) |
+| 11. Invoice | DHL → us | Monthly invoice per waybill: freight, the GST paid, the duty-paid fee. We match each line to its shipment. A difference from our estimate goes to the merchant's balance (decided 04-Nov-2026) |
 
 **The same order to the UK at £95 (keycaps)** differs in one step. Below
 £135, UK law makes the foreign seller charge VAT at checkout. In step 3 we
@@ -67,16 +67,16 @@ duty, §4). That is the whole tax logic of v1 (§4).
    returns a pair: the indirect-tax path (`NotDue`, `SellerCollected` or
    `BorderPaid`) and the duty path (`NotDue` or `BorderPaid`) (§4).
 3. **Duty source.** A vendor API (Zonos in estimate mode at about US$2 per
-   order; Easyship Taxes & Duties was ruled out on 2026-11-10 because it has
+   order; Easyship Taxes & Duties was ruled out on 10-Nov-2026 because it has
    no tax records for parcels shipping from Vietnam) behind an
    interface, with a mock. Used only when either path is `BorderPaid`.
 4. **One integrator module: DHL or FedEx, decided on quotes** (decided
-   2026-11-06). Rates, shipment with label and commercial invoice
+   06-Nov-2026). Rates, shipment with label and commercial invoice
    (duties billed to us), pickup, tracking (DHL by polling, FedEx by
    signed webhooks), return label, invoice import. Plus the mock
    courier, which stays the default in dev and tests.
    - **Express and a cheaper service where the carrier has one** (decided
-     2026-11-06: express is not always what the buyer prefers). DHL VN
+     06-Nov-2026: express is not always what the buyer prefers). DHL VN
      sells only Express Worldwide. FedEx sells International Priority and
      the cheaper International Connect Plus (FICP) and International
      Economy. So FedEx gives two choices per lane in one contract, which
@@ -101,9 +101,9 @@ registration):
 | Region | Countries | Notes |
 |---|---|---|
 | SEA | SG, MY, PH, TH, LA, KH | TH and LA have no duty-free limit, so every parcel is `BorderPaid`. ATIGA 0% duty for goods truly made in VN. ID closed (below) |
-| East Asia | HK, TW, KR, JP | KR needs the buyer's customs code (PCCC) on the waybill. JP knitwear and leather are dutiable at any value. JP seller registration only from 2028-04-01 |
+| East Asia | HK, TW, KR, JP | KR needs the buyer's customs code (PCCC) on the waybill. JP knitwear and leather are dutiable at any value. JP seller registration only from 01-Apr-2028 |
 | Oceania | AU, NZ | nothing due below A$1,000 / NZ$1,000 until our turnover thresholds |
-| Europe (non-EU) | CH, NO | border VAT through DHL. NO's VOEC scheme becomes mandatory from NOK 50k a year (confirmed 2026-11-10) |
+| Europe (non-EU) | CH, NO | border VAT through DHL. NO's VOEC scheme becomes mandatory from NOK 50k a year (confirmed 10-Nov-2026) |
 | Americas | CA | duty and tax from CAD 20, border-paid |
 
 **Open with one condition each:**
@@ -113,7 +113,7 @@ registration):
 | UK | UK VAT registration before launch | orders up to £135 must have VAT charged by the seller |
 | EU | an EU product-safety representative (a service, vendor-quoted €150–500 a year) and packaging registrations (DE before the first parcel; textile EPR in FR, NL) | The tax side works without IOSS: DHL pays import VAT at the border. The €3-per-item duty applies up to €150 |
 | AE | UAE VAT registration (no threshold for non-residents selling to consumers, per advisers; FTA guide not read) | 5% duty and 5% VAT; whoever customs lists as importer owes the import VAT (FTA e-commerce guide) |
-| US | adviser on importer of record under DHL duty-paid and on CPSC eFiling data; re-price after the Section 301 decision on 2026-11-29 | duty of about 30–45% on VN apparel; cotton needs origin proof (UFLPA) |
+| US | adviser on importer of record under DHL duty-paid and on CPSC eFiling data; re-price after the Section 301 decision on 29-Nov-2026 | duty of about 30–45% on VN apparel; cotton needs origin proof (UFLPA) |
 
 **Closed, with the reason shown at checkout:** ID (minimum price and
 representative rules: adviser), CN, IN, BR, MX, ZA (local importer or
@@ -122,7 +122,7 @@ review), NG, and every comprehensively sanctioned country.
 
 ## 4. The tax path rule
 
-Indirect tax and import duty are decided separately (decided 2026-11-08:
+Indirect tax and import duty are decided separately (decided 08-Nov-2026:
 the earlier single `TaxPath` assumed every order takes exactly one path,
 but seller schemes cover only VAT/GST, never duty. A cheap order can have
 its VAT collected by us and still owe duty at the border, e.g. an EU order
@@ -167,10 +167,10 @@ The duty-paid fee has a minimum (below), so in the third row the seller
 scheme does not save the fee: it only makes the VAT part exact. It costs
 no extra tax either (the rate is the same whoever collects it), only the
 filing work. This is why IOSS saves little while the EU flat duty lasts
-(2026-07-01 to 2028-07-01, then full duty).
+(01-Jul-2026 to 01-Jul-2028, then full duty).
 
-IOSS can even cost duty (found 2026-11-08, from TAXUD guidance of
-2026-06-08 in `docs/research/logistics/07-regulations-rest-of-world.md`):
+IOSS can even cost duty (found 08-Nov-2026, from TAXUD guidance of
+08-Jun-2026 in `docs/research/logistics/07-regulations-rest-of-world.md`):
 goods with EVFTA preferential origin escape the €3 only if VAT is **not**
 collected through IOSS and the parcel goes on a full H1 declaration. So
 for VN-made goods with VN or EU fabric under €150, IOSS turns 0% duty into
@@ -180,7 +180,7 @@ border VAT in the EU is therefore per product origin, not only per order
 value, and stays open until the entity decision.
 
 **Which services an order may use** follows from its `TaxPaths` (decided
-2026-11-08: customs charges whoever declares the parcel at the
+08-Nov-2026: customs charges whoever declares the parcel at the
 destination and holds it until paid, so on a duties-unpaid (DAP) line the
 buyer is billed at the door, and from VN we cannot pay each country's
 customs ourselves; a duty-paid service is exactly that arrangement. But
@@ -207,7 +207,7 @@ bill at the door leads to refused parcels.
 | MY | LVG, up to RM 500 | RM 500k in 12 months | RM 500 |
 | AU | GST, up to A$1,000 | A$75k a year | A$1,000 |
 | NZ | GST, up to NZ$1,000 | NZ$60k a year | NZ$1,000 |
-| NO | VOEC, under NOK 3,000 per item | NOK 50k (confirmed 2026-11-10) | — |
+| NO | VOEC, under NOK 3,000 per item | NOK 50k (confirmed 10-Nov-2026) | — |
 | CH | — | CHF 100k (then VAT registration with a representative) | VAT under CHF 5 |
 | others in §3 | none | — | per row |
 
@@ -220,7 +220,7 @@ buyer must never get a bill at the door. DHL VN's duty-paid fee is
 currently about US$23 per shipment (VND 600,000 or 2% of duties,
 whichever is higher), which is heavy on an US$80 order.
 
-Found 2026-11-06 while checking whether US$23 is competitive:
+Found 06-Nov-2026 while checking whether US$23 is competitive:
 
 - **It is DHL's normal fee, not a Vietnam penalty.** Other origins pay the
   same: US 2% with a US$17 minimum, Ireland 2% with an €18 minimum.
@@ -239,7 +239,7 @@ Found 2026-11-06 while checking whether US$23 is competitive:
 - Registering for a seller scheme (UK, later SG, AU, the EU's IOSS)
   removes the border charge and with it the fee, for the cheap orders
   where the fee hurts most, but only where those orders owe no duty. In
-  the EU the €3 flat duty keeps the fee on every parcel until 2028-07-01.
+  the EU the €3 flat duty keeps the fee on every parcel until 01-Jul-2028.
 
 Negotiating the minimum is the first question for DHL.
 
@@ -270,7 +270,7 @@ Express is the only DHL product from VN, which is why a cheaper lane
 
 **Cheaper integrator services from VN** (1 kg list prices before fuel
 and discount; FedEx figures are its 2026 VN promo sheets for VN account
-holders in good standing, verified from the PDFs 2026-11-10; UPS from its
+holders in good standing, verified from the PDFs 10-Nov-2026; UPS from its
 2025 VN guide):
 
 | To | DHL Express Worldwide | FedEx FICP | UPS Worldwide Expedited |
@@ -302,7 +302,7 @@ its own return rules. The merchant can be more generous, never less.
 
 | Reason | Refund | Return transport |
 |---|---|---|
-| Withdrawal within 14 days | everything paid, duties and tax included | DHL return label on our account to the merchant in VN, cost deducted from the merchant's payout (decided 2026-11-04). Or the merchant's policy says "keep it" (refund without return) |
+| Withdrawal within 14 days | everything paid, duties and tax included | DHL return label on our account to the merchant in VN, cost deducted from the merchant's payout (decided 04-Nov-2026). Or the merchant's policy says "keep it" (refund without return) |
 | Defective, not as described, not delivered | everything paid | as above, never charged to the buyer |
 | Change of mind after 14 days | per the merchant's policy | per the merchant's policy |
 
@@ -383,7 +383,7 @@ a named rounding mode, and any remainder is booked.
 
 ## 8. Registrations, per country
 
-What we must register for to sell there legally, as found 2026-11-06.
+What we must register for to sell there legally, as found 06-Nov-2026.
 Compiled from the research files plus a short check; several are
 UNVERIFIED and all need an adviser before launch. Payment licences are in
 `plan-psp-integration.md` §8, not here.
@@ -407,7 +407,7 @@ UNVERIFIED and all need an adviser before launch. Payment licences are in
 | TH, LA, KH | none for goods tax | TH: watch the seller-registration bill |
 | HK | none | — |
 | TW, KR | none for goods (their foreign-seller VAT is for digital services) | — |
-| JP | none | JCT registration and a tax agent by 2028-04-01 |
+| JP | none | JCT registration and a tax agent by 01-Apr-2028 |
 | AU | none | GST at A$75k a year |
 | NZ | none | GST at NZ$60k a year |
 | NO | none (voluntary VOEC possible) | VOEC at NOK 50k a year of items under NOK 3,000 |
@@ -415,7 +415,7 @@ UNVERIFIED and all need an adviser before launch. Payment licences are in
 | CA | none (GST is paid at the border on imports) | — |
 | **UK** | **VAT registration**, because orders up to £135 need seller-charged VAT | — |
 | **AE** | **VAT registration**: non-residents selling to consumers have no threshold (adviser sources) | — |
-| **EU** | product-safety responsible person (GPSR); packaging EPR in DE (before the first parcel) and in each country as sales start; textile EPR in FR and NL | IOSS (optional; removes border VAT on orders up to €150); EUDR operator for wooden goods from 2026-12-30 |
+| **EU** | product-safety responsible person (GPSR); packaging EPR in DE (before the first parcel) and in each country as sales start; textile EPR in FR and NL | IOSS (optional; removes border VAT on orders up to €150); EUDR operator for wooden goods from 30-Dec-2026 |
 | **US** | none to sell. As importer of record (if chosen): CBP importer number (Form 5106) and a bond, unless DHL's duty-paid covers it; CPSC eFiling data per product | state sales tax per state at economic nexus (often US$100k a year) |
 
 **Filing and paying the tax we collect** (decided 12-Nov-2026: we only

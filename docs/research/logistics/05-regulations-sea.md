@@ -1,6 +1,6 @@
 # 05 — Destination rules SEA (SG, MY, TH, ID, PH) + VN origin/returns
 
-Research date: 2026-11-06. Scope: B2C cross-border apparel / fashion accessories
+Research date: 06-Nov-2026. Scope: B2C cross-border apparel / fashion accessories
 (HS ch. 61, 62, 64, 42.02) shipped from Vietnam by air/express, sold DDP by us
 as merchant of record (MoR), legal entity SG or NL (undecided).
 
@@ -18,13 +18,13 @@ things to re-check or hand to an adviser.
 
 | | SG | MY | TH | ID | PH |
 |---|---|---|---|---|---|
-| Duty de minimis | Apparel is 0% duty anyway (only liquor, tobacco, motor vehicles, petroleum are dutiable) | CIF ≤ RM 500 **per consignment**, air courier/postal only: no import duty and no import sales tax [N] | **None since 2026-01-01**: the exemption applies only to items worth ≤ THB 1 (Customs Notification 219/2568) [A] | FOB < USD 3 per recipient per shipment, **duty only** (PMK 4/2025) [P] | FOB/FCA ≤ PHP 10,000 (CMTA s.423) [N; statute not re-read] |
+| Duty de minimis | Apparel is 0% duty anyway (only liquor, tobacco, motor vehicles, petroleum are dutiable) | CIF ≤ RM 500 **per consignment**, air courier/postal only: no import duty and no import sales tax [N] | **None since 01-Jan-2026**: the exemption applies only to items worth ≤ THB 1 (Customs Notification 219/2568) [A] | FOB < USD 3 per recipient per shipment, **duty only** (PMK 4/2025) [P] | FOB/FCA ≤ PHP 10,000 (CMTA s.423) [N; statute not re-read] |
 | Tax de minimis at the border | Import GST relief at CIF ≤ S$400 by air/post; under OVR, GST is charged at the point of sale instead [P] | ≤ RM 500 is exempt at the border, but LVG sales tax applies at the point of sale [A] | **None**: 7% VAT from the first baht [A] | **None**: VAT always applies [P/A] | Statute says "duties and taxes" (VAT included). Whether VAT applies below PHP 10k is contested; no official text confirmed |
 | Foreign-seller regime | OVR: global turnover > S$1m **and** B2C to SG > S$100k (12 months). 9% GST, quarterly simplified returns [P] | LVG: > RM 500k LVG sales in 12 months → registered seller. 10%, quarterly LVG-02 [A] | No LVG seller registration in force for goods (Revenue Code change proposed, not confirmed enacted). Customs collects at import [A] | No VAT registration. A foreign PPMSE (e-commerce operator) importing > 1,000 consignments/yr must partner with DJBC and appoint a representative in Indonesia; otherwise the recipient is the importer [P/N] | None for goods (RA 12023 covers digital services only) |
 | Apparel duty (MFN) | 0% | Many lines 0%: UNVERIFIED per line | Up to 30% for apparel/footwear, ~20% bags [N]; Mar 2026 plan to raise to 30–40% ceilings | **25% flat** for HS 61–63, 64, 42.02 parcels (PMK 4/2025) + VAT ~11% effective + PPh 5% [P] | ~10–20%: UNVERIFIED |
 | ATIGA 0% for VN origin | n/a (already 0%) | Yes with proof of origin | Yes with proof of origin; very valuable now | Unclear for the parcel (barang kiriman) channel: UNVERIFIED | Yes with proof of origin |
 | Proof-of-origin waiver | — | FOB ≤ USD 200: no CO needed, a simplified declaration is enough (ATIGA OCP, as implemented by VN Circular 10/2022/TT-BCT) [A] | same | same in principle | same |
-| Big apparel-specific risk | Low | Low | Duty rising; Thai-language labels | **Permendag 31/2023 minimum FOB USD 100 per unit** for cross-border direct sale via PPMSE; used-clothing ban; halal for leather (deadline 2026-10-17) | Uncertainty over the de minimis rule |
+| Big apparel-specific risk | Low | Low | Duty rising; Thai-language labels | **Permendag 31/2023 minimum FOB USD 100 per unit** for cross-border direct sale via PPMSE; used-clothing ban; halal for leather (deadline 17-Oct-2026) | Uncertainty over the de minimis rule |
 
 ---
 
@@ -37,9 +37,9 @@ things to re-check or hand to an adviser.
 - Apparel, footwear and bags carry no customs duty (SG duties apply only to
   liquor, tobacco, motor vehicles and petroleum), so duty is not an issue.
 
-**OVR regime for low-value goods (in force since 2023-01-01)** [P: IRAS e-Tax
+**OVR regime for low-value goods (in force since 01-Jan-2023)** [P: IRAS e-Tax
 Guide "Taxing imported low-value goods by way of the OVR regime", **5th ed.,
-published 2026-01-30**]
+published 30-Jan-2026**]
 - LVG = goods outside SG at the point of sale, delivered by air or post, not
   dutiable (or duty waived), not GST-exempt, and with value ≤ S$400.
 - **The threshold applies per item, not per consignment** (guide §16: the entry
@@ -85,7 +85,7 @@ need to pass GST information to the courier, quarterly filing.
 
 ## 2. Malaysia
 
-**LVG sales tax (in force since 2024-01-01; Sales Tax (Amendment) Act 2022)**
+**LVG sales tax (in force since 01-Jan-2024; Sales Tax (Amendment) Act 2022)**
 [A: Grant Thornton MY, L&Co FAQ, KPMG LVG guide 2022; RMCD portal
 mylvg.customs.gov.my had an expired TLS certificate during this run]
 - LVG = goods sold at a price ≤ RM 500 and brought into MY by land, sea or air
@@ -124,20 +124,20 @@ number belongs on the consignment note. No 2026 change to LVG found
 
 ## 3. Thailand
 
-**De minimis abolished on 2026-01-01** [A: Tilleke & Gibbins, 2026-04-01;
-Forvis Mazars, 2025-12-17; N: Khaosod, regfollower, VATupdate, DHL TH; govt PR
+**De minimis abolished on 01-Jan-2026** [A: Tilleke & Gibbins, 01-Apr-2026;
+Forvis Mazars, 17-Dec-2025; N: Khaosod, regfollower, VATupdate, DHL TH; govt PR
 thailand.prd.go.th]
-- **Customs Notification No. 219/2568** (Royal Gazette ~2025-12-11) narrowed
+- **Customs Notification No. 219/2568** (Royal Gazette ~11-Dec-2025) narrowed
   the "Type 12" exemption so that it applies only where an item's value is
   **≤ THB 1**. In practice duty + 7% VAT apply from the first baht for every
   parcel. **Our note "from first baht" is correct.**
-- Before this: from 2024-07-05, interim measures already collected 7% VAT on
+- Before this: from 05-Jul-2024, interim measures already collected 7% VAT on
   goods worth THB 1–1,500 (Customs collecting) [A: EY, BDO].
 - Valuation: CIF; VAT = 7% × (CIF + duty + any excise). Standard Thai rule;
   not re-read in a primary text here, so **UNVERIFIED** for e-commerce parcels.
 - Rates reported for low-value parcels: **apparel and footwear up to 30%,
   bags ~20%** [N].
-- **2026-03-30**: Customs announced a three-phase plan: (1) de minimis removal
+- **30-Mar-2026**: Customs announced a three-phase plan: (1) de minimis removal
   (done), (2) raise duties on sensitive consumer goods to their statutory
   ceilings, **often 30% or 40%**, which needs Cabinet approval, (3) a
   longer-term Customs Tariff Decree overhaul with a possible **flat rate for
@@ -176,8 +176,8 @@ no LVG seller registration (yet).
 ## 4. Indonesia
 
 **Parcel ("barang kiriman") regime: PMK 96/2023, amended by PMK 111/2023 and
-PMK 4/2025** (PMK 4/2025 signed 2025-01-06, promulgated 2025-02-03, **in force
-2025-03-05**) [P: Kemenkeu JDIH abstract of PMK 4/2025; A/N: DDTC, pajak.com,
+PMK 4/2025** (PMK 4/2025 signed 06-Jan-2025, promulgated 03-Feb-2025, **in force
+05-Mar-2025**) [P: Kemenkeu JDIH abstract of PMK 4/2025; A/N: DDTC, pajak.com,
 SIP Law, setkab.go.id]
 
 - **De minimis**: FOB < **USD 3 per recipient per shipment**. Below it: no
@@ -191,7 +191,7 @@ SIP Law, setkab.go.id]
   - The DDTC summary says "VAT and PPh both at a flat 5%"; the official
     abstract says VAT follows the normal rules. Treat VAT as normal; adviser to
     confirm.
-- **VAT rate**: statutory 12% since 2025-01-01, but for non-luxury goods the
+- **VAT rate**: statutory 12% since 01-Jan-2025, but for non-luxury goods the
   base is 11/12 of the import value (PMK 131/2024), so the **effective rate is
   11%**. [A: PwC, EY, RSM, KPMG]. Our note's "rate?" → **11% effective**.
 - Import value = CIF + duty (customs value is CIF; the de minimis test uses
@@ -225,7 +225,7 @@ pajak.com]
   cross-border trade. Whether an offshore MoR's own web shop is caught, and
   whether the rule changed in 2025–26: **UNVERIFIED, adviser item #1 for ID.**
 - Import policy: Permendag 36/2023 was replaced by **Permendag 16/2025** (in
-  force 2025-08-30, amended by Permendag 18/2026), with sector rules for
+  force 30-Aug-2025, amended by Permendag 18/2026), with sector rules for
   textiles/TPT in **Permendag 17/2025**. Parcel-specific quantity limits for
   apparel, footwear and bags under these rules: **UNVERIFIED**.
 - **Used clothing**: import ban (HS 6309; Permendag 40/2022 amending 18/2021;
@@ -233,7 +233,7 @@ pajak.com]
   remove imported used clothing. Relevant if a merchant sells vintage or
   pre-owned items.
 - **Halal**: mandatory halal certification for imported consumer goods
-  (barang gunaan), including **clothing and accessories**, from **2026-10-17**
+  (barang gunaan), including **clothing and accessories**, from **17-Oct-2026**
   (GR 42/2024 timeline; reported). For goods it applies to products made from
   or containing animal materials (leather bags/shoes, wool, silk?). Scope for
   our goods: **UNVERIFIED, adviser item.**
@@ -267,7 +267,7 @@ re-read here]
   a decision on VAT below de minimis.** Our note "VAT below it disputed (CAO
   02-2025)" should be re-worded: the statute exempts duties *and taxes*. There
   is policy pressure (Philippine Retailers Association position paper of
-  2025-05-06, a draft CAO consultation) to lower or scrap the de minimis and to
+  06-May-2025, a draft CAO consultation) to lower or scrap the de minimis and to
   tax goods sold via platforms. **No enacted change found.** Whether BIR/BOC
   collect VAT below PHP 10k in practice: **UNVERIFIED**.
 - Anti-splitting: several shipments to the same consignee may be aggregated
@@ -296,14 +296,14 @@ but under political pressure.
   **UNVERIFIED**.
 - **E-commerce customs decree**: the Ministry of Finance draft "Decree on
   customs management of import/export goods traded via e-commerce" (published
-  2025-03-26, 30 articles / 7 chapters, exporters/declarants register on an
+  26-Mar-2025, 30 articles / 7 chapters, exporters/declarants register on an
   e-commerce data system, special procedure for non-Group-2 goods) [A: EY
   April 2025, Baker McKenzie]. **No issued decree number or effective date
   found as of 2026-11; treat as still pending (UNVERIFIED).** Decree 169/2026
-  (customs administrative sanctions, in force 2026-07-01) is unrelated but
+  (customs administrative sanctions, in force 01-Jul-2026) is unrelated but
   relevant for penalties.
 - **0% VAT on export** (VAT Law 48/2024, Decree 181/2025 and Circular
-  69/2025, all in force **2025-07-01**) [A: KPMG VN, July 2025]. General
+  69/2025, all in force **01-Jul-2025**) [A: KPMG VN, July 2025]. General
   conditions: an export contract, **non-cash payment** evidence, a customs
   declaration, and goods consumed abroad. Decree 181 adds specific input-VAT
   credit conditions for **goods exported via foreign e-commerce platforms**
@@ -315,7 +315,7 @@ but under political pressure.
     payout record as non-cash payment, and the courier's export declaration
     per parcel or batch. Adviser to confirm (adviser item).
 - **VN import side (for returns and context)**: the VND 1m VAT exemption for
-  low-value express imports was **abolished from 2025-02-18** (PM Decision
+  low-value express imports was **abolished from 18-Feb-2025** (PM Decision
   01/2025/QĐ-TTg abolishing Decision 78/2010; the decision number is
   UNVERIFIED in sources read). The **import duty** exemption (≤ VND 1m, or
   duty ≤ VND 100k) remains. **Sept 2026 proposal**: lower it to customs value
@@ -344,7 +344,7 @@ but under political pressure.
   USD 200 are waived from a Certificate of Origin**. A simplified declaration
   by the exporter is accepted instead, and postal goods are treated the same
   [A: LawNet; Vietnam Briefing]. ASEAN-wide self-certification (AWSC,
-  certified exporters declaring on the invoice) has run since 2020-09-20.
+  certified exporters declaring on the invoice) has run since 20-Sep-2020.
 - Rules of origin: apparel ch. 61/62 under ATIGA usually requires
   substantive local working (e.g. 40% RVC or a change of tariff heading with
   cut-and-sew). Each merchant must be able to substantiate VN origin; imported
@@ -378,7 +378,7 @@ fields per PMK 96/2023 and the recipient's NIK (to confirm).
    selling via its own checkout? Current status after 2025–26 reviews?
 2. **ID**: appoint a PPMSE representative (and who), PMK 4/2025 duties and
    liabilities, NIK collection, whether ATIGA applies in the CN channel, halal
-   scope for leather and wool goods after 2026-10-17, Permendag 17/2025
+   scope for leather and wool goods after 17-Oct-2026, Permendag 17/2025
    apparel limits.
 3. **TH**: status of the Revenue Code LVG registration bill and of the
    30–40% duty increase / flat parcel rate. Do Thai labelling rules apply to
@@ -399,7 +399,7 @@ fields per PMK 96/2023 and the recipient's NIK (to confirm).
 ## Sources
 
 - IRAS e-Tax Guide, *GST: Taxing imported low-value goods by way of the OVR
-  regime*, 5th ed., 2026-01-30 [P] —
+  regime*, 5th ed., 30-Jan-2026 [P] —
   https://www.iras.gov.sg/docs/default-source/e-tax/gst-e-tax-guide_taxing-imported-low-value-goods-by-way-of-the-overseas-vendor-registration-regime_(1st-ed).pdf
 - IRAS, GST on imports of low-value goods [P] —
   https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/gst-and-digital-economy/gst-on-imports-of-low-value-goods
@@ -411,14 +411,14 @@ fields per PMK 96/2023 and the recipient's NIK (to confirm).
 - KPMG MY, Sales tax guide on LVG (2022) [A] —
   https://assets.kpmg.com/content/dam/kpmg/my/pdf/sales-tax-guide-on-lvg-21-dec-2022.pdf
 - RMCD LVG portal [P] — https://mylvg.customs.gov.my/ (TLS certificate expired during this run)
-- Tilleke & Gibbins, Thailand announces customs duty hikes (2026-04-01) [A] —
+- Tilleke & Gibbins, Thailand announces customs duty hikes (01-Apr-2026) [A] —
   https://www.tilleke.com/insights/thailand-announces-customs-duty-hikes-for-key-consumer-goods/
-- Forvis Mazars TH (2025-12-17) [A] —
+- Forvis Mazars TH (17-Dec-2025) [A] —
   https://www.forvismazars.com/th/en/insights/doing-business-in-thailand/tax/thailand-e-commerce-import-duty-2026
 - Thai Govt PRD [P-ish] — https://thailand.prd.go.th/en/content/category/detail/id/2078/iid/440097
 - regfollower, Thailand revises duty exemption rules [N] —
   https://regfollower.com/thailand-revises-duty-exemption-rules-for-low-value-goods/
-- The Star / The Nation (2026-03-30) [N] —
+- The Star / The Nation (30-Mar-2026) [N] —
   https://www.thestar.com.my/aseanplus/aseanplus-news/2026/03/30/thai-customs-to-abolish-tax-loophole-and-impose-40-duty-on-imported-parcels
 - US-ASEAN Business Council [N] —
   https://www.usasean.org/article/thailand-reshapes-e-commerce-landscape-imposing-duties-all-low-value-imports
@@ -440,13 +440,13 @@ fields per PMK 96/2023 and the recipient's NIK (to confirm).
   https://webiis08.mondaq.com/export-controls-trade-investment-sanctions/1721278/the-new-import-regulation-under-ministry-of-trade-regulation-no-16-of-2025
 - Hukumonline, used clothing [A] —
   https://hukumonline.com/klinik/a/importing-used-clothes-in-indonesia-what-is-the-legality--lt6437e7eb9233e
-- Jakarta Post 2025-11-07, used clothes on platforms [N] —
+- Jakarta Post 07-Nov-2025, used clothes on platforms [N] —
   https://www.thejakartapost.com/business/2025/11/07/minister-tells-e-commerce-platforms-to-stop-sale-of-imported-used-clothes
-- DFDL / Mondaq, Indonesia halal 2026-10-17 [A] — https://www.dfdl.com/?p=67700
+- DFDL / Mondaq, Indonesia halal 17-Oct-2026 [A] — https://www.dfdl.com/?p=67700
 - PortCalls / AISL on CAO 02-2025 (fees) [N] — https://portcalls.com/boc-amends-schedule-of-dues-fees-charges/
 - DHL PH de minimis guide [N] —
   https://www.dhl.com/discover/en-ph/logistics-advice/essential-guides/de-minimis-thresholds-guide
-- Philstar 2025-05-12, retailers push de minimis removal [N] —
+- Philstar 12-May-2025, retailers push de minimis removal [N] —
   https://www.philstar.com/business/2025/05/12/2442350/retailers-push-de-minimis-removal-gradual-reforms/amp/
 - KPMG VN, Decree 181/2025 and Circular 69/2025 [A] —
   https://assets.kpmg.com/content/dam/kpmg/vn/pdf/2025/07/decree-181-and-circular-69-en.pdf

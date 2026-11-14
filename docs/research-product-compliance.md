@@ -1,12 +1,12 @@
 # Research: product rules, consumer law and liability
 
-Status: desk research, 2026-11-06. No decisions in this file yet. It
+Status: desk research, 06-Nov-2026. No decisions in this file yet. It
 follows `docs/research-logistics.md`, which covers customs, tax and
 couriers. This file covers what a product must meet to be sold to a
 consumer in each destination, the consumer law we owe as seller, and our
 liability. The visual summary is in `docs/product-compliance.html`.
 
-Scope (agreed 2026-11-06): adult apparel, footwear, bags and leather
+Scope (agreed 06-Nov-2026): adult apparel, footwear, bags and leather
 goods, fashion jewellery and accessories (belts, hats, scarves,
 sunglasses). Children's clothing is flagged only. Cosmetics, fragrance and
 anything with a battery are out of scope. Deep on the launch markets (SG,
@@ -22,7 +22,7 @@ The detailed notes with every source are in `docs/research/product-compliance/`:
 | `04-apac-oceania.md` | AU, NZ (deep); JP, KR, TW (medium); CN, IN (light) |
 | `05-materials-ip-row.md` | CITES, fur, hallmarking, sunglasses, heavy metals, counterfeits, courier rules, forced labour; GCC, LatAm, ZA |
 | `06-consumer-law-liability.md` | Withdrawal rights, guarantees and price display per market; product liability; how Global-e splits duties with merchants |
-| `07-keycaps-ceramics-lacquer.md` | Added 2026-11-06 for the candidate merchants: resin keycaps and keyboards, ceramic tableware, lacquerware and wooden goods (short pass) |
+| `07-keycaps-ceramics-lacquer.md` | Added 06-Nov-2026 for the candidate merchants: resin keycaps and keyboards, ceramic tableware, lacquerware and wooden goods (short pass) |
 
 **How reliable this is.** The search budget shared between the six
 researchers ran out early (after 4 to 20 searches each). After that the
@@ -77,17 +77,17 @@ consumer law. The points confirmed against a primary source are named in
 5. **Cotton from Vietnam is a US forced-labour risk.** VN apparel often
    uses Chinese yarn, and VN is among the top origins of UFLPA detentions.
    The importer must prove the cotton's origin from bale to garment. The
-   EU Forced Labour Regulation follows from 2027-12-14.
+   EU Forced Labour Regulation follows from 14-Dec-2027.
 6. **The EU is the heaviest market and the Dutch BV is the simpler route
    there.** A BV is itself the GPSR responsible person and importer. An SG
    entity would need each VN merchant to appoint an EU representative.
    The EU also brings:
-   - REACH chemical limits, with the PFHxA restriction from 2026-10-10;
+   - REACH chemical limits, with the PFHxA restriction from 10-Oct-2026;
    - French and Danish PFAS bans;
    - textile and packaging producer registrations (Germany requires
      registration before the first parcel);
-   - the ban on unproven green claims from 2026-09-27;
-   - the withdrawal button since 2026-06-19.
+   - the ban on unproven green claims from 27-Sep-2026;
+   - the withdrawal button since 19-Jun-2026.
 7. **Launch markets (SG, MY, PH, HK) have light product rules but real
    seller duties:**
    - PH: registration with the E-Commerce Bureau.
@@ -133,10 +133,10 @@ being treated as the producer by default.
 | Jewellery and metal parts | Allow with a lab report per material | EU nickel release, lead and cadmium; California jewellery law and Prop 65; SG lists ASTM F2999 |
 | Leather | Allow with a lab report per supplier | EU chromium VI under 3 mg/kg; azo dyes |
 | Precious-metal words ("gold", "silver", "925") | Allow only with fineness and weight; otherwise "gold-tone" or "plated" | UK Hallmarking Act and similar rules in IE, NL, FR and others; US FTC Jewelry Guides |
-| Water-repellent finishes | PFAS-free declaration; test DWR items; block PFAS-treated SKUs from US, FR, DK | EU PFHxA from 2026-10-10; FR and DK bans; US state bans |
+| Water-repellent finishes | PFAS-free declaration; test DWR items; block PFAS-treated SKUs from US, FR, DK | EU PFHxA from 10-Oct-2026; FR and DK bans; US state bans |
 | Cotton-bearing items to the US | Supply-chain declaration and documents on request | UFLPA |
 | Third-party brands | Allow only with proof of ownership or authorisation | As seller and importer we are the direct infringer; card-scheme brand programmes put our acquiring at risk |
-| "Dupe", "inspired by", "replica" wording; unproven green claims | Block in listing copy | Trademark use; EU ban on generic green claims from 2026-09-27 |
+| "Dupe", "inspired by", "replica" wording; unproven green claims | Block in listing copy | Trademark use; EU ban on generic green claims from 27-Sep-2026 |
 
 ## 4. Rules per market
 
@@ -148,7 +148,7 @@ being treated as the producer by default.
 | MY | No mandatory certification found; Bahasa labels expected for domestic goods (UNVERIFIED) | Electronic Trade Transactions Regulations 2012: identity, total price, delivery estimate, error correction | None |
 | PH | Nothing in our categories on the mandatory certification list | **Internet Transactions Act**: publish name and address, submit them to the E-Commerce Bureau; merchant primarily liable; defect returns at no cost to the buyer | None (paid orders generally cannot be cancelled) |
 | HK | General safety requirement; warnings in English and Chinese; gold and platinum marking if claimed (UNVERIFIED) | Trade Descriptions Ordinance | None online |
-| AU | **Care Labelling Standard 2023** for apparel, scarves and leather garments (ISO 3758 or AS/NZS 1957 since 2025-03-05; footwear, hats, belts and bags exempt). **Sunglasses standard** AS/NZS 1067.1. PFOS, PFOA and PFHxS banned from 2025-07-01 | **Report serious injuries within 2 days**, including overseas incidents. Statutory guarantees cannot be excluded; say "your rights are unaffected" | None online; guarantees for defects |
+| AU | **Care Labelling Standard 2023** for apparel, scarves and leather garments (ISO 3758 or AS/NZS 1957 since 05-Mar-2025; footwear, hats, belts and bags exempt). **Sunglasses standard** AS/NZS 1067.1. PFOS, PFOA and PFHxS banned from 01-Jul-2025 | **Report serious injuries within 2 days**, including overseas incidents. Statutory guarantees cannot be excluded; say "your rights are unaffected" | None online; guarantees for defects |
 | NZ | **Care, fibre content and country of origin labels** on clothing; origin on footwear; English, letters at least 1.5 mm | Recall notice within 2 working days; Consumer Guarantees Act | None online |
 | UK | GB on the 2005 product safety rules; no UK responsible person for ordinary goods. UK REACH without PFHxA. English fibre labels. Hallmarking. Packaging EPR only if we get a UK branch, warehouse **or returns address** | DMCC Act: all-in prices, fake reviews banned | 14 days; duties refunded |
 | CH | Safety law plus contact-material limits like the EU; fur declaration mandatory; fibre labels voluntary | Identity, CHF prices including VAT | None online; 2-year warranty |
@@ -158,16 +158,16 @@ being treated as the producer by default.
 
 | Market | Must do before selling |
 |---|---|
-| EU | Choose the GPSR responsible person: the Dutch BV itself, or an EU representative per merchant under an SG entity. On every listing: manufacturer and responsible person contacts, product id and photo, warnings, fibre composition in the local language, footwear material codes. RSL declaration and ISO 17025 lab reports per material (azo dyes, chromium VI, nickel, cadmium, lead, PAHs, phthalates, NPE, CMR substances, PFHxA from 2026-10-10; FR and DK PFAS bans). SVHC declaration (and SCIP as importer). Textile EPR: FR (Refashion) and NL (UPV Textiel) now, all member states by 2028-04-17. Packaging EPR under the packaging regulation from 2026-08-12, with Germany's LUCID registration before the first parcel. Block unproven green claims. 14-day withdrawal with the online withdrawal button. 2-year conformity. Forced Labour Regulation from 2027-12-14. Destruction ban on unsold apparel and footwear, which includes returns, for large companies since 2026-07-19 (we are small at first) |
-| US | **CPSC eFiling** since 2026-07-08 per variant: a certificate reference, or Disclaim A (footwear, bags, jewellery, belts, hats) or B (adult apparel exempt from flammability testing). Lightweight silk, rayon and cotton (scarves) and raised-surface fabrics need a 16 CFR 1610 test and our certificate. Labels: fibre %, "Made in Vietnam", maker or our name, care. Every product page says "imported". Prop 65 warnings if we have 10+ employees. PFAS-free declarations (CA, NY, MN, ME, VT, CO). UFLPA cotton traceability. FTC Mail Order Rule for shipping promises. California fur ban |
+| EU | Choose the GPSR responsible person: the Dutch BV itself, or an EU representative per merchant under an SG entity. On every listing: manufacturer and responsible person contacts, product id and photo, warnings, fibre composition in the local language, footwear material codes. RSL declaration and ISO 17025 lab reports per material (azo dyes, chromium VI, nickel, cadmium, lead, PAHs, phthalates, NPE, CMR substances, PFHxA from 10-Oct-2026; FR and DK PFAS bans). SVHC declaration (and SCIP as importer). Textile EPR: FR (Refashion) and NL (UPV Textiel) now, all member states by 17-Apr-2028. Packaging EPR under the packaging regulation from 12-Aug-2026, with Germany's LUCID registration before the first parcel. Block unproven green claims. 14-day withdrawal with the online withdrawal button. 2-year conformity. Forced Labour Regulation from 14-Dec-2027. Destruction ban on unsold apparel and footwear, which includes returns, for large companies since 19-Jul-2026 (we are small at first) |
+| US | **CPSC eFiling** since 08-Jul-2026 per variant: a certificate reference, or Disclaim A (footwear, bags, jewellery, belts, hats) or B (adult apparel exempt from flammability testing). Lightweight silk, rayon and cotton (scarves) and raised-surface fabrics need a 16 CFR 1610 test and our certificate. Labels: fibre %, "Made in Vietnam", maker or our name, care. Every product page says "imported". Prop 65 warnings if we have 10+ employees. PFAS-free declarations (CA, NY, MN, ME, VT, CO). UFLPA cotton traceability. FTC Mail Order Rule for shipping promises. California fur ban |
 | CA | Bilingual fibre labels with our name and address; "Made in Vietnam" marking; flammability basis; records kept 6 years in Canada (exemption or agent); incident notice in 2 days and report in 10; French for Quebec |
 
 ### 4.3 Rest of Asia and the world
 
 | Market | Main points |
 |---|---|
-| TH | Garments, footwear and bags probably need a Thai label with importer details (UNVERIFIED). Direct marketing law: 7-day withdrawal and possible registration; a draft open until 2026-11-27 would make it 14 days and require a local coordinator for offshore merchants on platforms |
-| ID | Still blocked (US$100 minimum price, see `research-logistics.md`). **Halal deadline for clothing, headwear and accessories moved to 2028-10-17** (PP 40/2026, enacted 2026-10-14); leather goods, footwear and bags unconfirmed. Parcels need no importer licence (Permendag 16/2025) |
+| TH | Garments, footwear and bags probably need a Thai label with importer details (UNVERIFIED). Direct marketing law: 7-day withdrawal and possible registration; a draft open until 27-Nov-2026 would make it 14 days and require a local coordinator for offshore merchants on platforms |
+| ID | Still blocked (US$100 minimum price, see `research-logistics.md`). **Halal deadline for clothing, headwear and accessories moved to 17-Oct-2028** (PP 40/2026, enacted 14-Oct-2026); leather goods, footwear and bags unconfirmed. Parcels need no importer licence (Permendag 16/2025) |
 | JP | Household Goods Quality Labeling Act: Japanese labels naming a labeler with a **Japanese address and phone**. Personal imports are outside it, but sales aimed at Japan may be inside: get a Japanese lawyer's view. Harmful-substances limits (formaldehyde in underwear and socks, azo dyes). Customs seizes counterfeits sent to individuals. SCTA seller page and final confirmation screen; without a displayed policy, an 8-day return at the buyer's cost |
 | KR | Personal direct purchases are exempt from KC certification; authorities test and block specific products instead. 7-day withdrawal; 3 months for defects at our cost; refund within 3 business days |
 | TW | Labelling and inspection bind domestic sale and infant textiles. **7-day no-reason withdrawal at our cost**; we collect within 15 days, refund within 15 days |
@@ -198,13 +198,13 @@ their country.
 
 **Our exposure.** Where we are the importer we are strictly liable for
 defective products in the EU (new Product Liability Directive, applies to
-products placed after 2026-12-09), UK, AU (importer deemed manufacturer),
+products placed after 09-Dec-2026), UK, AU (importer deemed manufacturer),
 CH, NO, TH, JP, KR and TW. In the US any seller that holds title is
 strictly liable, and "innocent seller" defences usually fail when the
 maker is foreign. Fashion goods are low hazard; the risks are jewellery
 metals, flammable fabrics, and strap or buckle failures.
 
-**Global-e's split (terms v3, 2026-01-26).** The merchant warrants
+**Global-e's split (terms v3, 26-Jan-2026).** The merchant warrants
 compliance, labelling, origin and IP; is liable for product data errors;
 indemnifies, including product liability; and carries worldwide product
 liability insurance. Refunds including duties, and chargebacks, are
@@ -277,8 +277,8 @@ effective-dated and the version applied is stored.
 ## 9. Corrections to earlier documents
 
 - `research-logistics.md` §6.1, Indonesia: the halal deadline for
-  clothing, headwear and accessories is now **2028-10-17** (PP 40/2026),
-  not 2026-10-17.
+  clothing, headwear and accessories is now **17-Oct-2028** (PP 40/2026),
+  not 17-Oct-2026.
 - `research-logistics.md` §7, returns: border duties may be kept only on
   voluntary change-of-mind returns that were disclosed; withdrawals in the
   EU, UK, NO, TW and probably KR, and every defect refund, must include

@@ -1,6 +1,6 @@
 # Product compliance: United States and Canada
 
-Researched 2026-11-06. Scope: adult apparel, footwear, bags and leather goods,
+Researched 06-Nov-2026. Scope: adult apparel, footwear, bags and leather goods,
 fashion jewellery, accessories (belts, hats, scarves, sunglasses), sold B2C by
 us as the seller of record, DDP from Vietnam by express courier.
 
@@ -21,7 +21,7 @@ importer, or the buyer as consignee with the carrier acting as broker.
 
 - **US CPSA:** "manufacturer" includes any person who imports (15 USC 2052(a)(11)).
   The certifying party for imported products is the importer (16 CFR 1110.7(a), as
-  amended by the final rule of 2025-01-08). The rule lets the "importer" for mail
+  amended by the final rule of 08-Jan-2025). The rule lets the "importer" for mail
   and low-value shipments be the owner, purchaser, consignee or authorised
   broker [A: GDLSK, Covington, STR]. **If we are the IOR, we are the CPSA
   "manufacturer"**: we issue the certificate, eFile it, and owe the Section 15(b)
@@ -53,8 +53,8 @@ way, and owning the IOR role keeps the CPSC eFiling chain coherent.
 
 | Rule | Applies to us? | Who owes it | Date | Per-SKU data / documents |
 |---|---|---|---|---|
-| **US** CPSC General Certificate of Conformity, 16 CFR 1610 (clothing flammability) | Yes for clothing textiles, including scarves. Footwear, hats, gloves and interlinings are excluded from 1610 | Importer (us as IOR) certifies; VN merchant supplies tests | In force; GCC content rules amended 2025, effective 2026-07-08 | Fabric fibre %, weight (oz/yd²), surface (plain/raised), exemption basis 1610.1(d)(1)/(d)(2), or a 1610 test report (Class 1). Manufacturer name/address, date/place of manufacture, test date/lab |
-| **US** CPSC eFiling (PGA Message Set in ACE) | Yes, regardless of value, including low-value/informal entries [A][N] | IOR or broker transmits; the certifier ID is ours | Mandatory 2026-07-08 (FTZ 2027-01-08) | Per variant: certificate data (Product Registry ID) or a disclaim code (A = not regulated or no cert needed; B = enforcement discretion, e.g. exempt plain-surface adult apparel) plus intended-use code |
+| **US** CPSC General Certificate of Conformity, 16 CFR 1610 (clothing flammability) | Yes for clothing textiles, including scarves. Footwear, hats, gloves and interlinings are excluded from 1610 | Importer (us as IOR) certifies; VN merchant supplies tests | In force; GCC content rules amended 2025, effective 08-Jul-2026 | Fabric fibre %, weight (oz/yd²), surface (plain/raised), exemption basis 1610.1(d)(1)/(d)(2), or a 1610 test report (Class 1). Manufacturer name/address, date/place of manufacture, test date/lab |
+| **US** CPSC eFiling (PGA Message Set in ACE) | Yes, regardless of value, including low-value/informal entries [A][N] | IOR or broker transmits; the certifier ID is ours | Mandatory 08-Jul-2026 (FTZ 08-Jan-2027) | Per variant: certificate data (Product Registry ID) or a disclaim code (A = not regulated or no cert needed; B = enforcement discretion, e.g. exempt plain-surface adult apparel) plus intended-use code |
 | **US** CPSIA children's products (CPC, third-party lab, lead 100 ppm substrate / 90 ppm paint, tracking labels) | Only if we sell kidswear (under 13) | Importer (us) | In force | CPC, CPSC-accepted lab reports, tracking label info |
 | **US** drawstring rule, 16 CFR 1120.3(b) | Children's upper outerwear only | Importer / seller | In force | n/a for adult |
 | **US** Textile Fiber Products Identification Act + 16 CFR 303 | Yes: clothing, scarves, socks. Not shoes, hats, handbags; belts only if a fibre claim is made | Us (seller/importer) and the merchant (labelling at the factory) | In force | Generic fibre names and % by weight, country of origin ("Made in Vietnam"), dealer identity (name; an RN only if US-based), label placement |
@@ -64,24 +64,24 @@ way, and owning the IOR role keeps the CPSC eFiling chain coherent.
 | **US** Care Labeling Rule, 16 CFR 423 | Yes for textile wearing apparel; excludes footwear, gloves, hats | Manufacturer/importer (merchant labels; we are liable as importer) | In force | Care instruction text/symbols and its reasonable basis |
 | **US** FTC Leather Guides, 16 CFR 24 | Yes for leather/imitation leather bags, belts, shoes | Us (claims) + merchant | Voluntary guides, enforced via FTC Act s.5 | Material composition (real/bonded/split/imitation) |
 | **US** country of origin marking, 19 USC 1304 / 19 CFR 134 | Yes, every article, all entry types | Importer (us); merchant physically marks | In force | Origin marking on article or container; textiles follow 19 CFR 102.21 origin rules |
-| **US** California Prop 65 | Yes if we have 10+ employees (UNVERIFIED how they are counted) | Manufacturer/importer/distributor primarily; retailer in defined cases. If we are IOR, we are the importer | Short-form amendments operative 2025-01-01, transition to 2028-01-01 (UNVERIFIED) | Lead, cadmium, DEHP/DINP/DIDP (PVC), BPA, Cr(VI) (leather), PFOA/PFOS test results or warning decision per SKU; warning on product AND on product page |
+| **US** California Prop 65 | Yes if we have 10+ employees (UNVERIFIED how they are counted) | Manufacturer/importer/distributor primarily; retailer in defined cases. If we are IOR, we are the importer | Short-form amendments operative 01-Jan-2025, transition to 01-Jan-2028 (UNVERIFIED) | Lead, cadmium, DEHP/DINP/DIDP (PVC), BPA, Cr(VI) (leather), PFOA/PFOS test results or warning decision per SKU; warning on product AND on product page |
 | **US** California metal-containing jewellery law (HSC 25214.1–25214.4.2) | Yes for jewellery sold into CA | Manufacturer, supplier, seller | In force (UNVERIFIED thresholds) | Lead content per component material; cadmium for children's jewellery |
-| **US** state PFAS bans on apparel and textiles (CA, NY, ME, VT, CO, MN, WA, …) | Yes, sales into those states | Manufacturer; CA also requires a certificate of compliance to sellers; sellers liable in several states | CA 2025-01-01 (100 ppm TOF, 50 ppm from 2027-01-01); NY 2023-12-31; MN 2025-01-01; ME, VT, CO 2026-01-01; WA 2027 (all UNVERIFIED) | Written PFAS-free declaration + TOF test or supplier certificate per material |
-| **US** Minnesota / Maine PFAS reporting | Only if a product contains intentionally added PFAS | "Manufacturer" incl. importer/first seller (UNVERIFIED) | MN report due 2026-07-01 (extensions UNVERIFIED); ME later (UNVERIFIED) | PFAS presence per product |
-| **US** UFLPA + Tariff Act s.307 | Yes, all imports including low-value parcels | Importer (us) bears the rebuttable presumption | UFLPA since 2022-06-21 | Cotton/fibre supply-chain map to raw-material origin: mill, spinner, ginner; purchase orders, invoices, transport documents |
+| **US** state PFAS bans on apparel and textiles (CA, NY, ME, VT, CO, MN, WA, …) | Yes, sales into those states | Manufacturer; CA also requires a certificate of compliance to sellers; sellers liable in several states | CA 01-Jan-2025 (100 ppm TOF, 50 ppm from 01-Jan-2027); NY 31-Dec-2023; MN 01-Jan-2025; ME, VT, CO 01-Jan-2026; WA 2027 (all UNVERIFIED) | Written PFAS-free declaration + TOF test or supplier certificate per material |
+| **US** Minnesota / Maine PFAS reporting | Only if a product contains intentionally added PFAS | "Manufacturer" incl. importer/first seller (UNVERIFIED) | MN report due 01-Jul-2026 (extensions UNVERIFIED); ME later (UNVERIFIED) | PFAS presence per product |
+| **US** UFLPA + Tariff Act s.307 | Yes, all imports including low-value parcels | Importer (us) bears the rebuttable presumption | UFLPA since 21-Jun-2022 | Cotton/fibre supply-chain map to raw-material origin: mill, spinner, ginner; purchase orders, invoices, transport documents |
 | **US** Lacey Act (plant declaration PPQ 505) | Only for listed HTS (wood, some bamboo items). Cotton/textiles are not listed (UNVERIFIED for wooden sunglasses) | Importer | Phased | Genus/species, country of harvest |
 | **US** USFWS (wildlife import, CITES) | Only if exotic leather, feathers, shell, coral, horn. Cattle/sheep/goat/pig leather is not wildlife (UNVERIFIED wording) | Importer: USFWS licence, Form 3-177, CITES permit from VN | In force | Species (scientific name), CITES permit no. |
-| **US** California AB 44 fur ban | Yes if any real fur into CA | Seller (us) | 2023-01-01 | Fur yes/no; species |
+| **US** California AB 44 fur ban | Yes if any real fur into CA | Seller (us) | 01-Jan-2023 | Fur yes/no; species |
 | **US** FTC Mail Order Rule, 16 CFR 435 | Yes | Us (seller) | In force | Reasonable basis for every shipping-time promise |
 | **CA** Textile Labelling Act + Regs | Yes: apparel, scarves, most hats. Exempt: footwear, belts, handbags, straw/felt headwear | Us (dealer: importer/seller) + merchant | In force | Bilingual fibre content %, dealer identity (CA number only for Canadian dealers, else name + full postal address) |
 | **CA** CBSA country of origin marking | Yes: apparel, footwear, handbags/purses, hats, leather gloves are in Schedule I | Importer (us) | In force | "Made in Vietnam" in English or French |
 | **CA** Canada Consumer Product Safety Act | Yes (general prohibition, records, incidents) | Importer (us, if manufacturer is abroad) for s.7 and the 10-day report; every seller for the 2-day notice | In force | Supplier and customer records kept 6 years; incident handling |
-| **CA** Textile Flammability Regulations, SOR/2016-194 | Yes, all textile products | Manufacturer/importer | In force (amended 2024-11-20) | Flame-spread result (>3.5 s plain, >4 s raised fibre, CAN/CGSB-4.2 No. 27.5) or a fabric-based justification |
+| **CA** Textile Flammability Regulations, SOR/2016-194 | Yes, all textile products | Manufacturer/importer | In force (amended 20-Nov-2024) | Flame-spread result (>3.5 s plain, >4 s raised fibre, CAN/CGSB-4.2 No. 27.5) or a fabric-based justification |
 | **CA** children's jewellery / lead regs | Only children's items | Importer | In force | Lead, cadmium per component |
 | **CA** Consumer Packaging and Labelling Act | Mostly no for apparel (UNVERIFIED) | Dealer | n/a | Net quantity and dealer identity if a prepackaged multi-pack |
-| **CA** Charter of the French Language (Quebec) | Likely yes for Quebec buyers | Seller | Bill 96 product-labelling changes 2025-06-01 (UNVERIFIED) | French product inscriptions and documents; French website |
+| **CA** Charter of the French Language (Quebec) | Likely yes for Quebec buyers | Seller | Bill 96 product-labelling changes 01-Jun-2025 (UNVERIFIED) | French product inscriptions and documents; French website |
 | **CA** S-211 supply-chain report | Only if 2 of 3: C$20M assets, C$40M revenue, 250 employees, plus a Canadian connection | Us (entity) | Annually by 31 May | Forced-labour due diligence report |
-| **CA** Customs Tariff item 9897.00.00 (forced/child labour goods) | Yes | Importer (us) | 2020-07-01; child labour added 2024 | Same traceability as UFLPA |
+| **CA** Customs Tariff item 9897.00.00 (forced/child labour goods) | Yes | Importer (us) | 01-Jul-2020; child labour added 2024 | Same traceability as UFLPA |
 
 ---
 
@@ -95,7 +95,7 @@ way, and owning the IOR role keeps the CPSC eFiling chain coherent.
   Exempt from *testing* under 1610.1(d): (d)(1) plain-surface fabrics of
   2.6 oz/yd² or more regardless of fibre; (d)(2) fabrics made entirely of
   acrylic, modacrylic, nylon, olefin, polyester or wool, regardless of weight.
-  Since 2016-03-25 CPSC's enforcement-discretion policy says it will not pursue
+  Since 25-Mar-2016 CPSC's enforcement-discretion policy says it will not pursue
   a missing GCC for adult apparel that is exempt from testing under 1610.1(d)
   [P: CPSC 2016 policy, 81 FR 12594]. Non-exempt adult apparel still needs
   a GCC: raised-surface fabrics (fleece, chenille, terry, sherpa), lightweight
@@ -114,12 +114,12 @@ way, and owning the IOR role keeps the CPSC eFiling chain coherent.
   basis or a 16 CFR 1610 test report (Class 1, from any competent lab; adult
   apparel does not need a third-party lab).
 
-### 2. CPSC eFiling of certificates (mandatory 2026-07-08)
+### 2. CPSC eFiling of certificates (mandatory 08-Jul-2026)
 
-- **Rule:** final rule approved 2024-12-18, published 2025-01-08 (amending 16 CFR
+- **Rule:** final rule approved 18-Dec-2024, published 08-Jan-2025 (amending 16 CFR
   1110). Certificate data must be filed electronically with CBP at entry, through
   the ACE PGA Message Set, either in full or as a reference to a CPSC Product
-  Registry entry. Effective 2026-07-08; FTZ entries 2027-01-08 [P: CPSC press
+  Registry entry. Effective 08-Jul-2026; FTZ entries 08-Jan-2027 [P: CPSC press
   release; A: Covington, STR, GDLSK].
 - **Low-value / informal:** law firms said de minimis was not exempt: "any
   product requiring certification must have an eFiled certificate, regardless
@@ -135,9 +135,9 @@ way, and owning the IOR role keeps the CPSC eFiling chain coherent.
   The CBP clarification (CSMS #69382435) says ACE accepts entries without
   CPSC data if the PGA Message Set requirements are otherwise met, but "CPSC may
   review submitted data, reject CPSC data, or take enforcement action" [A: GHY,
-  updated 2026-07-30].
+  updated 30-Jul-2026].
 - **Enforcement:** at launch CPSC indicated warnings rather than refusals, with
-  escalation expected [N: Swap, updated 2026-10-10]. Missing data feeds CPSC
+  escalation expected [N: Swap, updated 10-Oct-2026]. Missing data feeds CPSC
   risk scoring and can lead to exams or detention. I found no public data on
   post-launch detentions of parcels.
 - **Per-SKU/variant data:** certifier ID or disclaim code, product ID, version
@@ -231,7 +231,7 @@ Per-SKU: origin, and for textiles the fabric origin.
   sales, the warning must be given on the product (or its label) and
   "also" on the product display page, through a clearly marked hyperlink on
   that page, or prominently before checkout (27 CCR 25602(b), last amended
-  2024-11-26, operative 2025-01-01) [P: CCR via Cornell].
+  26-Nov-2024, operative 01-Jan-2025) [P: CCR via Cornell].
 - **Who:** 27 CCR 25600.2 puts the duty mainly on manufacturers, producers,
   packagers, importers, suppliers and distributors. Retailers are responsible
   when they are the importer, sell under their own label, received a warning
@@ -257,7 +257,7 @@ Per-SKU: origin, and for textiles the fabric origin.
   1,000 ppm DEHP.
 - **Short-form warning amendments:** the 2024 amendment requires the chemical
   name in short-form warnings. Products labelled under the old short form
-  get until **2028-01-01**, with sell-through for products made before then
+  get until **01-Jan-2028**, with sell-through for products made before then
   (**UNVERIFIED** dates).
 - **Penalty:** up to $2,500 per day per violation, plus private-enforcer
   settlements. Mostly 60-day notices followed by settlement.
@@ -287,21 +287,21 @@ certification.
 All of this is **UNVERIFIED** this session; the state sites blocked fetches.
 These are working assumptions from prior knowledge.
 
-- **California AB 1817 (HSC 108970 ff.):** from 2025-01-01 no textile article
+- **California AB 1817 (HSC 108970 ff.):** from 01-Jan-2025 no textile article
   (incl. apparel, handbags, accessories) may contain regulated PFAS. That means
   intentionally added PFAS, or total organic fluorine of 100 ppm or more, falling
-  to 50 ppm from 2027-01-01. Outdoor apparel for severe wet conditions is exempt
+  to 50 ppm from 01-Jan-2027. Outdoor apparel for severe wet conditions is exempt
   until 2028 with a "made with PFAS chemicals" disclosure. Manufacturers must
   give sellers a certificate of compliance. Possible 2025 amendments (SB 682)
   not checked.
-- **New York:** apparel ban from 2023-12-31; outdoor apparel for severe wet
-  conditions from 2025-01-01 (or with a disclosure).
+- **New York:** apparel ban from 31-Dec-2023; outdoor apparel for severe wet
+  conditions from 01-Jan-2025 (or with a disclosure).
 - **Minnesota (Amara's Law):** intentionally added PFAS banned in clothing and
-  other categories from 2025-01-01. Reporting of all products with
-  intentionally added PFAS was due 2026-07-01, with extensions available.
-- **Maine:** apparel/textile ban from 2026-01-01; the reporting duty was
+  other categories from 01-Jan-2025. Reporting of all products with
+  intentionally added PFAS was due 01-Jul-2026, with extensions available.
+- **Maine:** apparel/textile ban from 01-Jan-2026; the reporting duty was
   narrowed and moved to later dates.
-- **Vermont:** apparel ban 2026-01-01. **Colorado:** apparel ban 2026-01-01
+- **Vermont:** apparel ban 01-Jan-2026. **Colorado:** apparel ban 01-Jan-2026
   (outdoor apparel 2028). **Washington:** Safer Products rule restricting PFAS in
   apparel and accessories from about 2027.
 - **Who:** the "manufacturer", usually defined to include the importer or first
@@ -318,7 +318,7 @@ These are working assumptions from prior knowledge.
   manufactured wholly or in part in the XUAR, or by an entity on the UFLPA
   Entity List". These are barred under 19 USC 1307 unless the importer shows
   "by clear and convincing evidence" that no forced labour was involved
-  [P: CBP UFLPA page, modified 2026-09-14]. Section 307 also supports
+  [P: CBP UFLPA page, modified 14-Sep-2026]. Section 307 also supports
   entity-specific Withhold Release Orders.
 - **Relevance:** Vietnamese garment makers often use Chinese yarn and fabric,
   so cotton is a DHS high-priority sector. Vietnam is consistently among the
@@ -359,7 +359,7 @@ These are working assumptions from prior knowledge.
 ### 12. State fur bans
 
 California AB 44 bans selling or manufacturing new fur products in California
-from 2023-01-01. Fur excludes cowhide, deer, sheep and goat skin and shearling;
+from 01-Jan-2023. Fur excludes cowhide, deer, sheep and goat skin and shearling;
 it includes rabbit and fox. Several cities have similar bans. Per-SKU: real fur
 yes or no.
 
@@ -431,7 +431,7 @@ Apply to all textile products except the listed exclusions (children's
 sleepwear up to 14X, which has its own rules, toys, cribs, tents, mattresses,
 and others). Flame-spread time must exceed **3.5 s** for plain surfaces and
 **4 s** for raised-fibre surfaces that ignite or fuse the base fibres, under
-CAN/CGSB-4.2 No. 27.5. Last amended 2024-11-20 [P]. No fibre or weight
+CAN/CGSB-4.2 No. 27.5. Last amended 20-Nov-2024 [P]. No fibre or weight
 exemption list like the US one appears in the text, so the importer needs a
 basis for compliance; in practice US 1610 Class 1 results are commonly relied
 on (**UNVERIFIED** whether Health Canada accepts them). Owed by the
@@ -458,7 +458,7 @@ the CPLA sense; multipacks of socks may need a count declaration.
 
 Product inscriptions, packaging and documents (warranty, instructions) must be
 in French, and the website must be available in French for Quebec buyers.
-Bill 96 tightened product-labelling and trademark rules from 2025-06-01.
+Bill 96 tightened product-labelling and trademark rules from 01-Jun-2025.
 Application to foreign online sellers is asserted by the OQLF; enforcement
 against foreign sellers is weak. **UNVERIFIED**, and the consumer-law
 researcher may cover it.
@@ -475,7 +475,7 @@ researcher may cover it.
   "doing business in Canada", but at our size we fall below the thresholds.
   Revisit when revenue approaches C$40M.
 - **Customs Tariff item 9897.00.00** has prohibited goods made by forced labour
-  since 2020-07-01, with child labour added by S-211 from 2024-01-01. Enforcement
+  since 01-Jul-2020, with child labour added by S-211 from 01-Jan-2024. Enforcement
   has been minimal. A stronger import ban has been discussed (**UNVERIFIED**).
   The same traceability documents as for UFLPA cover it.
 
@@ -512,11 +512,11 @@ Collect from the merchant, under a signed warranty or guaranty:
 - [P] CPSC press release, eFiling final rule: https://cpsc.gov/Newsroom/News-Releases/2025/CPSC-Approves-Final-Rule-to-Implement-eFiling-for-Certificates-of-Compliance
 - [P] CPSC 2016 adult-apparel enforcement discretion: https://www.cpsc.gov/Newsroom/News-Releases/2016/CPSC-Approves-Adult-Apparel-Enforcement-Discretion-to-Reduce-Paperwork-Requirement-on-Businesses ; 81 FR 12594: https://www.govinfo.gov/content/pkg/FR-2016-03-10/html/2016-04533.htm
 - [P] Federal Register, Certificates of Compliance (2023 NPR): https://www.federalregister.gov/documents/2023/12/08/2023-25911/certificates-of-compliance
-- [A] GDLSK, eFiling effective 2026-07-08: https://www.gdlsk.com/new-cpsc-efiling-rule-for-imported-consumer-products-effective-july-8-2026/
+- [A] GDLSK, eFiling effective 08-Jul-2026: https://www.gdlsk.com/new-cpsc-efiling-rule-for-imported-consumer-products-effective-july-8-2026/
 - [A] Covington: https://www.cov.com/en/news-and-insights/insights/2025/01/cpsc-revises-requirements-for-certificates-of-compliance
 - [A] Sandler Travis (STR): https://www.strtrade.com/trade-news-resources/str-trade-report/january/electronic-filing-of-compliance-certificate-data-mandated
 - [A] GHY, eFiling now live (CSMS #69382435, IG v2.5): https://www.ghy.com/trade-compliance/consumer-product-safety-commission-cpsc-reporting-begins-july-8/
-- [N] Swap guide to CPSC eFiling (updated 2026-10-10): https://www.swap-commerce.com/help-centre/regulatory-updates-guidance/the-swap-guide-to-cpsc-efiling-for-us-imports
+- [N] Swap guide to CPSC eFiling (updated 10-Oct-2026): https://www.swap-commerce.com/help-centre/regulatory-updates-guidance/the-swap-guide-to-cpsc-efiling-for-us-imports
 - [N] UL eFiling FAQ: https://www.ul.com/resources/efiling-us-market-frequently-asked-questions ; FedEx CPSC FAQ: https://www.fedex.com/content/dam/fedex/apac-asia-pacific/downloads/fedex-cpsc-faq-en-apac.pdf ; UPS/urShipper: https://urshipper.help.center/article/1104-united-states-CSPC-eFiling
 - [P] FTC, Threading Your Way (Textile and Wool Acts): https://www.ftc.gov/business-guidance/resources/threading-your-way-through-labeling-requirements-under-textile-wool-acts
 - [P] FTC RN FAQ: https://www.ftc.gov/business-guidance/industry/registered-identification-number-frequently-asked

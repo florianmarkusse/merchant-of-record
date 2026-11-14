@@ -2,7 +2,7 @@
 
 Researcher slice: DHL Express, FedEx, UPS, Aramex, SingPost/Quantium, Asendia, Cainiao,
 YunExpress, 4PX, Vietnam Post EMS, and e-commerce economy services from VN.
-Research date: 2026-11-06.
+Research date: 06-Nov-2026.
 
 **Limits of this research (read first).**
 - fedex.com rate PDFs and the dhl.com / ups.com marketing pages blocked automated
@@ -13,7 +13,7 @@ Research date: 2026-11-06.
   Returns, UPS Returns from VN), UPS Track Alert signing and Aramex API details were not
   researched online. Where this file states them it says so, and they are UNVERIFIED.
 - The UPS guide used here is the **2025** Vietnam Rate and Service Guide (effective
-  2024-12-22), downloaded and parsed in full. A 2026 guide (effective 2025-12-21) exists
+  22-Dec-2024), downloaded and parsed in full. A 2026 guide (effective 21-Dec-2025) exists
   but would not download. Assume roughly +5–6% for 2026 [estimate, based on DHL's
   published +5.9% GRI for VN 2026].
 - FX used for the USD figures: **1 USD ≈ 26,300 VND** [estimate]. All carrier list prices
@@ -55,9 +55,9 @@ tool (none was reachable for this slice), **[estimate]** inference or third-part
 
    VN Post EMS uses divisor **6000** (M bills 1.0 kg, L bills 2.5 kg).
 5. **Regulatory tailwinds for express DDP:**
-   - The US ended de minimis for all countries on 2025-08-29, and the postal flat-rate
-     option ended 2026-02-28.
-   - The EU introduced a €3 duty per low-value item from 2026-07-01, with VAT from the
+   - The US ended de minimis for all countries on 29-Aug-2025, and the postal flat-rate
+     option ended 28-Feb-2026.
+   - The EU introduced a €3 duty per low-value item from 01-Jul-2026, with VAT from the
      first euro and IOSS still in place.
 
    Both make carrier-handled DDP the default path, and both broke many postal routes
@@ -66,7 +66,7 @@ tool (none was reachable for this slice), **[estimate]** inference or third-part
    [DHL on EU 2026](https://www.dhl.com/discover/en-cz/logistics-advice/import-export-advice/eu-2026-duty-de-minimis-removal),
    [Easyship on EU €3](https://www.easyship.com/blog/eu-150-de-minimis-ends-for-ecommerce-sellers)).
    - **US tariff on VN goods:** one source reports that the country-specific IEEPA
-     tariffs were struck down and replaced by a 10% global tariff from 2026-02-24
+     tariffs were struck down and replaced by a 10% global tariff from 24-Feb-2026
      (UNVERIFIED, single source). Our landed-cost engine needs this rate.
 
 ---
@@ -127,18 +127,18 @@ Notes on the table:
 - **FedEx zone letters** (A to H) come from the 2026 VN zone index
   (`sources/fedex/fedex-rates-zi-en-vn-2026.pdf`), the same letters for the list
   tariff and the promo sheets: MY, TH, ID, PH, SG A; JP, KR B; AU C; US D; DE, NL,
-  GB E; AE H [published, verified 2026-11-10]. The index has no FICP column; FICP
+  GB E; AE H [published, verified 10-Nov-2026]. The index has no FICP column; FICP
   zones are assumed equal to IP.
   - Sources: [fedex-rates-exp-en-vn-2026.pdf](https://www.fedex.com/content/dam/fedex/international/rates/fedex-rates-exp-en-vn-2026.pdf),
     [fedex-rates-ficp-exp-en-vn-2026.pdf](https://www.fedex.com/content/dam/fedex/international/rates/fedex-rates-ficp-exp-en-vn-2026.pdf),
     [fedex-rates-box-en-vn-2026.pdf](https://www.fedex.com/content/dam/fedex/international/rates/fedex-rates-box-en-vn-2026.pdf).
-  - All three are effective 2026-01-05 and exclude fuel and special fees. Saved by hand
-    2026-11-10 and loaded 0.5–20 kg as `fedex_ip_vn_2026_promo`, `fedex_ie_vn_2026_promo`
+  - All three are effective 05-Jan-2026 and exclude fuel and special fees. Saved by hand
+    10-Nov-2026 and loaded 0.5–20 kg as `fedex_ip_vn_2026_promo`, `fedex_ie_vn_2026_promo`
     and `fedex_ficp_vn_2026_promo` (verified). "Qualified customers" means any VN FedEx
     account holder in good standing who settles invoices promptly in Vietnam
     (Miscellaneous Information in the surcharge PDF).
 - **FedEx FICP is about 18–20% below the IP promo rate at every weight** (verified
-  2026-11-10): 0.5 kg zone A VND 1,137,400 vs IP 1,407,800; 1 kg zone D 1,854,500 vs
+  10-Nov-2026): 0.5 kg zone A VND 1,137,400 vs IP 1,407,800; 1 kg zone D 1,854,500 vs
   2,291,100. The earlier "barely cheaper" reading compared FICP 1 kg with the FedEx
   Envelope rate, which our unverified data had loaded as IP 0.5 kg. IE promo is only
   1–3% below IP promo. FICP has no Envelope or Pak rates and takes no dangerous goods.
@@ -147,7 +147,7 @@ Notes on the table:
   shows 0.5 kg values of "84.30 … 151.50". These look like USD, which would put the tariff
   about 40% above the VND promo sheet. Currency UNVERIFIED.
 - **DHL Express**: no VN rate card could be retrieved. DHL VN does not publish one online;
-  the press release only gives the +5.9% average GRI from 2026-01-01
+  the press release only gives the +5.9% average GRI from 01-Jan-2026
   ([DHL VN press](https://www.dhl.com/vn-en/home/press/press-archive/2025/dhl-express-announces-annual-price-adjustments-for-2026-in-vietnam.html)).
   Expect DHL list prices close to UPS Saver [estimate]. **DHL per-parcel prices are
   UNVERIFIED.**
@@ -176,7 +176,7 @@ Expedited zone assignment is assumed equal to Saver for these countries (it was 
 extracted chart). Source:
 [UPS VN Rate and Service Guide 2025](https://www.ups.com/assets/resources/webcontent/en_GB/Rates_and_Service_Guide_preview_VN.pdf).
 
-**UPS Worldwide Economy, VN → US 48 states only, DDP** [published, effective 2024-07-15]
+**UPS Worldwide Economy, VN → US 48 states only, DDP** [published, effective 15-Jul-2024]
 - Rates: 0.5 kg VND 1,541,694 (~$59); 1 kg 1,869,378 (~$71); 1.5 kg 2,194,923 (~$83);
   2 kg 2,515,040 (~$96); 2.5 kg 2,844,534 (~$108); 3 kg 3,157,084 (~$120); 5 kg 4,405,310
   (~$168).
@@ -191,7 +191,7 @@ extracted chart). Source:
   value for us.
 - Source: [UPS WWE VN](https://ups.com/assets/resources/webcontent/en_GB/WWE_Rates_and_Service_Guide_VN.pdf).
 
-**VN Post EMS** [estimate, a third party reading the EMS VN calculator, 2026-10-24]
+**VN Post EMS** [estimate, a third party reading the EMS VN calculator, 24-Oct-2026]
 
 | Destination | 1 kg | 5 kg |
 |---|---|---|
@@ -263,7 +263,7 @@ centres in EU / North and South America". UPS Worldwide Economy VN → US: 5–8
 
 **Coverage and DDP**
 - About 220 countries. DHL clears customs at destination.
-- **DDP = "Duty Tax Paid" (DTP)** [published, effective 2026-01-01]: VND 600,000 or 2% of
+- **DDP = "Duty Tax Paid" (DTP)** [published, effective 01-Jan-2026]: VND 600,000 or 2% of
   fiscal charges, whichever is higher, per shipment, billed to the shipper.
 - With DTP, extra clearance charges are also billed to the DTP shipper when they occur:
   - Clearance processing: VND 280,000.
@@ -287,7 +287,7 @@ centres in EU / North and South America". UPS Worldwide Economy VN → US: 5–8
 - Elevated risk / restricted destination: VND 918,000.
 - Address correction: VND 350,000.
 - Oversize piece (>100 cm): VND 615,000.
-- Demand surcharge: per kg, for 2026-10-01 to 2027-02-05; amount not captured.
+- Demand surcharge: per kg, for 01-Oct-2026 to 05-Feb-2027; amount not captured.
 - Residential delivery: VND 150,000 [published, optional services page]. This matters
   because B2C is all residential.
 
@@ -324,7 +324,7 @@ centres in EU / North and South America". UPS Worldwide Economy VN → US: 5–8
 - Labels: PDF/PNG/ZPLII/EPL2 (generally documented for FedEx Ship API; not re-verified
   for VN).
 - **A FedEx account number is required for FICP non-document shipments (from
-  2025-09-15).**
+  15-Sep-2025).**
 - **The FedEx duties-estimate API may not be resold through a 3rd-party reseller
   solution** ([FedEx APAC PDF](https://www.fedex.com/content/dam/fedex/apac-asia-pacific/downloads/fedex-api-estimated-duties-taxes-en-apac.pdf)).
   Relevant: as MoR we calculate landed cost ourselves.
@@ -338,7 +338,7 @@ centres in EU / North and South America". UPS Worldwide Economy VN → US: 5–8
 - International Priority (IP) and International Priority Express (IPE).
 - International Economy (IE).
 - **FedEx International Connect Plus (FICP)**: day-definite e-commerce service, launched
-  in VN 2025-02-04
+  in VN 04-Feb-2025
   ([VIR](https://vir.com.vn/fedex-expands-international-connect-plus-service-to-vietnam-122288.html)).
   - No dangerous goods; no Envelope or Pak.
   - Promo export rates are published for 2026.
@@ -349,7 +349,7 @@ centres in EU / North and South America". UPS Worldwide Economy VN → US: 5–8
   the duties plus an "ancillary clearance / disbursement" surcharge.
 - **The VN amount is UNVERIFIED** (the VN surcharge page is
   [here](https://www.fedex.com/en-vn/shipping/rates/customized-rates/surcharges.html)).
-  Customs clearance surcharges were revised 2026-07-20
+  Customs clearance surcharges were revised 20-Jul-2026
   ([FedEx PDF](https://www.fedex.com/content/dam/fedex/apac-asia-pacific/downloads/fedex-customs-clearance-surcharge-20july2026.pdf)).
 - A third-party billing surcharge applies when billed to a third party.
 
@@ -487,7 +487,7 @@ centres in EU / North and South America". UPS Worldwide Economy VN → US: 5–8
 | Product | Status from VN |
 |---|---|
 | DHL eCommerce (Parcel International Direct) | **Not available.** DHL eCommerce stopped operating in VN in 2021. DHL Express remains. |
-| FedEx International Connect Plus | **Available since 2025-02-04**, promo VND rates published for 2026, account required. |
+| FedEx International Connect Plus | **Available since 04-Feb-2025**, promo VND rates published for 2026, account required. |
 | UPS Worldwide Economy | **US only**, DDP mandatory, 5–8 days. |
 | Asendia e-PAQ | Sales presence in VN, DDP/DAP, rates on RFQ. |
 | Cainiao, YunExpress, 4PX, SingPost | No confirmed VN-origin product. |

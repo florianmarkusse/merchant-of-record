@@ -8,7 +8,7 @@ Question q08.
 
 | File | What | Status |
 |---|---|---|
-| `pages/*.html` | vioepacket.com/en route pages, `epacket-extra` and `routes`, downloaded 2026-11-07; rates effective 2026-11-01 | loaded: main routes (standard line, not clothing) as `yunexpress_vn_2026_list`, US-Saver as `yunexpress_vn_us_saver_2026_list`, Extra groups as `yunexpress_vn_extra_2026_list`, 0.5 to 5 kg; transit, surcharges and US-Saver product limits |
+| `pages/*.html` | vioepacket.com/en route pages, `epacket-extra` and `routes`, downloaded 07-Nov-2026; rates effective 01-Nov-2026 | loaded: main routes (standard line, not clothing) as `yunexpress_vn_2026_list`, US-Saver as `yunexpress_vn_us_saver_2026_list`, Extra groups as `yunexpress_vn_extra_2026_list`, 0.5 to 5 kg; transit, surcharges and US-Saver product limits |
 
 Not loaded: Brazil, Chile, UAE and Saudi Arabia route pages (not
 downloaded), the clothing lines (charged on actual weight), Extra

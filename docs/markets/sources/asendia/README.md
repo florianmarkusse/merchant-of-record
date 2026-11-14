@@ -10,10 +10,10 @@ homepage); question q07.
 
 | File | What | Status |
 |---|---|---|
-| `asendia-gtc-2025-sg-en.pdf` | Asendia GTC 2025, Asendia Singapore Pte. Ltd., English, May 2025 (10 pp.) | saved 2026-11-10; read for `service_restrictions.csv`: §5.2 packing, §6 liability (declared value, Montreal by air, EUR 10/kg subsidiary), §7.1 excluded mail, §7.2 glass and porcelain at the sender's risk, §9 claims, §16 law of the contracting company |
-| `asendia-gtc-2025-sg-appendix1-customs-en.pdf` | GTC Appendix 1, customs clearance, Asendia Singapore, May 2025 | saved 2026-11-10; §5.2 dangerous goods only by written agreement |
+| `asendia-gtc-2025-sg-en.pdf` | Asendia GTC 2025, Asendia Singapore Pte. Ltd., English, May 2025 (10 pp.) | saved 10-Nov-2026; read for `service_restrictions.csv`: §5.2 packing, §6 liability (declared value, Montreal by air, EUR 10/kg subsidiary), §7.1 excluded mail, §7.2 glass and porcelain at the sender's risk, §9 claims, §16 law of the contracting company |
+| `asendia-gtc-2025-sg-appendix1-customs-en.pdf` | GTC Appendix 1, customs clearance, Asendia Singapore, May 2025 | saved 10-Nov-2026; §5.2 dangerous goods only by written agreement |
 
 Not found: a public prohibited-items list (asendia.sg/prohibited-items,
 asendia.sg/prohibited-and-restricted-items and asendia.com/prohibited-items
-all 404 on 2026-11-10) and the e-PAQ Product and Service Specifications
+all 404 on 10-Nov-2026) and the e-PAQ Product and Service Specifications
 the GTC refer to for packing.

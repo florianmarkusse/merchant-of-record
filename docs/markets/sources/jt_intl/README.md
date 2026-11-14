@@ -6,9 +6,9 @@ https://www.jtexpress.com/en/contactUs), question q06.
 
 | File | What | Status |
 |---|---|---|
-| `664196dba695b677401074.pdf` | international express rate card JTF/JTG/JTL2024, export from VN, effective 2024-05-10, VND (16 pp.: Vietnamese pp. 1-8, English pp. 9-16); surcharges p. 7, zones p. 8 | saved 2026-11-07; non-document rates 0.5 to 30 kg, zones and surcharges loaded as `jt_intl_vn_2024_list` |
-| `69cb6fda7f557356752523.pdf` | international rates VN to Malaysia and China, effective 2026-04-01 (table is an image) | saved 2026-11-07; read by eye: identical to the 2024 card for MY and CN, so the 2024 card is taken as current |
-| `69843f381c871660781152.pdf` | domestic VN standard express price list, from 2026-02-05 | saved 2026-11-07; not loaded (domestic) |
+| `664196dba695b677401074.pdf` | international express rate card JTF/JTG/JTL2024, export from VN, effective 10-May-2024, VND (16 pp.: Vietnamese pp. 1-8, English pp. 9-16); surcharges p. 7, zones p. 8 | saved 07-Nov-2026; non-document rates 0.5 to 30 kg, zones and surcharges loaded as `jt_intl_vn_2024_list` |
+| `69cb6fda7f557356752523.pdf` | international rates VN to Malaysia and China, effective 01-Apr-2026 (table is an image) | saved 07-Nov-2026; read by eye: identical to the 2024 card for MY and CN, so the 2024 card is taken as current |
+| `69843f381c871660781152.pdf` | domestic VN standard express price list, from 05-Feb-2026 | saved 07-Nov-2026; not loaded (domestic) |
 | `2026-11-14_quote_shipping_rate.xlsx` | J&T Express Vietnam's reply to q06: price sheet in VND, no date, validity or service name; sheet 2 lists remote US ZIP codes (stored as numbers, leading zeros lost) | saved 14-Nov-2026; 0.5 to 20 kg loaded as `jt_intl_vn_2026_quote` (service `jt_intl`, with its own surcharges) and the Singapore 2-3 days column as `jt_intl_vn_2026_quote_sg_fast` (service `jt_intl_sg_fast`) |
 
 Not in the 2024 files: fuel surcharge (updated monthly), transit times,
@@ -35,7 +35,7 @@ duties unpaid unless J&T offers DDP (asked in q06).
 - Not answered: validity, volume discount, DDP, API and webhooks, pickup,
   returns, transit except SG (q45).
 
-Goods rules (read in Chrome 2026-11-10; the site works in a browser, the
+Goods rules (read in Chrome 10-Nov-2026; the site works in a browser, the
 earlier certificate error was only for automated reads), loaded into
 `service_restrictions.csv`:
 

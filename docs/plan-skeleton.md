@@ -1,6 +1,6 @@
 # Plan: project skeleton and first slice
 
-Status: design, waiting for confirmation (2026-11-05). No code is written
+Status: design, waiting for confirmation (05-Nov-2026). No code is written
 until this is confirmed.
 
 ## 1. Scope

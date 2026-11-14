@@ -1,18 +1,18 @@
 # Plan: payment provider integration, merchant API and Shopify
 
-Status: design proposal (2026-11-04), awaiting confirmation. No code yet.
+Status: design proposal (04-Nov-2026), awaiting confirmation. No code yet.
 The language is still undecided, so the types below are written in neutral
 pseudo-notation (records, closed unions, functions), not in any language.
 
 ## 0. Decisions and context so far
 
-- (2026-11-04) Legal entity: Singapore entity or Dutch BV, not decided yet.
+- (04-Nov-2026) Legal entity: Singapore entity or Dutch BV, not decided yet.
   This matters a lot: local SEA methods and the SEA-native PSPs fit an SG
   entity much better, and licensing differs (§8).
-- (2026-11-04) Goods: both physical and digital. Both tax regimes are in
+- (04-Nov-2026) Goods: both physical and digital. Both tax regimes are in
   scope (digital-services rules for foreign sellers, plus import and goods
   rules).
-- (2026-11-04) Launch: merchants in Vietnam first, selling to buyers in
+- (04-Nov-2026) Launch: merchants in Vietnam first, selling to buyers in
   other SEA countries. Consequences:
   - **Buyer side:** the buyers' local methods come first (PayNow, PromptPay,
     DuitNow/FPX, QRIS/e-wallets, GCash/Maya) plus cards. VN checkout methods
@@ -28,7 +28,7 @@ pseudo-notation (records, closed unions, functions), not in any language.
     contract, a self-billed invoice or statement per payout) for its own VN
     tax treatment. That is VN export VAT and corporate income tax, and it
     needs advice.
-  - **Physical goods are in scope from launch** (decided 2026-11-04: VN and
+  - **Physical goods are in scope from launch** (decided 04-Nov-2026: VN and
     SEA merchants mostly sell physical goods). They ship from VN to the
     buyer's country. As seller we
     likely also own import VAT and duties there (who is importer of record,
@@ -37,17 +37,17 @@ pseudo-notation (records, closed unions, functions), not in any language.
     Digital goods avoid it and are simpler to launch with.
   - **Tax modules needed first:** the buyer countries (SG GST, MY SST/DST,
     TH VAT, ID VAT, PH VAT). VN VAT matters only on the merchant-to-us leg.
-- (2026-11-04) No orchestration vendor or switching layer for now. We only
+- (04-Nov-2026) No orchestration vendor or switching layer for now. We only
   keep the ability to add or swap a PSP when needed: one module per PSP
   behind one interface, plus a small routing config (§5.2).
-- (2026-11-04) JavaScript: PSP components are allowed in checkout. Our own
+- (04-Nov-2026) JavaScript: PSP components are allowed in checkout. Our own
   pages avoid JS where possible (AGENTS.md updated).
-- (2026-11-04) IDR uses exponent 0, departing from ISO 4217 on purpose
+- (04-Nov-2026) IDR uses exponent 0, departing from ISO 4217 on purpose
   (AGENTS.md updated). Provider modules convert (§4).
-- (2026-11-04) Saved cards and subscriptions: probably in scope. Accept that
+- (04-Nov-2026) Saved cards and subscriptions: probably in scope. Accept that
   tokens are bound to the PSP that issued them, and plan to export them
   later if we switch (§5.6).
-- (2026-11-04) Merchant payouts in v1: our own bank, weekly batched USD
+- (04-Nov-2026) Merchant payouts in v1: our own bank, weekly batched USD
   wires generated from the ledger (§6.4).
 
 ## 1. Framing: these providers are acquirers, not merchants of record
@@ -61,7 +61,7 @@ payouts stay with us. The companies that do offer MoR as a product (Paddle,
 Lemon Squeezy, FastSpring, Global-e, Stripe's "Managed Payments") compete
 with us. They are not suppliers.
 
-Who we compete with for Vietnamese merchants (noted 2026-11-10, from a
+Who we compete with for Vietnamese merchants (noted 10-Nov-2026, from a
 review of the "MoR / landed-cost / DDP" vendor categories): the
 physical-goods MoRs (Global-e, Reach, Digital River, ESW, Passport's Seller
 of Record, OpenBorder) and DDP networks that pay the border tax for the merchant
@@ -92,7 +92,7 @@ Consequences:
   account and PromptPay needs a Stripe TH account. Licensing and entity
   structure therefore decide which providers we can use (see §9).
 
-## 2. What the provider docs say (read 2026-11-04)
+## 2. What the provider docs say (read 04-Nov-2026)
 
 Sources were each provider's public developer docs. "?" means the docs did
 not say, or I could not read them. Worldpay's docs render client-side and
@@ -227,7 +227,7 @@ Decimal-string providers (Mollie, Nuvei, 2C2P) format by integer division and
 padding, never through a float. A conversion that is not exact is an error
 and is not rounded.
 
-**IDR** (decided 2026-11-04: exponent 0, departing from ISO 4217's 2).
+**IDR** (decided 04-Nov-2026: exponent 0, departing from ISO 4217's 2).
 Adyen also uses 0, so no conversion is needed. Checkout.com, Stripe and
 PPRO use 2: outbound is an exact ×100. Inbound, a provider amount such as a
 fee of IDR 1,234.56 is not representable. The provider module reports it as
@@ -275,7 +275,7 @@ orchestration code branches on capabilities, never on provider names.
 The **only** place that maps a name to a module is a `provider_registry` that
 dispatches on `ProviderName` (one exhaustive match). Which account to use for
 a new attempt comes from data. This is deliberately small (decided
-2026-11-04: no orchestration vendor or smart routing). With one or two PSPs
+04-Nov-2026: no orchestration vendor or smart routing). With one or two PSPs
 it is a handful of rows, and failover lists can stay empty until we need
 them:
 
@@ -363,7 +363,7 @@ therefore easy for one-off payments and hard for stored cards and
 subscriptions. Options, from cheapest to most costly:
 
 1. Accept lock-in for stored cards. New cards follow routing, and old tokens
-   stay where they are. (Chosen for v1, 2026-11-04.) The exit path is the
+   stay where they are. (Chosen for v1, 04-Nov-2026.) The exit path is the
    PCI-compliant card data export that large PSPs typically offer on
    request, from one PCI DSS Level 1 provider to another. We never handle
    the data ourselves. Before signing a contract, confirm with each PSP
@@ -414,7 +414,7 @@ country → tax quote (from the jurisdiction module, evidence stored) → method
 choice (filtered by routing and capabilities) → pay → receipt and invoice in
 our name.
 
-JavaScript (decided 2026-11-04): PSP components (Adyen Components,
+JavaScript (decided 04-Nov-2026): PSP components (Adyen Components,
 Checkout.com Flow, Xendit/2C2P SDKs) are allowed for the payment step. Our
 own steps (address, tax quote, method choice, receipt) stay server-rendered
 forms. The server finalizes from the webhook or a fetch, never from the
@@ -448,7 +448,7 @@ Rail choice, provider versus our own bank:
 | Checks | Beneficiary validation, status per transfer | More of it on us |
 | Cost | Fee per payout plus FX margin | Cheaper at scale |
 
-Decided 2026-11-04 (after "VN merchants, physical goods"): **our own bank
+Decided 04-Nov-2026 (after "VN merchants, physical goods"): **our own bank
 for v1**. Weekly batched USD SWIFT wires from our entity to each
 merchant's VN bank, with the instruction file generated from the ledger by
 a `bank_file` rail module.
@@ -478,7 +478,7 @@ licensed partner are allowed for this flow.
 
 ### 6.5 Physical goods: customs, duties and couriers
 
-Decided 2026-11-04: goods ship from VN merchants to SEA buyers through one
+Decided 04-Nov-2026: goods ship from VN merchants to SEA buyers through one
 or more **courier partners that offer DDP and customs clearance from VN
 into SEA**. Merchants create shipments through us, not on their own
 courier accounts, so the customs data and our registration numbers are
@@ -494,7 +494,7 @@ merchants' sales. Under **DDP** the buyer pays one total at checkout and we
 pay duties through the courier. Under **DAP** the buyer pays on delivery.
 We choose DDP.
 
-Buyer-country rules as found 2026-11-04 (all to be confirmed by an
+Buyer-country rules as found 04-Nov-2026 (all to be confirmed by an
 adviser; every one becomes an effective-dated rule in the per-country
 module):
 
@@ -503,16 +503,16 @@ module):
   the threshold is per item or per consignment, and whether shipping counts.
 - **MY:** 10% sales tax on goods ≤ RM 500, on the sale price. Register above
   RM 500k in 12 months.
-- **TH:** since 2026-01-01 no 1,500 baht exemption; duty plus 7% VAT from the
+- **TH:** since 01-Jan-2026 no 1,500 baht exemption; duty plus 7% VAT from the
   first baht.
 - **ID:** duty de minimis USD 3; VAT applies regardless (rate to confirm).
 - **PH:** de minimis PHP 10,000; VAT treatment below it disputed (CAO
   02-2025).
 
-Update 2026-11-06 (research, see `docs/research-logistics.md`; nothing
+Update 06-Nov-2026 (research, see `docs/research-logistics.md`; nothing
 decided yet):
 
-- Candidates: Ninja Van stopped VN express on 2025-09-30 and DHL eCommerce
+- Candidates: Ninja Van stopped VN express on 30-Sep-2025 and DHL eCommerce
   left VN in 2021, so both are out as VN-origin carriers. Remaining SEA
   candidates: Janio, Boxme, J&T International (J&T VN does not list ID).
   DHL Express, FedEx or UPS cover express and the rest of the world.
@@ -648,7 +648,7 @@ version stored per transaction (§5.5, §6.2); compliance named, not assumed
 
 ## 11. Open questions
 
-Answered 2026-11-04 (see §0): goods (both); IDR (ISO 2); orchestration
+Answered 04-Nov-2026 (see §0): goods (both); IDR (ISO 2); orchestration
 vendor (no); saved cards (yes, PSP-bound, export later); Shopify (nobody
 has talked to them; explore later, §7).
 

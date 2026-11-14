@@ -1,6 +1,6 @@
 # 03 — Multi-carrier orchestrators, aggregators and tracking platforms (VN origin)
 
-Researched 2026-11-06. Source-type labels: [published] = vendor's own page/docs,
+Researched 06-Nov-2026. Source-type labels: [published] = vendor's own page/docs,
 [3rd-party] = review/comparison site (weaker), [calculator] = public rate tool,
 [estimate] = my arithmetic from published numbers, UNVERIFIED = could not confirm.
 Several vendor pages (support.easyship.com, aftership.com/docs) returned HTTP 403
@@ -36,7 +36,7 @@ to automated fetches; claims from them come via search snippets and are marked.
 - **VN origin:** VN is in the "can create an account, but link your own courier to
   generate labels" group; pre-negotiated origins are AU, BE, CA, FR, DE, HK, NL, NZ,
   SG, US, UK [published via search snippet, https://support.easyship.com/hc/en-us/articles/360000487172 — page 403s].
-  VN courier directory: "Coming soon" [published, https://www.easyship.com/en-vn/couriers, fetched 2026-11-06].
+  VN courier directory: "Coming soon" [published, https://www.easyship.com/en-vn/couriers, fetched 06-Nov-2026].
   Linkable own accounts: DHL Express, FedEx, UPS [published, https://www.easyship.com/de-de/feature-list];
   whether linking works for a VN-registered account is UNVERIFIED (one forum user
   reports own FedEx account not appearing on some lanes [3rd-party, developers.easyship.com forum]).

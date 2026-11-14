@@ -1,6 +1,6 @@
 # 03 — Product compliance: SG, MY, TH, ID, PH, HK, and VN as origin
 
-Researched 2026-11-06. Scope: adult apparel, footwear, bags/leather goods, fashion
+Researched 06-Nov-2026. Scope: adult apparel, footwear, bags/leather goods, fashion
 jewellery and accessories, sold B2C cross-border from VN, DDP, with us (SG Pte Ltd or
 NL BV) as seller of record. Children's clothing is flagged where it differs.
 
@@ -16,27 +16,27 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
 | # | Rule | Applies to us? | Who owes it | Date / status | Per-SKU data |
 |---|------|----------------|-------------|---------------|--------------|
 | SG-1 | CPSR Controlled Goods (SAFETY Mark, pre-market registration) | **No.** Only 33 categories of household electrical, electronic and gas items [P] | n/a | in force | none |
-| SG-2 | CGSR 2011, general consumer goods safety (post-market) | **Yes.** Apparel, costume jewellery and watches are named in scope [P] | Every "supplier" incl. importer, retailer and anyone who disposes of goods for consideration, so **us** [P] | since 2011-04-01; booklet updated 2025-09-26 | Test reports on request: adult jewellery ASTM F2999 (Pb/Cd); children's outerwear cords EN 14682 / ASTM F1816; children's jewellery ASTM F2923; children's sunglasses ISO 12312 |
+| SG-2 | CGSR 2011, general consumer goods safety (post-market) | **Yes.** Apparel, costume jewellery and watches are named in scope [P] | Every "supplier" incl. importer, retailer and anyone who disposes of goods for consideration, so **us** [P] | since 01-Apr-2011; booklet updated 26-Sep-2025 | Test reports on request: adult jewellery ASTM F2999 (Pb/Cd); children's outerwear cords EN 14682 / ASTM F1816; children's jewellery ASTM F2923; children's sunglasses ISO 12312 |
 | SG-3 | CPFTA price transparency (drip pricing; total price incl. GST and mandatory fees) | Yes, any supplier dealing with SG consumers (UNVERIFIED for offshore reach) | us | in force | total landed price per SKU and destination |
 | SG-4 | CPTDSA false trade descriptions (origin, material) | Yes | us | in force | origin, material composition |
 | HK-1 | Consumer Goods Safety Ordinance Cap 456, general safety requirement; any warnings in English **and** Chinese | Yes, apparel, bags and jewellery are "consumer goods" (UNVERIFIED) | manufacturer, importer, supplier in HK; offshore reach weak | in force | safety warnings (bilingual) where needed |
 | HK-2 | Trade Descriptions Ordinance Cap 362 (+ gold/platinum marking orders) | Yes for claims; marking orders bite only if a piece is described as gold or platinum | us | in force (UTP rules since 2013) | metal and fineness claims |
 | HK-3 | Toys and Children's Products Safety Ordinance Cap 424 | Children only; clothing believed not in the Sch. 2 list (UNVERIFIED) | supplier | in force | — |
-| MY-1 | Consumer Protection (Electronic Trade Transactions) Regs 2012: online seller disclosures | Likely yes when targeting MY consumers (UNVERIFIED on offshore reach) | us | in force since 2013-07-01 (UNVERIFIED) | product main characteristics, full price incl. delivery and tax |
+| MY-1 | Consumer Protection (Electronic Trade Transactions) Regs 2012: online seller disclosures | Likely yes when targeting MY consumers (UNVERIFIED on offshore reach) | us | in force since 01-Jul-2013 (UNVERIFIED) | product main characteristics, full price incl. delivery and tax |
 | MY-2 | Trade Descriptions Act 2011 / CPA 1999 general safety; BM labelling | Domestic-supply oriented; low enforcement on parcels | importer/supplier | in force | origin, material (UNVERIFIED whether a textile labelling order exists) |
-| TH-1 | CPB label-controlled goods: Thai-language label with importer name/address, origin, etc. | Garments, footwear and bags are believed label-controlled (UNVERIFIED); duty sits on "importer"; a list review started 2026-02-24 [A] | importer (in DDP that may be us or the buyer: open) | label readability rule 2023-06-18 [A] | Thai label data: product type, maker/importer, origin, size, care, price |
+| TH-1 | CPB label-controlled goods: Thai-language label with importer name/address, origin, etc. | Garments, footwear and bags are believed label-controlled (UNVERIFIED); duty sits on "importer"; a list review started 24-Feb-2026 [A] | importer (in DDP that may be us or the buyer: open) | label readability rule 18-Jun-2023 [A] | Thai label data: product type, maker/importer, origin, size, care, price |
 | TH-2 | TISI mandatory standards | No adult fashion items believed listed (UNVERIFIED); toys TIS 685 (children) | importer | 2025 platform enforcement [N, UNVERIFIED] | — |
-| TH-3 | Direct Sales and Direct Marketing Act 2002 (am. 2017): online sellers register with OCPB | Yes in principle for direct marketing to Thai consumers [A]; foreign registration path unclear | us | **Draft amendment, comments until 2026-11-27**: 14-day cooling-off, local coordinator for offshore merchants on platforms [A] | return/cooling-off flags |
-| ID-1 | Permendag 31/2023: foreign merchants must prove business legality, SNI, halal, Bahasa label and ship-from origin; US$100 FOB per-unit floor for cross-border unless on a positive list | **Yes, and possibly blocking.** Apparel at < US$100 FOB is likely barred via cross-border e-commerce [N]. Whether our own checkout counts as a PPMSE is UNVERIFIED | platform (PPMSE) enforces; merchant (us) supplies proof | in force since 2023-09-26 (UNVERIFIED day) | FOB unit value, SNI cert no. (if SNI applies), halal cert no. (when due), Bahasa label |
-| ID-2 | Halal certification of goods (barang gunaan), clothing, headwear, accessories, leather goods | **Not yet.** PP 40/2026 pushed clothing, headwear and accessories to **2028-10-17** [P]; leather, footwear and bags not named in the BPJPH notice | business actor; foreign goods apply via an ID importer or representative [A] | PP 40/2026 enacted 2026-10-14 [A]; previous date 2026-10-17 | animal-derived inputs (leather type, wool, bone/horn, glue), halal or non-halal status |
+| TH-3 | Direct Sales and Direct Marketing Act 2002 (am. 2017): online sellers register with OCPB | Yes in principle for direct marketing to Thai consumers [A]; foreign registration path unclear | us | **Draft amendment, comments until 27-Nov-2026**: 14-day cooling-off, local coordinator for offshore merchants on platforms [A] | return/cooling-off flags |
+| ID-1 | Permendag 31/2023: foreign merchants must prove business legality, SNI, halal, Bahasa label and ship-from origin; US$100 FOB per-unit floor for cross-border unless on a positive list | **Yes, and possibly blocking.** Apparel at < US$100 FOB is likely barred via cross-border e-commerce [N]. Whether our own checkout counts as a PPMSE is UNVERIFIED | platform (PPMSE) enforces; merchant (us) supplies proof | in force since 26-Sep-2023 (UNVERIFIED day) | FOB unit value, SNI cert no. (if SNI applies), halal cert no. (when due), Bahasa label |
+| ID-2 | Halal certification of goods (barang gunaan), clothing, headwear, accessories, leather goods | **Not yet.** PP 40/2026 pushed clothing, headwear and accessories to **17-Oct-2028** [P]; leather, footwear and bags not named in the BPJPH notice | business actor; foreign goods apply via an ID importer or representative [A] | PP 40/2026 enacted 14-Oct-2026 [A]; previous date 17-Oct-2026 | animal-derived inputs (leather type, wool, bone/horn, glue), halal or non-halal status |
 | ID-3 | SNI mandatory: baby clothing (azo dyes, formaldehyde, metals) | Children only (UNVERIFIED citation Permenperin 7/2014, SNI 7617) | importer | in force | lab test, SPPT-SNI |
-| ID-4 | Import policy Permendag 16/2025 (as am. by 18/2026); consumer goods Permendag 23/2025 | Parcels: "barang kiriman" are Barang Bebas Impor; the API is not needed for non-business imports [P] | — | 16/2025 effective 2025-08-30 [A] | HS code |
+| ID-4 | Import policy Permendag 16/2025 (as am. by 18/2026); consumer goods Permendag 23/2025 | Parcels: "barang kiriman" are Barang Bebas Impor; the API is not needed for non-business imports [P] | — | 16/2025 effective 30-Aug-2025 [A] | HS code |
 | ID-5 | Used clothing import ban (Permendag 18/2021 as am. 40/2022, UNVERIFIED cite) | Only if we ship returned or used items into ID | us | in force | new/used flag |
 | PH-1 | DTI-BPS mandatory PS/ICC certification | **No.** Only helmets and child restraint systems touch our area [P] | n/a | in force | none |
-| PH-2 | Internet Transactions Act RA 11967 | **Yes.** Reaches foreign merchants with "minimum contacts" (s.3, s.5); e-retailers must publish name, address and contact and submit them to the E-Commerce Bureau (s.23(f)); the online merchant is primarily liable (s.25) [P] | us | signed 2023-12-05 (UNVERIFIED day); IRR 2024 (UNVERIFIED) | goods "as described"; seller identity |
+| PH-2 | Internet Transactions Act RA 11967 | **Yes.** Reaches foreign merchants with "minimum contacts" (s.3, s.5); e-retailers must publish name, address and contact and submit them to the E-Commerce Bureau (s.23(f)); the online merchant is primarily liable (s.25) [P] | us | signed 05-Dec-2023 (UNVERIFIED day); IRR 2024 (UNVERIFIED) | goods "as described"; seller identity |
 | PH-3 | Consumer Act RA 7394 labelling (name/address of manufacturer or importer, country of manufacture) | Mainly domestic retailers; parcels rarely policed (UNVERIFIED) | importer/retailer | in force | origin, importer details |
 | VN-1 | Export licensing (Decree 69/2018) | No licence for apparel, footwear or bags (UNVERIFIED) | merchant/exporter | in force | HS code |
-| VN-2 | Labelling Decree 43/2017 as am. 111/2021: exported goods follow the importing country's rules, but origin must not be falsified | Yes (UNVERIFIED wording) | VN manufacturer/exporter | 111/2021 in force 2022-02-15 (UNVERIFIED) | origin statement per SKU |
+| VN-2 | Labelling Decree 43/2017 as am. 111/2021: exported goods follow the importing country's rules, but origin must not be falsified | Yes (UNVERIFIED wording) | VN manufacturer/exporter | 111/2021 in force 15-Feb-2022 (UNVERIFIED) | origin statement per SKU |
 | VN-3 | Origin (Decree 31/2018, Circular 05/2018): "Made in Vietnam" only if VN-origin criteria are met | Yes, a transshipment risk for goods with Chinese inputs | VN merchant; we carry misdeclaration risk as seller | in force | BOM origin, tariff shift or local value content |
 | VN-4 | CITES export (Decree 06/2019, later replaced? UNVERIFIED) | Exotic leathers (python, crocodile, monitor lizard) need a VN CITES export permit, plus an import permit for App. I | VN exporter | in force | species, CITES appendix, permit no. |
 | VN-5 | Customs IP border measures on exports | Yes, counterfeits are seized on export | exporter | in force | brand authorisation |
@@ -89,7 +89,7 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
   sellers. In practice CPSO acts through stop-sale orders, publicising unsafe goods, and local
   importers and platforms. (c) "Supplier" includes manufacturer, importer, distributor,
   retailer and "any person who exchanges or disposes of the product for any consideration",
-  so **us as seller of record**. (d) In force since 2011-04-01; booklet updated 2025-09-26.
+  so **us as seller of record**. (d) In force since 01-Apr-2011; booklet updated 26-Sep-2025.
   (e) Low enforcement on individual parcels. The risk is a stop-sale or publicised unsafe
   listing, and selling after publication is an offence (fine and/or imprisonment).
 - (f) Per SKU: jewellery Pb/Cd test (ASTM F2999), and for children's lines the cord/drawstring
@@ -130,7 +130,7 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
 
 ## Malaysia (UNVERIFIED, prior knowledge; no primary text fetched)
 - **Consumer Protection (Electronic Trade Transactions) Regulations 2012** (P.U.(A) 458/2012,
-  in force 2013-07-01): a person operating a business through a website or online
+  in force 01-Jul-2013): a person operating a business through a website or online
   marketplace must disclose its name, registration number, address and contact details, the
   main characteristics of the goods, the full price including delivery and taxes, payment
   method, terms and estimated delivery, and must let the buyer correct errors before
@@ -148,10 +148,10 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
 ## Thailand
 - **Label-controlled goods (CPB, Consumer Protection Act B.E. 2522)**. Label-controlled goods
   are those "produced by factories in Thailand or imported into Thailand for sale" [A Tilleke].
-  The label must be in Thai, and a 2023 readability rule (effective 2023-06-18) sets a minimum
+  The label must be in Thai, and a 2023 readability rule (effective 18-Jun-2023) sets a minimum
   text height of 2 mm [A]. Penalties include a THB 50,000 fine and/or one month's
   imprisonment, and trading partners and platforms selling non-compliant goods can be
-  penalised [A]. The OCPB held a public hearing on 2026-02-24 on the Notification specifying
+  penalised [A]. The OCPB held a public hearing on 24-Feb-2026 on the Notification specifying
   label-controlled goods [A via search summary]. **UNVERIFIED but widely reported: garments,
   footwear and bags are label-controlled**, requiring a Thai label with product type, maker
   or importer name and address, country of origin, size, usage and care, and price. A draft
@@ -168,10 +168,10 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
   considered a direct marketing operator and must register with the Office of the Consumer
   Protection Board" [A Tilleke Fashion Law 2024]. Registration in practice needs a Thai
   entity, and offshore sellers are not registered or pursued (UNVERIFIED). **Draft amendment**
-  (OCPB consultation of 2026-11-02, comments until **2026-11-27**): it extends the definitions
+  (OCPB consultation of 02-Nov-2026, comments until **27-Nov-2026**): it extends the definitions
   to digital platforms, adds notification for small sellers (≤ THB 1.8m/yr), extends the
   cooling-off period from 7 to **14 days**, and requires platforms to have "a local
-  coordinator for offshore merchants" [A Tilleke insight dated 2026-11-06]. Watch this item.
+  coordinator for offshore merchants" [A Tilleke insight dated 06-Nov-2026]. Watch this item.
   A 14-day withdrawal right for TH buyers affects our returns state machine.
 - Foreign Business Act: offshore e-commerce into TH is not itself a "business in Thailand",
   but a local presence would be (UNVERIFIED).
@@ -179,7 +179,7 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
   have customs impound infringing imports, exports and transits [A Tilleke].
 
 ## Indonesia
-- **ID-1 Permendag 31/2023 (e-commerce)**, issued 2023-09-26, replacing Permendag 50/2020:
+- **ID-1 Permendag 31/2023 (e-commerce)**, issued 26-Sep-2023, replacing Permendag 50/2020:
   - Art. 5(4): foreign merchants (pedagang luar negeri) selling via domestic PPMSE must provide
     proof of business legality from the home country, compliance with mandatory SNI and halal,
     **Bahasa Indonesia labelling** on products of foreign origin, and the ship-from origin
@@ -204,8 +204,8 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
     The notice makes no size or origin split for barang gunaan, and **does not mention leather,
     footwear or bags**. Source:
     https://bpjph.halal.go.id/read/penyesuaian-penahapan-kewajiban-sertifikasi-halal-diatur-dalam-pp-40-tahun-2026-begini-rinciannya
-  - PP 40/2026 was enacted 2026-10-14, and the text was public 2026-10-21 [A REACH24H; A
-    Veritask]. Earlier sources treated 2026-10-17 as the deadline and said leather goods
+  - PP 40/2026 was enacted 14-Oct-2026, and the text was public 21-Oct-2026 [A REACH24H; A
+    Veritask]. Earlier sources treated 17-Oct-2026 as the deadline and said leather goods
     "including bags, belts, wallets, shoes" are in scope [N RRI quoting an official]. Leather
     goods may be grouped under accessories or a separate barang gunaan heading:
     **UNVERIFIED which date applies to them.**
@@ -225,7 +225,7 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
     imposed directly by Permendag 31/2023 Art. 5(4) [N]. The general list of goods requiring a
     BI label (formerly Permendag 73/2015, now in the risk-based licensing standards) is
     UNVERIFIED for apparel.
-- **ID-4 Import policy**: Permendag 16/2025 (effective 2025-08-30 [A DFDL]; amended by
+- **ID-4 Import policy**: Permendag 16/2025 (effective 30-Aug-2025 [A DFDL]; amended by
     Permendag 18/2026 [N]): Pasal 39(4)(c) lists "Barang kiriman" as Barang Bebas Impor. A
     non-API importer may import these, and they are not for business purposes [P pasal.id].
     Restricted consumer goods (Permendag 23/2025: bags, footwear [N]) and textiles
@@ -266,7 +266,7 @@ Source labels: [P] primary/official, [A] adviser/law firm, [N] news/vendor.
   export licence is needed. Gold and precious-metal jewellery has separate SBV/precious-metal
   rules (out of scope for fashion jewellery). Merchants export via the courier's e-commerce or
   express declaration.
-- **VN-2 Labelling (Decree 43/2017, am. Decree 111/2021, in force 2022-02-15)**: for exported
+- **VN-2 Labelling (Decree 43/2017, am. Decree 111/2021, in force 15-Feb-2022)**: for exported
   goods, label content follows the importing country's rules (Decree 43 Art. 10). Decree 111
   adds that the origin shown must be determined correctly (Art. 15 as amended: "Made in
   Vietnam" / "Sản xuất tại Việt Nam" only when VN origin is met; otherwise "assembled in",

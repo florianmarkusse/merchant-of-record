@@ -1,6 +1,6 @@
 # 07: Destination rules for markets outside APAC (US, CA, EU, UK, CH, NO, GCC, LatAm, Africa)
 
-Researched 2026-11-06. Scenario: Vietnam-origin apparel and fashion accessories,
+Researched 06-Nov-2026. Scenario: Vietnam-origin apparel and fashion accessories,
 sold B2C by us as the foreign merchant of record, shipped DDP (delivered duty
 paid) by express courier. The entity is a Singapore company or a Dutch BV.
 
@@ -11,10 +11,10 @@ bags and leather goods. LVG = low-value goods.
 
 The big picture for 2025–2026: low-value duty exemptions are going away
 everywhere. The US ended de minimis (2025, made indefinite 2026). The EU put
-a flat €3 duty on each item from 2026-07-01 and a €2 handling fee from
-2026-11-01, with full duty from 2028-07-01. The UK ends its £135 duty relief
+a flat €3 duty on each item from 01-Jul-2026 and a €2 handling fee from
+01-Nov-2026, with full duty from 01-Jul-2028. The UK ends its £135 duty relief
 by October 2028 at the latest. Brazil went the other way (0% federal tax up
-to US$50 since 2026-05-12). Chile now taxes items under US$500 at checkout.
+to US$50 since 12-May-2026). Chile now taxes items under US$500 at checkout.
 In every market the liability moves to the seller or platform, which means
 to us as MoR.
 
@@ -25,45 +25,45 @@ to us as MoR.
 ### 1.1 De minimis and valuation
 - **Section 321 ($800 de minimis) is suspended for all countries and all
   transport modes.** EO 14324 (July 2025) suspended it worldwide from
-  2025-08-29. After the Supreme Court's IEEPA ruling of 2026-02-20, EO 14388
-  continued the suspension, and CBP confirmed it on 2026-02-23 [S: GHY].
-- CBP then published two interim final rules on 2026-06-24 that make the
+  29-Aug-2025. After the Supreme Court's IEEPA ruling of 20-Feb-2026, EO 14388
+  continued the suspension, and CBP confirmed it on 23-Feb-2026 [S: GHY].
+- CBP then published two interim final rules on 24-Jun-2026 that make the
   suspension **indefinite** under 19 U.S.C. 1321(a)(2)(C), so it no longer
   depends on IEEPA [P: FR 2026-12669, CBP Dec. 26-13, 91 FR 37801; companion
   rule FR 2026-12670 for non-mail]:
-  - non-mail: effective 2026-06-24;
-  - mail: de minimis suspension effective 2026-06-24, new postal informal
-    entry process effective 2026-07-24.
+  - non-mail: effective 24-Jun-2026;
+  - mail: de minimis suspension effective 24-Jun-2026, new postal informal
+    entry process effective 24-Jul-2026.
 - Statute: the 2025 reconciliation act ("One Big Beautiful Bill") repeals
-  commercial de minimis by law from 2027-07-01 [S, recalled, UNVERIFIED
+  commercial de minimis by law from 01-Jul-2027 [S, recalled, UNVERIFIED
   wording]. In practice there is no way back to $800 for commercial
   parcels.
 - Litigation over the suspension continues at the CIT and the Federal
   Circuit. Sources conflict on where it stands: one says the CIT upheld the
-  suspension (2026-08-13), another says the case is stayed. UNVERIFIED, and
+  suspension (13-Aug-2026), another says the case is stayed. UNVERIFIED, and
   no change is expected in practice.
 - Valuation: transaction value (FOB basis, so international freight is
   excluded). Only gifts and accompanied personal baggage are still exempt.
 
 ### 1.2 Tariffs on Vietnam-origin goods (as of 2026-11)
 - **IEEPA "reciprocal" 20% (and the 40% transshipment penalty): dead.**
-  SCOTUS held on 2026-02-20 that IEEPA does not authorize tariffs.
-  Collection stopped for entries from 2026-02-24. Refunds of past IEEPA
+  SCOTUS held on 20-Feb-2026 that IEEPA does not authorize tariffs.
+  Collection stopped for entries from 24-Feb-2026. Refunds of past IEEPA
   duties go through the CIT, with no automatic process [S: GHY, AirLift].
-- **Section 122 surcharge of 10%** (HTS 9903.03.01) ran 2026-02-24 to
-  2026-07-24 and has **expired** [S: GHY].
+- **Section 122 surcharge of 10%** (HTS 9903.03.01) ran 24-Feb-2026 to
+  24-Jul-2026 and has **expired** [S: GHY].
 - **Section 301 of 12.5% on "products of Vietnam"** applies from
-  2026-07-24, HTS 9903.05.84, USTR notice 91 FR 47318 (published
-  2026-07-28). The finding: Vietnam does not impose and enforce a ban on
+  24-Jul-2026, HTS 9903.05.84, USTR notice 91 FR 47318 (published
+  28-Jul-2026). The finding: Vietnam does not impose and enforce a ban on
   imports made with forced labour. The same action covers about 60
   economies. There is **no low-value exemption**. It stacks on the MFN rate
   [S: AirLift tracker, Vietnam Briefing; FR notice not read directly].
   Status: **in force, high confidence, primary text UNVERIFIED by us.**
 - Pending risk:
-  - Section 301 IP investigation against Vietnam (opened 2026-05-29/06-03,
-    **final determination due 2026-11-29**);
-  - excess-capacity investigation (opened 2026-03-11).
-  - Either could add more duty. The US–Vietnam deal announced 2025-10-26
+  - Section 301 IP investigation against Vietnam (opened 29-May-2026/06-03,
+    **final determination due 29-Nov-2026**);
+  - excess-capacity investigation (opened 11-Mar-2026).
+  - Either could add more duty. The US–Vietnam deal announced 26-Oct-2025
     has no signed text with a rate [S: STR, AirLift].
 - MFN apparel rates (HTSUS column 1) are high and vary by fibre:
   - cotton knits often 16–20%;
@@ -97,11 +97,11 @@ to us as MoR.
   - the filer needs a **basic importation bond** (single or continuous);
   - submission is a spreadsheet with 10-digit HTS, origin, value and
     tracking, with duty paid via Pay.gov by the 7th of the following month;
-  - an Entry Type 13 electronic mail test started 2026-09-22.
+  - an Entry Type 13 electronic mail test started 22-Sep-2026.
   - Goods subject to **Chapter 99 duties (this includes VN Section 301)** or
     to an FTA claim must use **formal entry**. The compliance date was
-    2026-10-22 and was **postponed to 2027-01-20** [S: Thomson Reuters,
-    2026-10-22 final rule]. So from 2027-01-20, VN-origin goods sent by post
+    22-Oct-2026 and was **postponed to 20-Jan-2027** [S: Thomson Reuters,
+    22-Oct-2026 final rule]. So from 20-Jan-2027, VN-origin goods sent by post
     need a formal entry each, which makes **postal impractical for VN
     goods**. Use express.
 - Foreign seller as IOR: a **non-resident corporation may be importer of
@@ -142,7 +142,7 @@ to us as MoR.
   account. The carrier adds brokerage and disbursement fees (often $10–20+
   per entry, UNVERIFIED current).
 - The landed-cost quote must include MFN + 12.5% Section 301 + MPF + carrier
-  fees, and must be re-checked after 2026-11-29.
+  fees, and must be re-checked after 29-Nov-2026.
 
 ### 1.6 Returns
 - Unused-merchandise / rejected-merchandise drawback (19 USC 1313(c)):
@@ -156,7 +156,7 @@ to us as MoR.
 
 **Rating: HARD.** About 30–45% duty on synthetic apparel, policy
 volatility (a third tariff regime in 2026, another Section 301 determination
-on 2026-11-29), and the postal channel closing to VN goods from 2027-01.
+on 29-Nov-2026), and the postal channel closing to VN goods from 2027-01.
 It is still workable via express DDP. SG vs NL: **no difference.**
 
 ---
@@ -176,13 +176,13 @@ It is still workable via express DDP. SG vs NL: **no difference.**
 
 ### 2.2 Foreign seller registration
 - GST 5%, plus HST/PST by province (HST up to 15%).
-- The simplified GST/HST registration (from 2021-07-01) covers digital
+- The simplified GST/HST registration (from 01-Jul-2021) covers digital
   services and goods supplied **from Canadian warehouses** or via
   platforms. Goods **shipped directly from abroad** have their GST/HST
   collected at the border.
 - A non-resident can register normally (voluntarily) to recover input
   taxes as a Non-Resident Importer (NRI).
-- CARM (since 2024-10-21): NRIs need a Business Number, a CARM Client
+- CARM (since 21-Oct-2024): NRIs need a Business Number, a CARM Client
   Portal account and **their own financial security (bond)** for Release
   Prior to Payment. Otherwise the courier or broker acts as importer on its
   security [S].
@@ -231,19 +231,19 @@ needed. SG vs NL: **no difference.**
 ## 3. European Union
 
 ### 3.1 De minimis and valuation
-- **VAT:** no de minimis since 2021-07-01. IOSS covers consignments of
+- **VAT:** no de minimis since 01-Jul-2021. IOSS covers consignments of
   **intrinsic value ≤ €150**: VAT at the destination Member State rate is
   charged at checkout, and the parcel is released on the IOSS number.
-- **Customs duty:** the €150 duty exemption **ended on 2026-06-30**.
+- **Customs duty:** the €150 duty exemption **ended on 30-Jun-2026**.
   - Council Regulation (EU) 2026/382, with Delegated Regulation 2026/1022
     and Implementing Regulation 2026/1200 [P: TAXUD].
-  - From **2026-07-01 until 2028-07-01**, a **temporary flat €3 customs duty
+  - From **01-Jul-2026 until 01-Jul-2028**, a **temporary flat €3 customs duty
     per item** applies to distance-sale consignments ≤ €150. It applies
     under any VAT scheme (IOSS, special arrangements or standard), not only
     IOSS.
   - "Item" means **tariff classification, not quantity**: five T-shirts =
-    €3, one T-shirt + one watch = €6 [P: TAXUD guidance, 2026-06-08;
-    Commission news 2026-06-29].
+    €3, one T-shirt + one watch = €6 [P: TAXUD guidance, 08-Jun-2026;
+    Commission news 29-Jun-2026].
   - The declarant pays: the seller, the IOSS holder or the indirect
     representative.
   - **Preferential origin exception:** goods that benefit from a
@@ -251,7 +251,7 @@ needed. SG vs NL: **no difference.**
     collected through IOSS and the goods are declared on a full H1
     declaration** [P: TAXUD]. So **EVFTA cannot reduce the €3 on IOSS
     parcels.**
-- **Union handling fee: €2** from **2026-11-01**, set by Delegated
+- **Union handling fee: €2** from **01-Nov-2026**, set by Delegated
   Regulation (EU) 2026/2152 and Implementing Regulation 2026/2403 for
   guarantees and data [P: TAXUD customs reform page].
   - It applies per item like the €3, regardless of value, so consignments
@@ -273,11 +273,11 @@ needed. SG vs NL: **no difference.**
     https://taxation-customs.ec.europa.eu/customs/eu-customs-reform_en ;
     https://studiosavia.com/en/eu-3-euro-customs-duty-low-value-parcels/
   - Reportedly **not refunded on returns** [S].
-  - Italy's own €2 national fee was postponed to 2027-01-01, with repeal
+  - Italy's own €2 national fee was postponed to 01-Jan-2027, with repeal
     pending [S, UNVERIFIED].
-- **From 2028-07-01:** normal duty rates on all consignments, and the EU
+- **From 01-Jul-2028:** normal duty rates on all consignments, and the EU
   Customs Data Hub becomes mandatory for e-commerce [P: TAXUD].
-- **EU customs reform** (adopted 2026-09-16, in force 2026-09-21) [P:
+- **EU customs reform** (adopted 16-Sep-2026, in force 21-Sep-2026) [P:
   TAXUD]:
   - platforms and sellers become the "importer for distance sales" and are
     liable for duty, and must ensure product compliance through an EU
@@ -318,7 +318,7 @@ needed. SG vs NL: **no difference.**
     textile uppers);
   - handbags (4202): about 3% (leather) to 9.7% (plastic or textile);
   - imitation jewellery (7117): 4%.
-- **EVFTA (since 2020-08-01):** EU duties on VN apparel are phased out over
+- **EVFTA (since 01-Aug-2020):** EU duties on VN apparel are phased out over
   up to 7 years, so most lines are at 0% or close to it in 2026, and the
   phase-out is complete by about 2027 [S, UNVERIFIED per line].
   - Rule of origin for garments: **double transformation (fabric-forward)**.
@@ -328,16 +328,16 @@ needed. SG vs NL: **no difference.**
     may make one for consignments ≤ €6,000; above that, a registered
     exporter (REX) or an EUR.1 from MOIT.
   - **Practicality for parcels:**
-    - until 2028-07-01 it is irrelevant for IOSS parcels (flat €3 either
+    - until 01-Jul-2028 it is irrelevant for IOSS parcels (flat €3 either
       way);
     - above €150 it is useful: 12% becomes 0% if the fabric is VN or EU
       origin;
-    - after 2028-07-01 it becomes valuable for all parcels if the origin
+    - after 01-Jul-2028 it becomes valuable for all parcels if the origin
       statement is passed in the courier data. Few courier B2C flows
       support preferential claims today (UNVERIFIED by carrier).
 
 ### 3.4 Product compliance
-- **GPSR (Reg. 2023/988), applies since 2024-12-13:** products sold online
+- **GPSR (Reg. 2023/988), applies since 13-Dec-2024:** products sold online
   to EU consumers need an **EU-established responsible economic operator**.
   - That operator's name, postal and electronic address must be on the
     product, packaging or accompanying document, and in the online listing.
@@ -352,27 +352,27 @@ needed. SG vs NL: **no difference.**
 - REACH restrictions (azo dyes, nickel in accessories, PFAS phase-outs).
 - **Textile EPR:**
   - EU-wide: Waste Framework Directive revision 2025/1892, in force
-    2025-10-16. All Member States must run textile and footwear EPR schemes
-    **by 2028-04-17**, covering clothing, footwear and accessories [S].
+    16-Oct-2025. All Member States must run textile and footwear EPR schemes
+    **by 17-Apr-2028**, covering clothing, footwear and accessories [S].
     Distance sellers into a Member State are producers there and generally
     need an **authorised representative** in each Member State (UNVERIFIED
     exact transposition).
   - **France:** textile EPR since 2007 (Refashion), with eco-modulated
     fees. Foreign distance sellers must register and get a unique
     identifier (IDU). Marketplaces must verify compliance.
-  - **NL:** UPV Textiel since 2023-07-01 (Stichting UPV Textiel). It covers
+  - **NL:** UPV Textiel since 01-Jul-2023 (Stichting UPV Textiel). It covers
     consumer clothing and household textiles, and foreign sellers need an
     authorised representative.
   - Also check Hungary (2023), Spain, Italy and others transposing.
 - Packaging EPR (Germany VerpackG / LUCID registration for anyone shipping
   packaged goods to German consumers, French Triman, etc.) applies too, and
-  the PPWR applies from 2026-08-12.
+  the PPWR applies from 12-Aug-2026.
 
 ### 3.5 DDP in practice
 - **≤ €150:**
   - the courier lodges an H7 (super-reduced dataset) with the **IOSS
     number**;
-  - from 2026-07-01 it adds the €3/item duty and from 2026-11-01 the €2
+  - from 01-Jul-2026 it adds the €3/item duty and from 01-Nov-2026 the €2
     handling fee, both billed to the shipper's DDP account;
   - consumer VAT is already collected by us at checkout and declared in the
     monthly IOSS return.
@@ -406,16 +406,16 @@ responsible person and EPR representatives.
 ## 4. United Kingdom
 
 ### 4.1 De minimis and valuation
-- **VAT:** no LVCR since 2021-01-01. For consignments of **≤ £135** (intrinsic
+- **VAT:** no LVCR since 01-Jan-2021. For consignments of **≤ £135** (intrinsic
   value), the **seller charges UK VAT (20%) at the point of sale** and the
   goods enter without import VAT. Above £135, import VAT is paid at the
   border (postponed VAT accounting is available to UK VAT-registered
   importers).
 - **Customs duty:** currently **relieved for consignments ≤ £135**, except
   excise goods. **The relief is being removed**:
-  - announced at Budget 2025-11-26;
-  - consultation 2025-11-26 to 2026-03-06, response published
-    **2026-07-13**;
+  - announced at Budget 26-Nov-2025;
+  - consultation 26-Nov-2025 to 06-Mar-2026, response published
+    **13-Jul-2026**;
   - at Tax Update Day 2026 the deadline was accelerated from March 2029 to
     **October 2028 at the latest** (the appointed day is set by Treasury
     regulations), with legislation in the Finance Bill 2026-27
@@ -444,13 +444,13 @@ responsible person and EPR representatives.
 ### 4.3 Duty and UKVFTA
 - UK Global Tariff: apparel **12%**, footwear up to 16–17%, bags 2–9.7%
   (mirrors the EU).
-- **UKVFTA (since 2021-01-01, mirrors EVFTA):** phasing to 0 on the same
+- **UKVFTA (since 01-Jan-2021, mirrors EVFTA):** phasing to 0 on the same
   schedule. Same double-transformation fabric rule; the origin statement is
   made by the exporter (REX-based or ≤ £5,500 equivalent, UNVERIFIED
   threshold).
 - Until the relief ends (≤ Oct 2028) duty is 0 on ≤ £135 anyway. Above
   £135 the FTA saves 12% when the fabric qualifies.
-- CPTPP: the UK joined CPTPP on 2024-12-15 and Vietnam is a party. This is
+- CPTPP: the UK joined CPTPP on 15-Dec-2024 and Vietnam is a party. This is
   an alternative preferential route with fabric-forward rules for garments
   (UNVERIFIED which route is better).
 
@@ -488,16 +488,16 @@ parcel and likely a fiscal representative. SG vs NL: **no difference.**
 
 ### 5.1 De minimis and valuation
 - **Customs duty: 0% on industrial products, including all apparel,
-  footwear and bags, since 2024-01-01** (abolition of industrial tariffs)
+  footwear and bags, since 01-Jan-2024** (abolition of industrial tariffs)
   [recalled, SECO; high confidence]. A statistical fee and the
   import-VAT basis still apply.
 - Import VAT 8.1% (standard rate since 2024). It is **waived when the VAT
   amount is ≤ CHF 5**, i.e. goods worth up to about CHF 62 [S].
-- Mail-order rule (since 2019-01-01): a foreign seller whose **small
+- Mail-order rule (since 01-Jan-2019): a foreign seller whose **small
   consignments** into CH reach **CHF 100,000 per year** must register for
   Swiss VAT. It then charges Swiss VAT on **all** its sales to CH and is
   deemed the supplier/importer [S, consistent across advisers]. Platform
-  rules followed from 2025-01-01.
+  rules followed from 01-Jan-2025.
 - Valuation for VAT: price plus transport to the destination.
 
 ### 5.2 Registration
@@ -522,10 +522,10 @@ in CH).
 
 ## 6. Norway (VOEC)
 
-- **VOEC (since 2020-04-01):** foreign sellers and marketplaces of LVG
+- **VOEC (since 01-Apr-2020):** foreign sellers and marketplaces of LVG
   register in the VOEC register once sales to Norway exceed **NOK 50,000
   over 12 months**; voluntary registration from the first sale is allowed
-  [P: Skatteetaten VOEC register page, checked 2026-11-10].
+  [P: Skatteetaten VOEC register page, checked 10-Nov-2026].
   - Items under **NOK 3,000 per item** carry **25% Norwegian VAT at the
     point of sale**.
   - VAT is filed and paid **quarterly**.
@@ -536,12 +536,12 @@ in CH).
   customs duty**. Above that, apparel is dutiable (Norway keeps duties on
   some textiles, roughly up to 10.7%, UNVERIFIED) and import VAT is paid at
   the border.
-- Changes from **2026-07-01** affecting postal collection were reported.
-  Checked 2026-11-10: the 2026-07-01 change found on toll.no is the EU's
+- Changes from **01-Jul-2026** affecting postal collection were reported.
+  Checked 10-Nov-2026: the 01-Jul-2026 change found on toll.no is the EU's
   €3 duty on parcels entering the EU, which affects Norwegian exports, not
   imports into Norway. No change to Norway's own NOK 3,000 VOEC limit or
   postal collection was found [P: toll.no; regjeringen.no Finance Ministry
-  changes from 2026-07-01]. A consumer site reports Posten's clearance fee
+  changes from 01-Jul-2026]. A consumer site reports Posten's clearance fee
   is waived for VOEC parcels under NOK 3,000 [S: bytt.no].
 - Returns: VAT credit in the VOEC return for refunded sales.
 - Compliance: EEA, so GPSR applies via the EEA Agreement (UNVERIFIED
@@ -562,7 +562,7 @@ mutual-assistance agreement, which is irrelevant here.
   - VAT 5%: sources do not confirm a VAT de minimis, and VAT is generally
     collected on imports (UNVERIFIED).
   - Dubai Customs exempts e-commerce shipments ≤ AED 1,000 from its fees
-    from 2026-08-03, with a 60-day returns exemption [S: Al Khaleej].
+    from 03-Aug-2026, with a 60-day returns exemption [S: Al Khaleej].
   - There is no simplified VAT regime for non-resident goods sellers. The
     courier collects at import, and a non-resident must register for VAT
     only if it makes taxable supplies in the UAE (e.g. as importer of record
@@ -599,14 +599,14 @@ SG vs NL: **no difference.**
   collected at checkout, declared in advance (DIR), with priority release.
   - Up to US$50 (customs value incl. freight and insurance), buyer is an
     individual (CPF):
-    - **0% federal import tax since 2026-05-12** (Portaria MF 1.342/2026,
+    - **0% federal import tax since 12-May-2026** (Portaria MF 1.342/2026,
       under MP 1.357/2026);
-    - the MP was **converted into law: approved by Congress on 2026-09-03,
-      sanctioned on 2026-09-10** [S, several Brazilian outlets];
-    - **before that** the rate was 20% from 2024-08-01 to 2026-05-11.
+    - the MP was **converted into law: approved by Congress on 03-Sep-2026,
+      sanctioned on 10-Sep-2026** [S, several Brazilian outlets];
+    - **before that** the rate was 20% from 01-Aug-2024 to 11-May-2026.
   - US$50.01–3,000: **60% with a US$30 deduction** (raised from US$20 by
     Portaria MF 1.342/2026) [S: DHL Brazil, Senado, Econet; checked
-    2026-11-10]. DHL says the act for a 30% rate has not been published;
+    10-Nov-2026]. DHL says the act for a 30% rate has not been published;
     one column claims 30% for RC companies. Treat 60% − US$30 as current.
   - **ICMS (state): 17–20%** depending on the state, charged "por dentro"
     (grossed up). Ten states raised it to 20% in April 2025.
@@ -630,7 +630,7 @@ SG vs NL: **no difference.**
 ### 8.2 Mexico
 - Courier simplified regime ("tasa global", Rule 3.7.35 RGCE):
   - non-USMCA goods up to **US$2,500** via registered courier went from
-    19% (Jan 2025) to **33.5% flat** from **2025-08-15**
+    19% (Jan 2025) to **33.5% flat** from **15-Aug-2025**
     [S: Baker McKenzie, VATupdate];
   - USMCA goods > US$117 pay 19%.
 - A December 2025 decree raised MFN duties on 1,463 tariff lines (textiles
@@ -650,13 +650,13 @@ SG vs NL: **no difference.**
   that needs a Mexican importer RFC for NOM compliance.
 
 ### 8.3 Chile
-- Since **2025-10-25** (Ley 21.713, Ley de Cumplimiento Tributario):
+- Since **25-Oct-2025** (Ley 21.713, Ley de Cumplimiento Tributario):
   - foreign sellers and platforms charge **19% IVA at checkout** on sales
     to individuals of goods ≤ **US$500** (including shipping);
   - registration is in the **SII simplified regime**, open since
-    2025-08-01: no Chilean domicile required, monthly or quarterly filing;
+    01-Aug-2025: no Chilean domicile required, monthly or quarterly filing;
   - **customs duty is exempt** for these consignments ≤ US$500 [S: SII
-    news 2025-09-22, FedEx, Carey].
+    news 22-Sep-2025, FedEx, Carey].
 - Above US$500: IVA + 6% general duty. Chile has an FTA with Vietnam
   (VCFTA) and CPTPP, which help formal imports.
 - **Rating: EASY-MEDIUM.** A clear registration model, no rep, no duty up to
@@ -667,10 +667,10 @@ SG vs NL: **no difference.**
   single 10% rate, IVA 19%.
   - Decreto Legislativo 1474/2025 cut the IVA-free cap to **US$50** for
     2026, but the Constitutional Court suspended it provisionally on
-    2026-01-29 (Auto 082/2026). Since then DIAN applies the **US$200 IVA
+    29-Jan-2026 (Auto 082/2026). Since then DIAN applies the **US$200 IVA
     exclusion again** (Oficio DIAN 1470/2026). The decree never touched
     the duty: the 10% single rate up to US$200 FOB stands (Oficio DIAN
-    407/2026) [P: DIAN normograma, checked 2026-11-10]. A final Court
+    407/2026) [P: DIAN normograma, checked 10-Nov-2026]. A final Court
     ruling could change this again; whether the US$200 is FOB or customs
     value is still being asked of DIAN.
 - There is no specific foreign seller VAT registration for goods. The
@@ -682,7 +682,7 @@ SG vs NL: **no difference.**
 ## 9. Africa (brief)
 
 - **South Africa:**
-  - **the low-value concession changed on 2024-09-01**: shipments ≤ R500
+  - **the low-value concession changed on 01-Sep-2024**: shipments ≤ R500
     were previously 20% flat with no VAT, and now carry **15% VAT plus the
     20% flat rate**;
   - above R500 the normal tariff applies, with **clothing typically at 40–45%
@@ -706,19 +706,19 @@ SG vs NL: **no difference.**
 
 | Market | Duty de minimis (VN origin) | Consumer tax at checkout? | Registration for us | Apparel duty (VN) | FTA usable for B2C parcels? | Key 2025–26 change | Ease | SG vs NL |
 |---|---|---|---|---|---|---|---|---|
-| US | None (Section 321 suspended 2025-08-29, indefinite since 2026-06-24) | No federal VAT. State sales tax nexus separate | None for customs via carrier DDP. Own IOR needs Form 5106 + agent + bond | MFN 16–32% + **12.5% Section 301** (from 2026-07-24) | No FTA | IEEPA struck 2026-02-20; Section 122 Feb–Jul; Section 301 Jul; postal formal entry for Ch. 99 goods from 2027-01-20; VN IP 301 due 2026-11-29 | **Hard** | Same |
+| US | None (Section 321 suspended 29-Aug-2025, indefinite since 24-Jun-2026) | No federal VAT. State sales tax nexus separate | None for customs via carrier DDP. Own IOR needs Form 5106 + agent + bond | MFN 16–32% + **12.5% Section 301** (from 24-Jul-2026) | No FTA | IEEPA struck 20-Feb-2026; Section 122 Feb–Jul; Section 301 Jul; postal formal entry for Ch. 99 goods from 20-Jan-2027; VN IP 301 due 29-Nov-2026 | **Hard** | Same |
 | Canada | CAD 20 | No (GST at border) | Optional NRI + CARM bond | 17–18% MFN; CPTPP 0% (yarn-forward) | Rarely (yarn-forward, courier support) | None material | **Medium** | Same |
-| EU | None from 2026-07-01: €3/item (tariff line) to 2028-07-01, then full duty | Yes, IOSS ≤ €150 | IOSS (SG: **intermediary required**; NL: direct) + GPSR resp. person + textile EPR (FR, NL, all MS by 2028-04) | 12% MFN; EVFTA → ~0% | Not for IOSS parcels until 2028 (flat €3); yes above €150 / after 2028 with VN/EU fabric | €3 duty 2026-07-01; €2 handling fee 2026-11-01; customs reform in force 2026-09-21 | **Medium** | **NL clearly better** |
-| UK | £135 duty relief (ends ≤ Oct 2028) | Yes, seller charges VAT ≤ £135 | UK VAT from first sale; fiscal rep likely after 2028 | 12% MFN; UKVFTA/CPTPP → 0% | Only above £135 today | LVI reform response 2026-07-13, deadline Oct 2028 | **Easy → Medium** | Same |
+| EU | None from 01-Jul-2026: €3/item (tariff line) to 01-Jul-2028, then full duty | Yes, IOSS ≤ €150 | IOSS (SG: **intermediary required**; NL: direct) + GPSR resp. person + textile EPR (FR, NL, all MS by 2028-04) | 12% MFN; EVFTA → ~0% | Not for IOSS parcels until 2028 (flat €3); yes above €150 / after 2028 with VN/EU fabric | €3 duty 01-Jul-2026; €2 handling fee 01-Nov-2026; customs reform in force 21-Sep-2026 | **Medium** | **NL clearly better** |
+| UK | £135 duty relief (ends ≤ Oct 2028) | Yes, seller charges VAT ≤ £135 | UK VAT from first sale; fiscal rep likely after 2028 | 12% MFN; UKVFTA/CPTPP → 0% | Only above £135 today | LVI reform response 13-Jul-2026, deadline Oct 2028 | **Easy → Medium** | Same |
 | Switzerland | Duty 0 (industrial tariffs abolished 2024); VAT waived ≤ CHF 5 VAT | Only after CHF 100k (then mandatory) | Swiss VAT + tax rep at ≥ CHF 100k small consignments | **0%** | N/A | None | **Easy** | Same |
 | Norway | Generally duty-free < NOK 3,000/item under VOEC (UNVERIFIED) | Yes, VOEC 25% | VOEC register, no rep | Low/0 under VOEC; dutiable above | N/A | Possible 2026-07 postal changes (UNVERIFIED) | **Easy** | Same |
-| UAE | AED 1,000 duty | No (border) | Unclear for non-resident | 5% | No | Dubai fee exemption 2026-08-03 | **Medium** | Same |
+| UAE | AED 1,000 duty | No (border) | Unclear for non-resident | 5% | No | Dubai fee exemption 03-Aug-2026 | **Medium** | Same |
 | Saudi | SAR 1,000 duty; VAT on all | No (border) | Possibly VAT + rep if IOR | 5% (some higher) | No | SAR 15 e-com fee (2024) | **Medium** | Same |
-| Brazil | US$50 (RC): 0% federal II since 2026-05-12, law 2026-09-10; ICMS 17–20% | Yes (RC) | RC certification (via partner) | Above US$50: 60% (or 30%, UNVERIFIED) + ICMS | No | Taxa das blusinhas abolished | **Medium-Hard** | Same |
-| Mexico | None: courier flat 33.5% ≤ US$2,500 (from 2025-08-15) | No | NOM labelling needs importer RFC | 33.5% flat; MFN up to 35–50% non-FTA | CPTPP only via formal entry (UNVERIFIED) | 19% → 33.5% in 2025; MFN hikes 2026 | **Hard** | Same |
-| Chile | Duty-free ≤ US$500 | Yes, 19% IVA (since 2025-10-25) | SII simplified, no domicile | 0 ≤ US$500; 6% above | VCFTA/CPTPP for formal | New regime Oct 2025 | **Easy-Medium** | Same |
-| Colombia | Courier ≤ US$200 at 10%; IVA-free up to US$200 again since 2026-01-29 | No | None | 10% courier single rate | No | Decreto 1474/2025 (US$50 IVA cap) suspended by the Constitutional Court; final ruling pending | **Medium** | Same |
-| South Africa | None (20% flat + 15% VAT ≤ R500 since 2024-09-01) | No | None | ~40–45% above R500 | No | 2024 change | **Hard** | Same |
+| Brazil | US$50 (RC): 0% federal II since 12-May-2026, law 10-Sep-2026; ICMS 17–20% | Yes (RC) | RC certification (via partner) | Above US$50: 60% (or 30%, UNVERIFIED) + ICMS | No | Taxa das blusinhas abolished | **Medium-Hard** | Same |
+| Mexico | None: courier flat 33.5% ≤ US$2,500 (from 15-Aug-2025) | No | NOM labelling needs importer RFC | 33.5% flat; MFN up to 35–50% non-FTA | CPTPP only via formal entry (UNVERIFIED) | 19% → 33.5% in 2025; MFN hikes 2026 | **Hard** | Same |
+| Chile | Duty-free ≤ US$500 | Yes, 19% IVA (since 25-Oct-2025) | SII simplified, no domicile | 0 ≤ US$500; 6% above | VCFTA/CPTPP for formal | New regime Oct 2025 | **Easy-Medium** | Same |
+| Colombia | Courier ≤ US$200 at 10%; IVA-free up to US$200 again since 29-Jan-2026 | No | None | 10% courier single rate | No | Decreto 1474/2025 (US$50 IVA cap) suspended by the Constitutional Court; final ruling pending | **Medium** | Same |
+| South Africa | None (20% flat + 15% VAT ≤ R500 since 01-Sep-2024) | No | None | ~40–45% above R500 | No | 2024 change | **Hard** | Same |
 | Nigeria | n/a | n/a | VAT for non-residents | Garments on import prohibition list (UNVERIFIED) | No | Nigeria Tax Act 2025 | **Hard / not viable** | Same |
 
 ### Where the entity choice matters
@@ -742,14 +742,14 @@ SG vs NL: **no difference.**
 2. EU via an NL BV (or SG + intermediary), budgeting €3 + €2 per item until
    2028.
 3. Canada: medium.
-4. US: hard but large. Express DDP only, re-quote after 2026-11-29.
+4. US: hard but large. Express DDP only, re-quote after 29-Nov-2026.
 5. Brazil via an RC partner.
 6. Mexico and South Africa only with a local partner. Skip Nigeria.
 
 ---
 
 ## Sources
-- CBP/FR, mail de minimis IFR and postal informal entry (2026-06-24): https://www.govinfo.gov/content/pkg/FR-2026-06-24/html/2026-12669.htm
+- CBP/FR, mail de minimis IFR and postal informal entry (24-Jun-2026): https://www.govinfo.gov/content/pkg/FR-2026-06-24/html/2026-12669.htm
 - FR, non-mail indefinite suspension: https://www.federalregister.gov/documents/2026/06/24/2026-12670/indefinite-suspension-of-the-de-minimis-exemption-for-merchandise-arriving-through-all-modes-other
 - GHY, Section 122 / IEEPA end / de minimis continues: https://www.ghy.com/trade-compliance/us-10-section-122-tariff-in-effect-feb-24-ieepa-tariffs-directed-to-wind-down-de-minimis-suspension-continues/
 - AirLift, Vietnam tariff tracker (Section 301 12.5%, 9903.05.84, 91 FR 47318): https://airliftusa.com/tariff-updates/vietnam
@@ -757,10 +757,10 @@ SG vs NL: **no difference.**
 - FR, Vietnam IP 301 initiation: https://www.federalregister.gov/documents/2026/06/03/2026-11043/initiation-of-section-301-investigation-and-request-for-public-comments-vietnams-acts-policies-and
 - Thomson Reuters, CBP mail rule and compliance postponement: https://www.thomsonreuters.com/en-us/help/onesource-global-trade/regulatory-insights/2026/july-1st/cbp-suspends-de-minimis-mail-postal-entry.html
 - CBSA CN 20-18 (CUSMA thresholds, CAD 20 for others): https://cbsa-asfc.gc.ca/publications/cn-ad/cn20-18-eng.html
-- TAXUD, €3 flat duty guidance (2026-06-08): https://taxation-customs.ec.europa.eu/news/guidance-and-legal-text-temporary-flat-fee-low-value-imports-which-will-apply-until-1-july-2028-2026-06-08_en
+- TAXUD, €3 flat duty guidance (08-Jun-2026): https://taxation-customs.ec.europa.eu/news/guidance-and-legal-text-temporary-flat-fee-low-value-imports-which-will-apply-until-1-july-2028-2026-06-08_en
 - TAXUD, EU customs reform (handling fee 2026/2152, dates): https://taxation-customs.ec.europa.eu/customs/eu-customs-reform_en
-- Commission, €3 duty news (2026-06-29): https://commission.europa.eu/news-and-media/news/ensuring-fairness-and-safety-eur3-customs-duty-low-value-parcels-2026-06-29_en
-- Council, 2025-12-12 agreement: https://www.consilium.europa.eu/en/press/press-releases/2025/12/12/customs-council-agrees-to-levy-customs-duty-on-small-parcels-as-of-1-july-2026/
+- Commission, €3 duty news (29-Jun-2026): https://commission.europa.eu/news-and-media/news/ensuring-fairness-and-safety-eur3-customs-duty-low-value-parcels-2026-06-29_en
+- Council, 12-Dec-2025 agreement: https://www.consilium.europa.eu/en/press/press-releases/2025/12/12/customs-council-agrees-to-levy-customs-duty-on-small-parcels-as-of-1-july-2026/
 - Waste Framework Directive 2025/1892 textiles EPR: https://environment.ec.europa.eu/news/revised-waste-framework-directive-enters-force-2025-10-16_de
 - GOV.UK, LVI reform policy paper: https://www.gov.uk/government/publications/reforming-customs-rules-for-low-value-imports/reforming-the-customs-treatment-of-low-value-imports-into-the-uk
 - GOV.UK, consultation and response: https://www.gov.uk/government/consultations/reforming-the-customs-treatment-of-low-value-imports-into-the-united-kingdom

@@ -1,6 +1,6 @@
 # Product compliance: Australia, New Zealand, Japan, Korea, Taiwan, China, India
 
-Researched 2026-11-06. Scope: adult apparel, footwear, bags/leather goods, fashion
+Researched 06-Nov-2026. Scope: adult apparel, footwear, bags/leather goods, fashion
 jewellery and accessories (belts, hats, scarves, sunglasses). We are the seller
 (MoR, Singapore Pte Ltd or Dutch BV); goods ship from VN as B2C express parcels, DDP.
 
@@ -239,7 +239,7 @@ and is marked **UNVERIFIED**. Verify these before launch.
   alignment with ISO 3758:2023 (new symbols 111 hand-wash 30°C and 511 no-steam iron;
   iron temperatures changed to 210/160/120°C; dry-clean P/F symbols widened). Goods
   labelled under the old rules **by 19 Aug 2025** may continue to be sold [P: CAA news
-  release 2024-08-20]. Further amendment notice 25 Dec 2024 for textiles and miscellaneous
+  release 20-Aug-2024]. Further amendment notice 25 Dec 2024 for textiles and miscellaneous
   goods (content not checked).
 - (e) **Enforcement:** CAA plus METI/prefectures run inspections and publish annual results
   (FY2025 report 26 Jun 2026). Unlikely to reach individual B2C parcels at the border.
@@ -402,4 +402,4 @@ From prior knowledge (MHLW page 404). **UNVERIFIED** this session:
 - [P] TGA on IChEMS PFAS ban — https://www.tga.gov.au/news/news/updated-medical-devices-exempt-pfas-ban-include-other-therapeutic-goods
 - [N] Modern Slavery 2026 — https://www.wolterskluwer.com/en-au/expert-insights/australia-slipping-behind-on-modern-slavery ; [A] https://www.minterellison.com/articles/proposed-reforms-to-australias-modern-slavery-regime
 - [P] NZ Commerce Commission standards index and pages (care, fibre content, country of origin) — https://www.comcom.govt.nz/consumers/product-safety-and-consumer-information-standards/
-- [P] Japan CAA Household Goods Quality Labeling Act — https://www.caa.go.jp/policies/policy/representation/household_goods/ ; item list …/household_goods/list ; FAQ Q8–Q11 …/household_goods/faq/faq_07.html ; 2024-08-20 news release …/information/operation/assets/representation_cms219_240820_01.pdf
+- [P] Japan CAA Household Goods Quality Labeling Act — https://www.caa.go.jp/policies/policy/representation/household_goods/ ; item list …/household_goods/list ; FAQ Q8–Q11 …/household_goods/faq/faq_07.html ; 20-Aug-2024 news release …/information/operation/assets/representation_cms219_240820_01.pdf

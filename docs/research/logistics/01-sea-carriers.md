@@ -1,6 +1,6 @@
 # 01 — SEA carriers and cross-border specialists, VN origin → SG / MY / TH / ID / PH
 
-Researched 2026-11-06. Slice: regional carriers, VN couriers (first mile), VN/SEA cross-border
+Researched 06-Nov-2026. Slice: regional carriers, VN couriers (first mile), VN/SEA cross-border
 e-commerce forwarders. Global integrators (DHL Express, FedEx, UPS) and global aggregators are
 other researchers' slices and only appear here where a VN carrier resells them.
 
@@ -10,7 +10,7 @@ Source labels: **[published]** carrier's own page or doc, **[calculator]** publi
 > Bottom line up front: **No regional carrier in this slice publishes a self-serve, API-driven,
 > DDP parcel product from Vietnam to all five SEA markets.** The two big regional names that could
 > have done it end to end have left VN: **Ninja Van shut down its Vietnam express business on
-> 2025-09-30**, and **DHL eCommerce left Vietnam in 2021**. What is left is (a) J&T Vietnam's
+> 30-Sep-2025**, and **DHL eCommerce left Vietnam in 2021**. What is left is (a) J&T Vietnam's
 > "J&T International" counter/portal product (no public API, rates or DDP terms), (b) 4PL /
 > cross-border specialists (Janio, Boxme) that subcontract the line haul and last mile and claim
 > per-country duty handling, and (c) postal/express resellers (VNPost EMS, Viettel Post,
@@ -28,12 +28,12 @@ injection partner of a forwarder, but does not pick up in VN.
 
 | Provider | →SG | →MY | →TH | →ID | →PH | DDP from VN | Self-serve API for VN-origin int'l | Status note |
 |---|---|---|---|---|---|---|---|---|
-| **Ninja Van** (VN entity) | N | N | N | N | N | – | – | VN express shut 2025-09-30; only freight forwarding (air ≥45 kg) remains [published] |
+| **Ninja Van** (VN entity) | N | N | N | N | N | – | – | VN express shut 30-Sep-2025; only freight forwarding (air ≥45 kg) remains [published] |
 | Ninja Van (destination networks) | last mile | last mile | last mile | last mile | last mile | – | domestic API per country | Strong last mile in SG/MY/PH/ID/TH; usable via a forwarder that injects |
 | **J&T Express VN – J&T International** | Y | Y | Y | **N (not on list)** | Y | UNVERIFIED | No public docs; "Tạo đơn quốc tế" in web portal | Destination list of 232 countries omits Indonesia [published] |
 | **Flash Express** | N | N (exited MY Jan 2026) | last mile | N | last mile | – | – | No VN-origin cross-border found |
 | **Shopee SPX / SLS** | marketplace only | marketplace only | marketplace only | marketplace only | marketplace only | via Shopee (SIP/SLS) | No (captive) | Not usable for our own checkout |
-| **Lazada Logistics (LEX)** | marketplace only | marketplace only | marketplace only | marketplace only | marketplace only | via Lazada | No (captive) | FLex (LEX) stopped VN last mile 2026-03-31 |
+| **Lazada Logistics (LEX)** | marketplace only | marketplace only | marketplace only | marketplace only | marketplace only | via Lazada | No (captive) | FLex (LEX) stopped VN last mile 31-Mar-2026 |
 | **Janio** (SG 4PL) | Y? | Y? | Y? | Y? | Y? | "per-country customs and duty handling" — DDP term not used | Yes, REST API + Shopify/Woo plugin | VN listed as covered country; VN as *origin* not stated |
 | **Boxme** (VN-HQ) | Y? | Y? | Y? | Y? | Y? | "DDP options may be available upon agreement" | Open API v2 (markets: PH, TH, VN) | Model leans to stocking inventory in destination warehouses |
 | **DHL eCommerce Asia** | N | N | N | N | N | – | – | Exited VN 2021; PID not offered from VN origin |
@@ -59,8 +59,8 @@ gives a duty invoice per shipment** — none of these confirms that in public do
 ### 2.1 Ninja Van — exited Vietnam; still relevant as destination last mile
 
 - **Status:** Nin Sing Logistics (Ninja Van Vietnam) stopped all B2B and B2C express delivery on
-  **2025-09-30**; orders accepted only to 2025-09-08; COD reconciliation and claims closed by
-  2025-10-31. Stated reason: restructuring toward "a new logistics model in the future".
+  **30-Sep-2025**; orders accepted only to 08-Sep-2025; COD reconciliation and claims closed by
+  31-Oct-2025. Stated reason: restructuring toward "a new logistics model in the future".
   [published, news] https://mekongasean.vn/ninja-van-dung-dich-vu-giao-nhan-nhanh-tai-viet-nam-45764.html,
   https://en.vietstock.vn/2025/09/ninja-van-to-exit-viet-nam-delivery-scene-amid-intense-competiton-974-620157.htm,
   https://doanhnhan.baophapluat.vn/ninja-van-chinh-thuc-rut-khoi-thi-truong-giao-nhan-nhanh-viet-nam-sau-gan-mot-thap-ky-86233.html
@@ -103,7 +103,7 @@ gives a duty invoice per shipment** — none of these confirms that in public do
 
 ### 2.3 Flash Express (Thailand)
 
-- Thai-HQ; networks in TH, PH, (Laos JV). **Closed its Malaysia service, announced 2026-01-12**
+- Thai-HQ; networks in TH, PH, (Laos JV). **Closed its Malaysia service, announced 12-Jan-2026**
   [published, Thai news] https://www.thansettakij.com/technology/648775 . No VN-origin cross-border
   product found; VN presence (Flash Express Vietnam / Flash Fulfillment Vietnam) is thin and
   unconfirmed [estimate] https://sgpgrid.com/company/flash-express-vietnam-ID0000
@@ -120,7 +120,7 @@ gives a duty invoice per shipment** — none of these confirms that in public do
   https://spx.vn/en/about-us.html
 - Lazada Logistics (ex-LEX/LEL) sells multichannel fulfilment to brands from its own stock pool,
   no public third-party shipping API found [published, news] https://www.freemalaysiatoday.com/category/highlight/2021/08/25/lazada-rebrands-logistics-arm-to-reflect-its-one-stop-offerings .
-  **FLex Speed (LEX) ended VN last-mile delivery by 2026-03-31** [published, news 2026-03-05]
+  **FLex Speed (LEX) ended VN last-mile delivery by 31-Mar-2026** [published, news 05-Mar-2026]
   https://www.theasset.com/index.php/article/55988/alibaba-linked-logistics-firm-lex-to-stop-deliveries-in-vietnam
 - **Verdict:** N for our own-checkout MoR. Relevant only if a merchant *also* sells on Shopee/Lazada
   (out of our scope).
@@ -174,7 +174,7 @@ gives a duty invoice per shipment** — none of these confirms that in public do
 
 ### 2.7 DHL eCommerce Asia — not available from VN
 
-- DHL eCommerce **stopped nationwide domestic delivery in Vietnam (announced 2021-10-22)**; other DHL
+- DHL eCommerce **stopped nationwide domestic delivery in Vietnam (announced 22-Oct-2021)**; other DHL
   divisions (Express, Global Forwarding, Supply Chain) continue. [published, news]
   https://vir.com.vn/dhl-ecommerce-stops-operation-in-vietnam-88608.html
 - Parcel International Direct (PID) served CN/AU-origin sellers *into* MY/TH/VN, not VN origin.

@@ -1,11 +1,11 @@
 # Plan: logistics, next steps
 
-Status: written 2026-11-07, to pick up later. The data is in
+Status: written 07-Nov-2026, to pick up later. The data is in
 `docs/markets/` (see `plan-markets-data.md`); run
 `uv run scripts/markets.py build` and open `docs/markets.html` for the
 current comparison.
 
-## Where we are (2026-11-07)
+## Where we are (07-Nov-2026)
 
 Rates loaded, all list prices (no account discount):
 
@@ -15,14 +15,14 @@ Rates loaded, all list prices (no account discount):
 | UPS | Worldwide Express Saver, Expedited | 2026 VN rate guide (PDF) | verified |
 | UPS | Worldwide Economy (US only) | 2025 guide | verified, old |
 | FedEx | International Priority, International Economy | 2026 VN export tariff (PDF) | verified |
-| FedEx | IP, IE and FICP promo (VN account rates) | 2026 promo PDFs, saved 2026-11-10 | verified; FICP zones assumed equal to IP |
+| FedEx | IP, IE and FICP promo (VN account rates) | 2026 promo PDFs, saved 10-Nov-2026 | verified; FICP zones assumed equal to IP |
 | J&T Express VN | international express | 2024 card, MY/CN confirmed by April 2026 sheet | verified |
 | J&T Express VN | international express, quoted lanes (SG at two speeds) | quote in reply to q06, saved 14-Nov-2026 | verified; includes fuel and VAT; no validity date |
-| VIO ePacket (YunExpress network) | main routes, US-Saver, Extra | vioepacket.com, from 2026-11-01 | verified |
+| VIO ePacket (YunExpress network) | main routes, US-Saver, Extra | vioepacket.com, from 01-Nov-2026 | verified |
 | Vietnam Post EMS | EMS | third-party read of the calculator, DE 1 kg re-checked | secondary |
 
 Fuel is stored as this week's percentage (DHL 50%, FedEx 52.25%, UPS
-52.75% for 2026-11-09 to 2026-11-15); VIO includes fuel; J&T's is
+52.75% for 09-Nov-2026 to 15-Nov-2026); VIO includes fuel; J&T's is
 monthly and unknown.
 
 J&T's 14-Nov-2026 quote includes fuel and VAT. At 0.5 kg it costs
@@ -36,7 +36,7 @@ Indicative 0.5 kg list prices (US$, before fuel): VIO 7-16, J&T 16-26,
 DHL 54-73, UPS 62-95, FedEx IP 89-121. For light parcels the economy
 lines win by far; the open question for them is duty-paid delivery.
 
-Quote requests sent on 2026-11-07 (`questions.csv`, status `sent`):
+Quote requests sent on 07-Nov-2026 (`questions.csv`, status `sent`):
 
 | Question | Provider | Channel |
 |---|---|---|
@@ -80,7 +80,7 @@ cards:
 
 Save every quote in `docs/markets/sources/<provider>/`.
 
-### 3. Build an all-in cost comparison (done 2026-11-07)
+### 3. Build an all-in cost comparison (done 07-Nov-2026)
 
 `markets.html#all-in` and the `All-in` sheet: per reference parcel
 (`scenarios.csv`: 0.25, 0.5, 1, 2, 5 kg at US$25, 40, 60, 100, 200),
@@ -90,12 +90,12 @@ due. Each cell's tooltip lists its parts. A second table per parcel gives
 the freight discount DHL, FedEx IP and UPS Saver list prices need to match
 the cheapest economy line that is published, complete and duty-paid.
 
-What it shows (list prices, fuel of 2026-11-09):
+What it shows (list prices, fuel of 09-Nov-2026):
 
 - Where an economy line works (SG, JP, AU, GB via VIO), the big three
   need a freight discount of about 84-99%. No sales discount gets there;
   the big three are a premium or fallback option, not the default.
-- To the EU the duty-paid fee decides: since 2026-07-01 every EU parcel
+- To the EU the duty-paid fee decides: since 01-Jul-2026 every EU parcel
   pays the EUR 3 flat duty, so DHL's VND 600,000 minimum (about US$23) or
   UPS's VND 600,425 always applies. Up to 1 kg that fee alone is more
   than VIO's whole price, so no freight discount is enough; at 2 kg the
@@ -110,7 +110,7 @@ What it shows (list prices, fuel of 2026-11-09):
 Not modelled yet: volumetric weight (actual weight is assumed), remote
 areas, returns, discounts (no quotes yet).
 
-### 4. Check product rules per carrier (partly done 2026-11-07)
+### 4. Check product rules per carrier (partly done 07-Nov-2026)
 
 `service_restrictions.csv` now has DHL (VN pages), FedEx and UPS (from the
 VN rate PDFs; their web pages block automated reads) and VIO. Findings:
@@ -126,7 +126,7 @@ VN rate PDFs; their web pages block automated reads) and VIO. Findings:
 - Wood and lacquerware: VIO wants to check them first; DHL, FedEx and UPS
   say nothing. Destination rules (AU) apply either way.
 
-J&T and Asendia were read in Chrome on 2026-11-10 (J&T refused-goods
+J&T and Asendia were read in Chrome on 10-Nov-2026 (J&T refused-goods
 list, terms and compensation policy; Asendia Singapore GTC May 2025,
 which Asendia VN links as its terms):
 
@@ -142,12 +142,12 @@ which Asendia VN links as its terms):
 Open: wood and lacquerware everywhere, VIO battery and compensation
 terms, J&T Section II batteries, and Asendia's contracting entity,
 fragile-goods agreement and packing specifications. q35 now asks only
-these (draft, to send with the 2026-11-14 follow-ups); FedEx and UPS are
+these (draft, to send with the 14-Nov-2026 follow-ups); FedEx and UPS are
 in their drafts (q02, q03).
 
 ### 5. Follow up on the requests in flight
 
-About a week after sending (around 2026-11-14), follow up by WhatsApp,
+About a week after sending (around 14-Nov-2026), follow up by WhatsApp,
 Zalo or phone where there is no reply. Contacts are in `questions.csv`
 and `providers.csv`. When a reply arrives: save it in
 `docs/markets/sources/<provider>/`, set the question to `answered`, and
@@ -158,9 +158,9 @@ pickup in Ho Chi Minh City, and returns.
 ### 6. Keep weekly values current before any comparison
 
 Fuel for DHL, FedEx and UPS (their surcharge pages, readable in
-Chrome), the demand surcharges (loaded 2026-11-07: DHL from 2026-10-01 to
-2027-02-05, FedEx from 2026-11-02; both can change on notice) and the ECB
-display rates in `scripts/markets.py` (2026-11-06).
+Chrome), the demand surcharges (loaded 07-Nov-2026: DHL from 01-Oct-2026 to
+05-Feb-2027, FedEx from 02-Nov-2026; both can change on notice) and the ECB
+display rates in `scripts/markets.py` (06-Nov-2026).
 
 ## Not now
 
