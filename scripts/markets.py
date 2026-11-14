@@ -173,10 +173,36 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "scenario",
         "label",
         "weight_kg",
+        "length_cm",
+        "width_cm",
+        "height_cm",
         "goods_value_minor",
         "currency",
         "category",
         "hs_lines",
+        "notes",
+    ),
+    "landed_rates": (
+        "country",
+        "category",
+        "charge",
+        "collected",
+        "applies",
+        "limit_minor",
+        "limit_currency",
+        "limit_basis",
+        "basis",
+        "rate_percent",
+        "amount_minor",
+        "currency",
+        "base",
+        "effective_from",
+        "status",
+        "source",
+        "source_url",
+        "research_ref",
+        "checked_on",
+        "question",
         "notes",
     ),
     "border_charges": (
@@ -277,6 +303,16 @@ TRIGGERS = ("always", "duties_paid", "passthrough", "optional", "on_event")
 FUEL_APPLIES = ("yes", "no", "unknown")
 BORDER_RULES = ("always", "above", "never", "unknown")
 BORDER_BASES = ("goods", "goods_plus_freight")
+# Duties and taxes per destination (docs/plan-markets-data.md, phase 2).
+# Duties and fees come first: the taxes' goods_freight_duty base includes them.
+type Charge = Literal["duty", "additional_duty", "fee", "import_tax", "other_tax"]
+DUTY_CHARGES: tuple[Charge, ...] = ("duty", "additional_duty", "fee")
+TAX_CHARGES: tuple[Charge, ...] = ("import_tax", "other_tax")
+CHARGES: tuple[Charge, ...] = DUTY_CHARGES + TAX_CHARGES
+COLLECTED = ("border", "seller")
+APPLIES = ("always", "up_to", "above")
+LANDED_BASES = ("percent", "per_line", "per_parcel")
+VALUE_BASES = ("goods", "goods_plus_freight", "goods_freight_duty")
 
 # Minor-unit exponents for the currencies the tables use
 # (AGENTS.md: one table, never "divide by 100"; IDR 0 as decided there).
@@ -458,6 +494,7 @@ def check(data: Data) -> list[str]:
     errors.extend(check_restrictions(data, known))
     errors.extend(check_scenarios(data, known))
     errors.extend(check_border_charges(data, known))
+    errors.extend(check_landed_rates(data, known))
     return errors
 
 
@@ -732,8 +769,9 @@ def check_scenarios(data: Data, known: Known) -> list[str]:
     errors: list[str] = []
     for i, row in enumerate(data.rows("scenarios")):
         here = where("scenarios", i)
-        if not DECIMAL.match(row["weight_kg"]):
-            errors.append(f"{here}: weight_kg must be a number")
+        for column in ("weight_kg", "length_cm", "width_cm", "height_cm"):
+            if not DECIMAL.match(row[column]):
+                errors.append(f"{here}: {column} must be a number")
         for column in ("goods_value_minor", "hs_lines"):
             if not INTEGER.match(row[column]):
                 errors.append(f"{here}: {column} must be an integer")
@@ -1002,10 +1040,83 @@ STATUS_RANK: dict[Status, int] = {
     "to_fetch": 5,
     "awaiting_answer": 6,
 }
+
+
+def check_landed_rates(data: Data, known: Known) -> list[str]:
+    errors: list[str] = []
+    bands: dict[tuple[str, str, str], list[Row]] = {}
+    for i, row in enumerate(data.rows("landed_rates")):
+        here = where("landed_rates", i)
+        errors.extend(check_status_row("landed_rates", i, row, known))
+        errors.extend(known_ref("landed_rates", i, row, "country", known.places))
+        if row["category"]:
+            errors.extend(
+                known_ref("landed_rates", i, row, "category", known.categories)
+            )
+        errors.extend(one_of("landed_rates", i, row, "charge", CHARGES))
+        errors.extend(one_of("landed_rates", i, row, "collected", COLLECTED))
+        errors.extend(one_of("landed_rates", i, row, "applies", APPLIES))
+        errors.extend(one_of("landed_rates", i, row, "basis", LANDED_BASES))
+        errors.extend(check_dates("landed_rates", i, row, ("effective_from",)))
+        limit = (row["limit_minor"], row["limit_currency"], row["limit_basis"])
+        if row["applies"] == "always":
+            if any(limit):
+                errors.append(f"{here}: a limit needs applies up_to or above")
+        else:
+            errors.extend(pattern("landed_rates", i, row, ("limit_minor",), INTEGER))
+            errors.extend(one_of("landed_rates", i, row, "limit_currency", EXPONENT))
+            errors.extend(one_of("landed_rates", i, row, "limit_basis", BORDER_BASES))
+            if not row["limit_minor"]:
+                errors.append(f"{here}: up_to and above need limit_minor")
+        if row["basis"] == "percent":
+            if not DECIMAL.match(row["rate_percent"]):
+                errors.append(f"{here}: percent needs rate_percent")
+            errors.extend(one_of("landed_rates", i, row, "base", VALUE_BASES))
+            duty = row["charge"] in DUTY_CHARGES
+            if duty and row["base"] == "goods_freight_duty":
+                errors.append(f"{here}: a duty or fee cannot be charged on duty")
+            if row["amount_minor"] or row["currency"]:
+                errors.append(f"{here}: percent takes no amount_minor or currency")
+        else:
+            if not INTEGER.match(row["amount_minor"]):
+                errors.append(f"{here}: {row['basis']} needs amount_minor")
+            errors.extend(one_of("landed_rates", i, row, "currency", EXPONENT))
+            if row["rate_percent"] or row["base"]:
+                errors.append(f"{here}: {row['basis']} takes no rate_percent or base")
+        key = (row["country"], row["category"], row["charge"])
+        bands.setdefault(key, []).append(row)
+    for key, rows in bands.items():
+        kinds = [row["applies"] for row in rows]
+        limits = {
+            (r["limit_minor"], r["limit_currency"], r["limit_basis"]) for r in rows
+        }
+        overlap = len(set(kinds)) != len(kinds) or ("always" in kinds and len(rows) > 1)
+        if overlap or len(limits) > 1:
+            errors.append(
+                f"landed_rates.csv: {' '.join(k or '-' for k in key)}: rows overlap; "
+                "use one always row, or up_to and above with the same limit"
+            )
+    return errors
+
+
 NEAR_LIMIT = Fraction(1, 10)  # within 10% of a border limit at display rates
 
 type BorderOutcome = Literal["charged", "free", "unknown"]
 type DutyPaid = Literal["yes", "no", "unknown"]
+type PartKind = Literal["freight", "fuel", "fee", "duty_fee"]
+type Payer = Literal["us_at_checkout", "us_via_carrier", "buyer_at_door", "unknown"]
+PAYER_TEXT: dict[Payer, str] = {
+    "us_at_checkout": "we collect at checkout",
+    "us_via_carrier": "we pay via the carrier",
+    "buyer_at_door": "buyer pays at the door",
+    "unknown": "payer unknown",
+}
+PAYER_SHORT: dict[Payer, str] = {
+    "us_at_checkout": "checkout",
+    "us_via_carrier": "carrier",
+    "buyer_at_door": "buyer",
+    "unknown": "?",
+}
 
 
 @dataclass(frozen=True)
@@ -1015,6 +1126,18 @@ class Part:
     label: str
     cents: Fraction | None  # None: the amount is not known
     status: Status
+    note: str
+    kind: PartKind
+
+
+@dataclass(frozen=True)
+class Landed:
+    """One duty, fee or tax on a parcel, in exact US cents (display only)."""
+
+    charge: Charge
+    cents: Fraction | None  # None: the amount is not known
+    status: Status
+    payer: Payer
     note: str
 
 
@@ -1033,6 +1156,7 @@ class AllIn:
     freight: Fraction  # US cents, before fuel and discount
     fuel_rate: Fraction | None  # e.g. 1/2 for 50%; None when unknown
     parts: tuple[Part, ...]  # freight first, then fuel, then fees
+    landed: tuple[Landed, ...]  # duties, fees and taxes, in CHARGES order
     border: Border
     duty_paid: DutyPaid
     status: Status
@@ -1047,9 +1171,32 @@ class AllIn:
     def complete(self) -> bool:
         return all(part.cents is not None for part in self.parts)
 
+    def landed_total(self) -> Fraction:
+        """Carrier total plus every duty, fee and tax, whoever pays it."""
+        total = self.total()
+        for line in self.landed:
+            if line.cents is not None:
+                total += line.cents
+        return total
+
+    def landed_complete(self) -> bool:
+        return self.complete() and all(line.cents is not None for line in self.landed)
+
     def buyer_pays(self) -> bool:
         """Duties would be collected from the buyer at the door."""
         return self.border.outcome == "charged" and self.duty_paid == "no"
+
+
+def at_border(landed: Iterable[Landed]) -> Fraction | None:
+    """Duties, fees and taxes collected at the border; None when one is unknown."""
+    total = Fraction(0)
+    for line in landed:
+        if line.payer == "us_at_checkout":
+            continue
+        if line.cents is None:
+            return None
+        total += line.cents
+    return total
 
 
 def worst(statuses: Iterable[Status]) -> Status:
@@ -1145,6 +1292,164 @@ def border_for(
     return Border("free", status, f"at or below {limit_text}")
 
 
+def chargeable_kg(service: Row, scenario: Row) -> Fraction:
+    """The greater of actual and volumetric weight (L x W x H / divisor)."""
+    actual = Fraction(scenario["weight_kg"])
+    if not service["volumetric_divisor"]:
+        return actual
+    volume = (
+        Fraction(scenario["length_cm"])
+        * Fraction(scenario["width_cm"])
+        * Fraction(scenario["height_cm"])
+    )
+    return max(actual, volume / int(service["volumetric_divisor"]))
+
+
+@dataclass(frozen=True)
+class Values:
+    """The values a duty or tax is charged on, in exact US cents."""
+
+    goods: Fraction
+    freight: Fraction | None  # freight and fuel; None when fuel is unknown
+
+
+def in_band(row: Row, values: Values) -> bool | None:
+    """Whether a landed rate applies at these values; None when it depends on
+    freight that is not known."""
+    if row["applies"] == "always":
+        return True
+    limit = exact_usd_cents(int(row["limit_minor"]), row["limit_currency"])
+    if limit is None:
+        return None
+    value = values.goods
+    if row["limit_basis"] == "goods_plus_freight":
+        if values.freight is None:
+            return None
+        value += values.freight
+    if row["applies"] == "up_to":
+        return value <= limit
+    return value > limit
+
+
+def landed_rate(
+    data: Data, code: str, category: str, charge: Charge, values: Values
+) -> tuple[Row | None, bool]:
+    """The most specific landed rate for a charge whose band holds the values.
+
+    Returns the row and whether the band could be decided."""
+    places = [code, *groups_of(data, code)]
+    categories = [category, ""] if category else [""]
+    for place in places:
+        for wanted in categories:
+            for row in data.rows("landed_rates"):
+                if (
+                    row["country"] != place
+                    or row["category"] != wanted
+                    or row["charge"] != charge
+                ):
+                    continue
+                match in_band(row, values):
+                    case True:
+                        return row, True
+                    case False:
+                        continue
+                    case None:
+                        return row, False
+    return None, True
+
+
+def payer_for(row: Row, duty_paid: DutyPaid) -> Payer:
+    if row["collected"] == "seller":
+        return "us_at_checkout"
+    match duty_paid:
+        case "yes":
+            return "us_via_carrier"
+        case "no":
+            return "buyer_at_door"
+        case "unknown":
+            return "unknown"
+        case _:
+            assert_never(duty_paid)
+
+
+def landed_lines(
+    data: Data, code: str, scenario: Row, values: Values, duty_paid: DutyPaid
+) -> list[Landed]:
+    """Duties, fees and taxes on a parcel: duties and fees first, then taxes on
+    goods, freight and the duties and fees before them."""
+    lines: list[Landed] = []
+    duties = Fraction(0)
+    duties_known = True
+    for charge in CHARGES:
+        row, decided = landed_rate(data, code, scenario["category"], charge, values)
+        if row is None:
+            continue
+        status = as_status(row["status"])
+        payer = payer_for(row, duty_paid)
+        note = row["notes"]
+        if not decided:
+            lines.append(
+                Landed(
+                    charge,
+                    None,
+                    worst((status, "unverified")),
+                    payer,
+                    "limit includes freight, which is not known",
+                )
+            )
+            duties_known = False
+            continue
+        cents: Fraction | None
+        if row["basis"] == "percent":
+            rate = Fraction(row["rate_percent"]) / 100
+            base: Fraction | None = values.goods
+            if row["base"] != "goods":
+                base = None if values.freight is None else values.goods + values.freight
+            if row["base"] == "goods_freight_duty" and base is not None:
+                base = base + duties if duties_known else None
+            cents = None if base is None else base * rate
+            how = f"{row['rate_percent']}% of {row['base'].replace('_', ' ')}"
+        else:
+            amount = exact_usd_cents(int(row["amount_minor"]), row["currency"])
+            count = int(scenario["hs_lines"]) if row["basis"] == "per_line" else 1
+            cents = None if amount is None else amount * count
+            how = money(int(row["amount_minor"]), row["currency"])
+            if row["basis"] == "per_line":
+                how += f" per tariff line × {count}"
+        if charge in DUTY_CHARGES:
+            if cents is None:
+                duties_known = False
+            else:
+                duties += cents
+        lines.append(
+            Landed(charge, cents, status, payer, "; ".join(t for t in (how, note) if t))
+        )
+    return lines
+
+
+def agree_with_border(landed: list[Landed], border: Border) -> list[Landed]:
+    """Mark every line unverified where border_charges.csv disagrees about the
+    border being charged."""
+    border_lines = [line for line in landed if line.payer != "us_at_checkout"]
+    charged = any(line.cents is None or line.cents > 0 for line in border_lines)
+    agrees = border.outcome == "unknown" or (border.outcome == "charged") == charged
+    if agrees:
+        return landed
+    said = "charged" if border.outcome == "charged" else "free"
+    result: list[Landed] = []
+    for line in landed:
+        result.append(
+            Landed(
+                line.charge,
+                line.cents,
+                worst((line.status, "unverified")),
+                line.payer,
+                f"{line.note}; border_charges.csv says the border is {said} here",
+            )
+        )
+    return result
+
+
 def duty_paid_for(data: Data, service: Row, code: str) -> DutyPaid:
     match service["ddp"]:
         case "yes" | "mandatory":
@@ -1159,7 +1464,12 @@ def duty_paid_for(data: Data, service: Row, code: str) -> DutyPaid:
 
 
 def fee_cents(
-    row: Row, billed_kg: Fraction, scenario: Row, freight: Fraction, goods: Fraction
+    row: Row,
+    billed_kg: Fraction,
+    scenario: Row,
+    freight: Fraction,
+    goods: Fraction,
+    at_border: Fraction | None,
 ) -> tuple[Fraction | None, str]:
     """A surcharge in exact US cents, with a note on how it was taken."""
     currency = row["currency"]
@@ -1200,8 +1510,13 @@ def fee_cents(
                 return minimum, "minimum"
             return value, f"{row['rate_percent']}% of value"
         case "percent_of_duties":
-            # Duties are not modelled. With combined rates up to 100%, duties are
-            # at most the goods value plus freight; below that bound the minimum binds.
+            if at_border is not None and percent is not None:
+                value = at_border * percent
+                if minimum is not None and value < minimum:
+                    return minimum, "minimum"
+                return value, f"{row['rate_percent']}% of duties and taxes"
+            # Duties not known. With combined rates up to 100%, duties are at most
+            # the goods value plus freight; below that bound the minimum binds.
             if minimum is None:
                 return None, "share of duties, no minimum"
             if percent is not None and (goods + freight) * percent > minimum:
@@ -1217,7 +1532,9 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
     if mapping is None:
         return None
     zone = mapping["zone"]
-    billed = billed_weight(data, name, Fraction(scenario["weight_kg"]))
+    service = by_key(data.rows("services"), "service")[card["service"]]
+    chargeable = chargeable_kg(service, scenario)
+    billed = billed_weight(data, name, chargeable)
     if billed is None:
         return None
     rate = rate_for(data, name, zone, kg_text(billed))
@@ -1227,11 +1544,12 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
     goods = exact_usd_cents(int(scenario["goods_value_minor"]), scenario["currency"])
     if freight is None or goods is None:
         return None
-    service = by_key(data.rows("services"), "service")[card["service"]]
     card_status = as_status(card["status"])
     weight = kg_text(billed)
     freight_status = worst((card_status, as_status(mapping["status"])))
     freight_note = f"zone {zone}, {weight} kg, {price_text(rate, card['currency'])}"
+    if chargeable > Fraction(scenario["weight_kg"]):
+        freight_note += f" (volumetric {kg_text(chargeable)} kg)"
     if mapping["status"] != "verified" and mapping["notes"]:
         freight_note += f"; zone {mapping['status']}: {mapping['notes']}"
     if rate["amount_max_minor"]:
@@ -1253,8 +1571,15 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
     freight_with_fuel = freight * (1 + fuel_rate) if fuel_rate is not None else None
     border = border_for(data, code, scenario, freight_with_fuel)
     duty_paid = duty_paid_for(data, service, code)
+    landed = landed_lines(
+        data, code, scenario, Values(goods, freight_with_fuel), duty_paid
+    )
+    landed = agree_with_border(landed, border)
+    border_amount = at_border(landed)
 
-    parts: list[Part] = [Part("freight", freight, freight_status, freight_note)]
+    parts: list[Part] = [
+        Part("freight", freight, freight_status, freight_note, "freight")
+    ]
     fuel_base = freight
     fuel_notes: list[str] = []
     for row in fees:
@@ -1271,7 +1596,7 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
             if border.outcome == "unknown":
                 status = worst((status, "unverified"))
                 note = "only if duties or taxes are charged at the border"
-        cents, how = fee_cents(row, billed, scenario, freight, goods)
+        cents, how = fee_cents(row, billed, scenario, freight, goods, border_amount)
         if row["fuel_applies"] == "yes" and cents is not None:
             fuel_base += cents
             fuel_notes.append(row["surcharge"])
@@ -1280,15 +1605,23 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
             how = f"{how}; fuel on it unknown".lstrip("; ")
         parts.append(
             Part(
-                row["surcharge"], cents, status, "; ".join(t for t in (how, note) if t)
+                row["surcharge"],
+                cents,
+                status,
+                "; ".join(t for t in (how, note) if t),
+                "duty_fee" if trigger == "duties_paid" else "fee",
             )
         )
     if card["fuel"] == "included":
-        fuel = Part("fuel", Fraction(0), card_status, "included in the card's prices")
+        fuel = Part(
+            "fuel", Fraction(0), card_status, "included in the card's prices", "fuel"
+        )
     elif fuel_row is None:
-        fuel = Part("fuel", None, "to_fetch", "no fuel row for this service")
+        fuel = Part("fuel", None, "to_fetch", "no fuel row for this service", "fuel")
     elif fuel_rate is None:
-        fuel = Part("fuel", None, as_status(fuel_row["status"]), "rate not known")
+        fuel = Part(
+            "fuel", None, as_status(fuel_row["status"]), "rate not known", "fuel"
+        )
     else:
         on = "freight" + "".join(f" + {n}" for n in fuel_notes)
         fuel = Part(
@@ -1296,6 +1629,7 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
             fuel_base * fuel_rate,
             as_status(fuel_row["status"]),
             f"{fuel_row['rate_percent']}% of {on}",
+            "fuel",
         )
     parts.insert(1, fuel)
 
@@ -1308,6 +1642,7 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
         freight=freight,
         fuel_rate=fuel_rate,
         parts=tuple(parts),
+        landed=tuple(landed),
         border=border,
         duty_paid=duty_paid,
         status=worst(statuses),
@@ -1477,7 +1812,8 @@ background:var(--panel)}table{border-collapse:collapse;width:100%}th,td{
 border-bottom:1px solid var(--line);padding:5px 7px;text-align:left;
 vertical-align:top}th{position:sticky;top:0;background:var(--panel);font-weight:600;
 font-size:12.5px;z-index:1}td.num,th.num{text-align:right;
-font-variant-numeric:tabular-nums;white-space:nowrap}.cell{min-width:150px;
+font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.group-start td{border-top:2px solid var(--muted)}.cell{min-width:150px;
 max-width:260px;font-size:12.5px}.st-verified{background:var(--s-verified);
 color:var(--s-ink)}.st-secondary{background:var(--s-secondary);color:var(--s-ink)}
 .st-estimate{background:var(--s-estimate);color:var(--s-ink)}.st-unverified{
@@ -2072,8 +2408,8 @@ def section_all_in(data: Data) -> h.Element:
             ],
             h.li[
                 "Cell colour is the worst status among the parts and the border "
-                "rule. Weights are actual weights, assumed at or above the "
-                "volumetric weight."
+                "rule. The billed weight is the greater of the actual and the "
+                "volumetric weight of the reference box."
             ],
             h.li[
                 "Discount: the share off freight (fuel follows net freight, fees "
@@ -2086,6 +2422,197 @@ def section_all_in(data: Data) -> h.Element:
         blocks,
         h.h3["Border rules used"],
         section_border_rules(data),
+    ]
+
+
+@dataclass(frozen=True)
+class Item:
+    """One amount in a breakdown cell, in exact US cents (display only)."""
+
+    label: str
+    cents: Fraction | None
+    status: Status
+    note: str
+
+
+def usd_cents_text(cents: Fraction) -> str:
+    rounded = round_half_up(cents)
+    return f"US${rounded // 100:,}.{rounded % 100:02d}"
+
+
+def item_lines(items: Iterable[Item]) -> list[str]:
+    lines: list[str] = []
+    for item in items:
+        amount = "?" if item.cents is None else usd_cents_text(item.cents)
+        detail = f" ({item.note})" if item.note else ""
+        lines.append(f"{item.label}: {amount}{detail} [{item.status}]")
+    return lines
+
+
+def part_items(result: AllIn, kinds: tuple[PartKind, ...]) -> list[Item]:
+    return [
+        Item(part.label, part.cents, part.status, part.note)
+        for part in result.parts
+        if part.kind in kinds
+    ]
+
+
+def landed_items(result: AllIn, charges: tuple[Charge, ...]) -> list[Item]:
+    return [
+        Item(
+            f"{line.charge} ({PAYER_TEXT[line.payer]})",
+            line.cents,
+            line.status,
+            line.note,
+        )
+        for line in result.landed
+        if line.charge in charges
+    ]
+
+
+def payers_of(result: AllIn, charges: tuple[Charge, ...]) -> list[Payer]:
+    payers: list[Payer] = []
+    for line in result.landed:
+        if line.charge in charges and line.payer not in payers:
+            payers.append(line.payer)
+    return payers
+
+
+def sum_cell(items: list[Item], suffix: str = "") -> h.Element:
+    if not items:
+        return h.td(class_="num")["–"]
+    total = Fraction(0)
+    complete = True
+    for item in items:
+        if item.cents is None:
+            complete = False
+        else:
+            total += item.cents
+    text = ("" if complete else "≥ ") + usd_cents_text(total)
+    if all(item.cents is None for item in items):
+        text = "?"
+    status = worst(item.status for item in items)
+    return h.td(
+        class_=f"num {status_class(status)}", title="\n".join(item_lines(items))
+    )[f"{text} {suffix}".strip()]
+
+
+def landed_total_text(result: AllIn) -> str:
+    prefix = "" if result.landed_complete() else "≥ "
+    return f"{prefix}{usd_cents_text(result.landed_total())}"
+
+
+def landed_status(result: AllIn) -> Status:
+    return worst([result.status, *(line.status for line in result.landed)])
+
+
+LANDED_COLUMNS: tuple[str, ...] = (
+    "Freight",
+    "Fuel",
+    "Surcharges",
+    "Duty-paid fee",
+    "Duties and customs fees",
+    "Taxes",
+    "Carrier total",
+    "Landed total",
+)
+
+
+def section_landed(data: Data) -> h.Element:
+    cards = all_in_cards(data)
+    blocks: list[h.Node] = []
+    for scenario in data.rows("scenarios"):
+        grid = all_in_grid(data, scenario, cards)
+        rows: list[h.Node] = []
+        for code, results in zip(ALL_IN_DESTINATIONS, grid, strict=True):
+            first = True
+            for result in results:
+                if result is None:
+                    continue
+                duty_payers = payers_of(result, DUTY_CHARGES)
+                tax_payers = payers_of(result, TAX_CHARGES)
+                rows.append(
+                    h.tr(class_="group-start" if first else None)[
+                        h.td[country_label(data, code) if first else ""],
+                        h.td[result.card["rate_card"]],
+                        sum_cell(part_items(result, ("freight",))),
+                        sum_cell(part_items(result, ("fuel",))),
+                        sum_cell(part_items(result, ("fee",))),
+                        sum_cell(part_items(result, ("duty_fee",))),
+                        sum_cell(
+                            landed_items(result, DUTY_CHARGES),
+                            " ".join(PAYER_SHORT[p] for p in duty_payers),
+                        ),
+                        sum_cell(
+                            landed_items(result, TAX_CHARGES),
+                            " ".join(PAYER_SHORT[p] for p in tax_payers),
+                        ),
+                        h.td(
+                            class_=f"num {status_class(result.status)}",
+                            title=all_in_title(result),
+                        )[all_in_text(result)],
+                        h.td(class_=f"num {status_class(landed_status(result))}")[
+                            h.strong[landed_total_text(result)]
+                        ],
+                    ]
+                )
+                first = False
+        goods = money(int(scenario["goods_value_minor"]), scenario["currency"])
+        size = (
+            f"{scenario['length_cm']}×{scenario['width_cm']}×{scenario['height_cm']} cm"
+        )
+        blocks.append(
+            h.details[
+                h.summary[
+                    f"{scenario['label']}: {scenario['weight_kg']} kg, {size}, "
+                    f"{scenario['category'] or 'any category'}, goods {goods}"
+                ],
+                h.div(class_="scroll")[
+                    h.table[
+                        h.thead[
+                            h.tr[
+                                h.th["Destination"],
+                                h.th["Rate card"],
+                                [h.th(class_="num")[c] for c in LANDED_COLUMNS],
+                            ]
+                        ],
+                        h.tbody[rows],
+                    ]
+                ],
+            ]
+        )
+    return h.section[
+        h.h2(id="landed")["Landed cost per parcel"],
+        h.p(class_="muted")[
+            "The all-in carrier price split into its parts, plus the duties, "
+            "customs fees and taxes on the parcel from landed_rates.csv, for the "
+            "reference parcels' product category. Amounts in US$, exact until "
+            "rounded for display. Hover a cell for its parts, notes and status. "
+            f"{USD_RATE_NOTE}."
+        ],
+        h.ul(class_="muted")[
+            h.li[
+                "Who pays: checkout = we collect it from the buyer at checkout "
+                "through the country's seller scheme and pay it ourselves; "
+                "carrier = collected at the border and billed to us by a "
+                "duty-paid service; buyer = collected from the buyer at the door "
+                "by a duties-unpaid service (not usable for us as merchant of "
+                "record); ? = the service's duty-paid terms are unknown."
+            ],
+            h.li[
+                "Duties and taxes use one figure per destination and category "
+                "(see each row's note for the end of a range taken). Free-trade "
+                "preferences (ATIGA, EVFTA, ...) are not assumed. Taxes are "
+                "charged on goods, freight and the duties and fees before them; "
+                "the carrier's freight and fuel stand in for the shipping the "
+                "buyer pays."
+            ],
+            h.li[
+                "Landed total: carrier total plus every duty, fee and tax, "
+                "whoever pays it. ≥: a part is missing, so it is a lower bound."
+            ],
+        ],
+        blocks,
     ]
 
 
@@ -2493,6 +3020,7 @@ def build_html(data: Data, today: date) -> str:
                     h.a(href="#questions")["Open questions"],
                     h.a(href="#compare")["Price comparison"],
                     h.a(href="#all-in")["All-in cost"],
+                    h.a(href="#landed")["Landed cost"],
                     h.a(href="#carriers")["Providers"],
                     h.a(href="#rates")["Rate cards"],
                     h.a(href="#surcharges")["Surcharges"],
@@ -2506,6 +3034,7 @@ def build_html(data: Data, today: date) -> str:
                 section_questions(data),
                 section_compare(data),
                 section_all_in(data),
+                section_landed(data),
                 section_carriers(data),
                 section_rate_cards(data),
                 section_surcharges(data),
@@ -2794,6 +3323,69 @@ def sheet_all_in(book: Workbook, data: Data) -> None:
         sheet.column_dimensions[get_column_letter(j)].width = 18
 
 
+def sheet_landed(book: Workbook, data: Data) -> None:
+    """Long format: one row per parcel line, for filtering in Drive."""
+    cards = all_in_cards(data)
+    sheet = book.create_sheet("Landed")
+    sheet.append(
+        [
+            "scenario",
+            "category",
+            "destination",
+            "rate_card",
+            "line",
+            "group",
+            "amount_usd_cents",
+            "status",
+            "paid_by",
+            "note",
+        ]
+    )
+    bold_row(sheet, 1)
+    for scenario in data.rows("scenarios"):
+        grid = all_in_grid(data, scenario, cards)
+        for code, results in zip(ALL_IN_DESTINATIONS, grid, strict=True):
+            for result in results:
+                if result is None:
+                    continue
+                head = [
+                    scenario["scenario"],
+                    scenario["category"],
+                    code,
+                    result.card["rate_card"],
+                ]
+                for part in result.parts:
+                    amount = "" if part.cents is None else round_half_up(part.cents)
+                    sheet.append(
+                        [
+                            *head,
+                            part.label,
+                            part.kind,
+                            amount,
+                            part.status,
+                            "",
+                            part.note,
+                        ]
+                    )
+                    sheet.cell(row=sheet.max_row, column=8).fill = fill(part.status)
+                for line in result.landed:
+                    amount = "" if line.cents is None else round_half_up(line.cents)
+                    sheet.append(
+                        [
+                            *head,
+                            line.charge,
+                            "duty" if line.charge in DUTY_CHARGES else "tax",
+                            amount,
+                            line.status,
+                            line.payer,
+                            line.note,
+                        ]
+                    )
+                    sheet.cell(row=sheet.max_row, column=8).fill = fill(line.status)
+    for j, width in enumerate((10, 10, 12, 30, 24, 10, 12, 14, 16, 80), start=1):
+        sheet.column_dimensions[get_column_letter(j)].width = width
+
+
 def build_xlsx(data: Data, today: date) -> Workbook:
     book = Workbook()
     book.remove(book.worksheets[0])  # the default empty sheet
@@ -2803,6 +3395,7 @@ def build_xlsx(data: Data, today: date) -> Workbook:
     sheet_contacts(book, data)
     sheet_prices(book, data)
     sheet_all_in(book, data)
+    sheet_landed(book, data)
     for name, columns in SCHEMA.items():
         write_raw(book.create_sheet(name[:31]), columns, data.rows(name))
     return book

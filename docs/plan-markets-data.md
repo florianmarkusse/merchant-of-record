@@ -61,8 +61,9 @@ a value waits on a re-fetch, an email or an adviser.
   `on_event`), `destinations` (blank = all) and `fuel_applies`. The total
   counts freight, fuel, `always` fees, and `duties_paid` fees where the
   border rule says duty or tax is due. Duties and taxes themselves, and
-  pass-through duties such as VIO's EUR 3, are left out because they are
-  the same whichever carrier carries the parcel. A missing amount makes the
+  fees a carrier only passes through (VIO's EUR 2, the EU handling fee),
+  are left out of this carrier total; the landed-cost breakdown (phase 2
+  below) adds them from `landed_rates.csv`. A missing amount makes the
   total a lower bound (shown as ≥), never zero.
 - **Display rates are ECB reference rates** (decided 2026-11-07: an
   official, dated source for every currency we meet; VND stays at the
@@ -116,7 +117,8 @@ a value waits on a re-fetch, an email or an adviser.
 | `surcharges.csv` | fee per service, or per rate card where a card has its own terms |
 | `transit.csv` | transit days per service × destination |
 | `service_restrictions.csv` | what a service allows per product category |
-| `scenarios.csv` | reference parcel for the all-in cost: weight, goods value, category |
+| `scenarios.csv` | reference parcel for the all-in cost: weight, box size, goods value, category |
+| `landed_rates.csv` | duty, customs fee or tax per country or group (× category), with its band (always, up to or above a limit), who collects it and its base |
 | `border_charges.csv` | country or group (× category): duty or tax collected at the border always, never, or above a limit |
 
 ## Commands
@@ -255,6 +257,36 @@ status, paid by) for filtering in Drive.
 category and showing all six multiplies the table by six; apparel is
 where duty weighs most, e.g. ID's 25%). Other categories can be built on
 request.
+
+**Built 14-Nov-2026**, with these changes to the design above:
+
+- Each `landed_rates.csv` row carries its own band (`applies` = `always`,
+  `up_to` or `above` a limit, with the limit's basis) and `collected`
+  (`border` or `seller`), instead of `border_charges.csv` deciding. The
+  law draws different lines for different charges (EU: the EUR 3 duty and
+  the EUR 2 fee at the border, VAT through IOSS up to EUR 150), which one
+  border rule cannot express. The most specific row whose band holds the
+  parcel's value wins. `check` fails on overlapping bands for one country,
+  category and charge. Where `border_charges.csv` disagrees (MY: its
+  border limit tests goods plus freight, the LVG band tests the item), the
+  parcel's duty and tax lines are marked unverified with a note.
+- Charges are `duty`, `additional_duty` (US Section 301), `fee` (EU
+  handling fee), `import_tax` and `other_tax` (ID income tax); bases are
+  `percent`, `per_line` and `per_parcel`. Duties and fees come first; the
+  taxes' `goods_freight_duty` base includes them (q41 found the EU VAT base
+  includes the EUR 3 and EUR 2).
+- Seeded for apparel only, for the 11 reference destinations, with a
+  cotton knitted T-shirt (HS 6109.10) as the reference product. US 16.5%
+  MFN, US Section 301 12.5% and TH 30% MFN were checked on the web on
+  14-Nov-2026; JP's simplified rate and PH's rate were not found and are
+  `estimate`. Other categories need their own rows.
+- VIO's EUR 2 per HS code (from 2026-11-01, the date of the EU handling
+  fee) is the EU fee passed through: its surcharge is `passthrough` and the
+  fee counts once, in the landed lines.
+- Reference boxes are sized at or just below their actual weight at
+  divisor 5000, so no carrier total changed; the billed weight now follows
+  the box when a scenario's size is changed.
+- The `.xlsx` Landed sheet holds amounts as integer US cents.
 
 ### Phase 3, after phases 1 and 2: offer lifecycle and data checks
 
