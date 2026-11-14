@@ -6,7 +6,7 @@ asendia,Asendia,economy_postal,https://vn.asendia.com/homepage,rfq_sent,"e-PAQ, 
 yunexpress_vn,"VIO ePacket / VIO Shipping (YunExpress network, VN)",economy_postal,https://www.vioepacket.com/en,rfq_sent,"Da Nang HQ, branches Hanoi and HCMC; published rates from 2026-11-01; admin@vioshipping.com, WhatsApp/Zalo +84 943 978 891"
 janio,Janio,sea_line,https://janio.asia,rfq_sent,SG 4PL; VN as origin unverified
 boxme,Boxme,sea_line,https://boxme.asia,rfq_sent,VN-HQ; DDP 'upon agreement'
-jt_intl,J&T Express VN International,sea_line,https://www.jtexpress.vn,rfq_sent,VN entity Thuan Phong; international express to ~225 destinations incl. ID (2024 card); duties unpaid; contact@jet-logistics.com
+jt_intl,J&T Express VN International,sea_line,https://www.jtexpress.vn,quoted,VN entity Thuan Phong; international express to ~225 destinations incl. ID (2024 card); duties unpaid; contact@jet-logistics.com
 vnpost,Vietnam Post (EMS),postal,,not_pursued,duties unpaid; no international API
 aramex,Aramex (VN agent),integrator,,none,"later, GCC last mile"
 shipx,ShipX (shipx.asia),aggregator,https://shipx.asia,rfq_sent,"VN aggregator; own VN→US linehaul (Type 11 entry, USPS last mile), resold UPS/FedEx from VN, postal via YUN and Belgium Post; published ""from"" prices (research-logistics.md §3.2)"

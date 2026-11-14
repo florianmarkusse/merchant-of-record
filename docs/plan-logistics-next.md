@@ -17,12 +17,20 @@ Rates loaded, all list prices (no account discount):
 | FedEx | International Priority, International Economy | 2026 VN export tariff (PDF) | verified |
 | FedEx | IP, IE and FICP promo (VN account rates) | 2026 promo PDFs, saved 2026-11-10 | verified; FICP zones assumed equal to IP |
 | J&T Express VN | international express | 2024 card, MY/CN confirmed by April 2026 sheet | verified |
+| J&T Express VN | international express, quoted lanes (SG at two speeds) | quote in reply to q06, saved 14-Nov-2026 | verified; includes fuel and VAT; no validity date |
 | VIO ePacket (YunExpress network) | main routes, US-Saver, Extra | vioepacket.com, from 2026-11-01 | verified |
 | Vietnam Post EMS | EMS | third-party read of the calculator, DE 1 kg re-checked | secondary |
 
 Fuel is stored as this week's percentage (DHL 50%, FedEx 52.25%, UPS
 52.75% for 2026-11-09 to 2026-11-15); VIO includes fuel; J&T's is
 monthly and unknown.
+
+J&T's 14-Nov-2026 quote includes fuel and VAT. At 0.5 kg it costs
+US$ 10 to SG, 17-25 to KR, AU, TH and MY/PH/ID, 27-36 to GB, JP and US, and
+42-54 to the EU: cheap to SG, about the 2024 card plus 45-50% elsewhere in
+Asia and the US, and dear to the EU. Still duties unpaid; follow-up q45
+asks validity, DDP, API, transit and the sheet's oddities
+(`sources/jt_intl/README.md`).
 
 Indicative 0.5 kg list prices (US$, before fuel): VIO 7-16, J&T 16-26,
 DHL 54-73, UPS 62-95, FedEx IP 89-121. For light parcels the economy
