@@ -111,9 +111,9 @@ a value waits on a re-fetch, an email or an adviser.
 | `questions.csv` | question: email, adviser question or re-fetch, with priority, due date, blocker and providers |
 | `providers.csv` | logistics or landed-cost provider and our contact status |
 | `services.csv` | carrier service from an origin |
-| `rate_cards.csv` | price list of a service: kind, currency, validity, whether fuel and VAT are included |
+| `rate_cards.csv` | price list of a service: kind, currency, validity, when received, what it supersedes, its conditions, whether fuel and VAT are included |
 | `zones.csv` | country or group → zone, per rate card, with the mapping's status |
-| `rates.csv` | price per rate card × zone × weight |
+| `rates.csv` | price per rate card × zone × weight; `ack` on a price that falls as weight rises |
 | `surcharges.csv` | fee per service, or per rate card where a card has its own terms |
 | `transit.csv` | transit days per service × destination |
 | `service_restrictions.csv` | what a service allows per product category |
@@ -133,7 +133,7 @@ uv run scripts/markets.py build   # check, then write the views
 
 ## Next: quote terms and the landed-cost breakdown
 
-Status: designed and agreed 14-Nov-2026. Three phases, each
+Status: designed and agreed 14-Nov-2026; all three phases built the same day. Three phases, each
 built and checked before the next.
 
 ### Why
@@ -310,6 +310,24 @@ question that asked about it (e.g. `q45`) or is `confirmed`. (A rate for
 a zone with no destinations already fails `check`.) A mapped zone with no
 rates also fails. `build` also lists, per current card, the reference destinations it does
 not cover, so a gap is visible instead of silently missing from a table.
+
+**Phase 3 built 14-Nov-2026**, with these changes to the design above:
+
+- `supersedes` works per destination: a newer card replaces the older
+  one only where the newer card has a price. J&T's 2026 quote replaces
+  the 2024 card for its quoted lanes (all 11 reference destinations), and
+  the 2024 card is still compared for the rest (CN, HK, ...). The Older
+  offers section lists both kinds (ended, replaced).
+- `received_on` was filled from each card's `checked_on`, the date we
+  read it; `account_required` is `yes` for the FedEx promo cards (for VN
+  account holders), `unknown` for J&T's quotes and our sea-line estimate,
+  `no` elsewhere. No card has a `valid_until` or `volume_per_month` yet.
+- J&T's JP and US 5 kg prices carry `ack=q45`, the follow-up that asks
+  about them. The weight check runs once the other rate checks pass.
+- The all-in section lists, per current card, the reference destinations
+  it has no price for.
+- Dates added by this phase are shown as 14-Nov-2026; older text on the
+  page still prints ISO dates and is converted when next touched.
 
 ## Project rules applied
 

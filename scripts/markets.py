@@ -109,6 +109,11 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "currency",
         "effective_from",
         "effective_to",
+        "received_on",
+        "valid_until",
+        "supersedes",
+        "volume_per_month",
+        "account_required",
         "fuel",
         "vat",
         "status",
@@ -126,6 +131,7 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "weight_kg",
         "amount_minor",
         "amount_max_minor",
+        "ack",
         "notes",
     ),
     "surcharges": (
@@ -283,6 +289,10 @@ RELATIONSHIPS = (
     "n/a",
 )
 RATE_CARD_KINDS = ("list", "promo", "quote", "contract", "estimate")
+ACCOUNT_REQUIRED = ("yes", "no", "unknown")
+# A rate whose price falls as weight rises needs an ack: the question that asked
+# about it, or "confirmed" (docs/plan-markets-data.md, phase 3 E).
+CONFIRMED = "confirmed"
 # What a card's prices include (docs/plan-markets-data.md, phase 1 B).
 type CardFuel = Literal["included", "extra", "unknown"]
 CARD_FUEL: tuple[CardFuel, ...] = ("included", "extra", "unknown")
@@ -661,8 +671,45 @@ def check_rate_cards(data: Data, known: Known) -> list[str]:
         errors.extend(one_of("rate_cards", i, row, "currency", EXPONENT))
         errors.extend(one_of("rate_cards", i, row, "fuel", CARD_FUEL))
         errors.extend(one_of("rate_cards", i, row, "vat", CARD_VAT))
-        dates = ("effective_from", "effective_to")
+        errors.extend(
+            one_of("rate_cards", i, row, "account_required", ACCOUNT_REQUIRED)
+        )
+        errors.extend(pattern("rate_cards", i, row, ("volume_per_month",), INTEGER))
+        dates = ("effective_from", "effective_to", "received_on", "valid_until")
         errors.extend(check_dates("rate_cards", i, row, dates))
+    errors.extend(check_supersedes(data, known))
+    return errors
+
+
+def check_supersedes(data: Data, known: Known) -> list[str]:
+    """A card replaces another card of the same provider, without cycles."""
+    errors: list[str] = []
+    cards = by_key(data.rows("rate_cards"), "rate_card")
+    services = by_key(data.rows("services"), "service")
+    for i, row in enumerate(data.rows("rate_cards")):
+        here = where("rate_cards", i)
+        older = row["supersedes"]
+        if not older:
+            continue
+        if older not in known.cards:
+            errors.append(f"{here}: unknown supersedes {older!r}")
+            continue
+        if older == row["rate_card"]:
+            errors.append(f"{here}: a card cannot supersede itself")
+            continue
+        mine = services.get(row["service"])
+        theirs = services.get(cards[older]["service"])
+        if mine is not None and theirs is not None:
+            if mine["provider"] != theirs["provider"]:
+                errors.append(f"{here}: supersedes {older} of another provider")
+        seen = {row["rate_card"]}
+        step = older
+        while step:
+            if step in seen:
+                errors.append(f"{here}: supersedes forms a cycle through {step}")
+                break
+            seen.add(step)
+            step = cards[step]["supersedes"] if step in cards else ""
     return errors
 
 
@@ -676,8 +723,13 @@ def check_zones_and_rates(data: Data, known: Known) -> list[str]:
         card_zones.setdefault(row["rate_card"], set()).add(row["zone"])
 
     seen: set[tuple[str, str, str]] = set()
+    priced: set[tuple[str, str]] = set()
     for i, row in enumerate(data.rows("rates")):
+        priced.add((row["rate_card"], row["zone"]))
         here = where("rates", i)
+        ack = row["ack"]
+        if ack and ack != CONFIRMED and ack not in known.questions:
+            errors.append(f"{here}: ack {ack!r} is neither {CONFIRMED} nor a question")
         card = row["rate_card"]
         errors.extend(known_ref("rates", i, row, "rate_card", known.cards))
         if card in known.cards and row["zone"] not in card_zones.get(card, set()):
@@ -692,6 +744,34 @@ def check_zones_and_rates(data: Data, known: Known) -> list[str]:
         if key in seen:
             errors.append(f"{here}: duplicate rate {key}")
         seen.add(key)
+    for card, zones in card_zones.items():
+        for zone in sorted(zones):
+            if (card, zone) not in priced:
+                errors.append(f"zones.csv: zone {zone} of {card} has no rates")
+    if not errors:
+        errors.extend(check_weight_drops(data))
+    return errors
+
+
+def check_weight_drops(data: Data) -> list[str]:
+    """A price that falls as weight rises is a typing error or a carrier quirk:
+    the row must say which question asked about it, or that it is confirmed."""
+    errors: list[str] = []
+    lines: dict[tuple[str, str], list[tuple[Fraction, int, int]]] = {}
+    for i, row in enumerate(data.rows("rates")):
+        key = (row["rate_card"], row["zone"])
+        weight = Fraction(row["weight_kg"])
+        lines.setdefault(key, []).append((weight, int(row["amount_minor"]), i))
+    rows = data.rows("rates")
+    for (card, zone), points in lines.items():
+        points.sort()
+        for before, after in zip(points, points[1:], strict=False):
+            if after[1] < before[1] and not rows[after[2]]["ack"]:
+                errors.append(
+                    f"{where('rates', after[2])}: {card} zone {zone} costs less at "
+                    f"{kg_text(after[0])} kg than at {kg_text(before[0])} kg; "
+                    "set ack to the question that asks about it, or confirmed"
+                )
     return errors
 
 
@@ -1765,12 +1845,65 @@ def discount_text(discount: Discount) -> str:
             assert_never(discount.kind)
 
 
-def all_in_cards(data: Data) -> list[Row]:
-    """Rate cards that price at least one reference destination."""
+MONTHS = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
+
+
+def date_text(iso: str) -> str:
+    """An ISO date as people read it: 14-Nov-2026."""
+    day = date.fromisoformat(iso)
+    return f"{day.day:02d}-{MONTHS[day.month - 1]}-{day.year}"
+
+
+def ended_on(card: Row, today: date) -> str | None:
+    """The date a card stopped applying, when that is before today."""
+    for column in ("valid_until", "effective_to"):
+        if card[column] and date.fromisoformat(card[column]) < today:
+            return card[column]
+    return None
+
+
+def current_cards(data: Data, today: date) -> list[Row]:
+    """Cards not past their end of validity."""
+    return [card for card in data.rows("rate_cards") if ended_on(card, today) is None]
+
+
+def superseded_by(data: Data, card: Row, code: str, today: date) -> Row | None:
+    """The current card that replaces this one for a destination, if any. A card
+    replaces an older one only where it has a price for the destination."""
+    for newer in current_cards(data, today):
+        if newer["supersedes"] != card["rate_card"]:
+            continue
+        if zone_row(data, newer["rate_card"], code) is not None:
+            return newer
+    return None
+
+
+def current_zone(data: Data, card: Row, code: str, today: date) -> Row | None:
+    """The card's zone for a destination, unless a newer card replaces it there."""
+    if superseded_by(data, card, code, today) is not None:
+        return None
+    return zone_row(data, card["rate_card"], code)
+
+
+def all_in_cards(data: Data, today: date) -> list[Row]:
+    """Current cards that price at least one reference destination."""
     result: list[Row] = []
-    for card in data.rows("rate_cards"):
+    for card in current_cards(data, today):
         for code in ALL_IN_DESTINATIONS:
-            if zone_for(data, card["rate_card"], code) is not None:
+            if current_zone(data, card, code, today) is not None:
                 result.append(card)
                 break
     return result
@@ -2234,8 +2367,8 @@ def section_questions(data: Data) -> h.Element:
     ]
 
 
-def section_compare(data: Data) -> h.Element:
-    cards = data.rows("rate_cards")
+def section_compare(data: Data, today: date) -> h.Element:
+    cards = current_cards(data, today)
     blocks: list[h.Node] = []
     for weight in COMPARE_WEIGHTS:
         head = h.tr[
@@ -2245,7 +2378,7 @@ def section_compare(data: Data) -> h.Element:
         for country in compare_countries(data):
             cells: list[h.Node] = []
             for card in cards:
-                mapping = zone_row(data, card["rate_card"], country["iso2"])
+                mapping = current_zone(data, card, country["iso2"], today)
                 if mapping is None:
                     cells.append(h.td(class_="num")[""])
                     continue
@@ -2276,7 +2409,8 @@ def section_compare(data: Data) -> h.Element:
             "Freight only, before fuel, duty-paid fee, other surcharges and any "
             "discount. "
             f"{USD_RATE_NOTE}. A blank cell means the card has no price at that exact "
-            "weight or no zone for that country. "
+            "weight or no zone for that country, or a newer card replaces it there "
+            "(see Older offers). Only current cards are shown. "
             "Cell colour is the worse of the rate card's and the zone mapping's "
             "status; hover for the original amount."
         ],
@@ -2289,20 +2423,89 @@ def country_label(data: Data, code: str) -> str:
 
 
 def all_in_grid(
-    data: Data, scenario: Row, cards: list[Row]
+    data: Data, scenario: Row, cards: list[Row], today: date
 ) -> list[list[AllIn | None]]:
     grid: list[list[AllIn | None]] = []
     for code in ALL_IN_DESTINATIONS:
-        grid.append([all_in(data, card, code, scenario) for card in cards])
+        row: list[AllIn | None] = []
+        for card in cards:
+            if superseded_by(data, card, code, today) is not None:
+                row.append(None)
+            else:
+                row.append(all_in(data, card, code, scenario))
+        grid.append(row)
     return grid
 
 
-def section_all_in(data: Data) -> h.Element:
-    cards = all_in_cards(data)
+def coverage_gaps(data: Data, cards: list[Row], today: date) -> list[tuple[Row, str]]:
+    """Per card, the reference destinations it has no price for (a newer card's
+    price counts as covered)."""
+    gaps: list[tuple[Row, str]] = []
+    for card in cards:
+        missing: list[str] = []
+        for code in ALL_IN_DESTINATIONS:
+            if superseded_by(data, card, code, today) is not None:
+                continue
+            if zone_row(data, card["rate_card"], code) is None:
+                missing.append(code)
+        if missing:
+            gaps.append((card, " ".join(missing)))
+    return gaps
+
+
+def section_older(data: Data, today: date) -> h.Element:
+    rows: list[h.Node] = []
+    for card in data.rows("rate_cards"):
+        ended = ended_on(card, today)
+        if ended is not None:
+            rows.append(
+                h.tr[
+                    h.td[card["rate_card"]],
+                    h.td[f"ended {date_text(ended)}; left out of every comparison"],
+                ]
+            )
+            continue
+        for newer in current_cards(data, today):
+            if newer["supersedes"] != card["rate_card"]:
+                continue
+            places = sorted(
+                {
+                    row["destination"]
+                    for row in data.rows("zones")
+                    if row["rate_card"] == newer["rate_card"]
+                }
+            )
+            rows.append(
+                h.tr[
+                    h.td[card["rate_card"]],
+                    h.td[
+                        f"replaced by {newer['rate_card']} where that card has a "
+                        f"price ({' '.join(places)}); still compared elsewhere"
+                    ],
+                ]
+            )
+    return h.section[
+        h.h2(id="older")["Older offers"],
+        h.p(class_="muted")[
+            "Cards past their valid_until or effective_to date, and cards a newer "
+            "card supersedes. The comparisons show only current offers; the rate "
+            "cards section below still lists every card."
+        ],
+        h.div(class_="scroll")[
+            h.table[
+                h.thead[h.tr[h.th["Rate card"], h.th["Why it is not compared"]]],
+                h.tbody[rows or h.tr[h.td(colspan="2")["none"]]],
+            ]
+        ],
+    ]
+
+
+def section_all_in(data: Data, today: date) -> h.Element:
+    cards = all_in_cards(data, today)
     express = [c for c in cards if c["rate_card"] in BREAK_EVEN_CARDS]
     blocks: list[h.Node] = []
     for scenario in data.rows("scenarios"):
-        grid = all_in_grid(data, scenario, cards)
+        grid = all_in_grid(data, scenario, cards, today)
         head = h.tr[
             h.th["Destination"], [h.th(class_="num")[c["rate_card"]] for c in cards]
         ]
@@ -2420,6 +2623,14 @@ def section_all_in(data: Data) -> h.Element:
             ],
         ],
         blocks,
+        h.h3["Reference destinations without a price"],
+        h.ul(class_="muted")[
+            [
+                h.li[f"{card['rate_card']}: {missing}"]
+                for card, missing in coverage_gaps(data, cards, today)
+            ]
+            or h.li["none"]
+        ],
         h.h3["Border rules used"],
         section_border_rules(data),
     ]
@@ -2518,11 +2729,11 @@ LANDED_COLUMNS: tuple[str, ...] = (
 )
 
 
-def section_landed(data: Data) -> h.Element:
-    cards = all_in_cards(data)
+def section_landed(data: Data, today: date) -> h.Element:
+    cards = all_in_cards(data, today)
     blocks: list[h.Node] = []
     for scenario in data.rows("scenarios"):
-        grid = all_in_grid(data, scenario, cards)
+        grid = all_in_grid(data, scenario, cards, today)
         rows: list[h.Node] = []
         for code, results in zip(ALL_IN_DESTINATIONS, grid, strict=True):
             first = True
@@ -2730,6 +2941,27 @@ def section_carriers(data: Data) -> h.Element:
     ]
 
 
+def offer_text(card: Row) -> str:
+    """When we got the card, how long it holds, what it replaces, its conditions."""
+    parts: list[str] = []
+    if card["received_on"]:
+        parts.append(f"Received {date_text(card['received_on'])}")
+    if card["valid_until"]:
+        parts.append(f"valid until {date_text(card['valid_until'])}")
+    if card["supersedes"]:
+        parts.append(f"supersedes {card['supersedes']}")
+    if card["volume_per_month"]:
+        parts.append(f"from {int(card['volume_per_month']):,} parcels a month")
+    match card["account_required"]:
+        case "yes":
+            parts.append("needs an account")
+        case "unknown":
+            parts.append("account need unknown")
+        case _:
+            pass
+    return "; ".join(parts) + "." if parts else ""
+
+
 def section_rate_cards(data: Data) -> h.Element:
     blocks: list[h.Node] = []
     for card in data.rows("rate_cards"):
@@ -2775,6 +3007,7 @@ def section_rate_cards(data: Data) -> h.Element:
                         (
                             f" Valid {card['effective_from'] or '?'} to "
                             f"{card['effective_to'] or 'open'}. "
+                            f"{offer_text(card)} "
                             f"Fuel: {FUEL_TEXT[fuel_of(card)]}. "
                             f"VAT: {VAT_TEXT[vat_of(card)]}. "
                         ),
@@ -3021,6 +3254,7 @@ def build_html(data: Data, today: date) -> str:
                     h.a(href="#compare")["Price comparison"],
                     h.a(href="#all-in")["All-in cost"],
                     h.a(href="#landed")["Landed cost"],
+                    h.a(href="#older")["Older offers"],
                     h.a(href="#carriers")["Providers"],
                     h.a(href="#rates")["Rate cards"],
                     h.a(href="#surcharges")["Surcharges"],
@@ -3032,9 +3266,10 @@ def build_html(data: Data, today: date) -> str:
                 section_contacts(data),
                 section_details(data),
                 section_questions(data),
-                section_compare(data),
-                section_all_in(data),
-                section_landed(data),
+                section_compare(data, today),
+                section_all_in(data, today),
+                section_landed(data, today),
+                section_older(data, today),
                 section_carriers(data),
                 section_rate_cards(data),
                 section_surcharges(data),
@@ -3240,8 +3475,8 @@ def sheet_contacts(book: Workbook, data: Data) -> None:
     set_widths(sheet, CONTACT_WIDTHS)
 
 
-def sheet_prices(book: Workbook, data: Data) -> None:
-    cards = data.rows("rate_cards")
+def sheet_prices(book: Workbook, data: Data, today: date) -> None:
+    cards = current_cards(data, today)
     sheet = book.create_sheet("Prices")
     sheet.append(
         [
@@ -3257,7 +3492,7 @@ def sheet_prices(book: Workbook, data: Data) -> None:
             values: list[str] = [f"{country['iso2']} {country['name']}"]
             statuses: list[Status] = []
             for card in cards:
-                mapping = zone_row(data, card["rate_card"], country["iso2"])
+                mapping = current_zone(data, card, country["iso2"], today)
                 rate = None
                 status = as_status(card["status"])
                 if mapping is not None:
@@ -3275,8 +3510,8 @@ def sheet_prices(book: Workbook, data: Data) -> None:
         sheet.column_dimensions[get_column_letter(j)].width = 18
 
 
-def sheet_all_in(book: Workbook, data: Data) -> None:
-    cards = all_in_cards(data)
+def sheet_all_in(book: Workbook, data: Data, today: date) -> None:
+    cards = all_in_cards(data, today)
     express = [c for c in cards if c["rate_card"] in BREAK_EVEN_CARDS]
     sheet = book.create_sheet("All-in")
     sheet.append(
@@ -3288,7 +3523,7 @@ def sheet_all_in(book: Workbook, data: Data) -> None:
         ]
     )
     for scenario in data.rows("scenarios"):
-        grid = all_in_grid(data, scenario, cards)
+        grid = all_in_grid(data, scenario, cards, today)
         goods = money(int(scenario["goods_value_minor"]), scenario["currency"])
         sheet.append([])
         sheet.append(
@@ -3323,9 +3558,9 @@ def sheet_all_in(book: Workbook, data: Data) -> None:
         sheet.column_dimensions[get_column_letter(j)].width = 18
 
 
-def sheet_landed(book: Workbook, data: Data) -> None:
+def sheet_landed(book: Workbook, data: Data, today: date) -> None:
     """Long format: one row per parcel line, for filtering in Drive."""
-    cards = all_in_cards(data)
+    cards = all_in_cards(data, today)
     sheet = book.create_sheet("Landed")
     sheet.append(
         [
@@ -3343,7 +3578,7 @@ def sheet_landed(book: Workbook, data: Data) -> None:
     )
     bold_row(sheet, 1)
     for scenario in data.rows("scenarios"):
-        grid = all_in_grid(data, scenario, cards)
+        grid = all_in_grid(data, scenario, cards, today)
         for code, results in zip(ALL_IN_DESTINATIONS, grid, strict=True):
             for result in results:
                 if result is None:
@@ -3393,9 +3628,9 @@ def build_xlsx(data: Data, today: date) -> Workbook:
     sheet_overview(book, data)
     sheet_todo(book, data, today)
     sheet_contacts(book, data)
-    sheet_prices(book, data)
-    sheet_all_in(book, data)
-    sheet_landed(book, data)
+    sheet_prices(book, data, today)
+    sheet_all_in(book, data, today)
+    sheet_landed(book, data, today)
     for name, columns in SCHEMA.items():
         write_raw(book.create_sheet(name[:31]), columns, data.rows(name))
     return book
