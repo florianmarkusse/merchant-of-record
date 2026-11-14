@@ -29,6 +29,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "docs" / "markets"
 HTML_OUT = ROOT / "docs" / "markets.html"
@@ -108,7 +109,8 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "currency",
         "effective_from",
         "effective_to",
-        "excludes",
+        "fuel",
+        "vat",
         "status",
         "source",
         "source_url",
@@ -117,7 +119,7 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "question",
         "notes",
     ),
-    "zones": ("rate_card", "destination", "zone", "notes"),
+    "zones": ("rate_card", "destination", "zone", "status", "notes"),
     "rates": (
         "rate_card",
         "zone",
@@ -128,6 +130,7 @@ SCHEMA: dict[str, tuple[str, ...]] = {
     ),
     "surcharges": (
         "service",
+        "rate_card",
         "surcharge",
         "basis",
         "rate_percent",
@@ -254,6 +257,11 @@ RELATIONSHIPS = (
     "n/a",
 )
 RATE_CARD_KINDS = ("list", "promo", "quote", "contract", "estimate")
+# What a card's prices include (docs/plan-markets-data.md, phase 1 B).
+type CardFuel = Literal["included", "extra", "unknown"]
+CARD_FUEL: tuple[CardFuel, ...] = ("included", "extra", "unknown")
+type CardVat = Literal["included", "excluded", "unknown"]
+CARD_VAT: tuple[CardVat, ...] = ("included", "excluded", "unknown")
 SURCHARGE_BASES = (
     "percent_of_freight",
     "percent_of_duties",
@@ -614,6 +622,8 @@ def check_rate_cards(data: Data, known: Known) -> list[str]:
         errors.extend(known_ref("rate_cards", i, row, "service", known.services))
         errors.extend(one_of("rate_cards", i, row, "kind", RATE_CARD_KINDS))
         errors.extend(one_of("rate_cards", i, row, "currency", EXPONENT))
+        errors.extend(one_of("rate_cards", i, row, "fuel", CARD_FUEL))
+        errors.extend(one_of("rate_cards", i, row, "vat", CARD_VAT))
         dates = ("effective_from", "effective_to")
         errors.extend(check_dates("rate_cards", i, row, dates))
     return errors
@@ -625,6 +635,7 @@ def check_zones_and_rates(data: Data, known: Known) -> list[str]:
     for i, row in enumerate(data.rows("zones")):
         errors.extend(known_ref("zones", i, row, "rate_card", known.cards))
         errors.extend(known_ref("zones", i, row, "destination", known.places))
+        errors.extend(one_of("zones", i, row, "status", STATUSES))
         card_zones.setdefault(row["rate_card"], set()).add(row["zone"])
 
     seen: set[tuple[str, str, str]] = set()
@@ -649,9 +660,19 @@ def check_zones_and_rates(data: Data, known: Known) -> list[str]:
 
 def check_surcharges(data: Data, known: Known) -> list[str]:
     errors: list[str] = []
+    cards = by_key(data.rows("rate_cards"), "rate_card")
     for i, row in enumerate(data.rows("surcharges")):
+        here = where("surcharges", i)
         errors.extend(check_status_row("surcharges", i, row, known))
         errors.extend(known_ref("surcharges", i, row, "service", known.services))
+        card = cards.get(row["rate_card"]) if row["rate_card"] else None
+        if row["rate_card"] and card is None:
+            errors.append(f"{here}: unknown rate_card {row['rate_card']!r}")
+        if card is not None and card["service"] != row["service"]:
+            errors.append(f"{here}: rate_card {row['rate_card']} is of another service")
+        fuel = row["surcharge"] == "fuel"
+        if card is not None and fuel and card["fuel"] == "included":
+            errors.append(f"{here}: fuel row for a card whose prices include fuel")
         errors.extend(one_of("surcharges", i, row, "basis", SURCHARGE_BASES))
         errors.extend(one_of("surcharges", i, row, "currency", EXPONENT))
         amounts = ("amount_minor", "min_amount_minor")
@@ -788,17 +809,47 @@ def overview_fact(facts: dict[FactKey, Resolved], topic: str) -> Resolved | None
     return facts.get((topic, "", ""))
 
 
-def zone_for(data: Data, card: str, code: str) -> str | None:
+def zone_row(data: Data, card: str, code: str) -> Row | None:
+    """The zones row that maps a country to a zone of a card, directly or by group."""
     mine = groups_of(data, code)
-    via_group: str | None = None
+    via_group: Row | None = None
     for row in data.rows("zones"):
         if row["rate_card"] != card:
             continue
         if row["destination"] == code:
-            return row["zone"]
+            return row
         if row["destination"] in mine and via_group is None:
-            via_group = row["zone"]
+            via_group = row
     return via_group
+
+
+def zone_for(data: Data, card: str, code: str) -> str | None:
+    row = zone_row(data, card, code)
+    return row["zone"] if row is not None else None
+
+
+def surcharges_for(data: Data, card: Row) -> list[Row]:
+    """The surcharges that apply to a card's prices.
+
+    A row without a rate_card applies to every card of its service; a card's own
+    rows for a surcharge replace the service rows of that name. A card whose
+    prices include fuel takes no fuel row.
+    """
+    service = [
+        row
+        for row in data.rows("surcharges")
+        if row["service"] == card["service"]
+        and row["rate_card"] in ("", card["rate_card"])
+    ]
+    own = {row["surcharge"] for row in service if row["rate_card"]}
+    result: list[Row] = []
+    for row in service:
+        if not row["rate_card"] and row["surcharge"] in own:
+            continue
+        if row["surcharge"] == "fuel" and card["fuel"] == "included":
+            continue
+        result.append(row)
+    return result
 
 
 def rate_for(data: Data, card: str, zone: str, weight: str) -> Row | None:
@@ -1162,9 +1213,10 @@ def fee_cents(
 
 def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
     name = card["rate_card"]
-    zone = zone_for(data, name, code)
-    if zone is None:
+    mapping = zone_row(data, name, code)
+    if mapping is None:
         return None
+    zone = mapping["zone"]
     billed = billed_weight(data, name, Fraction(scenario["weight_kg"]))
     if billed is None:
         return None
@@ -1178,27 +1230,31 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
     service = by_key(data.rows("services"), "service")[card["service"]]
     card_status = as_status(card["status"])
     weight = kg_text(billed)
+    freight_status = worst((card_status, as_status(mapping["status"])))
     freight_note = f"zone {zone}, {weight} kg, {price_text(rate, card['currency'])}"
+    if mapping["status"] != "verified" and mapping["notes"]:
+        freight_note += f"; zone {mapping['status']}: {mapping['notes']}"
     if rate["amount_max_minor"]:
-        card_status = worst((card_status, "estimate"))
+        freight_status = worst((freight_status, "estimate"))
         freight_note += " (low end of the range)"
 
     fees = [
         row
-        for row in data.rows("surcharges")
-        if row["service"] == card["service"]
-        and (not row["destinations"] or in_places(data, code, row["destinations"]))
+        for row in surcharges_for(data, card)
+        if not row["destinations"] or in_places(data, code, row["destinations"])
     ]
     fuel_row = next((row for row in fees if row["surcharge"] == "fuel"), None)
     fuel_rate: Fraction | None = None
-    if fuel_row is not None and fuel_row["rate_percent"]:
+    if card["fuel"] == "included":
+        fuel_rate = Fraction(0)
+    elif fuel_row is not None and fuel_row["rate_percent"]:
         fuel_rate = Fraction(fuel_row["rate_percent"]) / 100
 
     freight_with_fuel = freight * (1 + fuel_rate) if fuel_rate is not None else None
     border = border_for(data, code, scenario, freight_with_fuel)
     duty_paid = duty_paid_for(data, service, code)
 
-    parts: list[Part] = [Part("freight", freight, card_status, freight_note)]
+    parts: list[Part] = [Part("freight", freight, freight_status, freight_note)]
     fuel_base = freight
     fuel_notes: list[str] = []
     for row in fees:
@@ -1227,7 +1283,9 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
                 row["surcharge"], cents, status, "; ".join(t for t in (how, note) if t)
             )
         )
-    if fuel_row is None:
+    if card["fuel"] == "included":
+        fuel = Part("fuel", Fraction(0), card_status, "included in the card's prices")
+    elif fuel_row is None:
         fuel = Part("fuel", None, "to_fetch", "no fuel row for this service")
     elif fuel_rate is None:
         fuel = Part("fuel", None, as_status(fuel_row["status"]), "rate not known")
@@ -1259,11 +1317,39 @@ def all_in(data: Data, card: Row, code: str, scenario: Row) -> AllIn | None:
 def all_in_text(result: AllIn) -> str:
     prefix = "" if result.complete() else "≥ "
     text = f"{prefix}US${whole_dollars(result.total()):,}"
+    if result.card["vat"] == "included":
+        text = f"{text} incl. VAT"
     if result.buyer_pays():
         return f"{text} DAP"
     if result.border.outcome != "free" and result.duty_paid == "unknown":
         return f"{text} DDP?"
     return text
+
+
+FUEL_TEXT: dict[CardFuel, str] = {
+    "included": "included",
+    "extra": "charged on top",
+    "unknown": "not stated",
+}
+VAT_TEXT: dict[CardVat, str] = {
+    "included": "included",
+    "excluded": "charged on top where due",
+    "unknown": "not stated",
+}
+
+
+def fuel_of(card: Row) -> CardFuel:
+    for value in CARD_FUEL:
+        if card["fuel"] == value:
+            return value
+    raise ValueError(f"fuel {card['fuel']!r}; run check first")
+
+
+def vat_of(card: Row) -> CardVat:
+    for value in CARD_VAT:
+        if card["vat"] == value:
+            return value
+    raise ValueError(f"vat {card['vat']!r}; run check first")
 
 
 def all_in_title(result: AllIn) -> str:
@@ -1274,6 +1360,7 @@ def all_in_title(result: AllIn) -> str:
         lines.append(f"{part.label}: {amount}{detail} [{part.status}]")
     lines.append(f"border: {result.border.outcome}, {result.border.note}")
     lines.append(f"duty-paid by this service: {result.duty_paid}")
+    lines.append(f"VAT in the card's prices: {VAT_TEXT[vat_of(result.card)]}")
     if result.buyer_pays():
         lines.append("DAP: the buyer would pay duties or tax at the door")
     return "\n".join(lines)
@@ -1822,18 +1909,21 @@ def section_compare(data: Data) -> h.Element:
         for country in compare_countries(data):
             cells: list[h.Node] = []
             for card in cards:
-                zone = zone_for(data, card["rate_card"], country["iso2"])
-                rate = (
-                    rate_for(data, card["rate_card"], zone, weight)
-                    if zone is not None
-                    else None
-                )
+                mapping = zone_row(data, card["rate_card"], country["iso2"])
+                if mapping is None:
+                    cells.append(h.td(class_="num")[""])
+                    continue
+                zone = mapping["zone"]
+                rate = rate_for(data, card["rate_card"], zone, weight)
                 if rate is None:
                     cells.append(h.td(class_="num")[""])
                     continue
+                status = worst(
+                    (as_status(card["status"]), as_status(mapping["status"]))
+                )
                 cells.append(
                     h.td(
-                        class_=f"num {status_class(card['status'])}",
+                        class_=f"num {status_class(status)}",
                         title=f"zone {zone}: {price_text(rate, card['currency'])}",
                     )[usd_text(rate, card["currency"])]
                 )
@@ -1851,7 +1941,8 @@ def section_compare(data: Data) -> h.Element:
             "discount. "
             f"{USD_RATE_NOTE}. A blank cell means the card has no price at that exact "
             "weight or no zone for that country. "
-            "Cell colour is the rate card's status; hover for the original amount."
+            "Cell colour is the worse of the rate card's and the zone mapping's "
+            "status; hover for the original amount."
         ],
         blocks,
     ]
@@ -1973,6 +2064,11 @@ def section_all_in(data: Data) -> h.Element:
             h.li[
                 "DDP?: duty or tax may be due and the service's duty-paid terms "
                 "are unknown."
+            ],
+            h.li[
+                "incl. VAT: the card's prices include Vietnamese VAT, unlike most "
+                "others; shown as quoted, not adjusted. Where a card's prices "
+                "include fuel, the fuel part is zero."
             ],
             h.li[
                 "Cell colour is the worst status among the parts and the border "
@@ -2114,9 +2210,12 @@ def section_rate_cards(data: Data) -> h.Element:
         currency = card["currency"]
         zones = zones_of(data, name)
         members: dict[str, list[str]] = {}
+        assumed: list[Row] = []
         for row in data.rows("zones"):
             if row["rate_card"] == name:
                 members.setdefault(row["zone"], []).append(row["destination"])
+                if row["status"] != "verified":
+                    assumed.append(row)
         rows: list[h.Node] = []
         for weight in weights_of(data, name):
             cells: list[h.Node] = []
@@ -2149,7 +2248,8 @@ def section_rate_cards(data: Data) -> h.Element:
                         (
                             f" Valid {card['effective_from'] or '?'} to "
                             f"{card['effective_to'] or 'open'}. "
-                            f"Excludes: {card['excludes'] or 'not stated'}. "
+                            f"Fuel: {FUEL_TEXT[fuel_of(card)]}. "
+                            f"VAT: {VAT_TEXT[vat_of(card)]}. "
                         ),
                         source_link(card),
                         f" · {card['research_ref']}",
@@ -2174,6 +2274,18 @@ def section_rate_cards(data: Data) -> h.Element:
                         h.tbody[zone_rows],
                     ]
                 ],
+                h.ul(class_="muted")[
+                    [
+                        h.li[
+                            chip(as_status(row["status"])),
+                            f" {row['destination']} → zone {row['zone']}",
+                            f": {row['notes']}" if row["notes"] else "",
+                        ]
+                        for row in assumed
+                    ]
+                ]
+                if assumed
+                else None,
             ]
         )
     return h.section[
@@ -2205,6 +2317,7 @@ def section_surcharges(data: Data) -> h.Element:
         rows.append(
             h.tr[
                 h.td[s["service"]],
+                h.td[s["rate_card"] or "all"],
                 h.td[s["surcharge"]],
                 h.td[s["basis"]],
                 h.td(class_="num")[amount or "?"],
@@ -2227,6 +2340,7 @@ def section_surcharges(data: Data) -> h.Element:
                 h.thead[
                     h.tr[
                         h.th["Service"],
+                        h.th["Rate card"],
                         h.th["Surcharge"],
                         h.th["Basis"],
                         h.th(class_="num")["Amount"],
@@ -2612,17 +2726,21 @@ def sheet_prices(book: Workbook, data: Data) -> None:
         bold_row(sheet, sheet.max_row)
         for country in compare_countries(data):
             values: list[str] = [f"{country['iso2']} {country['name']}"]
+            statuses: list[Status] = []
             for card in cards:
-                zone = zone_for(data, card["rate_card"], country["iso2"])
+                mapping = zone_row(data, card["rate_card"], country["iso2"])
                 rate = None
-                if zone is not None:
-                    rate = rate_for(data, card["rate_card"], zone, weight)
+                status = as_status(card["status"])
+                if mapping is not None:
+                    rate = rate_for(data, card["rate_card"], mapping["zone"], weight)
+                    status = worst((status, as_status(mapping["status"])))
                 values.append(usd_text(rate, card["currency"]) if rate else "")
+                statuses.append(status)
             sheet.append(values)
             r = sheet.max_row
-            for j, card in enumerate(cards, start=2):
+            for j, status in enumerate(statuses, start=2):
                 if sheet.cell(row=r, column=j).value:
-                    sheet.cell(row=r, column=j).fill = fill(as_status(card["status"]))
+                    sheet.cell(row=r, column=j).fill = fill(status)
     sheet.column_dimensions["A"].width = 28
     for j in range(2, len(cards) + 2):
         sheet.column_dimensions[get_column_letter(j)].width = 18

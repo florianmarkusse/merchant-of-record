@@ -110,10 +110,10 @@ a value waits on a re-fetch, an email or an adviser.
 | `questions.csv` | question: email, adviser question or re-fetch, with priority, due date, blocker and providers |
 | `providers.csv` | logistics or landed-cost provider and our contact status |
 | `services.csv` | carrier service from an origin |
-| `rate_cards.csv` | price list of a service: kind, currency, validity |
-| `zones.csv` | country or group → zone, per rate card |
+| `rate_cards.csv` | price list of a service: kind, currency, validity, whether fuel and VAT are included |
+| `zones.csv` | country or group → zone, per rate card, with the mapping's status |
 | `rates.csv` | price per rate card × zone × weight |
-| `surcharges.csv` | fee per service |
+| `surcharges.csv` | fee per service, or per rate card where a card has its own terms |
 | `transit.csv` | transit days per service × destination |
 | `service_restrictions.csv` | what a service allows per product category |
 | `scenarios.csv` | reference parcel for the all-in cost: weight, goods value, category |
@@ -159,6 +159,14 @@ destination × reference parcel: freight, fuel, fixed surcharges,
 duty-handling fee, duty, import tax, total landed cost.
 
 ### Phase 1: terms per rate card, inclusions as fixed values, zone status
+
+Built 14-Nov-2026. Besides the plan below: `fuel` also takes `unknown`
+(VN Post's calculator and VIO Extra do not say); the J&T 2024 card's
+surcharges moved onto that card, so the quote does not inherit them; VIO's
+and the sea-line estimate's 0% fuel rows became `fuel=included`; J&T's
+goods rules were copied to `jt_intl_sg_fast`; FedEx cards whose PDFs do not
+state VAT are `vat=unknown`; the VAT question went into the Vietnam
+adviser question q15.
 
 **A. Surcharges per rate card.** `surcharges.csv` gets a `rate_card`
 column. Blank means every card of the service; a value limits the row to
