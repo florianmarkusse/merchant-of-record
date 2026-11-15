@@ -8,6 +8,10 @@ worldwide, and most of them already use DHL. No code is written until
 this is confirmed. Revised 08-Nov-2026: §4 now decides indirect tax and
 duty separately (see there), also waiting for confirmation.
 
+Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
+overall design, and its §12 lists what it changes in this plan. Where the
+two differ, that plan wins.
+
 Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
 (including the new `07-keycaps-ceramics-lacquer.md`),
 `docs/research/logistics/08-regulations-la-kh-mm.md`,

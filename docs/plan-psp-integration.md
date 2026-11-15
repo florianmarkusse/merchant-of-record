@@ -4,6 +4,10 @@ Status: design proposal (04-Nov-2026), awaiting confirmation. No code yet.
 The language is still undecided, so the types below are written in neutral
 pseudo-notation (records, closed unions, functions), not in any language.
 
+Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
+overall design, and its §12 lists what it changes in this plan. Where the
+two differ, that plan wins.
+
 ## 0. Decisions and context so far
 
 - (04-Nov-2026) Legal entity: Singapore entity or Dutch BV, not decided yet.

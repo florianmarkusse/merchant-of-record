@@ -24,6 +24,35 @@ and wins where the two differ.
   lack of runtime type checks ever becomes the bottleneck). See Chosen
   Stack.
 
+- Where to start (15-Nov-2026): `docs/plan-architecture.md` is the confirmed
+  design for the whole flow and wins over the earlier plans where they
+  differ. Its §16 says what state the project is in and what comes next.
+  No code exists yet.
+- Decided 15-Nov-2026, with the reasons in `docs/plan-architecture.md`:
+  - A lock or a unique constraint guards; time only triggers. No leases,
+    no expiring idempotency keys of our own, no "old enough, so take it
+    over". Time starts work (retry, poll, deadline due) or is a promise
+    compared under the row lock (§4).
+  - After a vendor call with no answer, the operation's duplicate guard
+    decides (`vendor_constraint`, `compensable`, `none`), never a lookup
+    alone and never a clock (§5).
+  - Messages are facts only, no commands. Inbound is push, poll or file
+    as capability data, on one path (§5).
+  - Providers are picked by a registry with an exhaustive `match`. The
+    fakes are fake vendors over HTTP, inside the dev web server under
+    `/_fake/`, and offer every integration mode (§6).
+  - Shipping price and duty rates come from switchable sources, our own
+    tables or a provider, per lane (§8).
+  - The merchant receives exactly the price it names. Named fee
+    components (estimated PSP fee, FX, our margin), shipping, tax and
+    duty are added on top; the buyer sees them inside the item price.
+    Merchant prices are tax-exclusive (§8).
+  - We pay every carrier bill; a person attributes each difference to us
+    or to the merchant by cause (§9).
+  - The flow is fuzzed with Hypothesis: pure properties, the whole flow
+    as a state machine against the test database and the fakes, and a
+    real-concurrency suite (§10).
+
 ### Chosen Stack
 
 - Storage: PostgreSQL. Schema changes are numbered SQL files in

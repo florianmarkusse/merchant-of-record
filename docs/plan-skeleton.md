@@ -3,6 +3,10 @@
 Status: design, waiting for confirmation (05-Nov-2026). No code is written
 until this is confirmed.
 
+Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
+overall design, and its §12 lists what it changes in this plan. Where the
+two differ, that plan wins.
+
 ## 1. Scope
 
 The first slice builds the foundation everything else stands on, and

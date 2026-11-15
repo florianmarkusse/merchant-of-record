@@ -4,6 +4,10 @@ Status: design proposal (04-Nov-2026), awaiting confirmation. No code yet.
 This builds on `docs/plan-psp-integration.md` (core, PSP port, ledger,
 couriers, payouts) and only covers what merchants and buyers touch.
 
+Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
+overall design, and its §12 lists what it changes in this plan. Where the
+two differ, that plan wins.
+
 ## 1. The surfaces
 
 "Our frontend for merchants" is really three groups. Because we are the
