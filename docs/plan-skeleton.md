@@ -1,7 +1,11 @@
 # Plan: project skeleton and first slice
 
-Status: design, waiting for confirmation (05-Nov-2026). No code is written
-until this is confirmed.
+Status: built 16-Nov-2026, with the changes of plan-architecture.md §12 and
+these: the outbox (§7) moved to slice 2; account kinds follow
+plan-architecture.md §9; the currency exponent is an exhaustive `match`
+instead of a dict plus a test; the test database is emptied per test
+instead of rolled back, so commit-time triggers run. The open questions in
+§9 were answered: own role with `mor_dev` and `mor_test`, uuid7 ids.
 
 Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
 overall design, and its §12 lists what it changes in this plan. Where the

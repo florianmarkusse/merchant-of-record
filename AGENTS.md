@@ -27,7 +27,17 @@ and wins where the two differ.
 - Where to start (15-Nov-2026): `docs/plan-architecture.md` is the confirmed
   design for the whole flow and wins over the earlier plans where they
   differ. Its §16 says what state the project is in and what comes next.
-  No code exists yet.
+  Slice 1 (tooling, `money`, `db` and migrations, `ledger`) is built
+  (16-Nov-2026).
+- Decided 16-Nov-2026, starting slice 1:
+  - Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
+    reached over peer auth as the developer's own role
+    (`postgresql:///mor_dev`); no dedicated role locally.
+  - Ids are uuid7, made in code (`uuid.uuid7()`), so they sort by time
+    and code knows an id before inserting.
+  - The outbox moved from slice 1 to slice 2, where it is designed once
+    with `outbox_delivery`, the worker and the `message_type` enum
+    (plan-architecture.md §5, §12).
 - Decided 15-Nov-2026, with the reasons in `docs/plan-architecture.md`:
   - A lock or a unique constraint guards; time only triggers. No leases,
     no expiring idempotency keys of our own, no "old enough, so take it
@@ -89,7 +99,28 @@ and wins where the two differ.
 - Records are frozen dataclasses or msgspec structs, closed sets are
   `StrEnum` or `Literal`, results are unions of records matched with
   `match` and `assert_never` for exhaustiveness.
-- Checks: the shared order; pyright in strict mode.
+- Checks: the shared order; pyright in strict mode. `scripts/` holds
+  PEP 723 scripts with their own dependencies (`uv run scripts/markets.py
+  check`); they are outside the package's pyright run.
+
+### Commands
+
+```
+uv run python -m mor.db.migrate          # apply migrations/ to DATABASE_URL (default mor_dev)
+uv run pytest                            # drops and recreates mor_test, then runs the suite
+HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
+```
+
+- Tests: `tests/conftest.py` recreates `mor_test` once per session with
+  the real migrations, and empties every table before each test that asks
+  for `database_url`. Tests commit for real, so commit-time triggers (the
+  ledger balance check) run as in prod. The runner's own tests use a
+  throwaway `mor_test_migrations`.
+- Async tests: pytest functions are synchronous and run their async body
+  with `asyncio.run`, one event loop per call; no pytest async plugin.
+- The ledger refuses `UPDATE` and `DELETE` by trigger but not `TRUNCATE`
+  (the suite truncates between tests). The prod database role must not be
+  granted `TRUNCATE` on ledger tables: to be done in the deploy slice.
 
 ## Code Style
 

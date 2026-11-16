@@ -926,9 +926,16 @@ Nothing is open in this plan. Open items that belong to other plans
 
 ## 16. Picking this up in a new session
 
-Where things stand (15-Nov-2026): the repository holds plans, research
-and `scripts/markets.py` only. There is no `pyproject.toml`, no `src/`
-and no database yet. Nothing is to be built until the user says so.
+Where things stand (16-Nov-2026): slice 1 is built: `pyproject.toml`,
+`src/mor/` with `config`, `audit`, `money/`, `db/` (async connection and
+the migration runner) and `ledger/`, `migrations/0001_ledger.sql`, and
+tests including Hypothesis properties. The outbox moved to slice 2. The
+next step is slice 2, designed first (it adds tables and message shapes):
+its design goes to the user before code. Hypothesis was checked when added
+(6.170.15, MPL-2.0, supports Python 3.14).
+
+What follows is the hand-over as written before slice 1, kept for its
+reading order.
 
 Read, in this order:
 

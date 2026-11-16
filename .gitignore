@@ -22,7 +22,11 @@ logs/
 # Session handoffs and their scratch scripts (local only)
 .ai/handoff-*
 
-# Language-specific entries are added when the language is chosen.
+# Python
+.venv/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
 
 # Generated markets workbook (docs/markets/out/), upload to Drive instead
 docs/markets/out/
