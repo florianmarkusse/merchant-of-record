@@ -27,7 +27,11 @@ from mor.messaging.routing import ConsumerName
 from mor.messaging.store import AlreadyHandled, mark_handled
 
 
-IDLE_SLEEP_SECONDS = 0.5
+# An idle worker waits for a NOTIFY on channel `outbox_delivery`
+# (0003_delivery_notify.sql), for the next retry to come due, or at most this
+# long: notifications sent while no worker listens are not kept, so polling
+# stays as the fallback.
+FALLBACK_POLL = timedelta(seconds=5)
 MAX_BACKOFF = timedelta(hours=1)
 
 
@@ -282,20 +286,73 @@ async def drain_once(
     return results
 
 
+async def next_retry_at(conn: Connection, now: datetime) -> datetime | None:
+    """The earliest future `not_before` among deliveries that could run next
+    (the oldest unhandled per consumer and aggregate). Ones already due are
+    left out: they are busy on another worker or blocked behind an older
+    one, and counting them would make an idle worker spin."""
+    cur = await conn.execute(
+        """
+        SELECT min(not_before)
+        FROM (
+          SELECT DISTINCT ON (consumer, aggregate_type, aggregate_id) not_before
+          FROM outbox_delivery
+          WHERE handled_at IS NULL
+          ORDER BY consumer, aggregate_type, aggregate_id, seq
+        ) AS oldest
+        WHERE not_before > %(now)s
+        """,
+        {"now": now},
+    )
+    row = await cur.fetchone()
+    assert row is not None
+    retry_at = row[0]
+    assert retry_at is None or isinstance(retry_at, datetime)
+    return retry_at
+
+
+def idle_wait(
+    now: datetime, retry_at: datetime | None, fallback: timedelta
+) -> timedelta:
+    """How long an idle worker may wait before looking again."""
+    if retry_at is None:
+        return fallback
+    return max(timedelta(0), min(retry_at - now, fallback))
+
+
+async def listen(conn: Connection) -> None:
+    """Subscribe the worker's autocommit connection to new deliveries.
+    psycopg queues notifications that arrive while the worker is busy, so
+    one sent during a drain still wakes the next wait at once."""
+    await conn.execute("LISTEN outbox_delivery")
+
+
+async def wait_for_work(conn: Connection, wait: timedelta) -> bool:
+    """Wait for a notification, at most `wait`. True if one came."""
+    async for _ in conn.notifies(timeout=wait.total_seconds(), stop_after=1):
+        return True
+    return False
+
+
 async def run_worker(database_url: str) -> None:
+    """Drain until nothing runs, then wait for a notification, the next
+    retry or the fallback poll. Runs until cancelled or killed: a step in
+    flight rolls back, and its advisory lock goes with the connection."""
     async with await connect(database_url, autocommit=True) as conn:
+        await listen(conn)
         while True:
-            results = await drain_once(conn, datetime.now(UTC))
+            now = datetime.now(UTC)
+            results = await drain_once(conn, now)
+            ran = False
             for result in results:
                 if isinstance(result, Failed):
                     retry_at = format_moment(result.not_before)
                     print(f"failed: {result.error}; retry at {retry_at}")
-            ran = False
-            for result in results:
                 if isinstance(result, Ran):
                     ran = True
             if not ran:
-                await asyncio.sleep(IDLE_SLEEP_SECONDS)
+                retry_at = await next_retry_at(conn, now)
+                await wait_for_work(conn, idle_wait(now, retry_at, FALLBACK_POLL))
 
 
 if __name__ == "__main__":

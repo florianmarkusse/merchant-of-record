@@ -151,9 +151,13 @@ Order           { id, session_id, merchant_id, buyer, ship_to, invoice_id, state
 - **Auth:** secret API keys per merchant (`sk_test_…` / `sk_live_…`), stored
   hashed, shown once. Keys can be restricted to scopes (e.g. "products
   only"), and rotation keeps the old key valid for a short overlap.
-- **Test mode:** test keys hit the same API with separate data, the mock
-  PSP and a mock courier, so a merchant can run a whole order (pay → label →
-  delivered → payout statement) without real money or parcels.
+- **Test mode:** a separate sandbox deployment, not test keys on prod
+  (decided 17-Nov-2026, see plan-architecture.md §6). The sandbox runs
+  the same code with `ENVIRONMENT=test`, its own database and the fake
+  PSP and courier, so a merchant can run a whole order (pay → label →
+  delivered → payout statement) without real money or parcels. Sandbox
+  keys are issued there and work only there; going live means a new base
+  URL and a live key. Prod holds live data only: no `livemode` flag.
 - **Idempotency:** an `Idempotency-Key` header is required on every POST.
   It is stored per merchant with a unique constraint and replayed for 7
   days. The same key with different parameters returns 409.

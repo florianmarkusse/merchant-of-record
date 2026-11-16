@@ -356,10 +356,16 @@ connection, as a real third party would.
 
 **Environments.** `ENVIRONMENT` is `dev`, `test` or `prod`. Outside `prod`
 the registries raise on any provider but the fake, so a wrong account row
-cannot reach a real vendor. In `prod`, a merchant's test-mode API key
-routes to fake accounts and its records carry `livemode = false`
-(`plan-merchant-surfaces.md` §4). Contract tests against a vendor's
-sandbox are run by hand with an explicit flag, never by `pytest`.
+cannot reach a real vendor. Merchants test in a separate sandbox
+deployment (`ENVIRONMENT=test`, its own database, the fakes), never with
+test keys on prod (decided 17-Nov-2026, replacing "test keys on prod
+route to fake accounts, `livemode = false`"). Reasons: prod holds only
+live data, so no record needs a live/test flag and no test payment can
+reach a live report or payout; and the fakes never ship to prod. The
+cost: the sandbox is something merchants rely on, so it must stay up,
+and the long fuzz runs use a database of their own. Contract tests
+against a vendor's sandbox are run by hand with an explicit flag, never
+by `pytest`.
 
 **Every integration mode has a fake** (decided 15-Nov-2026: the fakes and
 the test setup must exercise every way a provider can be wired, not one

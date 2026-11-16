@@ -136,9 +136,16 @@ migrations would then not match.
   `not_before` (backoff, capped), and the loop goes on. The aggregate's
   later facts wait behind it, which keeps the order; a stuck delivery
   shows up in a query of `last_error IS NOT NULL`.
-- `python -m mor.messaging.worker`: runs the loop. It sleeps a short while only
-  when nothing is due (time only triggers). LISTEN/NOTIFY to wake at once
-  can come later.
+- `python -m mor.messaging.worker`: runs the loop. When a drain ran
+  nothing, the worker waits for a NOTIFY on `outbox_delivery`, for the
+  next retry among deliveries that could run next, or at most 5 s, the
+  fallback poll (added 17-Nov-2026, `0003_delivery_notify.sql`). A
+  statement trigger on `outbox_delivery` sends the NOTIFY, so no code
+  path can forget it; it is delivered only on commit and has no payload.
+  The fallback stays because a notification sent while no worker listens
+  is not kept. Watch `pg_notification_queue_usage()`: if the queue ever
+  filled (a listener stuck in a long transaction), commits that write
+  deliveries would fail. Workers never hold long transactions.
 
 ## 5. Testing
 
@@ -183,6 +190,13 @@ only on bugs.
 - The probe is the toy flow and stays as the deploy health check.
 - The inbox is kept (§2), for the reason given there.
 - msgspec 0.22.0 is added (BSD-3-Clause, Python 3.14 wheels).
+- For 2b (decided 16-Nov-2026): the effect machinery is proven on a
+  dev/test-only aggregate that calls a fake "echo" vendor. It is
+  transitional: once the fake PSP exercises the same machinery (slice 5),
+  the echo vendor and its aggregate are removed, unless they serve
+  something else by then. The fakes' own tables get a separate set of
+  migrations, applied only outside prod. starlette and httpx are
+  approved as dependencies.
 
 ## 9. What building 2a showed (16-Nov-2026)
 
@@ -198,8 +212,17 @@ only on bugs.
   echo deliveries give the same end state in either order. The unit test
   covers order; a flow where order changes the outcome must add it to the
   fuzzer's model.
+- Scaling is by running more worker processes: aggregates run in
+  parallel, one aggregate on one worker at a time. Every worker asks for
+  the same oldest candidates, so at many workers most lock attempts
+  return "busy": correct but wasted round trips. If it ever shows, start
+  each worker at a random offset or split aggregates by a hash of the id.
 - 20 runs of the fuzzer in a row passed: a dead connection's advisory
   lock was always gone by the next check.
+- With LISTEN/NOTIFY, a probe on `mor_dev` finishes in under 0.3 s,
+  start of the CLI included. Planted bugs: a worker that never listens,
+  and a next-retry query over every open delivery (which would make an
+  idle worker spin), each fail a test.
 - End to end on `mor_dev`: `python -m mor.messaging.worker` plus
   `python -m mor.probe` finishes a probe; with the worker stopped, the
   probe exits 1 after its wait.
