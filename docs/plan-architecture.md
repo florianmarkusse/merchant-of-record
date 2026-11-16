@@ -930,8 +930,10 @@ Where things stand (16-Nov-2026): slice 1 is built: `pyproject.toml`,
 `src/mor/` with `config`, `audit`, `money/`, `db/` (async connection and
 the migration runner) and `ledger/`, `migrations/0001_ledger.sql`, and
 tests including Hypothesis properties. The outbox moved to slice 2. The
-next step is slice 2, designed first (it adds tables and message shapes):
-its design goes to the user before code. Hypothesis was checked when added
+step after it is slice 2, planned in `plan-messaging.md`: step 2a (facts,
+deliveries, inbox, worker, the probe flow, layer 2 and 3 tests) is built;
+2b (effect consumers, duplicate guards, fake-vendor frame) is designed
+next, then 2c (inbound). Hypothesis was checked when added
 (6.170.15, MPL-2.0, supports Python 3.14).
 
 What follows is the hand-over as written before slice 1, kept for its

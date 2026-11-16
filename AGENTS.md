@@ -28,7 +28,8 @@ and wins where the two differ.
   design for the whole flow and wins over the earlier plans where they
   differ. Its §16 says what state the project is in and what comes next.
   Slice 1 (tooling, `money`, `db` and migrations, `ledger`) is built
-  (16-Nov-2026).
+  (16-Nov-2026); slice 2 is planned in `docs/plan-messaging.md`, and its
+  step 2a (outbox, deliveries, inbox, worker, probe, fuzzer) is built.
 - Decided 16-Nov-2026, starting slice 1:
   - Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
     reached over peer auth as the developer's own role
@@ -107,6 +108,8 @@ and wins where the two differ.
 
 ```
 uv run python -m mor.db.migrate          # apply migrations/ to DATABASE_URL (default mor_dev)
+uv run python -m mor.messaging.worker    # the worker: runs due deliveries
+uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run pytest                            # drops and recreates mor_test, then runs the suite
 HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 ```

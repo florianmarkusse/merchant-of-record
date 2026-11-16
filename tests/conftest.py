@@ -7,6 +7,7 @@ import pytest
 from hypothesis import settings
 
 from mor.db.migrate import MIGRATIONS_DIR, MigrationRefused, migrate, read_migrations
+from tests.helpers import ADMIN_URL, SCRATCH_URL, TEST_URL, empty_tables
 
 
 # Hypothesis profiles (plan-architecture.md §10). "dev" is the small budget
@@ -18,13 +19,6 @@ from mor.db.migrate import MIGRATIONS_DIR, MigrationRefused, migrate, read_migra
 settings.register_profile("dev", max_examples=200)
 settings.register_profile("soak", max_examples=100_000)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
-
-
-# The suite's own databases on the local cluster, reached over peer auth as
-# the developer's role. Never mor_dev: these are dropped and recreated.
-ADMIN_URL = "postgresql:///postgres"
-TEST_URL = "postgresql:///mor_test"
-SCRATCH_URL = "postgresql:///mor_test_migrations"
 
 
 async def _recreate_test_database() -> None:
@@ -51,27 +45,6 @@ async def _migrate_test_database() -> None:
     assert not isinstance(result, MigrationRefused), result
 
 
-async def _empty_tables() -> None:
-    # Every table but the migration record, found by the server, so a new
-    # table is emptied without being listed here.
-    async with await psycopg.AsyncConnection.connect(TEST_URL) as conn:
-        await conn.execute(
-            """
-            DO $$
-            DECLARE tables text;
-            BEGIN
-              SELECT string_agg(format('%I', tablename), ', ') INTO tables
-              FROM pg_tables
-              WHERE schemaname = 'public' AND tablename <> 'schema_migration';
-              IF tables IS NOT NULL THEN
-                EXECUTE 'TRUNCATE ' || tables || ' CASCADE';
-              END IF;
-            END $$
-            """
-        )
-        await conn.commit()
-
-
 @pytest.fixture(scope="session")
 def migrated_test_database() -> str:
     """mor_test, created empty once per session and migrated with the real
@@ -85,7 +58,7 @@ def migrated_test_database() -> str:
 def database_url(migrated_test_database: str) -> str:
     """The test database with every table empty. Tests commit for real, so
     commit-time checks (the ledger's balance trigger) run as in prod."""
-    asyncio.run(_empty_tables())
+    asyncio.run(empty_tables(TEST_URL))
     return migrated_test_database
 
 
