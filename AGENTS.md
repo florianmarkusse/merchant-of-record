@@ -35,8 +35,8 @@ and wins where the two differ.
   web handler) are built. The fuzzer failure seen in 2c was a real
   thin-webhook bug, now fixed (`docs/plan-messaging.md` §13). Slice 3,
   the test setup, is planned in `docs/plan-test-setup.md` (on this laptop
-  until a VPS exists); its steps 1 (serve, `SELF_URL`, seed) and 2 (the page at
-  `/_fake/`) are built.
+  until a VPS exists); its steps 1 (serve, `SELF_URL`, seed), 2 (the page at `/_fake/`)
+  and 3 (the nightly soak, `deploy/soak.sh`) are built.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
@@ -128,6 +128,7 @@ uv run python -m mor.messaging.worker    # the worker: runs due deliveries
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod
 uv run python -m mor.seed                # test setup: one echo account per provider and mode (server must run)
+deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
 uv run pytest                            # drops and recreates mor_test, then runs the suite
 HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 ```

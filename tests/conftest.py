@@ -15,7 +15,13 @@ from mor.db.migrate import (
     read_migrations,
 )
 from mor.fakes.migrate import migrate_fakes
-from tests.helpers import ADMIN_URL, SCRATCH_URL, TEST_URL, empty_tables
+from tests.helpers import (
+    ADMIN_URL,
+    SCRATCH_URL,
+    TEST_DATABASE,
+    TEST_URL,
+    empty_tables,
+)
 
 
 # Hypothesis profiles (plan-architecture.md §10). "dev" is the small budget
@@ -25,7 +31,12 @@ from tests.helpers import ADMIN_URL, SCRATCH_URL, TEST_URL, empty_tables
 # `HYPOTHESIS_PROFILE=soak uv run pytest`. A failure it finds is pinned as an
 # @example in the test.
 settings.register_profile("dev", max_examples=200)
-settings.register_profile("soak", max_examples=100_000)
+# The nightly soak gives each target an example budget (SOAK_EXAMPLES), so
+# pytest ends by itself and reports; a time limit cut it off unreliably
+# (plan-test-setup §5).
+settings.register_profile(
+    "soak", max_examples=int(os.environ.get("SOAK_EXAMPLES", "100000"))
+)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 
@@ -33,16 +44,30 @@ async def _recreate_test_database() -> None:
     async with await psycopg.AsyncConnection.connect(
         ADMIN_URL, autocommit=True
     ) as admin:
-        await admin.execute("DROP DATABASE IF EXISTS mor_test WITH (FORCE)")
-        await admin.execute("CREATE DATABASE mor_test")
+        match TEST_DATABASE:
+            case "mor_test":
+                await admin.execute("DROP DATABASE IF EXISTS mor_test WITH (FORCE)")
+                await admin.execute("CREATE DATABASE mor_test")
+            case "mor_soak":
+                await admin.execute("DROP DATABASE IF EXISTS mor_soak WITH (FORCE)")
+                await admin.execute("CREATE DATABASE mor_soak")
 
 
 async def _recreate_scratch_database() -> None:
     async with await psycopg.AsyncConnection.connect(
         ADMIN_URL, autocommit=True
     ) as admin:
-        await admin.execute("DROP DATABASE IF EXISTS mor_test_migrations WITH (FORCE)")
-        await admin.execute("CREATE DATABASE mor_test_migrations")
+        match TEST_DATABASE:
+            case "mor_test":
+                await admin.execute(
+                    "DROP DATABASE IF EXISTS mor_test_migrations WITH (FORCE)"
+                )
+                await admin.execute("CREATE DATABASE mor_test_migrations")
+            case "mor_soak":
+                await admin.execute(
+                    "DROP DATABASE IF EXISTS mor_soak_migrations WITH (FORCE)"
+                )
+                await admin.execute("CREATE DATABASE mor_soak_migrations")
 
 
 async def _migrate_test_database() -> None:

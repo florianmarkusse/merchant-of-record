@@ -331,6 +331,8 @@ class EchoFlow(RuleBasedStateMachine):
         cur = self.run(
             self.worker.execute(
                 "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
+                " AND database = (SELECT oid FROM pg_database"
+                " WHERE datname = current_database())"
             )
         )
         row = self.run(cur.fetchone())

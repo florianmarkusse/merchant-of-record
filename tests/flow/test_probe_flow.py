@@ -202,6 +202,8 @@ class ProbeFlow(RuleBasedStateMachine):
     async def _advisory_locks(self) -> int:
         cur = await self.worker.execute(
             "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
+            " AND database = (SELECT oid FROM pg_database"
+            " WHERE datname = current_database())"
         )
         row = await cur.fetchone()
         assert row is not None

@@ -1,7 +1,9 @@
 import asyncio
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 import httpx2
 import psycopg
@@ -14,10 +16,24 @@ from mor.config import Environment, Settings
 
 
 # The suite's own databases on the local cluster, reached over peer auth as
-# the developer's role. Never mor_dev: these are dropped and recreated.
+# the developer's role. Never mor_dev or mor_sandbox: these are dropped and
+# recreated. The nightly soak uses its own pair (MOR_TEST_DATABASE=mor_soak),
+# so a pytest run by hand never drops a database under it.
+type TestDatabase = Literal["mor_test", "mor_soak"]
+
+
+def _test_database(raw: str) -> TestDatabase:
+    match raw:
+        case "mor_test" | "mor_soak":
+            return raw
+        case _:
+            raise ValueError(f"MOR_TEST_DATABASE must be mor_test or mor_soak: {raw!r}")
+
+
+TEST_DATABASE = _test_database(os.environ.get("MOR_TEST_DATABASE", "mor_test"))
 ADMIN_URL = "postgresql:///postgres"
-TEST_URL = "postgresql:///mor_test"
-SCRATCH_URL = "postgresql:///mor_test_migrations"
+TEST_URL = f"postgresql:///{TEST_DATABASE}"
+SCRATCH_URL = f"postgresql:///{TEST_DATABASE}_migrations"
 
 
 async def empty_tables(database_url: str) -> None:
@@ -45,10 +61,15 @@ async def empty_tables(database_url: str) -> None:
 
 
 async def advisory_locks_held(database_url: str) -> int:
-    """Advisory locks held by any session: a worker must leave none."""
+    """Advisory locks held in this database by any session: a worker must
+    leave none. Only this database: other databases on the cluster (the
+    sandbox's worker, a soak run) take advisory locks of their own, and once
+    made the soak fail by chance (17-Nov-2026)."""
     async with await psycopg.AsyncConnection.connect(database_url) as conn:
         cur = await conn.execute(
             "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
+            " AND database = (SELECT oid FROM pg_database"
+            " WHERE datname = current_database())"
         )
         row = await cur.fetchone()
     assert row is not None

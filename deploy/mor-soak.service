@@ -1,0 +1,14 @@
+# The nightly soak on the laptop (docs/plan-test-setup.md §5). A user unit;
+# `deploy/soak.sh install` fills in @REPO@ and installs it.
+[Unit]
+Description=MoR nightly soak (property tests and fuzzers, large budget)
+
+[Service]
+Type=oneshot
+ExecStart=@REPO@/deploy/soak.sh run
+# Stay out of the way: the laptop may be in use when a missed run starts.
+Nice=19
+CPUWeight=20
+IOSchedulingClass=idle
+# The targets take about 50 minutes; their own guards add up to 135.
+TimeoutStartSec=150min

@@ -1,0 +1,11 @@
+# Every night at 02:00 local time. Persistent: a night the laptop was off
+# or asleep runs at the next start (docs/plan-test-setup.md §5).
+[Unit]
+Description=MoR nightly soak
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

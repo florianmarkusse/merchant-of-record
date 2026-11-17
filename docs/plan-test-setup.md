@@ -48,16 +48,49 @@ vendor status and recorded events, with form buttons:
   script a fault;
 - our side: create a job, record an event by hand (as a staff actor).
 
-Every POST is guarded against cross-site forgery (origin check plus a
-`SameSite` cookie). Nothing of it exists in prod.
+Every POST is guarded against cross-site forgery: its `Origin` must name
+the host it was sent to. There is no login or session cookie yet, so a
+`SameSite` cookie would guard nothing; it comes with the login. Nothing of
+it exists in prod.
 
 ## 5. Nightly soak
 
-A systemd user timer runs `HYPOTHESIS_PROFILE=soak pytest` against
-`mor_soak` with a time limit; the limit ending the run is a pass. A failure
-keeps the falsifying example and sends a Telegram message (bot token and
-chat id from `.env`, never committed). On the laptop the timer is
-`Persistent=true`, so a night with the laptop off runs at the next start.
+`deploy/soak.sh` (built 17-Nov-2026), run by a systemd user timer
+(`deploy/mor-soak.timer`, 02:00, `Persistent=true`, so a night the laptop
+was off runs at the next start; niced and on idle I/O, since that start
+may be while it is in use):
+
+- It tests the last commit on `main`, in a git worktree of its own under
+  `~/.local/state/mor-soak/`, never the working tree, so a half-edited
+  file is never what runs at night.
+- Its own databases, `mor_soak` and `mor_soak_migrations`
+  (`MOR_TEST_DATABASE=mor_soak`, a closed choice in `tests/helpers.py`),
+  and its own `.hypothesis/`, so a pytest run by hand never drops a
+  database under it.
+- Targets, as plain data in the script: the echo fuzzer, the probe
+  fuzzer, the pure properties. Each gets an example budget
+  (`SOAK_EXAMPLES`, read by the soak profile) sized to about 30, 10 and 5
+  minutes, stops at its first failure, and has a time limit only as a
+  guard against a hang.
+- A target is judged by its log: a `FAILED` line is a failure, else exit 0
+  is a pass, else the run broke. Failures and broken runs send one
+  Telegram message to `TELEGRAM_CHAT_ID_ALERTS` (token and chat id from
+  `.env`, never committed): the commit, the failing test, its first
+  assertion line and the log's path. Nothing is sent on a pass.
+- `deploy/soak.sh test-alert` sends one test message; `SOAK_QUICK=1`,
+  `SOAK_DRY_ALERT=1` and `SOAK_REF=<commit>` are for checking the soak
+  itself.
+
+What building it showed:
+
+- Ending targets by a time limit was wrong twice over. A limit that cut
+  pytest off lost failures it had already found (a planted money bug
+  showed four `F`s and counted as a pass), and a Ctrl-C at the limit did
+  not reliably stop the fuzzers. Hence example budgets.
+- The fuzzers' "no advisory lock left held" checks counted locks on the
+  whole PostgreSQL cluster, so a lock the sandbox's worker held in its
+  own database failed the probe fuzzer by chance. They now count only the
+  test's own database; `tests/test_helpers.py` pins it.
 
 ## 6. Build order
 
