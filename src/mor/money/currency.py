@@ -14,6 +14,14 @@ class Currency(StrEnum):
     PHP = "PHP"
     USD = "USD"
     EUR = "EUR"
+    # Limits and FX rates of the destinations (docs/plan-quote.md §2).
+    GBP = "GBP"
+    AUD = "AUD"
+    NZD = "NZD"
+    CAD = "CAD"
+    CHF = "CHF"
+    JPY = "JPY"
+    KRW = "KRW"
 
 
 def exponent(currency: Currency) -> int:
@@ -32,5 +40,9 @@ def exponent(currency: Currency) -> int:
             return 2
         case Currency.USD | Currency.EUR:
             return 2
+        case Currency.GBP | Currency.AUD | Currency.NZD | Currency.CAD | Currency.CHF:
+            return 2
+        case Currency.JPY | Currency.KRW:
+            return 0
         case _:
             assert_never(currency)

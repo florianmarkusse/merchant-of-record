@@ -343,41 +343,45 @@ EXPONENT: dict[str, int] = {
     "GBP": 2,
     "CHF": 2,
 }
-# ECB euro reference rates of 06-Nov-2026 (units per EUR), for display only.
-ECB_PER_EUR: dict[str, str] = {
-    "USD": "1.1165",
-    "JPY": "176.77",
-    "GBP": "0.83415",
-    "AUD": "1.6250",
-    "SGD": "1.4309",
-    "MYR": "4.5319",
-    "PHP": "70.358",
-    "IDR": "20208.93",
-    "THB": "37.459",
-    "KRW": "1517.02",
-    "CHF": "0.9143",
-    "NZD": "2.0141",
-    "CAD": "1.5705",
-}
 
 
-def usd_per_unit() -> dict[str, Fraction]:
-    rates: dict[str, Fraction] = {"USD": Fraction(1), "VND": Fraction(1, 26_300)}
-    usd_per_eur = Fraction(ECB_PER_EUR["USD"])
-    rates["EUR"] = usd_per_eur
-    for currency, per_eur in ECB_PER_EUR.items():
+def read_fx_rates() -> tuple[dict[str, Fraction], str]:
+    """Units of USD per unit of each currency, from fx_rates.csv (ECB
+    reference rates per EUR, and the VND estimate per USD), for display
+    only; the same file feeds the database (docs/plan-quote.md §2). Also
+    the date the rates are from."""
+    with (DATA / "fx_rates.csv").open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    per_eur: dict[str, Fraction] = {}
+    per_usd: dict[str, Fraction] = {}
+    as_of = ""
+    for row in rows:
+        if row["base"] == "EUR":
+            per_eur[row["quote"]] = Fraction(row["rate"])
+            as_of = row["as_of"]
+        elif row["base"] == "USD":
+            per_usd[row["quote"]] = Fraction(row["rate"])
+    usd_per_eur = per_eur["USD"]
+    rates: dict[str, Fraction] = {"USD": Fraction(1), "EUR": usd_per_eur}
+    for currency, units in per_eur.items():
         if currency != "USD":
-            rates[currency] = usd_per_eur / Fraction(per_eur)
-    return rates
+            rates[currency] = usd_per_eur / units
+    for currency, units in per_usd.items():
+        rates[currency] = 1 / units
+    return rates, as_of
 
 
 # Display-only conversion to compare cards; the page shows the rate and source.
-USD_PER_UNIT: dict[str, Fraction] = usd_per_unit()
-USD_RATE_NOTE = (
-    "VND converted at 26,300 per US$ (research/logistics/02, estimate), other "
-    "currencies at the ECB reference rates of 06-Nov-2026, "
-    "rounded half up to whole dollars"
-)
+USD_PER_UNIT, FX_AS_OF = read_fx_rates()
+
+
+def usd_rate_note() -> str:
+    return (
+        "VND converted at 26,300 per US$ (research/logistics/02, estimate), other "
+        f"currencies at the ECB reference rates of {date_text(FX_AS_OF)}, "
+        "rounded half up to whole dollars"
+    )
+
 
 OVERVIEW_TOPICS: tuple[str, ...] = (
     "ease",
@@ -2410,9 +2414,9 @@ def section_compare(data: Data, today: date) -> h.Element:
         h.p(class_="muted")[
             "Freight only, before fuel, duty-paid fee, other surcharges and any "
             "discount. "
-            f"{USD_RATE_NOTE}. A blank cell means the card has no price at that exact "
-            "weight or no zone for that country, or a newer card replaces it there "
-            "(see Older offers). Only current cards are shown. "
+            f"{usd_rate_note()}. A blank cell means the card has no price at that "
+            "exact weight or no zone for that country, or a newer card replaces it "
+            "there (see Older offers). Only current cards are shown. "
             "Cell colour is the worse of the rate card's and the zone mapping's "
             "status; hover for the original amount."
         ],
@@ -2590,7 +2594,7 @@ def section_all_in(data: Data, today: date) -> h.Element:
             "a border limit includes shipping (MY, KR, CH), the carrier's freight "
             "and fuel stand in for the shipping the buyer pays. Each "
             "part is converted to US$ and then summed, display only. "
-            f"{USD_RATE_NOTE}."
+            f"{usd_rate_note()}."
         ],
         h.ul(class_="muted")[
             h.li[
@@ -2801,7 +2805,7 @@ def section_landed(data: Data, today: date) -> h.Element:
             "customs fees and taxes on the parcel from landed_rates.csv, for the "
             "reference parcels' product category. Amounts in US$, exact until "
             "rounded for display. Hover a cell for its parts, notes and status. "
-            f"{USD_RATE_NOTE}."
+            f"{usd_rate_note()}."
         ],
         h.ul(class_="muted")[
             h.li[
@@ -3486,7 +3490,7 @@ def sheet_prices(book: Workbook, data: Data, today: date) -> None:
     sheet.append(
         [
             "Freight only in US$ (before fuel, duty-paid fee, surcharges, discount). "
-            + USD_RATE_NOTE
+            + usd_rate_note()
         ]
     )
     for weight in COMPARE_WEIGHTS:
@@ -3524,7 +3528,7 @@ def sheet_all_in(book: Workbook, data: Data, today: date) -> None:
             "All-in list price per parcel in US$ (freight, fuel, per-parcel fees, "
             "duty-paid fee where due; no duties or taxes, no discount). "
             "≥ lower bound, DAP buyer pays at the door. Comments hold the parts. "
-            + USD_RATE_NOTE
+            + usd_rate_note()
         ]
     )
     for scenario in data.rows("scenarios"):

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 
 _MONTHS = (
@@ -13,3 +13,8 @@ def format_moment(moment: datetime) -> str:
     process locale."""
     utc = moment.astimezone(UTC)
     return f"{utc.day:02d}-{_MONTHS[utc.month - 1]}-{utc.year} {utc:%H:%M} UTC"
+
+
+def format_day(day: date) -> str:
+    """The one format for a date a person reads: `16-Nov-2026`."""
+    return f"{day.day:02d}-{_MONTHS[day.month - 1]}-{day.year}"

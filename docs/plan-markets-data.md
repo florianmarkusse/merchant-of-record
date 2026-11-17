@@ -68,8 +68,14 @@ a value waits on a re-fetch, an email or an adviser.
 - **Display rates are ECB reference rates** (decided 07-Nov-2026: an
   official, dated source for every currency we meet; VND stays at the
   research estimate of 26,300 because the ECB does not publish it). They
-  live in `ECB_PER_EUR` in the script with their date; refresh them with
-  the fuel values before a comparison.
+  live in `fx_rates.csv` with their date (moved there from the script on
+  17-Nov-2026, so quoting loads the same rates); refresh them with the
+  fuel values before a comparison.
+- **Quoting reads the database, loaded from these files** (decided
+  17-Nov-2026, `docs/plan-quote.md` §2): `uv run python -m
+  mor.markets.load` shows what changed and `--write` stores a new set.
+  Of these files it loads `categories`, `countries`, `groups`,
+  `landed_rates`, `registrations` and `fx_rates`.
 - **Open work is in `questions.csv`**: emails to carriers, adviser
   questions and re-fetches. A fact waiting on one has status
   `awaiting_answer` and the question id.
@@ -120,6 +126,8 @@ a value waits on a re-fetch, an email or an adviser.
 | `scenarios.csv` | reference parcel for the all-in cost: weight, box size, goods value, category |
 | `landed_rates.csv` | duty, customs fee or tax per country or group (× category), with its band (always, up to or above a limit), who collects it and its base |
 | `border_charges.csv` | country or group (× category): duty or tax collected at the border always, never, or above a limit |
+| `fx_rates.csv` | exchange rate: base, quote, exact rate, date, status, source (the ECB reference rates per EUR, and the VND estimate per USD); read by the script for its USD display and loaded for quoting (added 17-Nov-2026) |
+| `registrations.csv` | one of our seller-scheme registrations: country, scheme, number, from when; empty until we register (added 17-Nov-2026) |
 
 ## Commands
 

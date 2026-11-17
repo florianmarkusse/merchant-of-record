@@ -1,0 +1,15 @@
+base,quote,rate,as_of,status,source,source_url,notes
+EUR,USD,1.1165,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,JPY,176.77,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,GBP,0.83415,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,AUD,1.6250,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,SGD,1.4309,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,MYR,4.5319,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,PHP,70.358,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,IDR,20208.93,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,THB,37.459,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,KRW,1517.02,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,CHF,0.9143,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,NZD,2.0141,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+EUR,CAD,1.5705,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
+USD,VND,26300,2026-11-06,estimate,research/logistics/02,,the ECB publishes no VND rate; research estimate
