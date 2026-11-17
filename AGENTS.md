@@ -35,7 +35,8 @@ and wins where the two differ.
   web handler) are built. The fuzzer failure seen in 2c was a real
   thin-webhook bug, now fixed (`docs/plan-messaging.md` §13). Slice 3,
   the test setup, is planned in `docs/plan-test-setup.md` (on this laptop
-  until a VPS exists); its step 1 (serve, `SELF_URL`, seed) is built.
+  until a VPS exists); its steps 1 (serve, `SELF_URL`, seed) and 2 (the page at
+  `/_fake/`) are built.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored

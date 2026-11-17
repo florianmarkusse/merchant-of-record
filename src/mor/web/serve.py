@@ -18,7 +18,7 @@ import uvicorn
 
 import mor.fakes.echo
 from mor.config import Environment, Settings, load_settings
-from mor.web.main import make_app
+from mor.web.main import Fakes, make_app
 
 
 # Longer than any handler of ours takes; a fake's webhook that gets no
@@ -38,7 +38,9 @@ async def serve(settings: Settings) -> None:
     async with httpx2.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS) as outgoing:
         fakes = None
         if settings.environment != Environment.PROD:
-            fakes = mor.fakes.echo.make_app(settings.database_url, outgoing)
+            fakes = Fakes(
+                mor.fakes.echo.make_app(settings.database_url, outgoing), outgoing
+            )
         app = make_app(settings, fakes, _now)
         config = uvicorn.Config(app, host=address.hostname, port=address.port)
         await uvicorn.Server(config).serve()
