@@ -43,7 +43,7 @@ from mor.messaging.worker import (
     try_lock_aggregate,
 )
 from mor.probe.flow import ProbeState, start_probe
-from tests.helpers import TEST_URL, empty_tables
+from tests.helpers import ENV, NO_HTTP, TEST_URL, empty_tables
 
 
 T0 = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -90,7 +90,7 @@ class ProbeFlow(RuleBasedStateMachine):
         if not candidates:
             return
         candidate = data.draw(st.sampled_from(candidates))
-        result = self.run(run_one(self.worker, candidate, self.now))
+        result = self.run(run_one(self.worker, NO_HTTP, ENV, candidate, self.now))
         assert not isinstance(result, Failed), result
 
     @rule(data=st.data())
@@ -101,7 +101,7 @@ class ProbeFlow(RuleBasedStateMachine):
         if not open_deliveries:
             return
         candidate = data.draw(st.sampled_from(open_deliveries))
-        result = self.run(run_one(self.worker, candidate, self.now))
+        result = self.run(run_one(self.worker, NO_HTTP, ENV, candidate, self.now))
         assert not isinstance(result, Failed), result
 
     @rule(data=st.data())
@@ -140,7 +140,7 @@ class ProbeFlow(RuleBasedStateMachine):
         if not handled:
             return
         candidate = data.draw(st.sampled_from(handled))
-        result = self.run(run_one(self.worker, candidate, self.now))
+        result = self.run(run_one(self.worker, NO_HTTP, ENV, candidate, self.now))
         assert result == Skipped("already_handled"), result
 
     @precondition(lambda self: len(self.seen) > 0)
@@ -233,7 +233,7 @@ class ProbeFlow(RuleBasedStateMachine):
             if not candidates:
                 break
             for candidate in candidates:
-                result = await run_one(self.worker, candidate, later)
+                result = await run_one(self.worker, NO_HTTP, ENV, candidate, later)
                 assert not isinstance(result, Failed), result
         states = await self._states()
         for state in states.values():

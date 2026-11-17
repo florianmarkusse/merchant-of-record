@@ -6,6 +6,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 from mor.audit import Actor, ActorKind
+from mor.config import Settings
 from mor.db.connect import connect
 from mor.messaging.facts import ProbeStartedV1
 from mor.messaging.store import append_fact
@@ -19,6 +20,7 @@ from mor.messaging.worker import (
     wait_for_work,
 )
 from mor.probe.flow import ProbeState, probe_state, start_probe
+from tests.helpers import ENV, NO_HTTP
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -43,7 +45,7 @@ def test_next_retry_counts_only_deliveries_that_could_run_next(
                 probe_id = await start_probe(conn, ACTOR, NOW)
                 await conn.execute("DELETE FROM probe WHERE id = %s", (probe_id,))
                 await conn.commit()
-            results = await drain_once(worker, NOW)
+            results = await drain_once(worker, NO_HTTP, ENV, NOW)
             assert len(results) == 1 and isinstance(results[0], Failed)
             # A second fact for the same probe is due now but waits behind
             # the failed one: it must not make the idle wait zero.
@@ -87,7 +89,7 @@ def test_running_worker_finishes_a_new_probe_well_before_its_fallback_poll(
     database_url: str,
 ) -> None:
     async def scenario() -> ProbeState | None:
-        worker = asyncio.create_task(run_worker(database_url))
+        worker = asyncio.create_task(run_worker(Settings(ENV, database_url)))
         await asyncio.sleep(0.3)  # let it drain nothing and start waiting
         async with await connect(database_url) as conn:
             probe_id = await start_probe(conn, ACTOR, datetime.now(UTC))

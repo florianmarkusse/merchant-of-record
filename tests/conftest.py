@@ -6,7 +6,15 @@ import psycopg
 import pytest
 from hypothesis import settings
 
-from mor.db.migrate import MIGRATIONS_DIR, MigrationRefused, migrate, read_migrations
+from mor.config import Environment
+from mor.db.migrate import (
+    MIGRATIONS_DIR,
+    Migrated,
+    MigrationRefused,
+    migrate,
+    read_migrations,
+)
+from mor.fakes.migrate import migrate_fakes
 from tests.helpers import ADMIN_URL, SCRATCH_URL, TEST_URL, empty_tables
 
 
@@ -43,12 +51,15 @@ async def _migrate_test_database() -> None:
     async with await psycopg.AsyncConnection.connect(TEST_URL) as conn:
         result = await migrate(conn, files, datetime.now(UTC))
     assert not isinstance(result, MigrationRefused), result
+    fakes = await migrate_fakes(TEST_URL, Environment.TEST, datetime.now(UTC))
+    assert isinstance(fakes, Migrated), fakes
 
 
 @pytest.fixture(scope="session")
 def migrated_test_database() -> str:
     """mor_test, created empty once per session and migrated with the real
-    migrations/ files: this is also the test that they apply cleanly."""
+    migrations/ and migrations_fake/ files: this is also the test that they
+    apply cleanly."""
     asyncio.run(_recreate_test_database())
     asyncio.run(_migrate_test_database())
     return TEST_URL

@@ -937,9 +937,9 @@ Where things stand (16-Nov-2026): slice 1 is built: `pyproject.toml`,
 the migration runner) and `ledger/`, `migrations/0001_ledger.sql`, and
 tests including Hypothesis properties. The outbox moved to slice 2. The
 step after it is slice 2, planned in `plan-messaging.md`: step 2a (facts,
-deliveries, inbox, worker, the probe flow, layer 2 and 3 tests) is built;
-2b (effect consumers, duplicate guards, fake-vendor frame) is designed
-next, then 2c (inbound). Hypothesis was checked when added
+deliveries, inbox, worker, the probe flow, layer 2 and 3 tests) and 2b
+(effect consumers, duplicate guards, the fake echo vendor) are built; 2c
+(inbound) is designed next. Hypothesis was checked when added
 (6.170.15, MPL-2.0, supports Python 3.14).
 
 What follows is the hand-over as written before slice 1, kept for its

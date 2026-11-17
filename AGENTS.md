@@ -29,7 +29,8 @@ and wins where the two differ.
   differ. Its §16 says what state the project is in and what comes next.
   Slice 1 (tooling, `money`, `db` and migrations, `ledger`) is built
   (16-Nov-2026); slice 2 is planned in `docs/plan-messaging.md`, and its
-  step 2a (outbox, deliveries, inbox, worker, probe, fuzzer) is built.
+  steps 2a (outbox, deliveries, inbox, worker, probe, fuzzer) and 2b
+  (effect consumers, duplicate guards, the fake echo vendor) are built.
 - Decided 16-Nov-2026, starting slice 1:
   - Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
     reached over peer auth as the developer's own role
@@ -93,7 +94,11 @@ and wins where the two differ.
     settlement file) is decoded into a typed, frozen record at the edge
     before anything else sees it, because Python does not check types at
     runtime.
-  - Outgoing HTTP: httpx. Crypto: `cryptography` and joserfc (HMAC,
+  - Outgoing HTTP: httpx2 (decided 17-Nov-2026), Pydantic's maintained
+    fork of httpx 0.28.1 with the same API under `import httpx2`. httpx
+    itself has had no release since 06-Dec-2024 and lists no Python 3.14
+    support. This reads the conventions' "httpx for outgoing HTTP" as
+    this fork. Crypto: `cryptography` and joserfc (HMAC,
     JWT/JWE). Invoices as PDF: WeasyPrint, from the same HTML functions.
   - Money: `int` minor units with a currency enum; exact rates as
     `fractions.Fraction`. Never `float` or `Decimal` for amounts.
@@ -108,6 +113,7 @@ and wins where the two differ.
 
 ```
 uv run python -m mor.db.migrate          # apply migrations/ to DATABASE_URL (default mor_dev)
+uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_vendor); refused in prod
 uv run python -m mor.messaging.worker    # the worker: runs due deliveries
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run pytest                            # drops and recreates mor_test, then runs the suite

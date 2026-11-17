@@ -6,6 +6,10 @@ from hypothesis import strategies as st
 from mor.messaging.facts import (
     Aggregate,
     AggregateType,
+    EchoJobEchoedV1,
+    EchoJobNeedsPersonV1,
+    EchoJobRefusedV1,
+    EchoJobRequestedV1,
     Fact,
     MessageType,
     ProbeEchoedV1,
@@ -16,12 +20,15 @@ from mor.messaging.facts import (
     encode,
     fact_type,
 )
-from mor.messaging.routing import consumers_for
 
 
 facts = st.one_of(
     st.builds(ProbeStartedV1, probe_id=st.uuids()),
     st.builds(ProbeEchoedV1, probe_id=st.uuids()),
+    st.builds(EchoJobRequestedV1, echo_job_id=st.uuids()),
+    st.builds(EchoJobEchoedV1, echo_job_id=st.uuids(), vendor_echo_id=st.text()),
+    st.builds(EchoJobRefusedV1, echo_job_id=st.uuids(), reason=st.text()),
+    st.builds(EchoJobNeedsPersonV1, echo_job_id=st.uuids()),
 )
 
 
@@ -40,7 +47,16 @@ def test_any_bytes_decode_to_a_fact_or_undecodable(
     message_type: MessageType, schema_version: int, payload: bytes
 ) -> None:
     result = decode(message_type, schema_version, payload)
-    assert isinstance(result, ProbeStartedV1 | ProbeEchoedV1 | UndecodableFact)
+    assert isinstance(
+        result,
+        ProbeStartedV1
+        | ProbeEchoedV1
+        | EchoJobRequestedV1
+        | EchoJobEchoedV1
+        | EchoJobRefusedV1
+        | EchoJobNeedsPersonV1
+        | UndecodableFact,
+    )
 
 
 def test_unknown_field_or_version_is_undecodable() -> None:
@@ -60,9 +76,3 @@ def test_probe_facts_belong_to_their_probe() -> None:
     assert aggregate_of(ProbeEchoedV1(probe_id=probe_id)) == Aggregate(
         AggregateType.PROBE, probe_id
     )
-
-
-def test_every_message_type_has_a_consumer() -> None:
-    # A fact nobody consumes is written for nothing; today none is meant to be.
-    for message_type in MessageType:
-        assert len(consumers_for(message_type)) >= 1

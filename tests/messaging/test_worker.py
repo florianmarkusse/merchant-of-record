@@ -23,7 +23,7 @@ from mor.messaging.worker import (
     try_lock_aggregate,
 )
 from mor.probe.flow import ProbeState, probe_state, start_probe
-from tests.helpers import advisory_locks_held
+from tests.helpers import ENV, NO_HTTP, advisory_locks_held
 
 
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -66,12 +66,12 @@ def test_worker_takes_a_probe_through_both_steps(database_url: str) -> None:
     async def scenario() -> None:
         probe_id = await _start(database_url)
         async with await connect(database_url, autocommit=True) as worker:
-            first = await drain_once(worker, NOW)
+            first = await drain_once(worker, NO_HTTP, ENV, NOW)
             assert first == [Ran(Applied())]
             assert await _state(database_url, probe_id) == ProbeState.ECHOED
-            second = await drain_once(worker, NOW)
+            second = await drain_once(worker, NO_HTTP, ENV, NOW)
             assert second == [Ran(Applied())]
-            assert await drain_once(worker, NOW) == []
+            assert await drain_once(worker, NO_HTTP, ENV, NOW) == []
         assert await _state(database_url, probe_id) == ProbeState.FINISHED
         assert await _count(database_url, b"SELECT count(*) FROM outbox") == 2
         assert await _count(database_url, b"SELECT count(*) FROM inbox") == 2
@@ -85,9 +85,11 @@ def test_a_handled_delivery_is_not_run_again(database_url: str) -> None:
         await _start(database_url)
         async with await connect(database_url, autocommit=True) as worker:
             candidate = await _only_candidate(worker, NOW)
-            assert await run_one(worker, candidate, NOW) == Ran(Applied())
+            assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Ran(Applied())
             # Picked before the run finished, as a second worker would have.
-            assert await run_one(worker, candidate, NOW) == Skipped("already_handled")
+            assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Skipped(
+                "already_handled"
+            )
         count = await _count(database_url, b"SELECT count(*) FROM outbox")
         assert count == 2
 
@@ -107,11 +109,13 @@ def test_facts_of_one_aggregate_run_in_order_and_a_repeat_is_stale(
             await conn.commit()
         repeat = _echo_candidate(repeat_id, probe_id)
         async with await connect(database_url, autocommit=True) as worker:
-            assert await run_one(worker, repeat, NOW) == Skipped("not_next")
+            assert await run_one(worker, NO_HTTP, ENV, repeat, NOW) == Skipped(
+                "not_next"
+            )
             first = await _only_candidate(worker, NOW)
             assert first.message_id != repeat_id
-            assert await run_one(worker, first, NOW) == Ran(Applied())
-            assert await run_one(worker, repeat, NOW) == Ran(Stale())
+            assert await run_one(worker, NO_HTTP, ENV, first, NOW) == Ran(Applied())
+            assert await run_one(worker, NO_HTTP, ENV, repeat, NOW) == Ran(Stale())
         echoed = b"SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
         assert await _count(database_url, echoed) == 1
 
@@ -123,7 +127,7 @@ def test_two_aggregates_proceed_independently(database_url: str) -> None:
         first = await _start(database_url)
         second = await _start(database_url)
         async with await connect(database_url, autocommit=True) as worker:
-            results = await drain_once(worker, NOW)
+            results = await drain_once(worker, NO_HTTP, ENV, NOW)
         assert results == [Ran(Applied()), Ran(Applied())]
         assert await _state(database_url, first) == ProbeState.ECHOED
         assert await _state(database_url, second) == ProbeState.ECHOED
@@ -142,7 +146,7 @@ def test_a_failing_consumer_is_retried_later_and_holds_only_its_aggregate(
             await conn.execute("DELETE FROM probe WHERE id = %s", (broken,))
             await conn.commit()
         async with await connect(database_url, autocommit=True) as worker:
-            results = await drain_once(worker, NOW)
+            results = await drain_once(worker, NO_HTTP, ENV, NOW)
             assert len(results) == 2
             failed = results[0]
             assert isinstance(failed, Failed)
@@ -164,7 +168,10 @@ def test_a_failing_consumer_is_retried_later_and_holds_only_its_aggregate(
             assert broken not in [c.aggregate_id for c in pending]
             later = NOW + timedelta(seconds=3)
             # The broken probe's echo, on its retry, and the healthy finish.
-            assert await drain_once(worker, later) == [Ran(Applied()), Ran(Applied())]
+            assert await drain_once(worker, NO_HTTP, ENV, later) == [
+                Ran(Applied()),
+                Ran(Applied()),
+            ]
         assert await _state(database_url, broken) == ProbeState.ECHOED
 
     asyncio.run(scenario())
@@ -179,10 +186,12 @@ def test_a_worker_skips_an_aggregate_another_holds_until_it_dies(
             candidate = await _only_candidate(worker, NOW)
             other = await connect(database_url, autocommit=True)
             assert await try_lock_aggregate(other, candidate)
-            assert await run_one(worker, candidate, NOW) == Skipped("busy")
+            assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Skipped(
+                "busy"
+            )
             # The holder's connection dies: no timeout, the lock is gone.
             await other.close()
-            assert await run_one(worker, candidate, NOW) == Ran(Applied())
+            assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Ran(Applied())
         assert await _state(database_url, probe_id) == ProbeState.ECHOED
 
     asyncio.run(scenario())
@@ -203,7 +212,7 @@ def test_a_crash_before_commit_leaves_nothing_and_frees_the_lock(
         assert await _state(database_url, probe_id) == ProbeState.STARTED
         assert await advisory_locks_held(database_url) == 0
         async with await connect(database_url, autocommit=True) as worker:
-            assert await run_one(worker, candidate, NOW) == Ran(Applied())
+            assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Ran(Applied())
         echoed = b"SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
         assert await _count(database_url, echoed) == 1
 
@@ -216,7 +225,7 @@ def test_database_refuses_reopening_a_handled_delivery_or_editing_a_fact(
     async def scenario() -> None:
         await _start(database_url)
         async with await connect(database_url, autocommit=True) as worker:
-            await drain_once(worker, NOW)
+            await drain_once(worker, NO_HTTP, ENV, NOW)
         for statement, message in [
             (b"UPDATE outbox_delivery SET handled_at = NULL", "already handled"),
             (b"DELETE FROM outbox_delivery", "never deleted"),

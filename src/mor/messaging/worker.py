@@ -13,17 +13,25 @@ import os
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, assert_never
 
+import httpx2
 from psycopg.rows import class_row
 
-from mor.config import load_settings
+from mor.config import Environment, Settings, load_settings
 from mor.dates import format_moment
 from mor.db.connect import Connection, connect
-from mor.messaging.consumers import handle
-from mor.messaging.facts import AggregateType, MessageType, UndecodableFact, decode
-from mor.messaging.outcome import ConsumerOutcome
-from mor.messaging.routing import ConsumerName
+from mor.messaging import consumers
+from mor.messaging.consumers import EffectCall, EffectResult
+from mor.messaging.facts import (
+    AggregateType,
+    Fact,
+    MessageType,
+    UndecodableFact,
+    decode,
+)
+from mor.messaging.outcome import Again, ConsumerOutcome, Done, NoCall, RetryLater
+from mor.messaging.routing import ConsumerName, consumer_kind
 from mor.messaging.store import AlreadyHandled, mark_handled
 
 
@@ -33,6 +41,8 @@ from mor.messaging.store import AlreadyHandled, mark_handled
 # stays as the fallback.
 FALLBACK_POLL = timedelta(seconds=5)
 MAX_BACKOFF = timedelta(hours=1)
+# A bound on prepare/call/complete rounds in one run; more is a bug.
+MAX_EFFECT_STEPS = 50
 
 
 @dataclass(frozen=True)
@@ -68,7 +78,16 @@ class Failed:
     not_before: datetime
 
 
-type RunResult = Ran | Skipped | Failed
+@dataclass(frozen=True)
+class Deferred:
+    """An effect got no usable answer (Unavailable, OutcomeUnknown): the
+    delivery stays open until `not_before`."""
+
+    reason: str
+    not_before: datetime
+
+
+type RunResult = Ran | Skipped | Deferred | Failed
 
 
 @dataclass(frozen=True)
@@ -152,11 +171,10 @@ async def unlock_aggregate(conn: Connection, candidate: Candidate) -> None:
     assert row is not None and row[0] is True, "unlocked a lock not held"
 
 
-async def handle_delivery(
+async def _open_delivery(
     conn: Connection, candidate: Candidate, now: datetime
-) -> Ran | Skipped:
-    """One delivery, in the caller's transaction, under the aggregate's
-    advisory lock. Never commits."""
+) -> Fact | Skipped:
+    """Lock the delivery row and decode its fact, if it should run now."""
     async with conn.cursor(row_factory=class_row(_DeliveryRow)) as cur:
         await cur.execute(
             """
@@ -191,13 +209,6 @@ async def handle_delivery(
     )
     if await cur.fetchone() is not None:
         return Skipped("not_next")
-
-    marked = await mark_handled(conn, candidate.consumer, candidate.message_id, now)
-    if isinstance(marked, AlreadyHandled):
-        # The inbox row and handled_at are written in one transaction, so
-        # one without the other is a bug.
-        raise AssertionError(f"inbox has {candidate} but delivery is open")
-
     fact = decode(
         MessageType(delivery.message_type),
         delivery.schema_version,
@@ -206,7 +217,18 @@ async def handle_delivery(
     if isinstance(fact, UndecodableFact):
         # We wrote it ourselves, so this is a bug.
         raise ValueError(f"undecodable fact for {candidate}: {fact}")
-    outcome = await handle(conn, candidate.consumer, fact, now)
+    return fact
+
+
+async def _finish_delivery(
+    conn: Connection, candidate: Candidate, now: datetime
+) -> None:
+    """The inbox row and `handled_at`, in the transaction of the effect."""
+    marked = await mark_handled(conn, candidate.consumer, candidate.message_id, now)
+    if isinstance(marked, AlreadyHandled):
+        # Both are written in one transaction, so one without the other is
+        # a bug.
+        raise AssertionError(f"inbox has {candidate} but delivery is open")
     await conn.execute(
         """
         UPDATE outbox_delivery SET handled_at = %(now)s
@@ -218,7 +240,123 @@ async def handle_delivery(
             "consumer": candidate.consumer.value,
         },
     )
+
+
+async def _defer(
+    conn: Connection, candidate: Candidate, reason: str, now: datetime
+) -> datetime:
+    """Leave the delivery open and set when to try again. Time only
+    triggers the retry; what happens then is decided under the locks."""
+    cur = await conn.execute(
+        """
+        SELECT attempts FROM outbox_delivery
+        WHERE message_id = %(message_id)s AND consumer = %(consumer)s
+        FOR UPDATE
+        """,
+        {"message_id": candidate.message_id, "consumer": candidate.consumer.value},
+    )
+    row = await cur.fetchone()
+    assert row is not None
+    attempts = row[0] + 1
+    not_before = now + backoff(attempts)
+    await conn.execute(
+        """
+        UPDATE outbox_delivery
+        SET attempts = %(attempts)s, last_error = %(reason)s,
+            not_before = %(not_before)s
+        WHERE message_id = %(message_id)s AND consumer = %(consumer)s
+        """,
+        {
+            "attempts": attempts,
+            "reason": reason,
+            "not_before": not_before,
+            "message_id": candidate.message_id,
+            "consumer": candidate.consumer.value,
+        },
+    )
+    return not_before
+
+
+async def handle_delivery(
+    conn: Connection, candidate: Candidate, now: datetime
+) -> Ran | Skipped:
+    """A local consumer's delivery, in the caller's transaction, under the
+    aggregate's advisory lock. Never commits."""
+    fact = await _open_delivery(conn, candidate, now)
+    if isinstance(fact, Skipped):
+        return fact
+    outcome = await consumers.handle(conn, candidate.consumer, fact, now)
+    await _finish_delivery(conn, candidate, now)
     return Ran(outcome)
+
+
+@dataclass(frozen=True)
+class Prepared:
+    """An effect consumer's `prepare` committed a call to make."""
+
+    fact: Fact
+    call: EffectCall
+
+
+async def prepare_delivery(
+    conn: Connection, candidate: Candidate, now: datetime
+) -> Prepared | Ran | Skipped:
+    """An effect consumer's first transaction. Never commits."""
+    fact = await _open_delivery(conn, candidate, now)
+    if isinstance(fact, Skipped):
+        return fact
+    prepared = await consumers.prepare(conn, candidate.consumer, fact, now)
+    if isinstance(prepared, NoCall):
+        await _finish_delivery(conn, candidate, now)
+        return Ran(prepared.outcome)
+    return Prepared(fact, prepared)
+
+
+async def complete_delivery(
+    conn: Connection,
+    candidate: Candidate,
+    prepared: Prepared,
+    result: EffectResult,
+    now: datetime,
+) -> Ran | Deferred | Again:
+    """An effect consumer's last transaction. Never commits."""
+    step = await consumers.complete(
+        conn, candidate.consumer, prepared.fact, prepared.call, result, now
+    )
+    match step:
+        case Done(outcome=outcome):
+            await _finish_delivery(conn, candidate, now)
+            return Ran(outcome)
+        case RetryLater(reason=reason):
+            not_before = await _defer(conn, candidate, reason, now)
+            return Deferred(reason, not_before)
+        case Again():
+            return step
+        case _:
+            assert_never(step)
+
+
+async def run_effect(
+    conn: Connection,
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    candidate: Candidate,
+    now: datetime,
+) -> Ran | Skipped | Deferred:
+    """prepare (commit), call with no transaction open, complete (commit),
+    again while `complete` asks for it. A crash between any two leaves the
+    committed state for the next run's `prepare` to find."""
+    for _ in range(MAX_EFFECT_STEPS):
+        async with conn.transaction():
+            prepared = await prepare_delivery(conn, candidate, now)
+        if not isinstance(prepared, Prepared):
+            return prepared
+        result = await consumers.call(http, environment, prepared.call)
+        async with conn.transaction():
+            completed = await complete_delivery(conn, candidate, prepared, result, now)
+        if not isinstance(completed, Again):
+            return completed
+    raise AssertionError(f"{candidate} did not finish in {MAX_EFFECT_STEPS} steps")
 
 
 def backoff(attempts: int) -> timedelta:
@@ -227,15 +365,25 @@ def backoff(attempts: int) -> timedelta:
     return min(timedelta(seconds=2 ** min(attempts, 20)), MAX_BACKOFF)
 
 
-async def run_one(conn: Connection, candidate: Candidate, now: datetime) -> RunResult:
-    """Lock the aggregate, run one delivery in its own transaction, unlock.
-    `conn` is the worker's dedicated autocommit connection."""
+async def run_one(
+    conn: Connection,
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    candidate: Candidate,
+    now: datetime,
+) -> RunResult:
+    """Lock the aggregate, run one delivery, unlock. `conn` is the worker's
+    dedicated autocommit connection."""
     if not await try_lock_aggregate(conn, candidate):
         return Skipped("busy")
     try:
         try:
-            async with conn.transaction():
-                return await handle_delivery(conn, candidate, now)
+            match consumer_kind(candidate.consumer):
+                case "local":
+                    async with conn.transaction():
+                        return await handle_delivery(conn, candidate, now)
+                case "effect":
+                    return await run_effect(conn, http, environment, candidate, now)
         except Exception as error:
             return await _record_failure(conn, candidate, repr(error), now)
     finally:
@@ -246,43 +394,21 @@ async def _record_failure(
     conn: Connection, candidate: Candidate, error: str, now: datetime
 ) -> Failed:
     async with conn.transaction():
-        cur = await conn.execute(
-            """
-            SELECT attempts FROM outbox_delivery
-            WHERE message_id = %(message_id)s AND consumer = %(consumer)s
-            FOR UPDATE
-            """,
-            {"message_id": candidate.message_id, "consumer": candidate.consumer.value},
-        )
-        row = await cur.fetchone()
-        assert row is not None
-        attempts = row[0] + 1
-        not_before = now + backoff(attempts)
-        await conn.execute(
-            """
-            UPDATE outbox_delivery
-            SET attempts = %(attempts)s, last_error = %(error)s,
-                not_before = %(not_before)s
-            WHERE message_id = %(message_id)s AND consumer = %(consumer)s
-            """,
-            {
-                "attempts": attempts,
-                "error": error,
-                "not_before": not_before,
-                "message_id": candidate.message_id,
-                "consumer": candidate.consumer.value,
-            },
-        )
+        not_before = await _defer(conn, candidate, error, now)
     return Failed(error, not_before)
 
 
 async def drain_once(
-    conn: Connection, now: datetime, limit: int = 100
+    conn: Connection,
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    now: datetime,
+    limit: int = 100,
 ) -> list[RunResult]:
     """Try each due candidate once. Returns what happened to each."""
     results: list[RunResult] = []
     for candidate in await find_candidates(conn, now, limit):
-        results.append(await run_one(conn, candidate, now))
+        results.append(await run_one(conn, http, environment, candidate, now))
     return results
 
 
@@ -334,15 +460,18 @@ async def wait_for_work(conn: Connection, wait: timedelta) -> bool:
     return False
 
 
-async def run_worker(database_url: str) -> None:
+async def run_worker(settings: Settings) -> None:
     """Drain until nothing runs, then wait for a notification, the next
     retry or the fallback poll. Runs until cancelled or killed: a step in
     flight rolls back, and its advisory lock goes with the connection."""
-    async with await connect(database_url, autocommit=True) as conn:
+    async with (
+        await connect(settings.database_url, autocommit=True) as conn,
+        httpx2.AsyncClient() as http,
+    ):
         await listen(conn)
         while True:
             now = datetime.now(UTC)
-            results = await drain_once(conn, now)
+            results = await drain_once(conn, http, settings.environment, now)
             ran = False
             for result in results:
                 if isinstance(result, Failed):
@@ -356,4 +485,4 @@ async def run_worker(database_url: str) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(run_worker(load_settings(os.environ).database_url))
+    asyncio.run(run_worker(load_settings(os.environ)))

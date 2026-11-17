@@ -1,7 +1,9 @@
 # Plan: slice 2, messaging
 
-Status: 2a built 16-Nov-2026 (probe kept, inbox kept, msgspec added); 2b
-and 2c are still to be designed. What building 2a showed is in §9. It details slice 2
+Status: 2a built 16-Nov-2026 (probe kept, inbox kept, msgspec added);
+LISTEN/NOTIFY added 17-Nov-2026. What building 2a showed is in §9. 2b is
+designed in §10, confirmed and built 17-Nov-2026; what building it showed
+is in §11. 2c is still to be designed. It details slice 2
 of `plan-architecture.md` §14 and follows its §4 and §5; where this plan
 says more, it does not change them unless §6 below names the change.
 
@@ -19,11 +21,11 @@ checks clean and its part fuzzed:
   request row, the duplicate guards (`vendor_constraint`, `compensable`,
   `none`), the exceptions list, and the fake-vendor frame (a Starlette app
   reached through httpx's ASGI transport). New dependencies: starlette,
-  httpx. Designed in detail when 2a is done.
+  and httpx or its maintained fork httpx2 (§10.8). Designed in §10.
 - **2c. Inbound.** `push`, `poll` and `file` on one path into a vendor
   inbox. Designed in detail when 2b is done.
 
-This document details 2a.
+This document details 2a in §2 to §9 and 2b in §10.
 
 ## 2. Tables (`0002_messaging.sql`)
 
@@ -226,3 +228,246 @@ only on bugs.
 - End to end on `mor_dev`: `python -m mor.messaging.worker` plus
   `python -m mor.probe` finishes a probe; with the worker stopped, the
   probe exits 1 after its wait.
+
+## 10. Step 2b: effect consumers (design, 17-Nov-2026)
+
+### 10.1 The echo flow
+
+A dev/test-only aggregate, `echo_job`, proves the machinery on a fake
+"echo" vendor that stores a message and returns an id. It is transitional
+(§8): it goes once the fake PSP uses the same machinery (slice 5).
+
+```
+echo_job: requested → echoed | refused | needs_person
+
+create_echo_job (test or dev CLI) → 'requested' + fact echo_job_requested
+echo_send (effect consumer) ← echo_job_requested:
+    prepare  → request row 'sent'           (commit)
+    call     → the echo vendor, no transaction open
+    complete → echoed + echo_job_echoed   |  refused + echo_job_refused
+             | still requested, retry later (Unavailable, OutcomeUnknown)
+             | needs_person + echo_job_needs_person (guard `none`, §10.4)
+```
+
+The three completion facts have no consumer yet: they are what a later
+stage would react to. The test that every message type has a consumer
+goes; a fact with no consumer writes no delivery.
+
+### 10.2 Tables (`0004_echo.sql`)
+
+```sql
+CREATE TYPE echo_provider AS ENUM
+  ('fake_keyed', 'fake_cancellable', 'fake_plain');   -- one per guard, §10.4
+CREATE TYPE echo_job_state AS ENUM
+  ('requested', 'echoed', 'refused', 'needs_person');
+CREATE TYPE echo_operation AS ENUM ('send', 'cancel');
+CREATE TYPE vendor_request_state AS ENUM
+  ('sent', 'succeeded', 'refused', 'not_sent');
+
+CREATE TABLE echo_account (
+  id         uuid PRIMARY KEY,
+  provider   echo_provider NOT NULL,
+  base_url   text NOT NULL,
+  timeout_ms int NOT NULL
+);
+
+CREATE TABLE echo_job (
+  id              uuid PRIMARY KEY,
+  account_id      uuid NOT NULL REFERENCES echo_account (id),
+  message         text NOT NULL,
+  state           echo_job_state NOT NULL,
+  vendor_echo_id  text,
+  refusal         text,
+  created_at      timestamptz NOT NULL,
+  updated_at      timestamptz NOT NULL
+);
+
+-- One row per call we may have made: the "we are about to ask" mark.
+CREATE TABLE echo_request (
+  id               uuid PRIMARY KEY,
+  echo_job_id      uuid NOT NULL REFERENCES echo_job (id),
+  operation        echo_operation NOT NULL,
+  number           int NOT NULL,                 -- 1, 2, … per operation
+  idempotency_key  text NOT NULL UNIQUE,         -- kept for good
+  state            vendor_request_state NOT NULL,
+  vendor_echo_id   text,                         -- what a cancel targets
+  sent_at          timestamptz NOT NULL,
+  completed_at     timestamptz,
+  UNIQUE (echo_job_id, operation, number)
+);
+```
+
+- A table per port, as plan-architecture §7 does for `courier_request`;
+  the PSP and courier slices add their own, with the same shape.
+- The exceptions list is a state, not a table: a job in `needs_person`
+  with its request still `sent`. An admin page later lists such rows per
+  port. A generic exceptions table would need a foreign key to any port's
+  request table, which SQL cannot express.
+- Removing the echo flow later means dropping its tables and leaving its
+  values in the shared enum types (`message_type`, `consumer_name`,
+  `aggregate_type`): PostgreSQL cannot drop an enum value without
+  rebuilding the type. The `Literal`/`StrEnum` in code loses them; the
+  dead values stay in the database, harmless. Rebuilding the types is
+  possible later if they bother us.
+
+### 10.3 The effect consumer in code
+
+```
+mor/echo/port.py       EchoAccount, SendRequest, CancelRequest, and the
+                       result union: Sent(echo_id) | Refused(reason)
+                       | Unavailable | OutcomeUnknown; FindResult
+mor/echo/registry.py   send / cancel / find_by_reference: an exhaustive
+                       match on the provider, refusing a fake in prod
+mor/echo/fake_client.py   httpx client for the fake's made-up API
+mor/echo/capabilities.py  the duplicate guard per provider and operation
+mor/echo/flow.py       create_echo_job; prepare, call, complete
+```
+
+- The consumer table gains a kind per consumer, `local` or `effect`,
+  as an exhaustive `match`. The worker runs an effect consumer as plan-
+  architecture §5 describes: under the aggregate's advisory lock,
+  transaction 1 `prepare`, no transaction during `call`, transaction 2
+  `complete`, which also marks the delivery handled or sets a later
+  `not_before`.
+- The HTTP client is an argument to `call` (`http: AsyncClient`): the
+  worker passes a real one; tests pass one whose transport is the fakes'
+  app in-process (ASGI). Explicit, no injection.
+- `prepare(conn, fact, now) -> NoCall | SendCall | FindCall`: lock the
+  job; if it is no longer `requested`, `NoCall`. Otherwise find the
+  latest send request: none, or `not_sent` → create or reuse it, mark it
+  `sent`. A `sent` one with no result means an earlier run died
+  mid-call or got no answer: the guard decides (§10.4).
+- `call` maps the transport to the result union:
+  - connection refused or a DNS failure: `Unavailable` (provably never
+    left);
+  - a timeout, a dropped connection or a 5xx: `OutcomeUnknown` (the
+    vendor may have done the work);
+  - a documented refusal (4xx with an error code): `Refused`.
+
+  The client bounds the whole call with `asyncio.timeout(account
+  timeout)`, which works the same on a socket and in-process.
+- `complete(conn, fact, call, result, now)`: lock the job, apply the
+  result to the state as it is now: `Sent` → `echoed` and the request
+  `succeeded`; `Refused` → `refused`; `Unavailable` → the request becomes
+  `not_sent` and the delivery is retried later; `OutcomeUnknown` → the
+  request stays `sent` and the delivery is retried later.
+
+### 10.4 The three guards, offered by the fake
+
+| Provider | What the fake promises | After a `sent` with no result |
+|---|---|---|
+| `fake_keyed` (`vendor_constraint`) | a request with a known `Idempotency-Key` returns the first answer, for good | send again with the same key |
+| `fake_cancellable` (`compensable`) | nothing on resend, but an echo can be cancelled | send again; then find by our reference, and cancel every echo but the one we keep (a `cancel` request each) |
+| `fake_plain` (`none`) | nothing, no cancel | never resend; find by our reference: found → echoed; not found → `needs_person` |
+
+Our reference on every send is the job id, so `find_by_reference` works on
+every flavour. Each provider's guard is one constant in
+`capabilities.py`, with its test.
+
+### 10.5 The fake vendor
+
+- `mor/fakes/echo.py`: a Starlette app, routes under
+  `/_fake/echo/{flavour}/…`. A made-up API: `POST /echoes` (body: our
+  reference and message; `Idempotency-Key` honoured only by `keyed`),
+  `GET /echoes?reference=…`, `POST /echoes/{id}/cancel` (only
+  `cancellable`).
+- Its state lives in its own schema, `fake_vendor`, on its own
+  connection, as a third party's would: `fake_vendor.echo` (every echo it
+  ever made, cancelled or not) and `fake_vendor.echo_fault` (scripted
+  faults for the next call).
+- Faults, set through `POST /_fake/echo/faults` or a test helper:
+  `fail_500` (before the work), `fail_500_after_work`,
+  `timeout_after_work` (does the work, commits, then hangs past the
+  client's timeout), `refuse`. "Connection refused" cannot come from an
+  app; tests get it from a transport wrapper in `tests/` that refuses the
+  next request: a fake of the network, not of our code.
+- The fake's tables come from a separate set of migrations,
+  `migrations_fake/`, applied by the same runner on a connection whose
+  `search_path` is `fake_vendor`, so its own `schema_migration` record
+  lives there and no SQL is composed. `python -m mor.fakes.migrate`
+  refuses to run when `ENVIRONMENT=prod`. Tests apply both sets.
+- The fake's routes are not mounted anywhere yet: there is no web app
+  until a later slice. In tests the app is called in-process; mounting
+  it under `/_fake/` comes with the dev server.
+
+### 10.6 Testing
+
+- Unit, through the worker: each result kind; each guard after a crash
+  between `prepare` and `call` and between `call` and `complete`; a
+  cancelled duplicate; `needs_person`; a fake in prod is refused.
+- Layer 2: a state machine like the probe's, over echo jobs on all
+  three providers. Actions: create a job; run a delivery fully; run
+  `prepare` and stop; run `prepare` and `call` and stop (each a crash at
+  a commit boundary); script a fault for the next call; refuse the next
+  connection; move the clock. Checks after every action: no step raised,
+  every job in a state its provider allows, no advisory lock held, the
+  fake never holds two live echoes for one job on `keyed` or `plain`.
+  After draining with faults off: every job is `echoed`, `refused` or
+  (on `plain` only, and only after a lost answer) `needs_person`; on
+  `cancellable` exactly one live echo per echoed job; nothing unhandled.
+- Check the fuzzer: plant "resend on `plain`" and "skip the cancel on
+  `cancellable`", and confirm it fails.
+
+### 10.7 Rules applied
+
+A lock guards, time only triggers (the timeout yields `OutcomeUnknown`,
+a value that decides nothing); the duplicate guard as capability data;
+one module per vendor and one registry with an exhaustive `match`; a
+fake that behaves like a vendor over HTTP, with faults; errors as values
+(the result union); a table per thing; transitional code marked with
+what must be true before it goes.
+
+### 10.8 Dependencies
+
+- starlette 1.10.0 (BSD-3-Clause, Python 3.14), for the fake's app now
+  and our web layer later.
+- httpx: its last release, 0.28.1, dates from 06-Dec-2024 and has no
+  Python 3.14 classifier. `httpx2` 2.16.2 (BSD-3-Clause, Python 3.14,
+  released 16-Nov-2026) is a fork of httpx 0.28.1 maintained by the
+  Pydantic organisation, "with HTTPX itself seeing limited activity". Its
+  public API is httpx's under the import name `httpx2`. fruggals already
+  uses it, and Starlette's own extras list it. Proposed: httpx2, with
+  the conventions' "httpx for outgoing HTTP" read as this fork.
+
+## 11. What building 2b showed (17-Nov-2026)
+
+Built as §10 designs, with these differences:
+
+- The echo job has one more state, `deduplicating`, and a request row
+  counts its `sends`. Only a request sent more than once on a
+  `compensable` vendor can have left duplicates; such a send, answered or
+  refused, moves the job to `deduplicating`. There it finds every echo by
+  our reference, cancels each extra one by one (a `cancel` request
+  each), and ends `echoed` with the echo it keeps, or `refused` if none
+  is live. A resend that is refused keeps an echo an earlier send made.
+- `complete` may answer `Again` (more to ask now); the worker then runs
+  `prepare` again under the same lock, up to 50 rounds.
+- The fake's keyed flavour replays a known key even when a `refuse`
+  fault is scripted: refusing a replay would break its own promise.
+- `consumers.py` has four dispatch tables: `handle` for local consumers,
+  `prepare`, `call` and `complete` for effect consumers.
+- The worker takes the HTTP client and the environment as arguments;
+  tests of flows that never call out pass a client that fails any
+  request.
+
+Checked by planting each bug the guards exist to stop:
+
+| Planted bug | Caught by |
+|---|---|
+| guard `none` resends after a lost answer | unit, fuzzer |
+| duplicates on `compensable` never cancelled | unit, fuzzer |
+| a `compensable` resend trusted without a lookup | unit, fuzzer |
+| no `sent` mark before the call | unit, fuzzer |
+| a refused connection treated as an unknown outcome | unit; the fuzzer only after its model was tightened (below) |
+| no advisory lock around an effect | concurrency suite |
+
+- The fuzzer first allowed `needs_person` for any `plain` job, so the
+  fifth bug (which ends there) passed. Its model now allows it only after
+  a crash on that job or a fault that loses answers scripted for `plain`.
+- For effect consumers the advisory lock is essential, unlike for the
+  probe: without it a second worker sees a `sent` request with no answer
+  in the middle of someone else's call.
+- 15 runs of the echo fuzzer in a row passed on the correct code.
+- The fake's routes are not mounted anywhere yet (no web app exists), so
+  the echo flow runs only in tests. Mounting under `/_fake/` comes with
+  the dev server.
