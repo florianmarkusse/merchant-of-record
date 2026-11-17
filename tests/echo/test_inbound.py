@@ -411,6 +411,55 @@ def test_a_thin_webhook_leads_to_one_fetch_and_no_schedule(database_url: str) ->
     asyncio.run(_with_setup(database_url, body))
 
 
+def test_each_thin_webhook_of_one_echo_leads_to_its_own_fetch(
+    database_url: str,
+) -> None:
+    """Once lost every event after the first: two thin notices for one
+    echo were the same bytes, and the inbox took the second for a resend."""
+
+    async def body(setup: Setup) -> None:
+        account_id, base_url = await _account(setup, EventMode.PUSH_THIN, "thin-2")
+        job_id, echo_id = await _echoed_job(setup, account_id)
+
+        assert await _release(setup, base_url, echo_id, kind="confirmed") == "delivered"
+        await _drain(setup)
+        assert await _status(setup, job_id) == "confirmed"
+        assert await _release(setup, base_url, echo_id, kind="archived") == "delivered"
+        await _drain(setup)
+        assert await _status(setup, job_id) == "archived"
+
+    asyncio.run(_with_setup(database_url, body))
+
+
+def test_a_backlog_of_reports_is_read_in_short_looks(database_url: str) -> None:
+    """Once failed as a bug: one look read every waiting report, and 25 of
+    them needed more steps than the worker allows one delivery."""
+
+    async def body(setup: Setup) -> None:
+        account_id, base_url = await _file_account(setup, "file-2")
+        job_id, echo_id = await _echoed_job(setup, account_id)
+        await _release(setup, base_url, echo_id)
+        last = ""
+        for _ in range(30):
+            response = await setup.wired.control.post(f"{base_url}/reports/cut")
+            last = response.json()["name"]
+
+        setup.now += timedelta(minutes=5)
+        for _ in range(40):
+            results = await drain_once(setup.worker, setup.wired.http, ENV, setup.now)
+            for result in results:
+                assert not isinstance(result, Failed), result
+        async with await connect(setup.url) as conn:
+            cur = await conn.execute(
+                "SELECT last_report FROM echo_report_cursor WHERE account_id = %s",
+                (account_id,),
+            )
+            assert await cur.fetchone() == (last,)
+        assert await _status(setup, job_id) == "confirmed"
+
+    asyncio.run(_with_setup(database_url, body))
+
+
 async def _file_account(setup: Setup, name: str) -> tuple[uuid.UUID, str]:
     account_id, base_url = await _account(setup, EventMode.FILE, name)
     async with await connect(setup.url) as conn:

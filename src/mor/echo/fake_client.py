@@ -195,12 +195,14 @@ def decode_full_webhook(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBod
 
 
 class _ThinWebhook(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    id: str  # the event behind the notice; the fetch brings the event itself
     echo_id: str
     reference: str
 
 
 def decode_thin_webhook(body: bytes) -> str | UndecodableBody:
-    """A thin webhook names the echo and our reference, nothing more."""
+    """A thin webhook names an event id, the echo and our reference, not
+    what happened: that comes from the fetch it starts."""
     try:
         webhook = msgspec.json.decode(body, type=_ThinWebhook)
     except msgspec.DecodeError as error:

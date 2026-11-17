@@ -2,11 +2,16 @@
 Transitional with the echo flow.
 
     start_report_schedule ─▶ echo_report_due (scheduled, per account)
-    echo_report_fetch (effect), one report per round, `Again` until none:
-        list the reports after our cursor ─▶ the first becomes `pending`
+    echo_report_fetch (effect), one look, at most one report:
+        list the reports after our cursor ─▶ the first becomes `pending`,
+            `Again`
         fetch `pending` ─▶ stored raw in the inbox (the same path as a
-            webhook), the cursor moves on
-        nothing new ─▶ schedule the next echo_report_due, done
+            webhook), the cursor moves on, the next look is due now
+        nothing new ─▶ the next look is due after the poll interval
+
+One report per look keeps a look at two steps however many reports wait
+(a backlog of 25 once ran past the worker's step limit), and a backlog is
+read as looks that follow each other at once.
 
 A list or a fetch only reads, so one repeated after a crash needs no guard:
 the inbox key absorbs a report stored twice.
@@ -164,4 +169,8 @@ async def complete_reports(
                 " SET last_report = %s, pending_report = NULL WHERE account_id = %s",
                 (report_call.name, account_id),
             )
-            return Again()
+            # More may wait: look again at once, in a delivery of its own.
+            await append_fact(
+                conn, EchoReportDueV1(account_id=account_id), SCHEDULER, now
+            )
+            return Done(Applied())

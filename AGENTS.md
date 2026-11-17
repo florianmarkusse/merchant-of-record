@@ -32,8 +32,12 @@ and wins where the two differ.
   steps 2a (outbox, deliveries, inbox, worker, probe, fuzzer), 2b
   (effect consumers, duplicate guards, the fake echo vendor) and 2c
   (inbound by push, thin push, poll, file, none, and by hand; the first
-  web handler) are built. One fuzzer failure seen in 2c is still
-  unexplained: `docs/plan-messaging.md` §13.
+  web handler) are built. The fuzzer failure seen in 2c was a real
+  thin-webhook bug, now fixed (`docs/plan-messaging.md` §13).
+- Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
+  the vendor's own id (event id, notice id, file name), never a hash of
+  the bytes; the inbox's body hash only means "these bytes are stored
+  already" (`docs/plan-messaging.md` §12.2).
 - Decided 16-Nov-2026, starting slice 1:
   - Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
     reached over peer auth as the developer's own role

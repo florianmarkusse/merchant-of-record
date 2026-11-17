@@ -91,6 +91,11 @@ class _FullWebhook(msgspec.Struct, frozen=True):
 
 
 class _ThinWebhook(msgspec.Struct, frozen=True):
+    """Only "this echo has news", but with the id of the event behind it,
+    as real thin webhooks carry one: two notices are never the same bytes,
+    while a resend of one notice is."""
+
+    id: str
     echo_id: str
     reference: str
 
@@ -314,7 +319,9 @@ def make_app(database_url: str, outgoing: httpx2.AsyncClient) -> Starlette:
         assert isinstance(url, str) and isinstance(secret, str)
         if payload == "thin":
             body = msgspec.json.encode(
-                _ThinWebhook(echo_id=event.echo_id, reference=event.reference)
+                _ThinWebhook(
+                    id=event.id, echo_id=event.echo_id, reference=event.reference
+                )
             )
         else:
             body = msgspec.json.encode(_FullWebhook(events=[event]))

@@ -489,7 +489,7 @@ Each echo account has an event mode, capability data on the account:
 | Mode | How events arrive | Started by |
 |---|---|---|
 | `push` | the vendor POSTs a signed webhook carrying the events | the vendor |
-| `push_thin` | a signed webhook carrying only the echo id; we fetch its events | the vendor |
+| `push_thin` | a signed webhook carrying an event id and the echo id, not what happened; we fetch its events | the vendor |
 | `poll` | we fetch one page of events per job | a scheduled fact per job, until a final status |
 | `file` | a report file of all events since the last one, per account | a scheduled fact per account |
 | `none` | nothing: the vendor offers no events | only events recorded by hand |
@@ -534,10 +534,20 @@ file            ─▶ effect consumer: fetch the file   ┘    unique per accou
 - Every mode stores the raw bytes first, commits and stops; a webhook
   then answers 200. Decoding is a consumer's job, so a decoder bug never
   loses an event: the raw row stays, and a fixed decoder re-runs it.
-- The inbox key is the sha256 of the body, for every mode. A webhook
-  sent twice or a page fetched twice is stored once. A vendor that wraps
-  the same event in a new envelope gets past the hash; the unique key on
-  (job, vendor event id) stops it one step later.
+- **The guard against duplicates is the vendor's id, never the bytes**
+  (decided 17-Nov-2026). Every event has the vendor's event id, and the
+  unique key on (job, vendor event id) records it once, whatever mode
+  brought it. Every webhook notice carries an id too (a thin one the id
+  of the event behind it), so two notices are never the same bytes; a
+  report file has its name, which is also our cursor; a poll page is a
+  read and needs none.
+- The inbox's unique sha256 of the body only means "these exact bytes are
+  stored already": a resend of one webhook, a page fetched twice, two
+  empty report files. It decides nothing about events. Bytes that differ
+  for one event (Adyen resends with a new `eventDate`) are stored twice
+  and stopped by the event key; a vendor whose distinct notices could be
+  the same bytes would lose the second, so a vendor module never relies
+  on the hash (the fake's thin notices did, §13).
 - Two hops, because one step locks one aggregate (plan-architecture §4):
   the inbox row belongs to the account (one webhook may carry events of
   several jobs), each event belongs to its job.
@@ -619,8 +629,11 @@ a key in `.env` (AGENTS.md: secrets never in the database).
   whether a poll is still wanted (not if the status is final).
 - `echo_poll` fetches one page and stores it in the inbox; then, unless
   the status is final, it appends the next `echo_poll_due` at now plus
-  the account's interval. `echo_report_fetch` does the same per account
-  for files, with the cursor saying which report comes next.
+  the account's interval. `echo_report_fetch` looks for files per
+  account, with the cursor saying which report comes next. A look reads
+  at most one report and then makes the next look due at once; a look
+  that finds nothing makes the next one due after the interval. A
+  backlog is read as looks that follow each other, each two steps.
 - Polls and report fetches only read at the vendor, so their guard is
   "resend freely": a fetch repeated after a crash stores the same bytes,
   and the inbox key absorbs it. No request row is needed for them.
@@ -659,6 +672,9 @@ a key in `.env` (AGENTS.md: secrets never in the database).
   and `POST /_fake/echo/{flavour}/events/redeliver` sends it again.
 - Faults: send a webhook twice; send it with a bad signature; poll and
   report requests that answer 500 or time out.
+- A thin webhook carries the event's id, the echo id and our reference,
+  as real thin webhooks carry an id (Stripe's thin events: the event id
+  and the changed object).
 - `GET /_fake/echo/{flavour}/echoes/{id}/events` (poll and thin),
   `GET /_fake/echo/{flavour}/reports/{name}` (file: all events released
   since the previous report, CSV).
@@ -759,17 +775,51 @@ Planted bugs:
 - Planted bugs: a report schedule that stops after one look, a cursor
   that never moves (unit, fuzzer).
 
-### Open: one unexplained fuzzer failure
+### The fuzzer failure on correct code, explained (17-Nov-2026)
 
-Once, in a full run right after the planted-bug runs (and once more when
-Hypothesis replayed that sequence), a `push` job ended `confirmed` where
-the vendor had released `archived` too. It was not seen again in 31 runs
-since, nor on replay after; the sequence did not shrink to anything
-readable. Not explained yet. The fuzzer's failure message for that check
-now carries the evidence (what the vendor released and pushed, what
-reached our inbox, what the job recorded), so the next occurrence can be
-read from the message alone. Until then it counts as a possible bug in
-the push path, not as a flaky test.
+Once, a job ended `confirmed` although the vendor had released `archived`
+too. The cause was a real bug in `push_thin`: a thin notice carried only
+`{echo_id, reference}`, so every notice for one echo was the same bytes.
+The inbox took the second for a resend of the first, no fetch followed (a
+thin account has no poll schedule), and every event after the first was
+lost. A two-step unit test shows it every time; driving the fuzzer's own
+class through the same order gives the failure as first seen. The full
+`push` path held up under 1,500 push-only fuzzer sequences.
+
+Why it looked flaky: random single deliveries seldom finish one event
+(decode, then fetch) before the vendor releases the next, so it was found
+once in about 30 runs. Its saved example stopped replaying when the
+fuzzer file was edited for debugging. The earlier note that the job was a
+`push` job was a guess from timing, which a thin job fits as well; the
+mode was not in the failure message then (it is now).
+
+Fixes:
+
+- Thin notices carry the id of the event behind them, as real ones do;
+  the rule that the vendor's id, never the hash, is the duplicate guard
+  is in §12.2. Pinned by
+  `test_each_thin_webhook_of_one_echo_leads_to_its_own_fetch`.
+- The fuzzer gains `the_worker_catches_up`: everything due, until
+  nothing is. With the thin bug put back, the long run finds it in about
+  four minutes and shrinks it to five steps (thin job, catch up, release,
+  catch up, drain); the normal 30-sequence budget does not find it
+  reliably, so the unit test is its guard in every run.
+
+A second bug, found by the long run: a `file` account with 25 or more
+waiting reports could not finish a look. A look read every waiting report
+in one delivery, two steps each, past the worker's 50-step limit, and the
+delivery failed as a bug (its progress kept, so a retry went on). A look
+now reads at most one report and makes the next look due at once (§12.4).
+Pinned by `test_a_backlog_of_reports_is_read_in_short_looks`.
+
+The long run on the fixed code then found a bug in the fuzzer itself: its
+drain stopped after a round of only report looks that stored nothing.
+With one report per look, such a round can read an empty report already
+stored (the same bytes as an earlier empty one) while the report with
+the events waits one look further, so the drain stopped short and a
+`file` job missed its events. The code was right: the next look runs at
+once. The drain now catches up fully in each round (the same loop as
+`the_worker_catches_up`) and stops after a round that changed nothing.
 
 - The echo fuzzer's normal budget is 30 sequences (about 10 to 15 s); the
   soak profile runs it long.

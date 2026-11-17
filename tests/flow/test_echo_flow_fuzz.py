@@ -1,7 +1,9 @@
 """Layer 2 for effect consumers: the echo flow as a Hypothesis state machine
 against mor_test and the fake echo vendor in-process (plan-messaging §10.6).
 
-Actions: create a job on any provider; run a delivery; crash after
+Actions: create a job on any provider; run a delivery; the worker
+catches up (runs everything due, so "an event fully processed before the
+next one arrives" is reachable in a few steps); crash after
 `prepare` committed; crash after the call, before `complete`; script a
 fault for the next send; refuse the next connection; redeliver a handled
 message; move the clock. Inbound (§12): accounts in `push`, `push_thin`,
@@ -202,6 +204,14 @@ class EchoFlow(RuleBasedStateMachine):
             return
         result = self.run(run_one(self.worker, self.http, ENV, candidate, self.now))
         assert not isinstance(result, Failed), result
+
+    @rule()
+    def the_worker_catches_up(self) -> None:
+        """Everything due, until nothing is: what a running worker does
+        between two events. Without it, a random pick of single deliveries
+        seldom finishes one event before the next (a thin-webhook bug hid
+        that way, 17-Nov-2026)."""
+        self.run(self._catch_up())
 
     @rule(data=st.data(), with_call=st.booleans())
     def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
@@ -413,6 +423,16 @@ class EchoFlow(RuleBasedStateMachine):
         parts.append(f"manual: {sorted(self.manual[job_id])}")
         return "; ".join(parts)
 
+    async def _catch_up(self) -> None:
+        for _ in range(100):
+            candidates = await find_candidates(self.worker, self.now, 50)
+            if not candidates:
+                return
+            for candidate in candidates:
+                result = await run_one(self.worker, self.http, ENV, candidate, self.now)
+                assert not isinstance(result, Failed), result
+        raise AssertionError("the worker never caught up")
+
     async def _progress(self) -> tuple[object, ...]:
         cur = await self.worker.execute(
             "SELECT (SELECT count(*) FROM echo_inbox),"
@@ -499,23 +519,18 @@ class EchoFlow(RuleBasedStateMachine):
         # Faults off, clock far ahead: everything must finish.
         await self.worker.execute("DELETE FROM fake_vendor.echo_fault")
         self.network.refuse_next = 0
-        for _ in range(200):
+        # Each round: the vendor releases and cuts, the worker catches up.
+        # A `file` account looks for reports forever, and a look reads one
+        # report, then looks again at once; catching up runs those looks
+        # within the round, so a round that changes nothing ends the drain.
+        # (Stopping after one round of looks instead stopped one look short
+        # of a report, behind an empty one already stored, 17-Nov-2026.)
+        for _ in range(50):
             self.now += timedelta(hours=2)
             await self._vendor_releases_everything_left()
-            candidates = await find_candidates(self.worker, self.now, 50)
-            if not candidates:
-                break
-            # A `file` account looks for reports forever: stop once a round
-            # of only such looks changes nothing.
-            only_report_looks = True
-            for candidate in candidates:
-                if candidate.consumer != ConsumerName.ECHO_REPORT_FETCH:
-                    only_report_looks = False
             before = await self._progress()
-            for candidate in candidates:
-                result = await run_one(self.worker, self.http, ENV, candidate, self.now)
-                assert not isinstance(result, Failed), result
-            if only_report_looks and await self._progress() == before:
+            await self._catch_up()
+            if await self._progress() == before:
                 break
         states = await self._states()
         live = await self._echo_counts(live_only=True)
