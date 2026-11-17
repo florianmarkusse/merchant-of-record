@@ -83,7 +83,17 @@ Built and confirmed one at a time, each with its checks, tests and fuzzing:
   by the countries file, not by their shape. Seven currencies were added
   (GBP, AUD, NZD, CAD, CHF, JPY, KRW) for limits and FX rates. The ECB
   rates moved from `scripts/markets.py` into `fx_rates.csv`, which both
-  read; the generated page is unchanged. A country whose
+  read; the generated page is unchanged.
+- **No import tax row means closed, not tax-free** (decided 18-Nov-2026,
+  following Q1: fail closed). An open country needs at least one
+  `import_tax` row for the category; a country that truly charges none
+  gets an explicit 0% row with its source. Seen on the staff page: CA and
+  CH were "open" with no rates at all. With today's data, apparel can be
+  quoted to SG and TH only; the rest are closed with the reason shown
+  (rates missing, a rate not confirmed, or the market status). Missing
+  duty rows are not the same: duty comes per HS code from the duty source
+  (4b), and a missing rate there starts a lookup.
+- The staff page (§5b) shows this for step 4a: `/staff/markets`. A country whose
   quoting values include anything weaker is closed at checkout with the
   reason "rules not confirmed yet".
 - **A rule change is a non-event** (decided 17-Nov-2026: governments
@@ -147,6 +157,24 @@ Built and confirmed one at a time, each with its checks, tests and fuzzing:
   `quote_refused`. No handler calls a vendor.
 - Buyer pages `/c/{session}` (cart, address, quote), server-rendered,
   English first, with the merchant's name. The pay step is slice 5.
+
+## 5b. The staff page
+
+A staff page, `/staff/markets`, shows what each step decides, and grows
+with every step of this slice (decided 17-Nov-2026): 4a the loads and each
+country's answer (open, or closed with the reason, and the rates in
+force); 4b a form for country, category and order value showing the tax
+paths and the duty decision; 4c the full price breakdown; 4d the sessions
+and quotes made. It is a staff tool, not a sandbox one: after this slice
+it becomes the admin page that edits market data. It is plain forms,
+read-only until then.
+
+Until staff sign-in exists it is mounted only outside prod, reached on
+loopback like the sandbox page. Staff sign-in (staff accounts, password
+plus a second factor, sessions with a SameSite cookie, the cross-site
+check on every POST, the person recorded as actor) is a slice of its own,
+before the first prod deploy (decided 17-Nov-2026); the page is mounted in
+prod behind it, unchanged.
 
 ## 6. Questions, answered 17-Nov-2026
 

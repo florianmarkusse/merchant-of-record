@@ -884,6 +884,11 @@ Each slice ends with the checks clean and its part of the flow fuzzed.
 9. Payout release and payout runs against the fake rail.
 10. The first real courier module, once the quotes decide which.
 
+Staff sign-in (staff accounts, password plus a second factor, sessions,
+the person recorded as actor) is a slice of its own, before the first prod
+deploy (decided 17-Nov-2026, `plan-quote.md` §5b); until then staff pages
+are mounted only outside prod.
+
 ## 15. Decisions from the review, and what is still open
 
 Decided 15-Nov-2026:

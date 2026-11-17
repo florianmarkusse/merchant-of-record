@@ -73,6 +73,17 @@ async def latest_load(conn: Connection) -> LoadRow | None:
         return await cur.fetchone()
 
 
+async def recent_loads(conn: Connection, limit: int) -> list[LoadRow]:
+    """The newest loads first; the first is the one in force."""
+    async with conn.cursor(row_factory=class_row(LoadRow)) as cur:
+        await cur.execute(
+            "SELECT id, content_sha256, git_commit, loaded_at FROM market_load"
+            " ORDER BY id DESC LIMIT %s",
+            (limit,),
+        )
+        return await cur.fetchall()
+
+
 async def load_market(
     conn: Connection, market: MarketSet, git_commit: str, actor: Actor, now: datetime
 ) -> Loaded | Unchanged:

@@ -42,7 +42,16 @@ class RulesNotConfirmed:
     line_nos: tuple[int, ...]
 
 
-type Closed = NotListed | NotOpen | RulesNotConfirmed
+@dataclass(frozen=True)
+class RatesMissing:
+    """No import tax row for the country and category: unresearched, not
+    "nothing due". A country that truly charges none has an explicit 0% row
+    with its source (decided 18-Nov-2026: fail closed, as for Q1)."""
+
+    category: str
+
+
+type Closed = NotListed | NotOpen | RulesNotConfirmed | RatesMissing
 
 
 @dataclass(frozen=True)
@@ -71,6 +80,8 @@ def country_rules(
                 unconfirmed.append(rate.line_no)
     if unconfirmed:
         return RulesNotConfirmed(tuple(sorted(unconfirmed)))
+    if Charge.IMPORT_TAX not in candidates:
+        return RatesMissing(category)
     return Open(country, candidates)
 
 

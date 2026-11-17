@@ -125,7 +125,7 @@ def _changed_fields(old: object, new: object) -> list[str]:
 def _record_text(row: object) -> str:
     parts: list[str] = []
     if not is_dataclass(row):
-        return _text(row)
+        return value_text(row)
     for field in fields(row):
         if field.name in _IGNORED:
             continue
@@ -136,10 +136,10 @@ def _record_text(row: object) -> str:
 def _field_text(row: object, name: str) -> str:
     if isinstance(row, Group) and name == "members":
         return " ".join(row.members)
-    return _text(getattr(row, name))
+    return value_text(getattr(row, name))
 
 
-def _text(value: object) -> str:
+def value_text(value: object) -> str:
     """A field's value as a person reads it."""
     match value:
         case None:
@@ -153,13 +153,13 @@ def _text(value: object) -> str:
         case date():
             return format_day(value)
         case Limit(amount=amount, basis=basis):
-            return f"{_text(amount)} on {basis.value}"
+            return f"{value_text(amount)} on {basis.value}"
         case Percent(rate=rate, base=base):
             return f"{_percent(rate)} of {base.value}"
         case PerLine(amount=amount):
-            return f"{_text(amount)} per line"
+            return f"{value_text(amount)} per line"
         case PerParcel(amount=amount):
-            return f"{_text(amount)} per parcel"
+            return f"{value_text(amount)} per parcel"
         case Scope(country=country, group=group):
             return country or group or "none"
         case _:

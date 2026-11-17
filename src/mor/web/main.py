@@ -16,7 +16,7 @@ from starlette.responses import Response
 from starlette.routing import BaseRoute, Route
 
 from mor.config import Environment, Settings
-from mor.web import sandbox, webhooks
+from mor.web import sandbox, staff_markets, webhooks
 
 
 class FakesInProd(Exception):
@@ -42,9 +42,18 @@ def make_app(
     async def echo_webhook(request: Request) -> Response:
         return await webhooks.echo_webhook(request, url, clock())
 
+    async def staff_markets_page(request: Request) -> Response:
+        return await staff_markets.show(request, url, clock())
+
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
     ]
+    # Staff pages: outside prod only until staff sign-in exists
+    # (plan-quote.md §5b); then mounted in prod behind it.
+    if settings.environment != Environment.PROD:
+        routes.append(
+            Route("/staff/markets", staff_markets_page, methods=["GET"]),
+        )
     if fakes is not None:
         if settings.environment == Environment.PROD:
             raise FakesInProd("the fakes never run in prod")
