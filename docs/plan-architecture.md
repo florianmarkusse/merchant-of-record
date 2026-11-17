@@ -791,6 +791,17 @@ tests that the locks do what layer 2 assumes.
   no change if a coverage-guided runner is added later.
 - Hypothesis is a new dev dependency; its version, licence (MPL-2.0 from
   memory) and Python 3.14 support are checked when it is added.
+- Browser tests arrive with the checkout (decided 17-Nov-2026), not
+  before: until then every page is plain forms with no JavaScript, tested
+  at the HTTP edge (request in, page and rows out), and the sandbox page
+  is transitional. The checkout is the first page with JavaScript (the
+  PSP's card fields), buyer-facing and lasting, and where a broken browser
+  path loses a payment. It gets a small Playwright smoke suite against the
+  test setup: a few journeys end to end (pay, a declined card, a redirect
+  method) under the prod Content-Security-Policy, failing on any "Refused
+  to load" in the console. It runs beside the soak, not in every
+  `uv run pytest`. Until then each new page is driven once by hand with
+  Playwright before review.
 
 **Modes.** Each layer 2 run first draws its wiring: for every port, which
 of the fake's modes this run uses (§6: push or poll tracking, file or API
