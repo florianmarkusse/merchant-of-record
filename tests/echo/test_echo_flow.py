@@ -21,7 +21,7 @@ from mor.echo.flow import (
 )
 from mor.echo.port import EchoProvider
 from mor.fakes.echo import make_app
-from mor.messaging.outcome import Applied
+from mor.messaging.outcome import Applied, Stale
 from mor.messaging.worker import (
     Deferred,
     Failed,
@@ -32,7 +32,7 @@ from mor.messaging.worker import (
     prepare_delivery,
     try_lock_aggregate,
 )
-from tests.helpers import ENV, RefusingTransport
+from tests.helpers import ENV, NO_HTTP, RefusingTransport, crash
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -54,7 +54,7 @@ class Setup:
 
 
 async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> None:
-    network = RefusingTransport(httpx2.ASGITransport(app=make_app(url)))
+    network = RefusingTransport(httpx2.ASGITransport(app=make_app(url, NO_HTTP)))
     async with (
         httpx2.AsyncClient(transport=network) as http,
         await connect(url, autocommit=True) as worker,
@@ -67,7 +67,7 @@ async def _job(setup: Setup, provider: EchoProvider) -> uuid.UUID:
         account_id = await create_echo_account(
             conn,
             provider,
-            f"http://fake/_fake/echo/{FLAVOUR[provider]}",
+            f"http://fake/_fake/echo/{FLAVOUR[provider]}/acct",
             timedelta(milliseconds=200),
         )
         job_id = await create_echo_job(conn, account_id, "hello", ACTOR, NOW)
@@ -130,7 +130,7 @@ async def _crash_after_prepare(setup: Setup) -> None:
     async with crashing.transaction():
         prepared = await prepare_delivery(crashing, candidates[0], NOW)
     assert isinstance(prepared, Prepared)
-    await crashing.close()
+    await crash(crashing)
 
 
 def test_each_provider_echoes_a_job_once(database_url: str) -> None:
@@ -144,6 +144,8 @@ def test_each_provider_echoes_a_job_once(database_url: str) -> None:
                 "echo_job_requested",
                 "echo_job_echoed",
             ]
+            # echo_job_echoed starts tracking; a `none` account polls nothing.
+            assert await _drain(setup, NOW) == [Ran(Stale())]
 
     asyncio.run(_with_setup(database_url, body))
 

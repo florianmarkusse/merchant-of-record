@@ -9,7 +9,13 @@ class ConsumerName(StrEnum):
 
     PROBE_ECHO = "probe_echo"
     PROBE_FINISH = "probe_finish"
-    ECHO_SEND = "echo_send"  # transitional, with the echo flow
+    # Transitional, with the echo flow.
+    ECHO_SEND = "echo_send"
+    ECHO_INBOX_DECODE = "echo_inbox_decode"
+    ECHO_EVENT_APPLY = "echo_event_apply"
+    ECHO_TRACKING_START = "echo_tracking_start"
+    ECHO_POLL = "echo_poll"
+    ECHO_REPORT_FETCH = "echo_report_fetch"
 
 
 type ConsumerKind = Literal["local", "effect"]
@@ -26,10 +32,21 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.PROBE_FINISH,)
         case MessageType.ECHO_JOB_REQUESTED:
             return (ConsumerName.ECHO_SEND,)
+        case MessageType.ECHO_INBOX_STORED:
+            return (ConsumerName.ECHO_INBOX_DECODE,)
+        case MessageType.ECHO_VENDOR_EVENT_RECEIVED:
+            return (ConsumerName.ECHO_EVENT_APPLY,)
+        case MessageType.ECHO_JOB_ECHOED:
+            return (ConsumerName.ECHO_TRACKING_START,)
+        case MessageType.ECHO_POLL_DUE | MessageType.ECHO_EVENTS_WANTED:
+            return (ConsumerName.ECHO_POLL,)
+        case MessageType.ECHO_REPORT_DUE:
+            return (ConsumerName.ECHO_REPORT_FETCH,)
         case (
-            MessageType.ECHO_JOB_ECHOED
-            | MessageType.ECHO_JOB_REFUSED
+            MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
+            | MessageType.ECHO_JOB_CONFIRMED
+            | MessageType.ECHO_JOB_ARCHIVED
         ):
             return ()
         case _:
@@ -40,9 +57,19 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
     """`local`: one transaction, no outside call. `effect`: prepare, call
     the outside, complete, each step its own commit (plan-architecture §5)."""
     match consumer:
-        case ConsumerName.PROBE_ECHO | ConsumerName.PROBE_FINISH:
+        case (
+            ConsumerName.PROBE_ECHO
+            | ConsumerName.PROBE_FINISH
+            | ConsumerName.ECHO_INBOX_DECODE
+            | ConsumerName.ECHO_EVENT_APPLY
+            | ConsumerName.ECHO_TRACKING_START
+        ):
             return "local"
-        case ConsumerName.ECHO_SEND:
+        case (
+            ConsumerName.ECHO_SEND
+            | ConsumerName.ECHO_POLL
+            | ConsumerName.ECHO_REPORT_FETCH
+        ):
             return "effect"
         case _:
             assert_never(consumer)

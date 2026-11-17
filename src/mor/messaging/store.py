@@ -19,10 +19,16 @@ class AlreadyHandled:
 
 
 async def append_fact(
-    conn: Connection, fact: Fact, actor: Actor, now: datetime
+    conn: Connection,
+    fact: Fact,
+    actor: Actor,
+    now: datetime,
+    deliver_at: datetime | None = None,
 ) -> uuid.UUID:
     """Write a fact and a delivery for each of its consumers, in the caller's
-    transaction next to the state change it records. Never commits."""
+    transaction next to the state change it records. Never commits.
+    `deliver_at` schedules the deliveries for later (a poll's next turn):
+    time only starts the consumer, which decides under its locks."""
     message_id = uuid.uuid7()
     aggregate = aggregate_of(fact)
     kind = fact_type(fact)
@@ -68,7 +74,7 @@ async def append_fact(
                 "aggregate_type": aggregate.type.value,
                 "aggregate_id": aggregate.id,
                 "seq": seq,
-                "not_before": now,
+                "not_before": now if deliver_at is None else deliver_at,
             },
         )
     return message_id

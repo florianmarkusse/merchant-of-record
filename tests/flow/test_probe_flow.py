@@ -43,7 +43,7 @@ from mor.messaging.worker import (
     try_lock_aggregate,
 )
 from mor.probe.flow import ProbeState, start_probe
-from tests.helpers import ENV, NO_HTTP, TEST_URL, empty_tables
+from tests.helpers import ENV, NO_HTTP, TEST_URL, crash, empty_tables
 
 
 T0 = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -116,7 +116,7 @@ class ProbeFlow(RuleBasedStateMachine):
             assert await try_lock_aggregate(crashing, candidate)
             await crashing.execute("BEGIN")
             await handle_delivery(crashing, candidate, self.now)
-            await crashing.close()  # dies before COMMIT
+            await crash(crashing)  # dies before COMMIT
 
         self.run(step())
 
@@ -130,7 +130,7 @@ class ProbeFlow(RuleBasedStateMachine):
         async def step() -> None:
             crashing = await connect(TEST_URL, autocommit=True)
             assert await try_lock_aggregate(crashing, candidate)
-            await crashing.close()
+            await crash(crashing)
 
         self.run(step())
 

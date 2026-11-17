@@ -6,6 +6,7 @@ and the old one stays decodable while prod holds undelivered messages of it.
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal, assert_never
 
@@ -17,6 +18,7 @@ class AggregateType(StrEnum):
 
     PROBE = "probe"
     ECHO_JOB = "echo_job"  # transitional, with the echo flow
+    ECHO_ACCOUNT = "echo_account"  # transitional, with the echo flow
 
 
 class MessageType(StrEnum):
@@ -29,6 +31,13 @@ class MessageType(StrEnum):
     ECHO_JOB_ECHOED = "echo_job_echoed"
     ECHO_JOB_REFUSED = "echo_job_refused"
     ECHO_JOB_NEEDS_PERSON = "echo_job_needs_person"
+    ECHO_INBOX_STORED = "echo_inbox_stored"
+    ECHO_VENDOR_EVENT_RECEIVED = "echo_vendor_event_received"
+    ECHO_JOB_CONFIRMED = "echo_job_confirmed"
+    ECHO_JOB_ARCHIVED = "echo_job_archived"
+    ECHO_POLL_DUE = "echo_poll_due"
+    ECHO_EVENTS_WANTED = "echo_events_wanted"
+    ECHO_REPORT_DUE = "echo_report_due"
 
 
 @dataclass(frozen=True)
@@ -66,6 +75,55 @@ class EchoJobNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tr
     echo_job_id: uuid.UUID
 
 
+class EchoInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Raw bytes from the vendor (a webhook, a page, a file) were stored,
+    not yet decoded."""
+
+    account_id: uuid.UUID
+    inbox_id: uuid.UUID
+
+
+class EchoVendorEventReceivedV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True
+):
+    """One event about a job: decoded from the vendor's bytes (`inbox_id`
+    set), or recorded by hand (`manual`, the person is the fact's actor)."""
+
+    echo_job_id: uuid.UUID
+    vendor_event_id: str
+    kind: Literal["confirmed", "archived"]
+    occurred_at: datetime
+    source: Literal["vendor", "manual"]
+    inbox_id: uuid.UUID | None
+
+
+class EchoJobConfirmedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    echo_job_id: uuid.UUID
+
+
+class EchoJobArchivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    echo_job_id: uuid.UUID
+
+
+class EchoPollDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Scheduled: the time to poll a job's events came. Whether a poll is
+    still wanted is decided under the job's lock."""
+
+    echo_job_id: uuid.UUID
+
+
+class EchoEventsWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A thin webhook said the job has news, without saying what."""
+
+    echo_job_id: uuid.UUID
+
+
+class EchoReportDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Scheduled: the time to look for new report files of an account."""
+
+    account_id: uuid.UUID
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -73,6 +131,13 @@ type Fact = (
     | EchoJobEchoedV1
     | EchoJobRefusedV1
     | EchoJobNeedsPersonV1
+    | EchoInboxStoredV1
+    | EchoVendorEventReceivedV1
+    | EchoJobConfirmedV1
+    | EchoJobArchivedV1
+    | EchoPollDueV1
+    | EchoEventsWantedV1
+    | EchoReportDueV1
 )
 
 
@@ -104,6 +169,20 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.ECHO_JOB_REFUSED, 1)
         case EchoJobNeedsPersonV1():
             return FactType(MessageType.ECHO_JOB_NEEDS_PERSON, 1)
+        case EchoInboxStoredV1():
+            return FactType(MessageType.ECHO_INBOX_STORED, 1)
+        case EchoVendorEventReceivedV1():
+            return FactType(MessageType.ECHO_VENDOR_EVENT_RECEIVED, 1)
+        case EchoJobConfirmedV1():
+            return FactType(MessageType.ECHO_JOB_CONFIRMED, 1)
+        case EchoJobArchivedV1():
+            return FactType(MessageType.ECHO_JOB_ARCHIVED, 1)
+        case EchoPollDueV1():
+            return FactType(MessageType.ECHO_POLL_DUE, 1)
+        case EchoEventsWantedV1():
+            return FactType(MessageType.ECHO_EVENTS_WANTED, 1)
+        case EchoReportDueV1():
+            return FactType(MessageType.ECHO_REPORT_DUE, 1)
         case _:
             assert_never(fact)
 
@@ -118,8 +197,18 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | EchoJobEchoedV1(echo_job_id=job_id)
             | EchoJobRefusedV1(echo_job_id=job_id)
             | EchoJobNeedsPersonV1(echo_job_id=job_id)
+            | EchoVendorEventReceivedV1(echo_job_id=job_id)
+            | EchoJobConfirmedV1(echo_job_id=job_id)
+            | EchoJobArchivedV1(echo_job_id=job_id)
+            | EchoPollDueV1(echo_job_id=job_id)
+            | EchoEventsWantedV1(echo_job_id=job_id)
         ):
             return Aggregate(AggregateType.ECHO_JOB, job_id)
+        case (
+            EchoInboxStoredV1(account_id=account_id)
+            | EchoReportDueV1(account_id=account_id)
+        ):
+            return Aggregate(AggregateType.ECHO_ACCOUNT, account_id)
         case _:
             assert_never(fact)
 
@@ -156,6 +245,20 @@ def decode(
             decoded = _decode(payload, EchoJobRefusedV1)
         case MessageType.ECHO_JOB_NEEDS_PERSON:
             decoded = _decode(payload, EchoJobNeedsPersonV1)
+        case MessageType.ECHO_INBOX_STORED:
+            decoded = _decode(payload, EchoInboxStoredV1)
+        case MessageType.ECHO_VENDOR_EVENT_RECEIVED:
+            decoded = _decode(payload, EchoVendorEventReceivedV1)
+        case MessageType.ECHO_JOB_CONFIRMED:
+            decoded = _decode(payload, EchoJobConfirmedV1)
+        case MessageType.ECHO_JOB_ARCHIVED:
+            decoded = _decode(payload, EchoJobArchivedV1)
+        case MessageType.ECHO_POLL_DUE:
+            decoded = _decode(payload, EchoPollDueV1)
+        case MessageType.ECHO_EVENTS_WANTED:
+            decoded = _decode(payload, EchoEventsWantedV1)
+        case MessageType.ECHO_REPORT_DUE:
+            decoded = _decode(payload, EchoReportDueV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

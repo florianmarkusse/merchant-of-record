@@ -11,6 +11,11 @@ How a call ends:
 """
 
 import asyncio
+import csv
+import hashlib
+import hmac
+import io
+from datetime import datetime
 from typing import Literal
 
 import httpx2
@@ -20,15 +25,20 @@ from mor.echo.port import (
     Cancelled,
     CancelResult,
     EchoAccount,
+    EventKind,
     FindResult,
     Found,
     OutcomeUnknown,
+    Page,
     Refused,
+    ReportList,
     SendRequest,
     SendResult,
     Sent,
     Unavailable,
+    UndecodableBody,
     VendorEcho,
+    VendorEvent,
 )
 
 
@@ -143,3 +153,133 @@ async def cancel(
     if isinstance(echo, OutcomeUnknown):
         return echo
     return Cancelled(echo.id)
+
+
+SIGNATURE_HEADER = "Echo-Signature"
+
+
+class _WebhookEvent(msgspec.Struct, frozen=True):
+    id: str
+    echo_id: str
+    reference: str
+    kind: Literal["confirmed", "archived"]
+    occurred_at: datetime
+
+
+class _FullWebhook(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    events: list[_WebhookEvent]
+
+
+def verify_webhook(secret: str, body: bytes, signature: str | None) -> bool:
+    """The vendor signs the raw body with HMAC-SHA256 (hex). Compared in
+    constant time."""
+    if signature is None or secret == "":
+        return False
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+def decode_full_webhook(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBody:
+    try:
+        webhook = msgspec.json.decode(body, type=_FullWebhook)
+    except msgspec.DecodeError as error:
+        return UndecodableBody(str(error))
+    events: list[VendorEvent] = []
+    for event in webhook.events:
+        events.append(
+            VendorEvent(
+                event.id, event.reference, EventKind(event.kind), event.occurred_at
+            )
+        )
+    return tuple(events)
+
+
+class _ThinWebhook(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    echo_id: str
+    reference: str
+
+
+def decode_thin_webhook(body: bytes) -> str | UndecodableBody:
+    """A thin webhook names the echo and our reference, nothing more."""
+    try:
+        webhook = msgspec.json.decode(body, type=_ThinWebhook)
+    except msgspec.DecodeError as error:
+        return UndecodableBody(str(error))
+    return webhook.reference
+
+
+async def fetch_events(
+    http: httpx2.AsyncClient, account: EchoAccount, reference: str
+) -> Page | Unavailable | OutcomeUnknown:
+    """One page of events for our reference, as raw bytes: decoding happens
+    after they are stored, like a webhook's."""
+    answer = await _request(
+        http, account, "GET", "/events", params={"reference": reference}
+    )
+    if not isinstance(answer, httpx2.Response):
+        return answer
+    if answer.status_code != 200:
+        return OutcomeUnknown(f"status {answer.status_code}")
+    return Page(answer.content)
+
+
+class _ReportNames(msgspec.Struct, frozen=True):
+    reports: list[str]
+
+
+async def list_reports(
+    http: httpx2.AsyncClient, account: EchoAccount, after: str
+) -> ReportList | Unavailable | OutcomeUnknown:
+    answer = await _request(http, account, "GET", "/reports", params={"after": after})
+    if not isinstance(answer, httpx2.Response):
+        return answer
+    if answer.status_code != 200:
+        return OutcomeUnknown(f"status {answer.status_code}")
+    try:
+        body = msgspec.json.decode(answer.content, type=_ReportNames)
+    except msgspec.DecodeError as error:
+        return OutcomeUnknown(f"unreadable answer: {error}")
+    return ReportList(tuple(body.reports))
+
+
+async def fetch_report(
+    http: httpx2.AsyncClient, account: EchoAccount, name: str
+) -> Page | Unavailable | OutcomeUnknown:
+    answer = await _request(http, account, "GET", f"/reports/{name}")
+    if not isinstance(answer, httpx2.Response):
+        return answer
+    if answer.status_code != 200:
+        return OutcomeUnknown(f"status {answer.status_code}")
+    return Page(answer.content)
+
+
+REPORT_HEADER = ["event_id", "echo_id", "reference", "kind", "occurred_at"]
+
+
+def decode_report(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBody:
+    """A report file (CSV with a header row) into our event records."""
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as error:
+        return UndecodableBody(str(error))
+    try:
+        rows = list(csv.reader(io.StringIO(text, newline="")))
+    except csv.Error as error:
+        return UndecodableBody(f"not CSV: {error}")
+    if not rows or rows[0] != REPORT_HEADER:
+        return UndecodableBody("missing or wrong header row")
+    events: list[VendorEvent] = []
+    for number, row in enumerate(rows[1:], start=2):
+        if len(row) != len(REPORT_HEADER):
+            return UndecodableBody(f"row {number}: {len(row)} fields")
+        event_id, _, reference, kind, occurred_at = row
+        if kind not in ("confirmed", "archived"):
+            return UndecodableBody(f"row {number}: unknown kind {kind!r}")
+        try:
+            moment = datetime.fromisoformat(occurred_at)
+        except ValueError:
+            return UndecodableBody(f"row {number}: bad time {occurred_at!r}")
+        if moment.utcoffset() is None:
+            return UndecodableBody(f"row {number}: time without a zone")
+        events.append(VendorEvent(event_id, reference, EventKind(kind), moment))
+    return tuple(events)

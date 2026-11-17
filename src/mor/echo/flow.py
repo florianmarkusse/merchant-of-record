@@ -34,6 +34,7 @@ from mor.echo.port import (
     CancelResult,
     EchoAccount,
     EchoProvider,
+    EventMode,
     FindResult,
     Found,
     OutcomeUnknown,
@@ -134,15 +135,31 @@ type Operation = Literal["send", "cancel"]
 
 
 async def create_echo_account(
-    conn: Connection, provider: EchoProvider, base_url: str, timeout: timedelta
+    conn: Connection,
+    provider: EchoProvider,
+    base_url: str,
+    timeout: timedelta,
+    event_mode: EventMode = EventMode.NONE,
+    webhook_secret: str = "",
+    poll_interval: timedelta = timedelta(minutes=5),
 ) -> uuid.UUID:
     account_id = uuid.uuid7()
     await conn.execute(
         """
-        INSERT INTO echo_account (id, provider, base_url, timeout_ms)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO echo_account
+          (id, provider, base_url, timeout_ms, event_mode, webhook_secret,
+           poll_interval_s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-        (account_id, provider.value, base_url, int(timeout.total_seconds() * 1000)),
+        (
+            account_id,
+            provider.value,
+            base_url,
+            int(timeout.total_seconds() * 1000),
+            event_mode.value,
+            webhook_secret,
+            int(poll_interval.total_seconds()),
+        ),
     )
     return account_id
 

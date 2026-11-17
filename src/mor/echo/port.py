@@ -7,7 +7,7 @@ machinery (slice 5), unless it serves something else by then.
 
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Literal
 
@@ -81,6 +81,56 @@ class OutcomeUnknown:
     detail: str
 
 
+class EventMode(StrEnum):
+    """How an account's events reach us; matches `echo_event_mode`."""
+
+    PUSH = "push"
+    PUSH_THIN = "push_thin"
+    POLL = "poll"
+    FILE = "file"
+    NONE = "none"
+
+
+class EventKind(StrEnum):
+    """Matches `echo_event_kind`."""
+
+    CONFIRMED = "confirmed"
+    ARCHIVED = "archived"
+
+
+@dataclass(frozen=True)
+class VendorEvent:
+    """One event the vendor reports about an echo, whatever the mode."""
+
+    vendor_event_id: str
+    reference: str  # our echo_job id, as we sent it
+    kind: EventKind
+    occurred_at: datetime
+
+
+@dataclass(frozen=True)
+class UndecodableBody:
+    """Bytes from the vendor that are not what its API documents."""
+
+    detail: str
+
+
+@dataclass(frozen=True)
+class Page:
+    """A page of events as the vendor sent it, not yet decoded."""
+
+    body: bytes
+
+
+@dataclass(frozen=True)
+class ReportList:
+    """Report names after the one asked for, in the vendor's order."""
+
+    names: tuple[str, ...]
+
+
 type SendResult = Sent | Refused | Unavailable | OutcomeUnknown
 type FindResult = Found | Unavailable | OutcomeUnknown
 type CancelResult = Cancelled | Refused | Unavailable | OutcomeUnknown
+type FetchResult = Page | Unavailable | OutcomeUnknown
+type ListResult = ReportList | Unavailable | OutcomeUnknown

@@ -5,11 +5,12 @@ import asyncio
 import httpx2
 
 from mor.fakes.echo import make_app
+from tests.helpers import NO_HTTP
 
 
 def _client(database_url: str) -> httpx2.AsyncClient:
     return httpx2.AsyncClient(
-        transport=httpx2.ASGITransport(app=make_app(database_url)),
+        transport=httpx2.ASGITransport(app=make_app(database_url, NO_HTTP)),
         base_url="http://fake",
     )
 
@@ -22,12 +23,12 @@ def test_keyed_returns_the_first_echo_for_a_known_key(database_url: str) -> None
         async with _client(database_url) as http:
             headers = {"Idempotency-Key": "k-1"}
             first = await http.post(
-                "/_fake/echo/keyed/echoes", json=SEND, headers=headers
+                "/_fake/echo/keyed/acct/echoes", json=SEND, headers=headers
             )
             again = await http.post(
-                "/_fake/echo/keyed/echoes", json=SEND, headers=headers
+                "/_fake/echo/keyed/acct/echoes", json=SEND, headers=headers
             )
-            found = await http.get("/_fake/echo/keyed/echoes?reference=job-1")
+            found = await http.get("/_fake/echo/keyed/acct/echoes?reference=job-1")
         assert (first.status_code, again.status_code) == (201, 200)
         assert again.json()["id"] == first.json()["id"]
         assert len(found.json()["echoes"]) == 1
@@ -39,9 +40,9 @@ def test_plain_makes_a_second_echo_for_a_resend(database_url: str) -> None:
     async def scenario() -> None:
         async with _client(database_url) as http:
             headers = {"Idempotency-Key": "k-1"}  # ignored by plain
-            await http.post("/_fake/echo/plain/echoes", json=SEND, headers=headers)
-            await http.post("/_fake/echo/plain/echoes", json=SEND, headers=headers)
-            found = await http.get("/_fake/echo/plain/echoes?reference=job-1")
+            await http.post("/_fake/echo/plain/acct/echoes", json=SEND, headers=headers)
+            await http.post("/_fake/echo/plain/acct/echoes", json=SEND, headers=headers)
+            found = await http.get("/_fake/echo/plain/acct/echoes?reference=job-1")
         assert len(found.json()["echoes"]) == 2
 
     asyncio.run(scenario())
@@ -50,14 +51,14 @@ def test_plain_makes_a_second_echo_for_a_resend(database_url: str) -> None:
 def test_only_cancellable_cancels(database_url: str) -> None:
     async def scenario() -> None:
         async with _client(database_url) as http:
-            made = await http.post("/_fake/echo/cancellable/echoes", json=SEND)
+            made = await http.post("/_fake/echo/cancellable/acct/echoes", json=SEND)
             echo_id = made.json()["id"]
             cancelled = await http.post(
-                f"/_fake/echo/cancellable/echoes/{echo_id}/cancel"
+                f"/_fake/echo/cancellable/acct/echoes/{echo_id}/cancel"
             )
-            plain = await http.post("/_fake/echo/plain/echoes", json=SEND)
+            plain = await http.post("/_fake/echo/plain/acct/echoes", json=SEND)
             refused = await http.post(
-                f"/_fake/echo/plain/echoes/{plain.json()['id']}/cancel"
+                f"/_fake/echo/plain/acct/echoes/{plain.json()['id']}/cancel"
             )
         assert cancelled.json()["state"] == "cancelled"
         assert refused.status_code == 404
@@ -74,9 +75,9 @@ def test_scripted_faults_apply_to_the_next_sends_in_order(database_url: str) -> 
                 )
             statuses: list[int] = []
             for _ in range(4):
-                response = await http.post("/_fake/echo/plain/echoes", json=SEND)
+                response = await http.post("/_fake/echo/plain/acct/echoes", json=SEND)
                 statuses.append(response.status_code)
-            found = await http.get("/_fake/echo/plain/echoes?reference=job-1")
+            found = await http.get("/_fake/echo/plain/acct/echoes?reference=job-1")
         assert statuses == [422, 500, 500, 201]
         # The 500 after work and the last send each made an echo.
         assert len(found.json()["echoes"]) == 2
@@ -93,10 +94,10 @@ def test_timeout_after_work_keeps_the_work(database_url: str) -> None:
             )
             try:
                 async with asyncio.timeout(0.2):
-                    await http.post("/_fake/echo/plain/echoes", json=SEND)
+                    await http.post("/_fake/echo/plain/acct/echoes", json=SEND)
             except TimeoutError:
                 pass
-            found = await http.get("/_fake/echo/plain/echoes?reference=job-1")
+            found = await http.get("/_fake/echo/plain/acct/echoes?reference=job-1")
         return len(found.json()["echoes"])
 
     assert asyncio.run(scenario()) == 1

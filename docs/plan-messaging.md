@@ -3,7 +3,9 @@
 Status: 2a built 16-Nov-2026 (probe kept, inbox kept, msgspec added);
 LISTEN/NOTIFY added 17-Nov-2026. What building 2a showed is in §9. 2b is
 designed in §10, confirmed and built 17-Nov-2026; what building it showed
-is in §11. 2c is still to be designed. It details slice 2
+is in §11. 2c is designed in §12, confirmed 17-Nov-2026 with the
+`none` mode and manual events added, and built the same day; what building
+it showed is in §13. It details slice 2
 of `plan-architecture.md` §14 and follows its §4 and §5; where this plan
 says more, it does not change them unless §6 below names the change.
 
@@ -471,3 +473,303 @@ Checked by planting each bug the guards exist to stop:
 - The fake's routes are not mounted anywhere yet (no web app exists), so
   the echo flow runs only in tests. Mounting under `/_fake/` comes with
   the dev server.
+
+## 12. Step 2c: inbound (design, 17-Nov-2026)
+
+### 12.1 What the echo vendor now reports
+
+After making an echo, the fake vendor later reports what happens to it,
+as a carrier reports a parcel: `confirmed`, then `archived`. Events are
+released by an explicit call (a test, a dev page later), never by a
+timer, and can be released twice, late or out of order. This rehearses
+shipment tracking (plan-architecture.md §9) on a flow that moves no money.
+
+Each echo account has an event mode, capability data on the account:
+
+| Mode | How events arrive | Started by |
+|---|---|---|
+| `push` | the vendor POSTs a signed webhook carrying the events | the vendor |
+| `push_thin` | a signed webhook carrying only the echo id; we fetch its events | the vendor |
+| `poll` | we fetch one page of events per job | a scheduled fact per job, until a final status |
+| `file` | a report file of all events since the last one, per account | a scheduled fact per account |
+| `none` | nothing: the vendor offers no events | only events recorded by hand |
+
+**Any event can be recorded by hand, whatever the mode** (decided
+17-Nov-2026): a person who sees on the vendor's website that something
+happened records it, with themselves as the actor. It enters at the same
+fact as a decoded vendor event (`echo_vendor_event_received`, source
+`manual`), so it goes through the same apply step, unique key, status and
+milestones. For a `none` account this is the only way its status moves.
+
+Deferred to the shipment slice, where it has a business meaning (when the
+merchant's money may be released): a check that starts when no event
+arrived for N days, in any mode, and opens a case for a person. Time only
+starts that check; a person or a rule decides.
+
+How the fakes become visible on a local server (one app with the fakes
+under `/_fake/`, a seed with one account per guard and mode, a page to
+release events by hand) is deferred to slice 3's test setup, as
+plan-architecture §6 and §14 have it.
+
+### 12.2 One path for all four
+
+```
+push, push_thin ─▶ webhook handler: verify signature ┐
+poll            ─▶ effect consumer: fetch a page     ├─▶ echo_inbox row (raw bytes,
+file            ─▶ effect consumer: fetch the file   ┘    unique per account + sha256)
+                                                          + fact echo_inbox_stored
+                                                                │
+                        consumer echo_inbox_decode (local, per account):
+                        decode the raw bytes with msgspec into VendorEvent
+                        records; for each, fact echo_vendor_event_received
+                        (thin: fact echo_events_wanted, which starts a poll)
+                                                                │
+                        consumer echo_event_apply (local, per job):
+                        insert into echo_job_event (unique per job + vendor
+                        event id); status = derive_status(all events);
+                        first time a status is reached: echo_job_milestone
+                        row (unique) and fact echo_job_confirmed / _archived
+```
+
+- Every mode stores the raw bytes first, commits and stops; a webhook
+  then answers 200. Decoding is a consumer's job, so a decoder bug never
+  loses an event: the raw row stays, and a fixed decoder re-runs it.
+- The inbox key is the sha256 of the body, for every mode. A webhook
+  sent twice or a page fetched twice is stored once. A vendor that wraps
+  the same event in a new envelope gets past the hash; the unique key on
+  (job, vendor event id) stops it one step later.
+- Two hops, because one step locks one aggregate (plan-architecture §4):
+  the inbox row belongs to the account (one webhook may carry events of
+  several jobs), each event belongs to its job.
+- `derive_status(events: frozenset[VendorEvent]) -> EchoVendorStatus` is
+  pure: `none` < `confirmed` < `archived`, decided by the set, not the
+  order of arrival. Duplicates and out-of-order delivery cannot corrupt
+  it; an `archived` before its `confirmed` reaches `archived`, and the
+  `confirmed` arriving later emits no milestone backwards.
+
+### 12.3 Tables (`0005_echo_inbound.sql`)
+
+```sql
+CREATE TYPE echo_event_mode AS ENUM ('push', 'push_thin', 'poll', 'file', 'none');
+CREATE TYPE echo_event_source AS ENUM ('vendor', 'manual');
+CREATE TYPE echo_event_kind AS ENUM ('confirmed', 'archived');
+CREATE TYPE echo_vendor_status AS ENUM ('none', 'confirmed', 'archived');
+ALTER TABLE echo_account ADD COLUMN event_mode echo_event_mode NOT NULL
+  DEFAULT 'push';                    -- the default only fills existing rows
+ALTER TABLE echo_account ADD COLUMN webhook_secret text NOT NULL DEFAULT '';
+ALTER TABLE echo_job ADD COLUMN vendor_status echo_vendor_status NOT NULL
+  DEFAULT 'none';
+
+CREATE TABLE echo_inbox (            -- raw, as received; append-only
+  id           uuid PRIMARY KEY,
+  account_id   uuid NOT NULL REFERENCES echo_account (id),
+  mode         echo_event_mode NOT NULL,
+  body_sha256  text NOT NULL,
+  body         bytea NOT NULL,
+  received_at  timestamptz NOT NULL,
+  UNIQUE (account_id, body_sha256)
+);
+
+CREATE TABLE echo_job_event (        -- decoded, per job; append-only
+  echo_job_id      uuid NOT NULL REFERENCES echo_job (id),
+  vendor_event_id  text NOT NULL,
+  kind             echo_event_kind NOT NULL,
+  occurred_at      timestamptz NOT NULL,
+  source           echo_event_source NOT NULL,
+  inbox_id         uuid REFERENCES echo_inbox (id),   -- vendor events only
+  recorded_at      timestamptz NOT NULL,
+  PRIMARY KEY (echo_job_id, vendor_event_id),
+  CHECK ((source = 'vendor') = (inbox_id IS NOT NULL))
+);
+-- Who recorded a manual event is the actor on its outbox fact.
+
+CREATE TABLE echo_job_milestone (    -- a status first reached; once each
+  echo_job_id  uuid NOT NULL REFERENCES echo_job (id),
+  status       echo_vendor_status NOT NULL,
+  reached_at   timestamptz NOT NULL,
+  PRIMARY KEY (echo_job_id, status)
+);
+
+CREATE TABLE echo_report_cursor (    -- file mode: the last report fetched
+  account_id   uuid PRIMARY KEY REFERENCES echo_account (id),
+  last_report  text NOT NULL
+);
+```
+
+The webhook secret sits on the account row because these accounts are
+fakes with made-up secrets. A real port keeps a `credentials_ref` naming
+a key in `.env` (AGENTS.md: secrets never in the database).
+
+### 12.4 New facts and consumers
+
+| Fact (v1) | Aggregate | Consumer |
+|---|---|---|
+| `echo_inbox_stored` | account | `echo_inbox_decode` (local) |
+| `echo_vendor_event_received` | job | `echo_event_apply` (local) |
+| `echo_events_wanted` (thin push) | job | `echo_poll` (effect) |
+| `echo_poll_due` (scheduled) | job | `echo_poll` (effect) |
+| `echo_report_due` (scheduled) | account | `echo_report_fetch` (effect) |
+| `echo_job_confirmed`, `echo_job_archived` | job | none yet |
+
+- `echo_job_echoed` gains a consumer, `echo_tracking_start` (local): on a
+  `poll` account it appends the first `echo_poll_due`.
+- A scheduled fact is an ordinary fact whose deliveries carry a later
+  `not_before`: `append_fact` gains a `deliver_at` argument. Time only
+  starts the work; the poll consumer decides under the job's lock
+  whether a poll is still wanted (not if the status is final).
+- `echo_poll` fetches one page and stores it in the inbox; then, unless
+  the status is final, it appends the next `echo_poll_due` at now plus
+  the account's interval. `echo_report_fetch` does the same per account
+  for files, with the cursor saying which report comes next.
+- Polls and report fetches only read at the vendor, so their guard is
+  "resend freely": a fetch repeated after a crash stores the same bytes,
+  and the inbox key absorbs it. No request row is needed for them.
+
+### 12.5 Our first web handler
+
+- `mor/web/main.py` holds the route table (shared conventions: the whole
+  table in one file); `mor/web/webhooks.py` holds
+  `POST /webhooks/echo/{account_id}`: read the body, verify the HMAC-SHA256
+  signature header with the account's secret (stdlib `hmac`, constant-time
+  compare), insert the inbox row and its fact in one transaction, commit,
+  answer 200. A bad signature: 401, nothing stored. A body already stored:
+  200, nothing new. The handler never decodes events.
+- Outside prod the fakes' routes are mounted in the same app under
+  `/_fake/` (plan-architecture §6). A dev server with uvicorn is not
+  part of 2c; tests call the app in-process.
+- Webhooks take no cookies, so the conventions' cross-site rule is met by
+  the signature, not a SameSite cookie: a forged POST has no valid
+  signature.
+
+### 12.6 The fake vendor's side
+
+- The fake knows vendor-side accounts by a path segment:
+  `/_fake/echo/{flavour}/{vendor_account}/…`, part of our account's
+  `base_url`. A webhook subscription (URL, secret, full or thin) is
+  registered per vendor account, as on a vendor's dashboard. The fake
+  pushes only to subscribed accounts; it always offers poll and reports.
+  Which mode we use is our account's `event_mode`.
+- `fake_vendor.echo_event`: per echo, its pending and released events,
+  and for push accounts whether the webhook went through.
+- `POST /_fake/echo/{flavour}/events/release` with an echo id: releases
+  that echo's next event (or a named one, so a test can release
+  `archived` first). A push account's webhook goes out at once to the
+  account's registered URL, through an HTTP client the fake app is given
+  (in tests: our app, in-process). An answer other than 200 is recorded
+  and `POST /_fake/echo/{flavour}/events/redeliver` sends it again.
+- Faults: send a webhook twice; send it with a bad signature; poll and
+  report requests that answer 500 or time out.
+- `GET /_fake/echo/{flavour}/echoes/{id}/events` (poll and thin),
+  `GET /_fake/echo/{flavour}/reports/{name}` (file: all events released
+  since the previous report, CSV).
+
+### 12.7 Testing
+
+- Layer 1: `derive_status` gives the same answer for every order and
+  duplication of a set of events; every decoder (webhook JSON, poll page,
+  report CSV) turns any bytes into events or a typed error.
+- Unit, per mode: an event released at the vendor ends as a milestone,
+  once; the same webhook twice stores one row; a bad signature stores
+  nothing; a thin push leads to a poll; polling stops at `archived`;
+  an undecodable body stays in the inbox, its delivery failing with the
+  error, until a fixed decoder handles it.
+- Layer 2: the echo fuzzer gains actions to release the next or a later
+  event, send a webhook twice, fail a webhook, fail a poll, and run the
+  scheduled facts. It draws each account's mode. After draining: every
+  released event is recorded once, every job's status equals
+  `derive_status` of what the vendor released, each milestone exists
+  once, and no poll is left scheduled for a final job.
+- Check the fuzzer: plant "status from the latest event instead of the
+  set" and "no unique key on job events", and confirm it fails.
+
+### 12.8 Build order
+
+1. The inbox, the decode and apply consumers, `derive_status`,
+   milestones, push with the webhook handler (and the route table), the
+   `none` mode and manual events.
+2. Poll and thin push, with scheduled facts.
+3. File reports.
+
+Each ends with the checks clean and its part fuzzed. No new dependency:
+signatures use the standard library.
+
+## 13. What building 2c showed (17-Nov-2026)
+
+### Step 1: inbox, push, `none`, manual events
+
+- The web app takes a `clock` argument (`make_app(settings, fakes,
+  clock)`): the webhook handler stamps what it stores with it, so tests
+  and the fuzzer control time there too. Serving passes
+  `datetime.now(UTC)`.
+- An event naming a job its account never sent fails its delivery
+  (`UnknownReference`), which holds that account's later inbox rows until
+  someone looks. Acceptable for the fake; a real port turns it into an
+  exception row for a person instead.
+- Tests that simulate a crashed worker wait until its server process is
+  gone (`tests/helpers.py: crash`): PostgreSQL frees the advisory lock as
+  that process exits, a moment after the client closes, and a check in
+  that moment saw the lock. Production needs no wait: a worker meeting the
+  lock then gets "busy" and tries later.
+- The fuzzer found a bug in itself: its crash action ran `prepare` on any
+  delivery, which raises for the new local consumers, and left the
+  connection open holding the lock. Each consumer kind now crashes its
+  own way.
+
+Planted bugs:
+
+| Planted bug | Caught by |
+|---|---|
+| status from the latest event, not the set | unit, fuzzer |
+| signature not checked | unit |
+| milestone without its unique key | nothing: a second guard (below) |
+| a repeated event not answered `Stale` | nothing: not a guard (below) |
+| a milestone fact on every event (both guards gone) | unit, fuzzer |
+
+- A milestone fact is emitted only when the status moves up, under the
+  job's row lock, so its unique key is a second guard, as the delivery
+  row lock was in §9. The early `Stale` for a repeated event is not a
+  guard at all: the event table's key keeps one row and the status comes
+  out the same. The fuzzer now checks after every step that no milestone
+  fact exists twice.
+
+### Step 2: polling and thin webhooks
+
+- A poll asks for events by our reference (the job id), not the vendor's
+  echo id: a thin webhook can arrive before we recorded the vendor's
+  answer, when we do not know its echo id yet.
+- A poll stores the page raw in the inbox and decides on its next turn
+  from the status before that page is applied, so it schedules one poll
+  more than needed; that one finds the job final and stops.
+- `echo_job_echoed` now has a consumer (`echo_tracking_start`), so every
+  echoed job gets one more delivery, a no-op outside `poll` accounts.
+- Planted bugs: polling that never stops at the final status (unit,
+  fuzzer); a scheduled fact delivered at once instead of at its time
+  (unit).
+
+### Step 3: report files
+
+- A `file` account looks for reports forever: each look lists the
+  reports after its cursor, fetches and stores them one per `Again` round
+  under the account's lock, then schedules the next look. The fuzzer
+  therefore drains until a round of only report looks changes nothing,
+  and then expects exactly one scheduled look per `file` account.
+- The decoder property test found a real bug: the report decoder raised
+  `csv.Error` on bytes such as `b"\r\x00"` instead of returning a typed
+  error. Fixed, and pinned as an `@example`.
+- Planted bugs: a report schedule that stops after one look, a cursor
+  that never moves (unit, fuzzer).
+
+### Open: one unexplained fuzzer failure
+
+Once, in a full run right after the planted-bug runs (and once more when
+Hypothesis replayed that sequence), a `push` job ended `confirmed` where
+the vendor had released `archived` too. It was not seen again in 31 runs
+since, nor on replay after; the sequence did not shrink to anything
+readable. Not explained yet. The fuzzer's failure message for that check
+now carries the evidence (what the vendor released and pushed, what
+reached our inbox, what the job recorded), so the next occurrence can be
+read from the message alone. Until then it counts as a possible bug in
+the push path, not as a flaky test.
+
+- The echo fuzzer's normal budget is 30 sequences (about 10 to 15 s); the
+  soak profile runs it long.

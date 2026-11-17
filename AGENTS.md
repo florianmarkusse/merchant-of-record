@@ -29,8 +29,11 @@ and wins where the two differ.
   differ. Its §16 says what state the project is in and what comes next.
   Slice 1 (tooling, `money`, `db` and migrations, `ledger`) is built
   (16-Nov-2026); slice 2 is planned in `docs/plan-messaging.md`, and its
-  steps 2a (outbox, deliveries, inbox, worker, probe, fuzzer) and 2b
-  (effect consumers, duplicate guards, the fake echo vendor) are built.
+  steps 2a (outbox, deliveries, inbox, worker, probe, fuzzer), 2b
+  (effect consumers, duplicate guards, the fake echo vendor) and 2c
+  (inbound by push, thin push, poll, file, none, and by hand; the first
+  web handler) are built. One fuzzer failure seen in 2c is still
+  unexplained: `docs/plan-messaging.md` §13.
 - Decided 16-Nov-2026, starting slice 1:
   - Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
     reached over peer auth as the developer's own role

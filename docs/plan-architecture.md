@@ -938,8 +938,10 @@ the migration runner) and `ledger/`, `migrations/0001_ledger.sql`, and
 tests including Hypothesis properties. The outbox moved to slice 2. The
 step after it is slice 2, planned in `plan-messaging.md`: step 2a (facts,
 deliveries, inbox, worker, the probe flow, layer 2 and 3 tests) and 2b
-(effect consumers, duplicate guards, the fake echo vendor) are built; 2c
-(inbound) is designed next. Hypothesis was checked when added
+(effect consumers, duplicate guards, the fake echo vendor) and 2c
+(inbound in every mode, the first web handler) are built. Next is slice 3,
+the deployed test setup, which also makes the fakes visible on a local
+server (plan-messaging §12.1). Hypothesis was checked when added
 (6.170.15, MPL-2.0, supports Python 3.14).
 
 What follows is the hand-over as written before slice 1, kept for its

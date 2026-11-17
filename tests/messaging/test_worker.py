@@ -23,7 +23,7 @@ from mor.messaging.worker import (
     try_lock_aggregate,
 )
 from mor.probe.flow import ProbeState, probe_state, start_probe
-from tests.helpers import ENV, NO_HTTP, advisory_locks_held
+from tests.helpers import ENV, NO_HTTP, advisory_locks_held, crash
 
 
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -190,7 +190,7 @@ def test_a_worker_skips_an_aggregate_another_holds_until_it_dies(
                 "busy"
             )
             # The holder's connection dies: no timeout, the lock is gone.
-            await other.close()
+            await crash(other)
             assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Ran(Applied())
         assert await _state(database_url, probe_id) == ProbeState.ECHOED
 
@@ -207,7 +207,7 @@ def test_a_crash_before_commit_leaves_nothing_and_frees_the_lock(
         assert await try_lock_aggregate(crashing, candidate)
         await crashing.execute("BEGIN")
         assert await handle_delivery(crashing, candidate, NOW) == Ran(Applied())
-        await crashing.close()  # dies before COMMIT
+        await crash(crashing)  # dies before COMMIT
 
         assert await _state(database_url, probe_id) == ProbeState.STARTED
         assert await advisory_locks_held(database_url) == 0

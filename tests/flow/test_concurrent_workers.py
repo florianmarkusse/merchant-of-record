@@ -114,7 +114,7 @@ def test_many_workers_send_every_echo_once_across_the_call(database_url: str) ->
                 account_id = await create_echo_account(
                     conn,
                     provider,
-                    f"http://fake/_fake/echo/{flavour}",
+                    f"http://fake/_fake/echo/{flavour}/acct",
                     timedelta(seconds=5),
                 )
                 for _ in range(ECHO_JOBS_PER_PROVIDER):
@@ -123,7 +123,7 @@ def test_many_workers_send_every_echo_once_across_the_call(database_url: str) ->
                     )
             await conn.commit()
         results: list[RunResult] = []
-        transport = httpx2.ASGITransport(app=make_app(database_url))
+        transport = httpx2.ASGITransport(app=make_app(database_url, NO_HTTP))
         async with httpx2.AsyncClient(transport=transport) as http:
             await asyncio.gather(
                 *[_echo_worker(database_url, http, results) for _ in range(WORKERS)]
