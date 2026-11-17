@@ -939,9 +939,9 @@ tests including Hypothesis properties. The outbox moved to slice 2. The
 step after it is slice 2, planned in `plan-messaging.md`: step 2a (facts,
 deliveries, inbox, worker, the probe flow, layer 2 and 3 tests) and 2b
 (effect consumers, duplicate guards, the fake echo vendor) and 2c
-(inbound in every mode, the first web handler) are built. Next is slice 3,
-the deployed test setup, which also makes the fakes visible on a local
-server (plan-messaging §12.1). Hypothesis was checked when added
+(inbound in every mode, the first web handler) are built. Slice 3, the
+test setup, is planned in `plan-test-setup.md` (17-Nov-2026: on the
+developer's laptop until a VPS exists; the deploy waits for it). Hypothesis was checked when added
 (6.170.15, MPL-2.0, supports Python 3.14).
 
 What follows is the hand-over as written before slice 1, kept for its

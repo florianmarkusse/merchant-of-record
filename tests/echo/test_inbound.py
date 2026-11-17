@@ -308,7 +308,11 @@ def test_webhooks_for_unknown_or_non_push_accounts_are_refused(
 def test_the_fakes_are_never_mounted_in_prod() -> None:
     fakes = mor.fakes.echo.make_app("postgresql:///unused", NO_HTTP)
     with pytest.raises(FakesInProd):
-        make_app(Settings(Environment.PROD, "postgresql:///unused"), fakes, lambda: NOW)
+        make_app(
+            Settings(Environment.PROD, "postgresql:///unused", "http://mor"),
+            fakes,
+            lambda: NOW,
+        )
 
 
 async def _scheduled_polls(setup: Setup, job_id: uuid.UUID) -> int:

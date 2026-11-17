@@ -33,7 +33,9 @@ and wins where the two differ.
   (effect consumers, duplicate guards, the fake echo vendor) and 2c
   (inbound by push, thin push, poll, file, none, and by hand; the first
   web handler) are built. The fuzzer failure seen in 2c was a real
-  thin-webhook bug, now fixed (`docs/plan-messaging.md` §13).
+  thin-webhook bug, now fixed (`docs/plan-messaging.md` §13). Slice 3,
+  the test setup, is planned in `docs/plan-test-setup.md` (on this laptop
+  until a VPS exists); its step 1 (serve, `SELF_URL`, seed) is built.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
@@ -123,10 +125,16 @@ uv run python -m mor.db.migrate          # apply migrations/ to DATABASE_URL (de
 uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_vendor); refused in prod
 uv run python -m mor.messaging.worker    # the worker: runs due deliveries
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
+uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod
+uv run python -m mor.seed                # test setup: one echo account per provider and mode (server must run)
 uv run pytest                            # drops and recreates mor_test, then runs the suite
 HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 ```
 
+- The test setup (`docs/plan-test-setup.md`) runs on this laptop for now:
+  `ENVIRONMENT=test DATABASE_URL=postgresql:///mor_sandbox` for the server,
+  worker, seed and probe, on `127.0.0.1:8741`. Never point it at `mor_test`,
+  which every pytest run drops.
 - Tests: `tests/conftest.py` recreates `mor_test` once per session with
   the real migrations, and empties every table before each test that asks
   for `database_url`. Tests commit for real, so commit-time triggers (the

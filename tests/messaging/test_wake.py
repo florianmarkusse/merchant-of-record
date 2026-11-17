@@ -89,7 +89,9 @@ def test_running_worker_finishes_a_new_probe_well_before_its_fallback_poll(
     database_url: str,
 ) -> None:
     async def scenario() -> ProbeState | None:
-        worker = asyncio.create_task(run_worker(Settings(ENV, database_url)))
+        worker = asyncio.create_task(
+            run_worker(Settings(ENV, database_url, "http://mor"))
+        )
         await asyncio.sleep(0.3)  # let it drain nothing and start waiting
         async with await connect(database_url) as conn:
             probe_id = await start_probe(conn, ACTOR, datetime.now(UTC))

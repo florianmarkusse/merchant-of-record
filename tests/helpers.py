@@ -106,7 +106,7 @@ def wire(database_url: str, clock: Callable[[], datetime]) -> Wired:
 
     outgoing = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=our_app))
     fakes = mor.fakes.echo.make_app(database_url, outgoing)
-    app = mor.web.main.make_app(Settings(ENV, database_url), fakes, clock)
+    app = mor.web.main.make_app(Settings(ENV, database_url, "http://mor"), fakes, clock)
     built.append(app)
     network = RefusingTransport(httpx2.ASGITransport(app=app))
     return Wired(

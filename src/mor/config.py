@@ -12,10 +12,17 @@ class Environment(StrEnum):
     PROD = "prod"
 
 
+DEFAULT_SELF_URL = "http://127.0.0.1:8741"
+
+
 @dataclass(frozen=True)
 class Settings:
     environment: Environment
     database_url: str
+    # Our own address as seen from this machine: where the server listens,
+    # where seeded accounts reach the fakes, and where the fakes send their
+    # webhooks (docs/plan-test-setup.md §2).
+    self_url: str
 
 
 def load_settings(env: Mapping[str, str]) -> Settings:
@@ -31,4 +38,5 @@ def load_settings(env: Mapping[str, str]) -> Settings:
             f" got {raw_environment!r}"
         ) from None
     database_url = env.get("DATABASE_URL", "postgresql:///mor_dev")
-    return Settings(environment=environment, database_url=database_url)
+    self_url = env.get("SELF_URL", DEFAULT_SELF_URL).rstrip("/")
+    return Settings(environment, database_url, self_url)
