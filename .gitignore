@@ -36,3 +36,7 @@ __pycache__/
 docs/markets/sources/**
 !docs/markets/sources/**/
 !docs/markets/sources/**/README.md
+
+# Frontend: TypeScript in ts/ compiles to static/js/ (npx tsc)
+node_modules/
+static/js/

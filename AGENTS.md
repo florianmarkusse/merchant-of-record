@@ -122,7 +122,14 @@ and wins where the two differ.
 - Records are frozen dataclasses or msgspec structs, closed sets are
   `StrEnum` or `Literal`, results are unions of records matched with
   `match` and `assert_never` for exhaustiveness.
-- Checks: the shared order; pyright in strict mode. `scripts/` holds
+- Frontend (decided 18-Nov-2026): the staff pages' stylesheet is
+  `static/css/staff.css`; scripts are strict TypeScript in `ts/`, compiled
+  by `tsc` into git-ignored `static/js/` (no bundler, no framework, as in
+  the other projects). Run `npm install` once, then `npx tsc` after
+  changing a `.ts` file. Every page works without them: a script only
+  improves a form or table the server already handles (the quote page
+  re-quotes as you type; the data and answers tables get a filter).
+- Checks: the shared order plus `npx tsc`; pyright in strict mode. `scripts/` holds
   PEP 723 scripts with their own dependencies (`uv run scripts/markets.py
   check`); they are outside the package's pyright run.
 
@@ -137,6 +144,7 @@ uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.
 uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor accounts at the fake (server must run)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
+npx tsc                                  # compile ts/ into static/js/ (after `npm install` once)
 uv run pytest                            # drops and recreates mor_test, then runs the suite
 HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 ```

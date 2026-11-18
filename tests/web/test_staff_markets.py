@@ -4,6 +4,7 @@ with our own rows or a vendor's answer (4b). Not mounted in prod until
 staff sign-in exists."""
 
 import asyncio
+import html
 from datetime import UTC, datetime, timedelta
 
 import httpx2
@@ -55,13 +56,13 @@ def test_the_page_shows_the_loads_what_changed_and_each_answer(
         await _load(
             database_url, SG_GST.replace("percent,9,", "percent,10,", 1), "second"
         )
-        page = await _get(database_url, Environment.TEST, "/staff/markets")
+        page = await _get(database_url, Environment.TEST, "/staff/markets/data")
         assert page.status_code == 200
         text = page.text
         assert "second" in text and "first" in text
         assert "9% of goods_freight_duty -&gt; 10% of goods_freight_duty" in text
         assert "conditional: product-safety rep needed" in text
-        assert "closed: no import tax recorded for apparel" in text
+        assert "no import tax recorded for apparel" in text
         assert "import_tax: 10% of goods_freight_duty, seller, up_to 400.00 SGD" in text
 
     asyncio.run(body())
@@ -71,22 +72,25 @@ def test_the_day_asked_for_picks_the_rule_in_force(database_url: str) -> None:
     async def body() -> None:
         await _load(database_url, SG_GST + AHEAD, "ahead")
         before = await _get(
-            database_url, Environment.TEST, "/staff/markets?on=2026-12-31"
+            database_url, Environment.TEST, "/staff/markets/data?on=2026-12-31"
         )
         after = await _get(
-            database_url, Environment.TEST, "/staff/markets?on=2027-01-01"
+            database_url, Environment.TEST, "/staff/markets/data?on=2027-01-01"
         )
         assert "import_tax: 9% of goods_freight_duty, seller" in before.text
         assert "import_tax: 10% of goods_freight_duty, seller" in after.text
         assert "import_tax: 9% of goods_freight_duty, seller" not in after.text
+        # The day as people read it, beside the browser's own date picker.
+        assert "31-Dec-2026" in before.text
 
     asyncio.run(body())
 
 
 def test_the_page_does_not_exist_in_prod(database_url: str) -> None:
     async def body() -> None:
-        page = await _get(database_url, Environment.PROD, "/staff/markets")
-        assert page.status_code == 404
+        for path in ("/staff/markets", "/staff/markets/answers", "/staff/markets/data"):
+            page = await _get(database_url, Environment.PROD, path)
+            assert page.status_code == 404, path
 
     asyncio.run(body())
 
@@ -110,6 +114,8 @@ def test_an_order_check_explains_both_paths_and_the_rates(database_url: str) -> 
         assert "Rate 30% of goods_plus_freight: hs_rates.csv line 2" in text
         assert "Not applied: ATIGA 0%" in text
         assert "Only duty-paid services may carry this order." in text
+        # "Made in" is a list of the countries file, the order's one chosen.
+        assert '<option value="VN" selected>' in text
 
     asyncio.run(body())
 
@@ -119,7 +125,11 @@ def test_an_order_check_with_a_bad_amount_says_so(database_url: str) -> None:
         await _load(database_url, SG_GST, "one")
         query = "/staff/markets?country=SG&goods=lots&currency=SGD"
         text = (await _get(database_url, Environment.TEST, query)).text
-        assert "Goods value: not a number." in text
+        # Said beside the field it is about.
+        assert (
+            '<span id="error-goods" class="error" data-live="">'
+            "Enter a price (not a number).</span>"
+        ) in text
 
     asyncio.run(body())
 
@@ -168,9 +178,9 @@ def test_a_vendor_country_is_asked_from_the_page_and_its_answer_shown(
         after = (await wired.control.get(f"http://mor{CHECK}")).text
         assert "Rate 25% of goods_plus_freight: acme said &#39;25%&#39;" in after
         assert "Our own row differs: 30% (hs_rates.csv line 2)" in after
-        assert "Vendor answers against our own rows" in after
+        answers = (await wired.control.get("http://mor/staff/markets/answers")).text
         # Each answer listed beside our row, the difference first.
-        listed = after[after.index("Each answer") :]
+        listed = answers[answers.index("Each answer") :]
         assert listed.index("acme: 25%") < listed.index("acme: 7%")
         assert "30% (hs_rates.csv line 2)" in listed
 
@@ -210,10 +220,54 @@ def test_with_a_parcel_the_check_shows_each_option_and_its_parts(
         )
         text = page.text
         # The worked example of tests/quote/test_build_quote.py.
-        assert "Express (express): 649.28 SGD" in text
-        assert "fuel rate out of date since 15-Nov-2026" in text
-        assert "eco_card: not duty paid (something is due at the border)" in text
-        assert "Placeholders in this quote: fees.csv line 2 (psp_fee)" in text
-        assert "52.78 SGD" in text and "half_even" in text
+        assert "<h3>Express</h3>" in text
+        assert '<div class="total">649.28 SGD</div>' in text
+        assert "fuel rate ended 15-Nov-2026" in text
+        # Beside the quote's own currency, for reading (ECB rates in the set).
+        assert "≈ 506.62 USD · 453.76 EUR" in text
+        assert "<code>eco_card</code>: not duty-paid" in text
+        assert "fees.csv line 2 (psp_fee)" in text
+        assert "52.78 SGD" in text and "half to even" in text
+        assert "/static/css/staff.css" in text
+
+    asyncio.run(body())
+
+
+def _error(text: str, name: str) -> str:
+    """What the page says beside one field ("" when nothing)."""
+    start = text.index(f'<span id="error-{name}"')
+    start = text.index(">", start) + 1
+    return html.unescape(text[start : text.index("</span>", start)])
+
+
+def test_pressing_quote_marks_each_field_a_quote_still_needs(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        async with await connect(database_url) as conn:
+            await load_market(conn, quote_market(), "quote", LOADER, NOW)
+            await conn.commit()
+        empty = (await _get(database_url, Environment.TEST, "/staff/markets?go=1")).text
+        assert _error(empty, "country") == "Choose where it ships to."
+        assert _error(empty, "goods") == "Enter the merchant's price."
+        assert _error(empty, "weight") == "Enter the parcel's weight to see shipping."
+        marked = "Fix the fields marked above: Ship to, Merchant's price, Weight."
+        assert marked in html.unescape(empty)
+        # The HS code once the country's rates turn out to need it.
+        no_hs = "/staff/markets?country=TH&goods=50.00&currency=USD&weight=1000&go=1"
+        text = (await _get(database_url, Environment.TEST, no_hs)).text
+        assert _error(text, "hs") == "This country's rates need the HS code."
+        assert _error(text, "weight") == ""
+
+    asyncio.run(body())
+
+
+def test_while_typing_an_empty_field_is_not_marked(database_url: str) -> None:
+    async def body() -> None:
+        await _load(database_url, SG_GST, "one")
+        query = "/staff/markets?country=SG&currency=SGD"
+        text = (await _get(database_url, Environment.TEST, query)).text
+        assert _error(text, "goods") == ""
+        assert _error(text, "weight") == ""
 
     asyncio.run(body())

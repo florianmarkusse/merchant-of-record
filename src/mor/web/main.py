@@ -13,10 +13,12 @@ import httpx2
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.routing import BaseRoute, Route
+from starlette.routing import BaseRoute, Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from mor.config import Environment, Settings
 from mor.web import sandbox, staff_markets, webhooks
+from mor.web.staff_layout import STATIC_DIR
 
 
 class FakesInProd(Exception):
@@ -42,21 +44,35 @@ def make_app(
     async def echo_webhook(request: Request) -> Response:
         return await webhooks.echo_webhook(request, url, clock())
 
-    async def staff_markets_page(request: Request) -> Response:
-        return await staff_markets.show(request, url, clock())
+    async def staff_quote_page(request: Request) -> Response:
+        return await staff_markets.quote_page(request, url, clock())
+
+    async def staff_answers_page(request: Request) -> Response:
+        return await staff_markets.answers_page(url)
+
+    async def staff_data_page(request: Request) -> Response:
+        return await staff_markets.data_page(request, url, clock())
 
     async def staff_ask_vendor(request: Request) -> Response:
         return await staff_markets.ask_vendor(request, url, clock())
 
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
+        # Stylesheets and compiled scripts (static/js/ comes from ts/).
+        Mount(
+            "/static",
+            StaticFiles(directory=STATIC_DIR, check_dir=False),
+            name="static",
+        ),
     ]
     # Staff pages: outside prod only until staff sign-in exists
     # (plan-quote.md §5b); then mounted in prod behind it.
     if settings.environment != Environment.PROD:
         routes.extend(
             [
-                Route("/staff/markets", staff_markets_page, methods=["GET"]),
+                Route("/staff/markets", staff_quote_page, methods=["GET"]),
+                Route("/staff/markets/answers", staff_answers_page, methods=["GET"]),
+                Route("/staff/markets/data", staff_data_page, methods=["GET"]),
                 Route(
                     "/staff/markets/duty_lookups", staff_ask_vendor, methods=["POST"]
                 ),

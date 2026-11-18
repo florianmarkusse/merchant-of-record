@@ -417,6 +417,20 @@ and quotes made. It is a staff tool, not a sandbox one: after this slice
 it becomes the admin page that edits market data. It is plain forms,
 read-only until then.
 
+Reworked 18-Nov-2026 (it had grown into one long unstyled page): three
+pages under one menu. **Quote** (`/staff/markets`) is the order form
+with a parcel, each shipping option as a card (total, transit, warning
+tags, a summary of merchant's price, our fees, shipping, the carrier's
+duty-paid fee and duties and taxes), every part of each option in plain
+words below, and why the duties and taxes are what they are.
+**Vendor answers** (`/staff/markets/answers`) and **Market data**
+(`/staff/markets/data`) hold the rest. Scripts improve it (the quote
+follows the form as you type; tables filter), and it works without them.
+Amounts show in USD and EUR beside the quote's own currency, converted at
+the load's exchange rates for reading only. The freight field of 4b's
+check is gone: with a parcel the explanation uses the cheapest option's
+freight.
+
 Until staff sign-in exists it is mounted only outside prod, reached on
 loopback like the sandbox page. Staff sign-in (staff accounts, password
 plus a second factor, sessions with a SameSite cookie, the cross-site

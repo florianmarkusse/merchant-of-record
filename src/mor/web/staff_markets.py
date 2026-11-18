@@ -1,42 +1,38 @@
-"""The staff markets page (docs/plan-quote.md §5b): what the market data in
-force decides. It grows with each step of slice 4:
+"""The staff markets pages (docs/plan-quote.md §5b): what the market data
+in force decides. Three pages under one menu, growing with slice 4:
 
-- 4a: the loads, what the newest one changed, and each researched
-  country's answer for a category on a day (open with the rates in force,
-  or closed with the reason);
-- 4b: a check of one order (country, category, goods value, freight, HS
-  code, origin): both tax paths, the row that decided each, and the rates,
-  from our own rows or the country's vendor, with the comparison; a button
-  to ask the vendor about a combination not yet asked; and how the
-  vendor's answers compare with our rows per country, with each answer
-  listed (differences first);
-- 4c: with a parcel's weight (and box), the quote: every part of the
-  price per shipping option, how each was taken and rounded, and why a
-  card was not offered.
+- Quote (4b, 4c): an order (country, category, price, HS code, origin)
+  and a parcel: every shipping option with each part of its price, and
+  why the duties and taxes are what they are, from our own rows or the
+  country's vendor; a button to ask the vendor about a product not yet
+  asked.
+- Vendor answers (4b-2): how the vendor's answers compare with our rows,
+  per country and charge, and each answer, differences first.
+- Market data (4a): the loads, what the newest changed, and each
+  researched country's answer for a category on a day.
 
-    GET  /staff/markets?category=apparel&on=2026-11-17
-    GET  /staff/markets?country=TH&goods=50.00&currency=USD&hs=610910&origin=VN
+    GET  /staff/markets?country=TH&goods=50.00&currency=USD&hs=610910
+         &origin=VN&weight=600&length=300&width=250&height=50
+    GET  /staff/markets/answers
+    GET  /staff/markets/data?category=apparel&on=2026-11-17
     POST /staff/markets/duty_lookups   country, origin, hs, back
 
 Mounted only outside prod until staff sign-in exists. The one POST asks a
 vendor (through the outbox, never from the handler).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
+from fractions import Fraction
 from urllib.parse import urlencode
 
-import htpy
 import msgspec
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 from mor.audit import Actor, ActorKind
-from mor.dates import format_day, format_moment
 from mor.db.connect import Connection, connect
 from mor.duties.lookups import (
-    Agreement,
-    AnswerRow,
     NoVendorAccount,
     agreement,
     read_lookup,
@@ -46,490 +42,46 @@ from mor.duties.lookups import (
 )
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
-from mor.markets.changes import describe_changes, percent_text, value_text
-from mor.markets.records import (
-    DutyMode,
-    LandedRate,
-    MarketSet,
-    MarketStatus,
-    Standing,
-)
-from mor.markets.rules import (
-    Closed,
-    NotListed,
-    NotOpen,
-    Open,
-    RatesMissing,
-    RulesNotConfirmed,
-    country_rules,
-)
-from mor.markets.store import LoadRow, read_market, recent_loads
-from mor.money.amount import InvalidAmount, Money, format_major, parse_major
+from mor.markets.changes import describe_changes
+from mor.markets.fx import FxMissing
+from mor.markets.fx import rate as fx_rate
+from mor.markets.records import Country, DutyMode, MarketSet, MarketStatus
+from mor.markets.store import read_market, recent_loads
+from mor.money.amount import InvalidAmount, Money, parse_major
 from mor.money.currency import Currency
 from mor.quote.build import (
-    CountryClosed,
-    InputsMissing,
     LineRateRefused,
-    NoCurrency,
-    NoFeeRule,
-    NoServiceForLane,
-    Part,
+    PartKind,
     Quote,
     QuoteLine,
     QuoteRequest,
     QuoteResult,
+    ShippingOption,
     build_quote,
 )
-from mor.quote.shipping import NotOffered, Parcel
+from mor.quote.shipping import Parcel
 from mor.tax.explain import OrderCheck, explain
-from mor.tax.line_rates import duty_source_for
+from mor.tax.line_rates import RateNeeded, duty_source_for
 from mor.web.forms import read_form, same_origin
+from mor.web.staff_data_html import DataView, render_answers_page, render_data_page
+from mor.web.staff_quote_html import PAGE, Ask, QuoteView, render_quote_page
 
 
 LOADS_SHOWN = 10
 ANSWERS_SHOWN = 200
-PAGE = "/staff/markets"
 PERSON = Actor(ActorKind.STAFF, "staff-markets-page")
-
-
-@dataclass(frozen=True)
-class Ask:
-    """The order check's vendor still to be asked, and whether this
-    environment has an account for it."""
-
-    vendor: str
-    has_account: bool
-
-
-@dataclass(frozen=True)
-class View:
-    loads: list[LoadRow]
-    market: MarketSet | None
-    changes: list[str]
-    category: str
-    on: date
-    fields: dict[str, str]  # the order check's fields as entered
-    check: list[str] | None  # what the order check says, once asked
-    ask: Ask | None
-    agreement: list[Agreement]
-    answers: list[AnswerRow]
-    quote: QuoteResult | str | None  # with a parcel: the quote, or why not
-    back: str  # this page's URL, to come back to after a POST
-
-
-def _answer_text(answer: Open | Closed) -> str:
-    match answer:
-        case Open():
-            return "open"
-        case NotListed():
-            return "closed: not listed"
-        case NotOpen(status=status, note=note):
-            if note:
-                return f"{status.value}: {note}"
-            return status.value
-        case RulesNotConfirmed(line_nos=line_nos):
-            lines = ", ".join(str(line_no) for line_no in line_nos)
-            return f"closed: rules not confirmed (landed_rates.csv lines {lines})"
-        case RatesMissing(category=category):
-            return f"closed: no import tax recorded for {category}"
-
-
-def _rate_text(rate: LandedRate) -> str:
-    place = rate.scope.country or rate.scope.group or ""
-    band = rate.band.value
-    if rate.limit is not None:
-        band = f"{band} {value_text(rate.limit)}"
-    started = ""
-    if rate.effective_from is not None:
-        started = f", from {format_day(rate.effective_from)}"
-    return (
-        f"{rate.charge.value}: {value_text(rate.amount)}, {rate.collector.value},"
-        f" {band} [{place}, {rate.status.value}{started}]"
-    )
-
-
-def _country_rows(view: View) -> list[htpy.Node]:
-    rows: list[htpy.Node] = []
-    if view.market is None:
-        return rows
-    for country in view.market.countries:
-        if country.status == MarketStatus.NOT_ASSESSED:
-            continue
-        answer = country_rules(view.market, country.iso2, view.category, view.on)
-        rates: list[htpy.Node] = []
-        if isinstance(answer, Open):
-            for candidates in answer.candidates.values():
-                for rate in candidates:
-                    rates.append(htpy.li[_rate_text(rate)])
-        rows.append(
-            htpy.tr[
-                htpy.td[htpy.code[country.iso2]],
-                htpy.td[country.name],
-                htpy.td[_answer_text(answer)],
-                htpy.td[htpy.ul[rates] if rates else ""],
-            ]
-        )
-    return rows
-
-
-def _filter_form(view: View) -> htpy.Element:
-    options: list[htpy.Node] = []
-    if view.market is not None:
-        for category in view.market.categories:
-            options.append(
-                htpy.option(
-                    value=category.category,
-                    selected=category.category == view.category,
-                )[category.label]
-            )
-    return htpy.form(method="get", action="/staff/markets")[
-        htpy.label["Category ", htpy.select(name="category")[options]],
-        " ",
-        htpy.label[
-            "on ", htpy.input(type="date", name="on", value=view.on.isoformat())
-        ],
-        " ",
-        htpy.button(type="submit")["show"],
-    ]
-
-
-def _loads_table(loads: list[LoadRow]) -> htpy.Node:
-    if not loads:
-        return htpy.p["No loads yet: run `python -m mor.markets.load --write`."]
-    rows: list[htpy.Node] = []
-    for index, load in enumerate(loads):
-        rows.append(
-            htpy.tr[
-                htpy.td[format_moment(load.loaded_at)],
-                htpy.td[htpy.code[load.git_commit]],
-                htpy.td[htpy.code[str(load.id)]],
-                htpy.td["in force" if index == 0 else ""],
-            ]
-        )
-    return htpy.table[
-        htpy.tr[htpy.th["loaded"], htpy.th["commit"], htpy.th["load"], htpy.th[""]],
-        rows,
-    ]
-
-
-def _check_form(view: View) -> htpy.Element:
-    def field(name: str, label: str, size: int, placeholder: str = "") -> htpy.Node:
-        return htpy.label[
-            f"{label} ",
-            htpy.input(
-                name=name,
-                value=view.fields.get(name, ""),
-                size=size,
-                placeholder=placeholder,
-            ),
-        ]
-
-    currencies: list[htpy.Node] = []
-    chosen = view.fields.get("currency", "USD")
-    for currency in Currency:
-        currencies.append(
-            htpy.option(value=currency.value, selected=currency.value == chosen)[
-                currency.value
-            ]
-        )
-    return htpy.form(method="get", action="/staff/markets")[
-        htpy.input(type="hidden", name="category", value=view.category),
-        htpy.input(type="hidden", name="on", value=view.on.isoformat()),
-        field("country", "Country", 3, "TH"),
-        " ",
-        field("goods", "goods", 9, "50.00"),
-        " ",
-        htpy.select(name="currency")[currencies],
-        " ",
-        field("freight", "freight", 9, "optional"),
-        " ",
-        field("hs", "HS code", 10, "610910"),
-        " ",
-        field("origin", "origin", 3, "VN"),
-        htpy.br,
-        "Parcel, for the quote: ",
-        field("weight", "weight (g)", 6, "600"),
-        " ",
-        field("length", "box (mm)", 4, "300"),
-        " x ",
-        field("width", "", 4, "250"),
-        " x ",
-        field("height", "", 4, "50"),
-        " ",
-        htpy.button(type="submit")["check"],
-    ]
-
-
-def _check_result(view: View) -> htpy.Node:
-    if view.check is None:
-        return htpy.p[
-            "Enter an order to see who collects the VAT/GST, whether duty is due,"
-            " and at which rates. The category and date are those above."
-        ]
-    items: list[htpy.Node] = []
-    for line in view.check:
-        items.append(htpy.li[line])
-    return [htpy.ul[items], _ask_form(view)]
-
-
-def _ask_form(view: View) -> htpy.Node:
-    if view.ask is None:
-        return None
-    if not view.ask.has_account:
-        return htpy.p[
-            f"No account for {view.ask.vendor} in this environment: it cannot be asked."
-        ]
-    return htpy.form(method="post", action=f"{PAGE}/duty_lookups")[
-        htpy.input(type="hidden", name="country", value=view.fields.get("country", "")),
-        htpy.input(type="hidden", name="origin", value=view.fields.get("origin", "")),
-        htpy.input(type="hidden", name="hs", value=view.fields.get("hs", "")),
-        htpy.input(type="hidden", name="back", value=view.back),
-        htpy.button(type="submit")[f"Ask {view.ask.vendor}"],
-    ]
-
-
-def _agreement_table(rows: list[Agreement]) -> htpy.Node:
-    if not rows:
-        return htpy.p["No vendor answers yet."]
-    lines: list[htpy.Node] = []
-    for row in rows:
-        lines.append(
-            htpy.tr[
-                htpy.td[htpy.code[row.destination]],
-                htpy.td[row.charge.value],
-                htpy.td[str(row.matched)],
-                htpy.td[str(row.differed)],
-                htpy.td[str(row.own_none)],
-                htpy.td[str(row.not_a_rate)],
-            ]
-        )
-    return htpy.table[
-        htpy.tr[
-            htpy.th["country"],
-            htpy.th["charge"],
-            htpy.th["agreed"],
-            htpy.th["differed"],
-            htpy.th["we had no row"],
-            htpy.th["not a plain rate"],
-        ],
-        lines,
-    ]
-
-
-def _money(money: Money) -> str:
-    return f"{format_major(money)} {money.currency.value}"
-
-
-def _parts_rows(parts: tuple[Part, ...]) -> list[htpy.Node]:
-    rows: list[htpy.Node] = []
-    for part in parts:
-        collector = part.collector.value if part.collector is not None else ""
-        rows.append(
-            htpy.tr[
-                htpy.td[part.kind.value],
-                htpy.td[part.label],
-                htpy.td(style="text-align: right")[_money(part.amount)],
-                htpy.td[part.mode.value],
-                htpy.td[collector],
-                htpy.td[part.source],
-            ]
-        )
-    return rows
-
-
-_PARTS_HEADER = htpy.tr[
-    htpy.th["part"],
-    htpy.th["what"],
-    htpy.th["amount"],
-    htpy.th["rounded"],
-    htpy.th["collected"],
-    htpy.th["from"],
-]
-
-
-def _not_offered_text(item: NotOffered) -> str:
-    return f"{item.rate_card}: {item.reason.replace('_', ' ')} ({item.detail})"
-
-
-def _quote_section(quote: QuoteResult | str | None) -> htpy.Node:
-    if quote is None:
-        return htpy.p["Add a parcel weight to see the quote."]
-    heading = htpy.h3["Quote"]
-    match quote:
-        case str():
-            return [heading, htpy.p[quote]]
-        case Quote():
-            pass
-        case InputsMissing(asks=asks, waiting=waiting):
-            said: list[str] = []
-            for ask in asks:
-                said.append(f"{ask.vendor} has not been asked about this product")
-            if waiting:
-                said.append("waiting for the vendor's answer")
-            return [heading, htpy.p[f"Not yet: {'; '.join(said)}."]]
-        case CountryClosed(category=category, closed=closed):
-            return [heading, htpy.p[f"Refused for {category}: {_answer_text(closed)}."]]
-        case NoCurrency(currency=currency):
-            return [heading, htpy.p[f"Refused: no currency we charge in ({currency})."]]
-        case NoFeeRule(component=component):
-            return [heading, htpy.p[f"Refused: no fee rule for {component.value}."]]
-        case LineRateRefused(charge=charge, problem=problem):
-            return [heading, htpy.p[f"Refused: the {charge.value} rate ({problem})."]]
-        case NoServiceForLane(not_offered=not_offered):
-            items: list[htpy.Node] = []
-            for item in not_offered:
-                items.append(htpy.li[_not_offered_text(item)])
-            return [heading, htpy.p["Refused: no card can carry it."], htpy.ul[items]]
-        case _:
-            return [
-                heading,
-                htpy.p[
-                    "Refused: no confirmed exchange rate from"
-                    f" {quote.base.value} to {quote.quote.value}."
-                ],
-            ]
-    sections: list[htpy.Node] = [
-        heading,
-        htpy.p[
-            "The buyer pays in ",
-            quote.currency.value,
-            ". The merchant's price and our fee components, the same for every option:",
-        ],
-        htpy.table[_PARTS_HEADER, _parts_rows(quote.goods)],
-    ]
-    if quote.placeholders:
-        sections.append(
-            htpy.p[
-                f"Placeholders in this quote: {', '.join(quote.placeholders)}."
-                " Prod refuses to quote on a placeholder."
-            ]
-        )
-    for option in quote.options:
-        notes: list[str] = []
-        if option.transit_days is not None:
-            low, high = option.transit_days
-            notes.append(f"{low}-{high} days")
-        else:
-            notes.append("transit time unknown")
-        if option.fuel_stale_since is not None:
-            notes.append(
-                f"fuel rate out of date since {format_day(option.fuel_stale_since)}"
-            )
-        if option.standing == Standing.PLACEHOLDER:
-            notes.append("a placeholder route (no carrier contract yet)")
-        sections.append(
-            htpy.h4[
-                f"{option.service_name} ({option.tier.value}): {_money(option.total)}"
-            ]
-        )
-        sections.append(htpy.p[f"{option.rate_card}; {'; '.join(notes)}."])
-        sections.append(htpy.table[_PARTS_HEADER, _parts_rows(option.parts)])
-    if quote.not_offered:
-        items = []
-        for item in quote.not_offered:
-            items.append(htpy.li[_not_offered_text(item)])
-        sections.append(htpy.p["Not offered:"])
-        sections.append(htpy.ul[items])
-    return sections
-
-
-_COMPARISON_TEXT = {
-    "differs": "differs",
-    "not_a_rate": "not a plain rate",
-    "own_none": "we had no row",
-    "agrees": "agrees",
-}
-
-
-def _answers_table(rows: list[AnswerRow]) -> htpy.Node:
-    if not rows:
-        return None
-    lines: list[htpy.Node] = []
-    for row in rows:
-        ours = "none"
-        if row.own_rate is not None and row.own_line_no is not None:
-            ours = f"{percent_text(row.own_rate)} (hs_rates.csv line {row.own_line_no})"
-        said = row.formula
-        if row.note is not None:
-            said = f"{said}; note: {row.note}"
-        lines.append(
-            htpy.tr[
-                htpy.td[htpy.code[row.destination]],
-                htpy.td[row.origin],
-                htpy.td[htpy.code[row.hs_code]],
-                htpy.td[row.charge.value],
-                htpy.td[f"{row.vendor}: {said}"],
-                htpy.td[ours],
-                htpy.td[_COMPARISON_TEXT[row.comparison]],
-                htpy.td[format_moment(row.answered_at)],
-            ]
-        )
-    return htpy.table[
-        htpy.tr[
-            htpy.th["country"],
-            htpy.th["origin"],
-            htpy.th["HS code"],
-            htpy.th["charge"],
-            htpy.th["vendor said"],
-            htpy.th["our row"],
-            htpy.th[""],
-            htpy.th["answered"],
-        ],
-        lines,
-    ]
-
-
-def render(view: View) -> str:
-    changes: htpy.Node = htpy.p["The first load: nothing to compare with."]
-    if len(view.loads) > 1:
-        items: list[htpy.Node] = []
-        for line in view.changes:
-            items.append(htpy.li[htpy.code[line]])
-        changes = htpy.ul[items] if items else htpy.p["No differences."]
-    page = htpy.html(lang="en")[
-        htpy.head[htpy.meta(charset="utf-8"), htpy.title["Staff: markets"]],
-        htpy.body[
-            htpy.h1["Markets"],
-            htpy.p[
-                "What the market data in force decides. Edit docs/markets/ and"
-                " run `python -m mor.markets.load` to change it."
-            ],
-            htpy.h2["Loads"],
-            _loads_table(view.loads),
-            htpy.h2["What the newest load changed"],
-            changes,
-            htpy.h2[f"Check an order ({view.category}, {format_day(view.on)})"],
-            _check_form(view),
-            _check_result(view),
-            _quote_section(view.quote),
-            htpy.h2["Vendor answers against our own rows"],
-            htpy.p[
-                "Per country and charge, every answer a vendor gave, compared"
-                " with our own row in force when it came. A country moves from"
-                " vendor to own_first when its rows hold up here."
-            ],
-            _agreement_table(view.agreement),
-            htpy.h3["Each answer"],
-            _answers_table(view.answers),
-            htpy.h2[f"Countries on {format_day(view.on)}"],
-            _filter_form(view),
-            htpy.p[
-                "Researched countries only. Open means a quote may be made;"
-                " the rates are those in force, most specific first. Which"
-                " band applies depends on the order's value (step 4b)."
-            ],
-            htpy.table[
-                htpy.tr[
-                    htpy.th["code"],
-                    htpy.th["country"],
-                    htpy.th["answer"],
-                    htpy.th["rates in force"],
-                ],
-                _country_rows(view),
-            ],
-        ],
-    ]
-    return str(page)
+FIELDS = (
+    "country",
+    "category",
+    "goods",
+    "currency",
+    "hs",
+    "origin",
+    "weight",
+    "length",
+    "width",
+    "height",
+)
 
 
 def _day(text: str | None, default: date) -> date:
@@ -541,58 +93,172 @@ def _day(text: str | None, default: date) -> date:
         return default
 
 
-def _order_check(fields: dict[str, str], category: str) -> OrderCheck | str | None:
-    """The order check from the form, an error to show, or None when not
-    asked."""
+@dataclass(frozen=True)
+class OrderForm:
+    """The quote form, read: the order check and the parcel, if given."""
+
+    check: OrderCheck
+    parcel: Parcel | None
+
+
+def read_order(fields: dict[str, str]) -> OrderForm | dict[str, str] | None:
+    """The form as an order, the errors per field, or None while the
+    country or the price is still empty (marked only once Quote is pressed,
+    see `_missing`)."""
     country = fields.get("country", "").strip().upper()
-    if not country:
+    goods_text = fields.get("goods", "").strip()
+    if not country or not goods_text:
         return None
+    errors: dict[str, str] = {}
     currency: Currency | None = None
     for option in Currency:
-        if option.value == fields.get("currency", ""):
+        if option.value == fields.get("currency", "USD"):
             currency = option
     if currency is None:
-        return "Choose a currency."
-    goods = parse_major(fields.get("goods", "").strip(), currency)
+        errors["goods"] = "Choose a currency."
+        currency = Currency.USD
+    goods = parse_major(goods_text, currency)
     if isinstance(goods, InvalidAmount):
-        return f"Goods value: {goods.reason.replace('_', ' ')}."
-    freight: Money | None = None
-    if fields.get("freight", "").strip():
-        parsed = parse_major(fields["freight"].strip(), currency)
-        if isinstance(parsed, InvalidAmount):
-            return f"Freight: {parsed.reason.replace('_', ' ')}."
-        freight = parsed
+        errors["goods"] = f"Enter a price ({goods.reason.replace('_', ' ')})."
     hs_code = fields.get("hs", "").replace(".", "").replace(" ", "") or None
     if hs_code is not None and not hs_code.isdigit():
-        return "HS code: digits only."
+        errors["hs"] = "Digits only."
     origin = fields.get("origin", "").strip().upper() or "VN"
-    return OrderCheck(country, category, goods, freight, hs_code, origin)
+    parcel = _parcel(fields, errors)
+    if errors or isinstance(goods, InvalidAmount):
+        return errors
+    category = fields.get("category", "apparel")
+    check = OrderCheck(country, category, goods, None, hs_code, origin)
+    return OrderForm(check, parcel)
 
 
-async def show(request: Request, database_url: str, now: datetime) -> Response:
+def _missing(fields: dict[str, str], quote: QuoteResult | None) -> dict[str, str]:
+    """What a quote still needs, per field: the country, the price and the
+    parcel weight always, the HS code when the country's rates need one."""
+    missing: dict[str, str] = {}
+    if not fields.get("country", "").strip():
+        missing["country"] = "Choose where it ships to."
+    if not fields.get("goods", "").strip():
+        missing["goods"] = "Enter the merchant's price."
+    if not fields.get("weight", "").strip():
+        missing["weight"] = "Enter the parcel's weight to see shipping."
+    if isinstance(quote, LineRateRefused):
+        match quote.problem:
+            case RateNeeded(reason="no_hs_code"):
+                missing["hs"] = "This country's rates need the HS code."
+            case _:
+                pass
+    return missing
+
+
+def _parcel(fields: dict[str, str], errors: dict[str, str]) -> Parcel | None:
+    """The parcel, or None without a weight. A box left empty is 1 mm a
+    side: no volumetric weight."""
+    if not fields.get("weight", "").strip():
+        return None
+    sizes: list[int] = []
+    for name in ("weight", "length", "width", "height"):
+        text = fields.get(name, "").strip() or "1"
+        if not text.isdigit() or int(text) == 0:
+            # The box's three sizes share one field on the form.
+            where = "weight" if name == "weight" else "length"
+            errors[where] = "Whole numbers above zero."
+            return None
+        sizes.append(int(text))
+    return Parcel(sizes[0], sizes[1], sizes[2], sizes[3])
+
+
+def _researched(market: MarketSet | None) -> list[Country]:
+    countries: list[Country] = []
+    if market is None:
+        return countries
+    for country in market.countries:
+        if country.status != MarketStatus.NOT_ASSESSED:
+            countries.append(country)
+    countries.sort(key=lambda country: country.name)
+    return countries
+
+
+async def _market_in_force(conn: Connection) -> MarketSet | None:
+    loads = await recent_loads(conn, 1)
+    if not loads:
+        return None
+    return await read_market(conn, loads[0].id)
+
+
+async def quote_page(request: Request, database_url: str, now: datetime) -> Response:
     on = _day(request.query_params.get("on"), now.date())
-    category = request.query_params.get("category", "apparel")
     fields: dict[str, str] = {}
-    for name in (
-        "country",
-        "goods",
-        "currency",
-        "freight",
-        "hs",
-        "origin",
-        "weight",
-        "length",
-        "width",
-        "height",
-    ):
+    for name in FIELDS:
         value = request.query_params.get(name)
         if value is not None:
             fields[name] = value
-    order = _order_check(fields, category)
-    check: list[str] | None = None
+    order = read_order(fields)
+    errors: dict[str, str] = {}
+    if isinstance(order, dict):
+        errors = order
+    quote: QuoteResult | None = None
+    references: tuple[tuple[Currency, Fraction], ...] = ()
+    why: list[str] | None = None
     ask: Ask | None = None
-    quote: QuoteResult | str | None = None
-    parcel = _parcel(fields)
+    async with await connect(database_url) as conn:
+        market = await _market_in_force(conn)
+        if isinstance(order, OrderForm) and market is not None:
+            lookup = await _lookup_for(conn, market, order.check)
+            check = order.check
+            if order.parcel is not None:
+                quote = _quote(market, check, order.parcel, on, lookup)
+                if isinstance(quote, Quote):
+                    # Explained with the cheapest option's freight, so a
+                    # band on goods plus freight is decided as it quoted.
+                    check = replace(check, freight=_freight(quote.options[0]))
+                    references = _references(market, quote.currency)
+            explained = explain(market, check, on, lookup)
+            why = explained.lines
+            if explained.ask_vendor is not None:
+                account = await vendor_account(conn, explained.ask_vendor)
+                ask = Ask(explained.ask_vendor, account is not None)
+    if "go" in request.query_params:
+        # Quote was pressed: also mark what a quote still needs.
+        errors = _missing(fields, quote) | errors
+    categories: list[tuple[str, str]] = []
+    if market is not None:
+        for category in market.categories:
+            categories.append((category.category, category.label))
+    back = PAGE
+    if request.url.query:
+        back = f"{PAGE}?{request.url.query}"
+    origins: list[Country] = []
+    if market is not None:
+        origins = sorted(market.countries, key=lambda country: country.name)
+    view = QuoteView(
+        _researched(market),
+        origins,
+        categories,
+        fields,
+        errors,
+        on,
+        market is not None,
+        quote,
+        why,
+        ask,
+        "asked" in request.query_params,
+        back,
+        references,
+    )
+    return HTMLResponse(render_quote_page(view))
+
+
+async def answers_page(database_url: str) -> Response:
+    async with await connect(database_url) as conn:
+        rows = await agreement(conn)
+        answers = await vendor_answers(conn, ANSWERS_SHOWN)
+    return HTMLResponse(render_answers_page(rows, answers))
+
+
+async def data_page(request: Request, database_url: str, now: datetime) -> Response:
+    on = _day(request.query_params.get("on"), now.date())
+    category = request.query_params.get("category", "apparel")
     async with await connect(database_url) as conn:
         loads = await recent_loads(conn, LOADS_SHOWN)
         market: MarketSet | None = None
@@ -602,56 +268,37 @@ async def show(request: Request, database_url: str, now: datetime) -> Response:
         if len(loads) > 1 and market is not None:
             previous = await read_market(conn, loads[1].id)
             changes = describe_changes(previous, market)
-        rows = await agreement(conn)
-        answers = await vendor_answers(conn, ANSWERS_SHOWN)
-        if isinstance(order, str):
-            check = [order]
-        elif order is not None and market is None:
-            check = ["No market data loaded yet."]
-        elif order is not None and market is not None:
-            lookup = await _lookup_for(conn, market, order)
-            explained = explain(market, order, on, lookup)
-            check = explained.lines
-            if explained.ask_vendor is not None:
-                account = await vendor_account(conn, explained.ask_vendor)
-                ask = Ask(explained.ask_vendor, account is not None)
-            if isinstance(parcel, str):
-                quote = parcel
-            elif parcel is not None:
-                quote = _quote(market, order, parcel, on, lookup)
-    back = PAGE
-    if request.url.query:
-        back = f"{PAGE}?{request.url.query}"
-    view = View(
-        loads,
-        market,
-        changes,
-        category,
-        on,
-        fields,
-        check,
-        ask,
-        rows,
-        answers,
-        quote,
-        back,
-    )
-    return HTMLResponse(render(view))
+    view = DataView(loads, market, changes, category, on)
+    return HTMLResponse(render_data_page(view))
 
 
-def _parcel(fields: dict[str, str]) -> Parcel | str | None:
-    """The parcel from the form, an error to show, or None without a
-    weight. A box left empty is 1 mm a side: no volumetric weight."""
-    weight = fields.get("weight", "").strip()
-    if not weight:
-        return None
-    sizes: list[int] = []
-    for name in ("weight", "length", "width", "height"):
-        text = fields.get(name, "").strip() or "1"
-        if not text.isdigit() or int(text) == 0:
-            return f"Parcel {name}: a whole number above zero."
-        sizes.append(int(text))
-    return Parcel(sizes[0], sizes[1], sizes[2], sizes[3])
+# Shown beside a quote's own currency, for reading (asked 18-Nov-2026).
+REFERENCE_CURRENCIES = (Currency.USD, Currency.EUR)
+
+
+def _references(
+    market: MarketSet, currency: Currency
+) -> tuple[tuple[Currency, Fraction], ...]:
+    """Units of each reference currency per unit of the quote's, where the
+    load has a confirmed rate; none for the quote's own currency."""
+    found: list[tuple[Currency, Fraction]] = []
+    for reference in REFERENCE_CURRENCIES:
+        if reference == currency:
+            continue
+        per_unit = fx_rate(market, currency, reference)
+        if not isinstance(per_unit, FxMissing):
+            found.append((reference, per_unit))
+    return tuple(found)
+
+
+def _freight(option: ShippingOption) -> Money:
+    """What customs counts as the freight: freight, surcharges and fuel."""
+    total = 0
+    currency = option.total.currency
+    for part in option.parts:
+        if part.kind in (PartKind.FREIGHT, PartKind.SURCHARGE, PartKind.FUEL):
+            total += part.amount.amount_minor
+    return Money(total, currency)
 
 
 def _quote(
@@ -661,7 +308,7 @@ def _quote(
     on: date,
     lookup: VendorLookup | None,
 ) -> QuoteResult:
-    """The order check as one line of one item, quoted."""
+    """The order as one line of one item, quoted."""
     line = QuoteLine(order.category, order.hs_code, order.origin, 1, order.goods)
     request = QuoteRequest(order.country, (line,), parcel, on)
     lookups: dict[RateQuestion, VendorLookup] = {}
@@ -702,10 +349,9 @@ async def ask_vendor(request: Request, database_url: str, now: datetime) -> Resp
     if not hs_code.isdigit() or not 4 <= len(hs_code) <= 10:
         return Response("HS code: 4 to 10 digits", status_code=400)
     async with await connect(database_url) as conn:
-        load = await recent_loads(conn, 1)
-        if not load:
+        market = await _market_in_force(conn)
+        if market is None:
             return Response("no market data loaded", status_code=409)
-        market = await read_market(conn, load[0].id)
         source = duty_source_for(market, country)
         if source.vendor is None:
             return Response(f"{country} has no vendor", status_code=409)

@@ -99,7 +99,7 @@ def explain(
             return Explained(
                 [
                     f"Needs the freight: landed_rates.csv line {line_no} measures"
-                    " goods plus freight. Enter a freight amount."
+                    " goods plus freight. Add a parcel so the freight is known."
                 ],
                 None,
             )

@@ -34,6 +34,7 @@ from fractions import Fraction
 
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
+from mor.markets.changes import percent_text
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
     Base,
@@ -49,7 +50,7 @@ from mor.markets.records import (
     Standing,
 )
 from mor.markets.rules import Closed, Open, country_rules
-from mor.money.amount import Money
+from mor.money.amount import Money, format_major
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
 from mor.quote.fees import fee_rule_for
@@ -283,9 +284,12 @@ def build_quote(
             if isinstance(fixed, FxMissing):
                 return fixed
             exact += fixed
+        how = f"{percent_text(rule.rate)} of the merchant's price"
+        if rule.fixed is not None:
+            how += f" + {format_major(rule.fixed)} {rule.fixed.currency.value}"
         part = _part(
             PartKind(component.value),
-            component.value,
+            how,
             None,
             exact,
             currency,
@@ -487,7 +491,7 @@ def _charges(
                     return LineRateRefused(index, charge, priced)
                 case FxMissing():
                     return priced
-                case Priced(exact=exact, source=source):
+                case Priced(exact=exact, how=how, source=source):
                     pass
             if isinstance(row.amount, PerParcel):
                 parcel_rows.add(row.line_no)
@@ -496,7 +500,7 @@ def _charges(
             parts.append(
                 _part(
                     _CHARGE_KINDS[charge],
-                    f"line {index + 1}: {charge.value}",
+                    f"line {index + 1}: {how}",
                     None if isinstance(row.amount, PerParcel) else index,
                     exact,
                     currency,
@@ -522,6 +526,7 @@ _CHARGE_KINDS = {
 @dataclass(frozen=True)
 class Priced:
     exact: Fraction
+    how: str  # the rate and what it is taken on, for a person
     source: str  # where the rate or amount came from
 
 
@@ -550,7 +555,9 @@ def _charge(
             converted = convert_minor(market, money, currency)
             if isinstance(converted, FxMissing):
                 return converted
-            return Priced(converted, f"landed_rates.csv line {row.line_no}")
+            each = "per line" if isinstance(row.amount, PerLine) else "per parcel"
+            how = f"{format_major(money)} {money.currency.value} {each}"
+            return Priced(converted, how, f"landed_rates.csv line {row.line_no}")
         case Percent(base=base):
             pass
     if charge in (Charge.DUTY, Charge.IMPORT_TAX):
@@ -571,7 +578,8 @@ def _charge(
             on = values.goods + values.freight
         case Base.GOODS_FREIGHT_DUTY:
             on = values.goods + values.freight + values.duty
-    return Priced(on * rate, source)
+    how = f"{percent_text(rate)} of {base.value.replace('_', ' ')}"
+    return Priced(on * rate, how, source)
 
 
 def _rate_source(found: Found) -> str:

@@ -1,0 +1,11 @@
+{
+  "name": "merchant-of-record-frontend",
+  "private": true,
+  "description": "Vanilla TypeScript compiled to static/js; no bundler, no frameworks.",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
