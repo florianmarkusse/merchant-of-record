@@ -42,6 +42,7 @@ from mor.quote.build import (
     ShippingOption,
 )
 from mor.quote.shipping import NotOffered, NotOfferedReason
+from mor.tax.explain import CHARGE_WORDS, Explained
 from mor.tax.line_rates import (
     RateNeeded,
     RateNotConfirmed,
@@ -73,7 +74,7 @@ class QuoteView:
     on: date
     loaded: bool  # whether any market data is loaded
     quote: QuoteResult | None
-    why: list[str] | None  # the tax explanation, once a country is given
+    why: Explained | None  # the tax decision, once a country and price are given
     ask: Ask | None
     asked: bool  # the vendor was just asked from this page
     back: str  # this page's URL, to come back to after a POST
@@ -415,7 +416,7 @@ def _refusal(view: QuoteView, quote: QuoteResult) -> htpy.Node:
             return _notice(
                 "bad",
                 htpy.strong["No shipping option can carry it."],
-                _not_offered_list(not_offered),
+                htpy.table(class_="grid")[_not_offered_rows(not_offered, 1)],
             )
         case _:
             return _notice(
@@ -439,17 +440,21 @@ def _rate_problem_text(problem: LineRateProblem) -> str:
             return f"the vendor's answer needs a person ({detail})."
 
 
-def _not_offered_list(items: tuple[NotOffered, ...]) -> htpy.Element:
-    lines: list[htpy.Node] = []
+def _not_offered_rows(items: tuple[NotOffered, ...], span: int) -> list[htpy.Node]:
+    """A table row per rate card that cannot carry the order: its code, then
+    why across `span` columns."""
+    rows: list[htpy.Node] = []
     for item in items:
-        lines.append(
-            htpy.li[
-                htpy.code[item.rate_card],
-                f": {NOT_OFFERED_WORDS[item.reason]} ",
-                htpy.span(class_="muted")[f"({item.detail})"],
+        rows.append(
+            htpy.tr(class_="not-offered")[
+                htpy.td[htpy.code[item.rate_card]],
+                htpy.td(colspan=str(span))[
+                    f"Not offered: {NOT_OFFERED_WORDS[item.reason]} ",
+                    htpy.span(class_="muted")[f"({item.detail})"],
+                ],
             ]
         )
-    return htpy.ul[lines]
+    return rows
 
 
 def _converted(money: Money, currency: Currency, rate: Fraction) -> Money:
@@ -565,6 +570,8 @@ def _options_table(
                 htpy.th(class_="num")[""],
             ],
             rows,
+            # Cards that cannot carry it, greyed, with why.
+            _not_offered_rows(quote.not_offered, 5),
         ]
     ]
 
@@ -677,7 +684,7 @@ def _buildup(view: QuoteView, quote: Quote, option: ShippingOption) -> htpy.Elem
                         htpy.span(class_="swatch s-tax"),
                         htpy.span(class_="what")["+ Duties and taxes"],
                         htpy.span(class_="how")["none due on this order"],
-                        htpy.span(class_="note")["why: see below"],
+                        htpy.span(class_="note")["why: see Duties and taxes below"],
                     ],
                     htpy.td(class_="num")[money_text(none)],
                     htpy.td(class_="num muted")[_first_reference(view, none)],
@@ -737,15 +744,83 @@ def _quote_block(view: QuoteView, quote: Quote) -> htpy.Node:
         )
     chosen = chosen_option(quote, view.fields.get("option", ""))
     blocks.append(_options_table(view, quote, chosen))
-    if quote.not_offered:
-        blocks.append(
-            htpy.div(class_="not-offered")[
-                htpy.span(class_="muted")["Not offered: "],
-                _not_offered_list(quote.not_offered),
-            ]
-        )
     blocks.append(_buildup(view, quote, chosen))
     return blocks
+
+
+def _duties_panel(why: Explained, ask: htpy.Node) -> htpy.Element:
+    """Who collects each duty and tax and at what rate: a summary, one row
+    per charge, then the data rows that decided it, folded."""
+    summary: list[htpy.Node] = []
+    for sentence in why.summary:
+        summary.append(htpy.p[sentence])
+    rows: list[htpy.Node] = []
+    for charge in why.charges:
+        rate: list[htpy.Node] = [charge.rate or "none"]
+        if charge.problem is not None:
+            rate.append(htpy.span(class_="note bad")[charge.problem])
+        for missed in charge.missed:
+            rate.append(htpy.span(class_="note")[missed])
+        own: htpy.Node = ""
+        if charge.own is not None:
+            if charge.own.differs:
+                own = htpy.span(class_="tag warn")[charge.own.text]
+            else:
+                own = charge.own.text
+        rows.append(
+            htpy.tr[
+                htpy.td[htpy.strong[CHARGE_WORDS[charge.charge]]],
+                htpy.td[charge.collected],
+                htpy.td[rate],
+                htpy.td[charge.says or ""],
+                htpy.td[own],
+            ]
+        )
+    table: htpy.Node = None
+    if rows:
+        table = htpy.div(class_="scroll")[
+            htpy.table(class_="grid duties")[
+                htpy.tr[
+                    htpy.th["Charge"],
+                    htpy.th["Collected"],
+                    htpy.th["Rate"],
+                    htpy.th["Who says so"],
+                    htpy.th["Our own data"],
+                ],
+                rows,
+            ]
+        ]
+    sources: htpy.Node = None
+    if why.rows:
+        lines: list[htpy.Node] = []
+        for row in why.rows:
+            lines.append(
+                htpy.tr[
+                    htpy.td[row.where],
+                    htpy.td[row.says],
+                    htpy.td[row.research or ""],
+                ]
+            )
+        sources = [
+            htpy.h3["The data rows used"],
+            htpy.div(class_="scroll")[
+                htpy.table(class_="grid sources")[
+                    htpy.tr[
+                        htpy.th["Where"],
+                        htpy.th["What it says"],
+                        htpy.th["Research"],
+                    ],
+                    lines,
+                ]
+            ],
+        ]
+    return htpy.section(class_="panel duties-panel")[
+        htpy.h2["Duties and taxes: who collects them, and at what rate"],
+        htpy.div(class_="duties-summary")[summary],
+        table,
+        ask,
+        sources,
+    ]
 
 
 def _result(view: QuoteView) -> htpy.Element:
@@ -786,18 +861,8 @@ def _result(view: QuoteView) -> htpy.Element:
             htpy.p(class_="muted")["Add a parcel weight to see the shipping options."]
         )
     if view.why is not None:
-        items: list[htpy.Node] = []
-        for line in view.why:
-            items.append(htpy.li[line])
-        open_it = not isinstance(view.quote, Quote)
         ask = _ask_form(view) if view.quote is None else None
-        blocks.append(
-            htpy.details(class_="panel", open=open_it)[
-                htpy.summary["Why these duties and taxes"],
-                htpy.ul(class_="why")[items],
-                ask,
-            ]
-        )
+        blocks.append(_duties_panel(view.why, ask))
     return htpy.section(id="result")[blocks]
 
 

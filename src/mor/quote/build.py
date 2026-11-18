@@ -34,7 +34,7 @@ from fractions import Fraction
 
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
-from mor.markets.changes import percent_text
+from mor.markets.changes import BASE_WORDS, percent_text
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
     Base,
@@ -607,15 +607,6 @@ def _line_goods(goods_parts: list[Part], lines: int, fee_total: int) -> list[Fra
             share = Fraction(1, lines)
         result.append(price + fee_total * share)
     return result
-
-
-# What a percentage is of, for a person. "The price" is the line's price
-# with its share of our fees: what customs values.
-BASE_WORDS = {
-    Base.GOODS: "the price with fees",
-    Base.GOODS_PLUS_FREIGHT: "the price with fees + freight",
-    Base.GOODS_FREIGHT_DUTY: "the price with fees + freight + duty",
-}
 
 
 _SHIP_KINDS = {

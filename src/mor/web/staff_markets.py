@@ -60,7 +60,7 @@ from mor.quote.build import (
     build_quote,
 )
 from mor.quote.shipping import Parcel
-from mor.tax.explain import OrderCheck, explain
+from mor.tax.explain import Explained, OrderCheck, explain
 from mor.tax.line_rates import RateNeeded, duty_source_for
 from mor.web.forms import read_form, same_origin
 from mor.web.staff_data_html import DataView, render_answers_page, render_data_page
@@ -206,7 +206,7 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
         errors = order
     quote: QuoteResult | None = None
     references: tuple[tuple[Currency, Fraction], ...] = ()
-    why: list[str] | None = None
+    why: Explained | None = None
     ask: Ask | None = None
     async with await connect(database_url) as conn:
         market = await _market_in_force(conn)
@@ -221,11 +221,10 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
                     shown = chosen_option(quote, fields.get("option", ""))
                     check = replace(check, freight=_freight(shown))
                     references = _references(market, quote.currency)
-            explained = explain(market, check, on, lookup)
-            why = explained.lines
-            if explained.ask_vendor is not None:
-                account = await vendor_account(conn, explained.ask_vendor)
-                ask = Ask(explained.ask_vendor, account is not None)
+            why = explain(market, check, on, lookup)
+            if why.ask_vendor is not None:
+                account = await vendor_account(conn, why.ask_vendor)
+                ask = Ask(why.ask_vendor, account is not None)
     if "go" in request.query_params:
         # Quote was pressed: also mark what a quote still needs.
         errors = _missing(fields, quote) | errors

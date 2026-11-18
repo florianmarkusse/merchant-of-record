@@ -425,8 +425,12 @@ comes to be: a bar of each group's share, then the merchant's price, our
 fees, shipping (with the carrier's duty-paid fee) and duties and taxes,
 each with its subtotal, and each part with what it is a share of, where
 it came from and how it was rounded. The cheapest is chosen until another
-is picked (`option=`, a plain link). Below, why the duties and taxes are
-what they are. (Cards per option were tried first and dropped the same
+is picked (`option=`, a plain link); cards that cannot carry the order
+are greyed rows of the same table, with why. Below, always shown, "Duties
+and taxes": a summary (what is charged at the border and what that rules
+out, who sets the rates, any rate our own data disputes), one row per
+charge (collected where, rate, who says so, what our own data says), and
+the data rows that decided it. (Cards per option were tried first and dropped the same
 day: they compared options but did not explain one price.)
 **Vendor answers** (`/staff/markets/answers`) and **Market data**
 (`/staff/markets/data`) hold the rest. Scripts improve it (the quote

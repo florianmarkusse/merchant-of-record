@@ -13,6 +13,7 @@ from fractions import Fraction
 
 from mor.dates import format_day
 from mor.markets.records import (
+    Base,
     CardRate,
     CardZone,
     Category,
@@ -268,6 +269,15 @@ def value_text(value: object) -> str:
             return country or group or "none"
         case _:
             return str(value)
+
+
+# What a percentage is of, for a person. "The price" is the merchant's
+# price with its share of our fees: what customs values.
+BASE_WORDS = {
+    Base.GOODS: "the price with fees",
+    Base.GOODS_PLUS_FREIGHT: "the price with fees + freight",
+    Base.GOODS_FREIGHT_DUTY: "the price with fees + freight + duty",
+}
 
 
 def percent_text(rate: Fraction) -> str:

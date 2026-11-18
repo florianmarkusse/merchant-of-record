@@ -5,6 +5,7 @@ staff sign-in exists."""
 
 import asyncio
 import html
+import re
 from datetime import UTC, datetime, timedelta
 
 import httpx2
@@ -109,11 +110,14 @@ def test_an_order_check_explains_both_paths_and_the_rates(database_url: str) -> 
             "/staff/markets?country=TH&goods=50.00&currency=USD&hs=6109.10&origin=VN"
         )
         text = (await _get(database_url, Environment.TEST, query)).text
-        assert "VAT/GST: charged at the border" in text
-        assert "Duty: charged at the border" in text
-        assert "Rate 30% of goods_plus_freight: hs_rates.csv line 2" in text
-        assert "Not applied: ATIGA 0%" in text
-        assert "Only duty-paid services may carry this order." in text
+        said = _words(text)
+        assert "charges VAT/GST and duty at the border on this order" in said
+        assert "only duty-paid services can carry the order" in said
+        assert "Duty at the border, on every order" in said
+        assert "Duty at the border, on every order 30% of the price with fees" in said
+        assert "not applied: needs certificate of origin" in said
+        assert "our own row for HS 6109" in said
+        assert "hs_rates.csv line 2 HS 6109: 30% secondary" in said
         # "Made in" is a list of the countries file, the order's one chosen.
         assert '<option value="VN" selected>' in text
 
@@ -159,8 +163,8 @@ def test_a_vendor_country_is_asked_from_the_page_and_its_answer_shown(
         assert rate.status_code == 204
 
         before = (await wired.control.get(f"http://mor{CHECK}")).text
-        assert "acme decides; our own rows are compared with it" in before
-        assert "acme has not been asked about HS 610910 from VN" in before
+        assert "Rates per HS code come from acme" in _words(before)
+        assert "acme has not been asked about HS 610910 made in VN" in before
         assert "Ask acme" in before
 
         asked = await wired.control.post(
@@ -176,8 +180,13 @@ def test_a_vendor_country_is_asked_from_the_page_and_its_answer_shown(
         async with await connect(database_url, autocommit=True) as worker:
             await drain_once(worker, wired.http, ENV, NOW)
         after = (await wired.control.get(f"http://mor{CHECK}")).text
-        assert "Rate 25% of goods_plus_freight: acme said &#39;25%&#39;" in after
-        assert "Our own row differs: 30% (hs_rates.csv line 2)" in after
+        said = _words(after)
+        assert (
+            "25% of the price with fees + freight acme, for HS 610910 made in VN"
+            " 30%: differs (hs_rates.csv line 2)"
+        ) in said
+        assert "Check the duty rate: our own data differs" in said
+        assert "acme duty for HS 610910: '25%'" in said
         answers = (await wired.control.get("http://mor/staff/markets/answers")).text
         # Each answer listed beside our row, the difference first.
         listed = answers[answers.index("Each answer") :]
@@ -227,12 +236,21 @@ def test_with_a_parcel_the_check_shows_each_option_and_its_parts(
         assert "fuel rate ended 15-Nov-2026" in text
         # Beside the quote's own currency, for reading (ECB rates in the set).
         assert "≈ 506.62 USD · 453.76 EUR" in text
-        assert "<code>eco_card</code>: not duty-paid" in text
+        assert (
+            '<code>eco_card</code></td><td colspan="5">Not offered: not duty-paid'
+            in text
+        )
         assert "fees.csv line 2 (psp_fee)" in text
         assert "52.78 SGD" in text and "half to even" in text
         assert "/static/css/staff.css" in text
 
     asyncio.run(body())
+
+
+def _words(page: str) -> str:
+    """A page's text as a person reads it: tags gone, spaces collapsed."""
+    text = html.unescape(re.sub(r"<[^>]+>", " ", page))
+    return " ".join(text.split())
 
 
 def _error(text: str, name: str) -> str:
