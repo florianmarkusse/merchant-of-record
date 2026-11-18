@@ -48,7 +48,49 @@ def market_texts(
         "fx_rates": "base,quote,rate,as_of,status,source,source_url,notes\n" + fx_rows,
         "hs_rates": HS_HEADER + hs_rows,
         "duty_sources": "country,mode,vendor,notes\n" + duty_sources,
-    }
+    } | shipping_texts({})
+
+
+SHIPPING_HEADERS = {
+    "services": (
+        "service,provider,name,origin,tier,ddp,volumetric_divisor,weight_step_kg,"
+        "max_weight_kg,status,source,source_url,research_ref,checked_on,question,"
+        "notes\n"
+    ),
+    "rate_cards": (
+        "rate_card,service,kind,currency,effective_from,effective_to,received_on,"
+        "valid_until,supersedes,volume_per_month,account_required,fuel,vat,status,"
+        "source,source_url,research_ref,checked_on,question,notes\n"
+    ),
+    "zones": "rate_card,destination,zone,status,notes\n",
+    "rates": "rate_card,zone,weight_kg,amount_minor,amount_max_minor,ack,notes\n",
+    "surcharges": (
+        "service,rate_card,surcharge,basis,rate_percent,amount_minor,"
+        "min_amount_minor,currency,trigger,destinations,fuel_applies,applies_when,"
+        "valid_until,status,source,source_url,research_ref,checked_on,question,"
+        "notes\n"
+    ),
+    "transit": (
+        "service,destination,days_min,days_max,status,source,research_ref,"
+        "checked_on,notes\n"
+    ),
+    "service_restrictions": (
+        "service,category,rule,status,research_ref,checked_on,notes\n"
+    ),
+    "shipping_routes": "destination,rate_card,source,standing,notes\n",
+    "fees": (
+        "component,country,percent,fixed_minor,currency,effective_from,standing,"
+        "source,notes\n"
+    ),
+}
+
+
+def shipping_texts(rows: dict[str, str]) -> dict[str, str]:
+    """The shipping and fee files: each header plus the rows given for it."""
+    texts: dict[str, str] = {}
+    for name, header in SHIPPING_HEADERS.items():
+        texts[name] = header + rows.get(name, "")
+    return texts
 
 
 SG_GST = (

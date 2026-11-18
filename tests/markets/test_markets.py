@@ -105,6 +105,15 @@ def test_the_research_files_load_once_and_read_back_as_loaded(
         assert set(stored.categories) == set(market.categories)
         assert set(stored.landed_rates) == set(market.landed_rates)
         assert set(stored.fx_rates) == set(market.fx_rates)
+        assert set(stored.services) == set(market.services)
+        assert set(stored.rate_cards) == set(market.rate_cards)
+        assert set(stored.zones) == set(market.zones)
+        assert set(stored.rates) == set(market.rates)
+        assert set(stored.surcharges) == set(market.surcharges)
+        assert set(stored.transit) == set(market.transit)
+        assert set(stored.restrictions) == set(market.restrictions)
+        assert set(stored.routes) == set(market.routes)
+        assert set(stored.fees) == set(market.fees)
 
     asyncio.run(body())
 

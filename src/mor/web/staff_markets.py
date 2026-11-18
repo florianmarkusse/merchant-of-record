@@ -8,7 +8,11 @@ force decides. It grows with each step of slice 4:
   code, origin): both tax paths, the row that decided each, and the rates,
   from our own rows or the country's vendor, with the comparison; a button
   to ask the vendor about a combination not yet asked; and how the
-  vendor's answers compare with our rows per country.
+  vendor's answers compare with our rows per country, with each answer
+  listed (differences first);
+- 4c: with a parcel's weight (and box), the quote: every part of the
+  price per shipping option, how each was taken and rounded, and why a
+  card was not offered.
 
     GET  /staff/markets?category=apparel&on=2026-11-17
     GET  /staff/markets?country=TH&goods=50.00&currency=USD&hs=610910&origin=VN
@@ -32,16 +36,24 @@ from mor.dates import format_day, format_moment
 from mor.db.connect import Connection, connect
 from mor.duties.lookups import (
     Agreement,
+    AnswerRow,
     NoVendorAccount,
     agreement,
     read_lookup,
     request_duty_rate,
     vendor_account,
+    vendor_answers,
 )
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
-from mor.markets.changes import describe_changes, value_text
-from mor.markets.records import DutyMode, LandedRate, MarketSet, MarketStatus
+from mor.markets.changes import describe_changes, percent_text, value_text
+from mor.markets.records import (
+    DutyMode,
+    LandedRate,
+    MarketSet,
+    MarketStatus,
+    Standing,
+)
 from mor.markets.rules import (
     Closed,
     NotListed,
@@ -52,14 +64,30 @@ from mor.markets.rules import (
     country_rules,
 )
 from mor.markets.store import LoadRow, read_market, recent_loads
-from mor.money.amount import InvalidAmount, Money, parse_major
+from mor.money.amount import InvalidAmount, Money, format_major, parse_major
 from mor.money.currency import Currency
+from mor.quote.build import (
+    CountryClosed,
+    InputsMissing,
+    LineRateRefused,
+    NoCurrency,
+    NoFeeRule,
+    NoServiceForLane,
+    Part,
+    Quote,
+    QuoteLine,
+    QuoteRequest,
+    QuoteResult,
+    build_quote,
+)
+from mor.quote.shipping import NotOffered, Parcel
 from mor.tax.explain import OrderCheck, explain
 from mor.tax.line_rates import duty_source_for
 from mor.web.forms import read_form, same_origin
 
 
 LOADS_SHOWN = 10
+ANSWERS_SHOWN = 200
 PAGE = "/staff/markets"
 PERSON = Actor(ActorKind.STAFF, "staff-markets-page")
 
@@ -84,6 +112,8 @@ class View:
     check: list[str] | None  # what the order check says, once asked
     ask: Ask | None
     agreement: list[Agreement]
+    answers: list[AnswerRow]
+    quote: QuoteResult | str | None  # with a parcel: the quote, or why not
     back: str  # this page's URL, to come back to after a POST
 
 
@@ -216,6 +246,15 @@ def _check_form(view: View) -> htpy.Element:
         field("hs", "HS code", 10, "610910"),
         " ",
         field("origin", "origin", 3, "VN"),
+        htpy.br,
+        "Parcel, for the quote: ",
+        field("weight", "weight (g)", 6, "600"),
+        " ",
+        field("length", "box (mm)", 4, "300"),
+        " x ",
+        field("width", "", 4, "250"),
+        " x ",
+        field("height", "", 4, "50"),
         " ",
         htpy.button(type="submit")["check"],
     ]
@@ -277,6 +316,169 @@ def _agreement_table(rows: list[Agreement]) -> htpy.Node:
     ]
 
 
+def _money(money: Money) -> str:
+    return f"{format_major(money)} {money.currency.value}"
+
+
+def _parts_rows(parts: tuple[Part, ...]) -> list[htpy.Node]:
+    rows: list[htpy.Node] = []
+    for part in parts:
+        collector = part.collector.value if part.collector is not None else ""
+        rows.append(
+            htpy.tr[
+                htpy.td[part.kind.value],
+                htpy.td[part.label],
+                htpy.td(style="text-align: right")[_money(part.amount)],
+                htpy.td[part.mode.value],
+                htpy.td[collector],
+                htpy.td[part.source],
+            ]
+        )
+    return rows
+
+
+_PARTS_HEADER = htpy.tr[
+    htpy.th["part"],
+    htpy.th["what"],
+    htpy.th["amount"],
+    htpy.th["rounded"],
+    htpy.th["collected"],
+    htpy.th["from"],
+]
+
+
+def _not_offered_text(item: NotOffered) -> str:
+    return f"{item.rate_card}: {item.reason.replace('_', ' ')} ({item.detail})"
+
+
+def _quote_section(quote: QuoteResult | str | None) -> htpy.Node:
+    if quote is None:
+        return htpy.p["Add a parcel weight to see the quote."]
+    heading = htpy.h3["Quote"]
+    match quote:
+        case str():
+            return [heading, htpy.p[quote]]
+        case Quote():
+            pass
+        case InputsMissing(asks=asks, waiting=waiting):
+            said: list[str] = []
+            for ask in asks:
+                said.append(f"{ask.vendor} has not been asked about this product")
+            if waiting:
+                said.append("waiting for the vendor's answer")
+            return [heading, htpy.p[f"Not yet: {'; '.join(said)}."]]
+        case CountryClosed(category=category, closed=closed):
+            return [heading, htpy.p[f"Refused for {category}: {_answer_text(closed)}."]]
+        case NoCurrency(currency=currency):
+            return [heading, htpy.p[f"Refused: no currency we charge in ({currency})."]]
+        case NoFeeRule(component=component):
+            return [heading, htpy.p[f"Refused: no fee rule for {component.value}."]]
+        case LineRateRefused(charge=charge, problem=problem):
+            return [heading, htpy.p[f"Refused: the {charge.value} rate ({problem})."]]
+        case NoServiceForLane(not_offered=not_offered):
+            items: list[htpy.Node] = []
+            for item in not_offered:
+                items.append(htpy.li[_not_offered_text(item)])
+            return [heading, htpy.p["Refused: no card can carry it."], htpy.ul[items]]
+        case _:
+            return [
+                heading,
+                htpy.p[
+                    "Refused: no confirmed exchange rate from"
+                    f" {quote.base.value} to {quote.quote.value}."
+                ],
+            ]
+    sections: list[htpy.Node] = [
+        heading,
+        htpy.p[
+            "The buyer pays in ",
+            quote.currency.value,
+            ". The merchant's price and our fee components, the same for every option:",
+        ],
+        htpy.table[_PARTS_HEADER, _parts_rows(quote.goods)],
+    ]
+    if quote.placeholders:
+        sections.append(
+            htpy.p[
+                f"Placeholders in this quote: {', '.join(quote.placeholders)}."
+                " Prod refuses to quote on a placeholder."
+            ]
+        )
+    for option in quote.options:
+        notes: list[str] = []
+        if option.transit_days is not None:
+            low, high = option.transit_days
+            notes.append(f"{low}-{high} days")
+        else:
+            notes.append("transit time unknown")
+        if option.fuel_stale_since is not None:
+            notes.append(
+                f"fuel rate out of date since {format_day(option.fuel_stale_since)}"
+            )
+        if option.standing == Standing.PLACEHOLDER:
+            notes.append("a placeholder route (no carrier contract yet)")
+        sections.append(
+            htpy.h4[
+                f"{option.service_name} ({option.tier.value}): {_money(option.total)}"
+            ]
+        )
+        sections.append(htpy.p[f"{option.rate_card}; {'; '.join(notes)}."])
+        sections.append(htpy.table[_PARTS_HEADER, _parts_rows(option.parts)])
+    if quote.not_offered:
+        items = []
+        for item in quote.not_offered:
+            items.append(htpy.li[_not_offered_text(item)])
+        sections.append(htpy.p["Not offered:"])
+        sections.append(htpy.ul[items])
+    return sections
+
+
+_COMPARISON_TEXT = {
+    "differs": "differs",
+    "not_a_rate": "not a plain rate",
+    "own_none": "we had no row",
+    "agrees": "agrees",
+}
+
+
+def _answers_table(rows: list[AnswerRow]) -> htpy.Node:
+    if not rows:
+        return None
+    lines: list[htpy.Node] = []
+    for row in rows:
+        ours = "none"
+        if row.own_rate is not None and row.own_line_no is not None:
+            ours = f"{percent_text(row.own_rate)} (hs_rates.csv line {row.own_line_no})"
+        said = row.formula
+        if row.note is not None:
+            said = f"{said}; note: {row.note}"
+        lines.append(
+            htpy.tr[
+                htpy.td[htpy.code[row.destination]],
+                htpy.td[row.origin],
+                htpy.td[htpy.code[row.hs_code]],
+                htpy.td[row.charge.value],
+                htpy.td[f"{row.vendor}: {said}"],
+                htpy.td[ours],
+                htpy.td[_COMPARISON_TEXT[row.comparison]],
+                htpy.td[format_moment(row.answered_at)],
+            ]
+        )
+    return htpy.table[
+        htpy.tr[
+            htpy.th["country"],
+            htpy.th["origin"],
+            htpy.th["HS code"],
+            htpy.th["charge"],
+            htpy.th["vendor said"],
+            htpy.th["our row"],
+            htpy.th[""],
+            htpy.th["answered"],
+        ],
+        lines,
+    ]
+
+
 def render(view: View) -> str:
     changes: htpy.Node = htpy.p["The first load: nothing to compare with."]
     if len(view.loads) > 1:
@@ -299,6 +501,7 @@ def render(view: View) -> str:
             htpy.h2[f"Check an order ({view.category}, {format_day(view.on)})"],
             _check_form(view),
             _check_result(view),
+            _quote_section(view.quote),
             htpy.h2["Vendor answers against our own rows"],
             htpy.p[
                 "Per country and charge, every answer a vendor gave, compared"
@@ -306,6 +509,8 @@ def render(view: View) -> str:
                 " vendor to own_first when its rows hold up here."
             ],
             _agreement_table(view.agreement),
+            htpy.h3["Each answer"],
+            _answers_table(view.answers),
             htpy.h2[f"Countries on {format_day(view.on)}"],
             _filter_form(view),
             htpy.p[
@@ -368,13 +573,26 @@ async def show(request: Request, database_url: str, now: datetime) -> Response:
     on = _day(request.query_params.get("on"), now.date())
     category = request.query_params.get("category", "apparel")
     fields: dict[str, str] = {}
-    for name in ("country", "goods", "currency", "freight", "hs", "origin"):
+    for name in (
+        "country",
+        "goods",
+        "currency",
+        "freight",
+        "hs",
+        "origin",
+        "weight",
+        "length",
+        "width",
+        "height",
+    ):
         value = request.query_params.get(name)
         if value is not None:
             fields[name] = value
     order = _order_check(fields, category)
     check: list[str] | None = None
     ask: Ask | None = None
+    quote: QuoteResult | str | None = None
+    parcel = _parcel(fields)
     async with await connect(database_url) as conn:
         loads = await recent_loads(conn, LOADS_SHOWN)
         market: MarketSet | None = None
@@ -385,6 +603,7 @@ async def show(request: Request, database_url: str, now: datetime) -> Response:
             previous = await read_market(conn, loads[1].id)
             changes = describe_changes(previous, market)
         rows = await agreement(conn)
+        answers = await vendor_answers(conn, ANSWERS_SHOWN)
         if isinstance(order, str):
             check = [order]
         elif order is not None and market is None:
@@ -396,11 +615,59 @@ async def show(request: Request, database_url: str, now: datetime) -> Response:
             if explained.ask_vendor is not None:
                 account = await vendor_account(conn, explained.ask_vendor)
                 ask = Ask(explained.ask_vendor, account is not None)
+            if isinstance(parcel, str):
+                quote = parcel
+            elif parcel is not None:
+                quote = _quote(market, order, parcel, on, lookup)
     back = PAGE
     if request.url.query:
         back = f"{PAGE}?{request.url.query}"
-    view = View(loads, market, changes, category, on, fields, check, ask, rows, back)
+    view = View(
+        loads,
+        market,
+        changes,
+        category,
+        on,
+        fields,
+        check,
+        ask,
+        rows,
+        answers,
+        quote,
+        back,
+    )
     return HTMLResponse(render(view))
+
+
+def _parcel(fields: dict[str, str]) -> Parcel | str | None:
+    """The parcel from the form, an error to show, or None without a
+    weight. A box left empty is 1 mm a side: no volumetric weight."""
+    weight = fields.get("weight", "").strip()
+    if not weight:
+        return None
+    sizes: list[int] = []
+    for name in ("weight", "length", "width", "height"):
+        text = fields.get(name, "").strip() or "1"
+        if not text.isdigit() or int(text) == 0:
+            return f"Parcel {name}: a whole number above zero."
+        sizes.append(int(text))
+    return Parcel(sizes[0], sizes[1], sizes[2], sizes[3])
+
+
+def _quote(
+    market: MarketSet,
+    order: OrderCheck,
+    parcel: Parcel,
+    on: date,
+    lookup: VendorLookup | None,
+) -> QuoteResult:
+    """The order check as one line of one item, quoted."""
+    line = QuoteLine(order.category, order.hs_code, order.origin, 1, order.goods)
+    request = QuoteRequest(order.country, (line,), parcel, on)
+    lookups: dict[RateQuestion, VendorLookup] = {}
+    if lookup is not None and order.hs_code is not None:
+        lookups[RateQuestion(order.country, order.origin, order.hs_code)] = lookup
+    return build_quote(market, request, lookups)
 
 
 async def _lookup_for(

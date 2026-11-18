@@ -1,0 +1,4 @@
+component,country,percent,fixed_minor,currency,effective_from,standing,source,notes
+psp_fee,,3.5,,,2026-11-01,placeholder,placeholder until the PSP contract (plan-quote.md Q5),estimate of the PSP's cut; a percentage of the merchant's price
+fx,,0,,,2026-11-01,agreed,decided 17-Nov-2026 (plan-quote.md Q4),0% until a margin is decided
+mor_margin,,5,,,2026-11-01,placeholder,placeholder until pricing is decided (plan-quote.md Q5),a percentage of the merchant's price

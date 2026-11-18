@@ -14,12 +14,19 @@ from mor.markets.records import (
     Amount,
     Band,
     Base,
+    CardFuel,
+    CardRate,
+    CardZone,
     Category,
     Charge,
     Collector,
     Country,
+    DutiesPaid,
     DutyMode,
     DutySource,
+    FeeComponent,
+    FeeRule,
+    FuelApplies,
     FxRate,
     Group,
     GroupKind,
@@ -34,9 +41,21 @@ from mor.markets.records import (
     PerParcel,
     Preference,
     PreferenceCondition,
+    PriceSource,
+    RateCard,
     Registration,
     ResearchStatus,
+    RestrictionRule,
     Scope,
+    Service,
+    ServiceRestriction,
+    ServiceTier,
+    ShippingRoute,
+    Standing,
+    Surcharge,
+    SurchargeBasis,
+    SurchargeTrigger,
+    Transit,
     content_sha256,
 )
 from mor.money.amount import Money
@@ -199,6 +218,193 @@ async def _insert_rows(conn: Connection, load_id: uuid.UUID, market: MarketSet) 
             "INSERT INTO duty_source (load_id, iso2, mode, vendor_name)"
             " VALUES (%s, %s, %s, %s)",
             [(load_id, d.country, d.mode.value, d.vendor) for d in market.duty_sources],
+        )
+    await _insert_shipping(conn, load_id, market)
+
+
+def _numerator(value: Fraction | None) -> int | None:
+    return value.numerator if value is not None else None
+
+
+def _denominator(value: Fraction | None) -> int | None:
+    return value.denominator if value is not None else None
+
+
+async def _insert_shipping(
+    conn: Connection, load_id: uuid.UUID, market: MarketSet
+) -> None:
+    async with conn.cursor() as cur:
+        await cur.executemany(
+            "INSERT INTO shipping_service"
+            " (load_id, code, provider, name, origin_iso2, tier, duties_paid,"
+            "  volumetric_divisor, max_weight_numerator, max_weight_denominator,"
+            "  status)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            [
+                (
+                    load_id,
+                    s.code,
+                    s.provider,
+                    s.name,
+                    s.origin,
+                    s.tier.value,
+                    s.duties_paid.value,
+                    s.volumetric_divisor,
+                    _numerator(s.max_weight_kg),
+                    _denominator(s.max_weight_kg),
+                    s.status.value,
+                )
+                for s in market.services
+            ],
+        )
+        await cur.executemany(
+            "INSERT INTO rate_card"
+            " (load_id, code, service, currency, effective_from, effective_to,"
+            "  fuel, status, source)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            [
+                (
+                    load_id,
+                    c.code,
+                    c.service,
+                    c.currency.value,
+                    c.effective_from,
+                    c.effective_to,
+                    c.fuel.value,
+                    c.status.value,
+                    c.source,
+                )
+                for c in market.rate_cards
+            ],
+        )
+        await cur.executemany(
+            "INSERT INTO rate_card_zone"
+            " (load_id, rate_card, destination_iso2, zone, status)"
+            " VALUES (%s, %s, %s, %s, %s)",
+            [
+                (load_id, z.rate_card, z.destination, z.zone, z.status.value)
+                for z in market.zones
+            ],
+        )
+        await cur.executemany(
+            "INSERT INTO rate_card_rate"
+            " (load_id, rate_card, zone, weight_numerator, weight_denominator,"
+            "  amount_minor, amount_max_minor)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            [
+                (
+                    load_id,
+                    r.rate_card,
+                    r.zone,
+                    r.weight_kg.numerator,
+                    r.weight_kg.denominator,
+                    r.amount_minor,
+                    r.amount_max_minor,
+                )
+                for r in market.rates
+            ],
+        )
+        await cur.executemany(
+            "INSERT INTO shipping_surcharge"
+            " (load_id, line_no, service, rate_card, name, basis, rate_numerator,"
+            "  rate_denominator, amount_minor, min_amount_minor, currency, trigger,"
+            "  destinations, fuel_applies, valid_until, status, source)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+            "  %s, %s)",
+            [
+                (
+                    load_id,
+                    s.line_no,
+                    s.service,
+                    s.rate_card,
+                    s.name,
+                    s.basis.value,
+                    _numerator(s.rate),
+                    _denominator(s.rate),
+                    s.amount_minor,
+                    s.min_amount_minor,
+                    s.currency.value,
+                    s.trigger.value,
+                    list(s.destinations),
+                    s.fuel_applies.value,
+                    s.valid_until,
+                    s.status.value,
+                    s.source,
+                )
+                for s in market.surcharges
+            ],
+        )
+        await cur.executemany(
+            "INSERT INTO shipping_transit"
+            " (load_id, service, country_iso2, group_code, days_min, days_max,"
+            "  status)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            [
+                (
+                    load_id,
+                    t.service,
+                    t.scope.country,
+                    t.scope.group,
+                    t.days_min,
+                    t.days_max,
+                    t.status.value,
+                )
+                for t in market.transit
+            ],
+        )
+        await cur.executemany(
+            "INSERT INTO service_restriction (load_id, service, category, rule, status)"
+            " VALUES (%s, %s, %s, %s, %s)",
+            [
+                (load_id, r.service, r.category, r.rule.value, r.status.value)
+                for r in market.restrictions
+            ],
+        )
+        await cur.executemany(
+            "INSERT INTO shipping_route"
+            " (load_id, country_iso2, group_code, rate_card, source, standing)"
+            " VALUES (%s, %s, %s, %s, %s, %s)",
+            [
+                (
+                    load_id,
+                    r.scope.country,
+                    r.scope.group,
+                    r.rate_card,
+                    r.source.value,
+                    r.standing.value,
+                )
+                for r in market.routes
+            ],
+        )
+        fee_rows: list[tuple[object, ...]] = []
+        for fee in market.fees:
+            country = fee.scope.country if fee.scope is not None else None
+            group = fee.scope.group if fee.scope is not None else None
+            fixed_minor = fee.fixed.amount_minor if fee.fixed is not None else None
+            fixed_currency = fee.fixed.currency.value if fee.fixed is not None else None
+            fee_rows.append(
+                (
+                    load_id,
+                    fee.line_no,
+                    fee.component.value,
+                    country,
+                    group,
+                    fee.rate.numerator,
+                    fee.rate.denominator,
+                    fixed_minor,
+                    fixed_currency,
+                    fee.effective_from,
+                    fee.standing.value,
+                    fee.source,
+                )
+            )
+        await cur.executemany(
+            "INSERT INTO fee_rule"
+            " (load_id, line_no, component, country_iso2, group_code,"
+            "  rate_numerator, rate_denominator, fixed_minor, fixed_currency,"
+            "  effective_from, standing, source)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            fee_rows,
         )
 
 
@@ -405,6 +611,7 @@ async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
     duty_sources: list[DutySource] = []
     for iso2, mode, vendor_name in await cur.fetchall():
         duty_sources.append(DutySource(iso2, DutyMode(mode), vendor_name))
+    shipping = await _read_shipping(conn, load_id)
     return MarketSet(
         tuple(categories),
         tuple(countries),
@@ -414,6 +621,256 @@ async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
         tuple(fx_rates),
         tuple(hs_rates),
         tuple(duty_sources),
+        shipping.services,
+        shipping.rate_cards,
+        shipping.zones,
+        shipping.rates,
+        shipping.surcharges,
+        shipping.transit,
+        shipping.restrictions,
+        shipping.routes,
+        shipping.fees,
+    )
+
+
+@dataclass(frozen=True)
+class _Shipping:
+    services: tuple[Service, ...]
+    rate_cards: tuple[RateCard, ...]
+    zones: tuple[CardZone, ...]
+    rates: tuple[CardRate, ...]
+    surcharges: tuple[Surcharge, ...]
+    transit: tuple[Transit, ...]
+    restrictions: tuple[ServiceRestriction, ...]
+    routes: tuple[ShippingRoute, ...]
+    fees: tuple[FeeRule, ...]
+
+
+def _optional_fraction(
+    numerator: int | None, denominator: int | None
+) -> Fraction | None:
+    if numerator is None or denominator is None:
+        return None
+    return Fraction(numerator, denominator)
+
+
+async def _read_shipping(conn: Connection, load_id: uuid.UUID) -> _Shipping:
+    cur = await conn.execute(
+        "SELECT code, provider, name, origin_iso2, tier::text, duties_paid::text,"
+        " volumetric_divisor, max_weight_numerator, max_weight_denominator,"
+        " status::text FROM shipping_service WHERE load_id = %s ORDER BY code",
+        (load_id,),
+    )
+    services: list[Service] = []
+    for (
+        code,
+        provider,
+        name,
+        origin,
+        tier,
+        duties_paid,
+        divisor,
+        max_numerator,
+        max_denominator,
+        status,
+    ) in await cur.fetchall():
+        services.append(
+            Service(
+                code,
+                provider,
+                name,
+                origin,
+                ServiceTier(tier),
+                DutiesPaid(duties_paid),
+                divisor,
+                _optional_fraction(max_numerator, max_denominator),
+                ResearchStatus(status),
+            )
+        )
+    cur = await conn.execute(
+        "SELECT code, service, currency::text, effective_from, effective_to,"
+        " fuel::text, status::text, source FROM rate_card WHERE load_id = %s"
+        " ORDER BY code",
+        (load_id,),
+    )
+    cards: list[RateCard] = []
+    for (
+        code,
+        service,
+        currency,
+        effective_from,
+        effective_to,
+        fuel,
+        status,
+        source,
+    ) in await cur.fetchall():
+        cards.append(
+            RateCard(
+                code,
+                service,
+                Currency(currency),
+                effective_from,
+                effective_to,
+                CardFuel(fuel),
+                ResearchStatus(status),
+                source,
+            )
+        )
+    cur = await conn.execute(
+        "SELECT rate_card, destination_iso2, zone, status::text FROM rate_card_zone"
+        " WHERE load_id = %s ORDER BY rate_card, destination_iso2",
+        (load_id,),
+    )
+    zones: list[CardZone] = []
+    for card, destination, zone, status in await cur.fetchall():
+        zones.append(CardZone(card, destination, zone, ResearchStatus(status)))
+    cur = await conn.execute(
+        "SELECT rate_card, zone, weight_numerator, weight_denominator, amount_minor,"
+        " amount_max_minor FROM rate_card_rate WHERE load_id = %s"
+        " ORDER BY rate_card, zone, weight_numerator::numeric / weight_denominator",
+        (load_id,),
+    )
+    rates: list[CardRate] = []
+    for card, zone, numerator, denominator, amount, amount_max in await cur.fetchall():
+        rates.append(
+            CardRate(card, zone, Fraction(numerator, denominator), amount, amount_max)
+        )
+    cur = await conn.execute(
+        "SELECT line_no, service, rate_card, name, basis::text, rate_numerator,"
+        " rate_denominator, amount_minor, min_amount_minor, currency::text,"
+        " trigger::text, destinations, fuel_applies::text, valid_until,"
+        " status::text, source FROM shipping_surcharge WHERE load_id = %s"
+        " ORDER BY line_no",
+        (load_id,),
+    )
+    surcharges: list[Surcharge] = []
+    for (
+        line_no,
+        service,
+        card,
+        name,
+        basis,
+        rate_numerator,
+        rate_denominator,
+        amount,
+        minimum,
+        currency,
+        trigger,
+        destinations,
+        fuel_applies,
+        valid_until,
+        status,
+        source,
+    ) in await cur.fetchall():
+        surcharges.append(
+            Surcharge(
+                line_no,
+                service,
+                card,
+                name,
+                SurchargeBasis(basis),
+                _optional_fraction(rate_numerator, rate_denominator),
+                amount,
+                minimum,
+                Currency(currency),
+                SurchargeTrigger(trigger),
+                tuple(destinations),
+                FuelApplies(fuel_applies),
+                valid_until,
+                ResearchStatus(status),
+                source,
+            )
+        )
+    cur = await conn.execute(
+        "SELECT service, country_iso2, group_code, days_min, days_max, status::text"
+        " FROM shipping_transit WHERE load_id = %s"
+        " ORDER BY service, country_iso2, group_code",
+        (load_id,),
+    )
+    transit: list[Transit] = []
+    for service, country, group, days_min, days_max, status in await cur.fetchall():
+        transit.append(
+            Transit(
+                service,
+                Scope(country, group),
+                days_min,
+                days_max,
+                ResearchStatus(status),
+            )
+        )
+    cur = await conn.execute(
+        "SELECT service, category, rule::text, status::text FROM service_restriction"
+        " WHERE load_id = %s ORDER BY service, category",
+        (load_id,),
+    )
+    restrictions: list[ServiceRestriction] = []
+    for service, category, rule, status in await cur.fetchall():
+        restrictions.append(
+            ServiceRestriction(
+                service, category, RestrictionRule(rule), ResearchStatus(status)
+            )
+        )
+    cur = await conn.execute(
+        "SELECT country_iso2, group_code, rate_card, source::text, standing::text"
+        " FROM shipping_route WHERE load_id = %s"
+        " ORDER BY rate_card, country_iso2, group_code",
+        (load_id,),
+    )
+    routes: list[ShippingRoute] = []
+    for country, group, card, source, standing in await cur.fetchall():
+        routes.append(
+            ShippingRoute(
+                Scope(country, group), card, PriceSource(source), Standing(standing)
+            )
+        )
+    cur = await conn.execute(
+        "SELECT line_no, component::text, country_iso2, group_code, rate_numerator,"
+        " rate_denominator, fixed_minor, fixed_currency::text, effective_from,"
+        " standing::text, source FROM fee_rule WHERE load_id = %s ORDER BY line_no",
+        (load_id,),
+    )
+    fees: list[FeeRule] = []
+    for (
+        line_no,
+        component,
+        country,
+        group,
+        numerator,
+        denominator,
+        fixed_minor,
+        fixed_currency,
+        effective_from,
+        standing,
+        source,
+    ) in await cur.fetchall():
+        scope: Scope | None = None
+        if country is not None or group is not None:
+            scope = Scope(country, group)
+        fixed: Money | None = None
+        if fixed_minor is not None and fixed_currency is not None:
+            fixed = Money(fixed_minor, Currency(fixed_currency))
+        fees.append(
+            FeeRule(
+                line_no,
+                FeeComponent(component),
+                scope,
+                Fraction(numerator, denominator),
+                fixed,
+                effective_from,
+                Standing(standing),
+                source,
+            )
+        )
+    return _Shipping(
+        tuple(services),
+        tuple(cards),
+        tuple(zones),
+        tuple(rates),
+        tuple(surcharges),
+        tuple(transit),
+        tuple(restrictions),
+        tuple(routes),
+        tuple(fees),
     )
 
 

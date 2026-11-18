@@ -41,8 +41,9 @@ and wins where the two differ.
   (markets in the database, versioned loads), 4b-1 (the tax-path rule,
   rates per HS code with trade agreements, exact FX chains) and 4b-2
   (duty and VAT rates from vendors: a mode per country, asked once per
-  combination, compared with our rows) are built; 4c (shipping prices,
-  fees, `build_quote`) is next.
+  combination, compared with our rows) and 4c-1 (shipping from our own
+  rate tables, fee rules, `build_quote` with one option per service) are
+  built; 4c-2 (live carrier prices through a fake courier) is next.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored

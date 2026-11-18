@@ -314,7 +314,7 @@ cannot be: `complete` and finishing the delivery commit together, so
 Still to do (asked 18-Nov-2026): the staff page's agreement table shows
 counts only; add a list of each answer (country, origin, HS code, charge,
 what the vendor said, our row and its line), differences first, so a
-person can see which rates differ and by how much.
+person can see which rates differ and by how much. Done in 4c-1.
 
 ## 4. Prices and the quote (4c)
 
@@ -332,6 +332,65 @@ person can see which rates differ and by how much.
   buyer field missing, parcel over limits. Fuzzed: for any lines and any
   country, the parts sum to the total in minor units, the merchant gets
   exactly its price, and no float or `Decimal` appears.
+
+### 4c: decided 18-Nov-2026
+
+4c is built in two steps: **4c-1** our own tables, the fee rules,
+`build_quote` and the full breakdown on the staff page; **4c-2** the
+`carrier_api` source, a fake courier's `quote_rate` asked by a worker and
+stored with its expiry, like the duty lookups.
+
+1. **One option per routed service, each with its full total**: freight
+   changes the duty, the tax and the duty-paid fee, so totals differ by
+   more than shipping (plan-logistics §2 already shows every service on
+   the lane). Cheapest first; the buyer picks.
+2. **What is offered** is `shipping_routes.csv`: a rate card per country
+   or group. Until a carrier contract exists the routes are DHL Express
+   Worldwide and FedEx International Priority from their published cards
+   and FedEx International Connect Plus from its promotional card, all
+   `placeholder`, so prod refuses to quote on them (as Q5).
+3. **An unconfirmed cost leaves the option out** (as Q1): a service,
+   card, zone, weight break or charged surcharge that is not verified or
+   secondary, a price given as a range, or a category the service does
+   not confirm it carries. The reason is shown on the staff page; with no
+   option left the refusal is `no_service_for_lane`. Today FedEx drops out
+   whenever something is paid at the border (its bill-duties fee awaits an
+   answer) and Connect Plus everywhere (its zones are estimates).
+4. **Surcharges on the buyer**: those that always apply, and the
+   duty-paid fee when something is paid at the border. Those only on an
+   event (remote area, oversize), optional ones and passed-through duties
+   are not charged; a person handles them at invoice import (slice 6).
+5. **Fuel past its week is still used and flagged** on the staff page:
+   the difference is small and ours. A weekly update, or `carrier_api`,
+   fixes it properly.
+6. **Fees are a percentage of the merchant's price** (plus an optional
+   fixed amount), never of the buyer's total, which would be circular:
+   the fee raises the goods value, which raises the tax. The defaults are
+   in `fees.csv` (`psp_fee` 3.5% and `mor_margin` 5% as placeholders,
+   `fx` 0% as decided in Q4); per merchant overrides come in 4d.
+7. **Currency and rounding**: the buyer pays in the country's currency.
+   The merchant's price is converted rounding up (the merchant is never
+   short), shipping parts round up (we never under-collect the carrier),
+   fees, duties and taxes round half to even. Each part keeps its exact
+   value: the difference is the remainder, booked when the order is paid
+   (slice 5).
+
+**4c-1 built 18-Nov-2026** (`mor.quote.shipping`, `mor.quote.fees`,
+`mor.quote.build`, `0011_shipping.sql`): the shipping files, routes and
+fee rules load with the market set. One parcel per order for now (packed
+weight and box). Freight from our tables matches `scripts/markets.py`'s
+all-in freight exactly for its XS, M and L scenarios into SG, TH, JP, DE
+and US on both priced cards. The Hypothesis properties (parts sum to each
+total, every part is its exact value rounded by its named mode, the
+merchant is never short, duties and taxes are never negative, the
+duty-paid fee only with something at the border, cheapest first) run on
+the synthetic set and on the research files; five planted bugs (goods
+rounded half to even, the duty-paid fee left out of the total, the fee
+charged with nothing at the border, options unsorted, a part rounded by
+another mode than it names) were all caught. Not built yet: a product
+gate per country and category (no data for it beyond the services'
+restrictions), several parcels per order, and prod's refusal of
+placeholders, which belongs to the quote flow (4d).
 
 ## 5. Session, API and pages (4d)
 

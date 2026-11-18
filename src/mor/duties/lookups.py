@@ -17,6 +17,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from fractions import Fraction
+from typing import Literal
 
 import httpx2
 from psycopg.rows import class_row
@@ -482,3 +483,96 @@ async def agreement(conn: Connection) -> list[Agreement]:
             )
         )
     return rows
+
+
+type Comparison = Literal["differs", "not_a_rate", "own_none", "agrees"]
+
+
+@dataclass(frozen=True)
+class AnswerRow:
+    """One vendor answer beside our own row in force when it came."""
+
+    vendor: str
+    destination: str
+    origin: str
+    hs_code: str
+    charge: Charge
+    formula: str
+    note: str | None
+    own_rate: Fraction | None
+    own_line_no: int | None
+    comparison: Comparison
+    answered_at: datetime
+
+
+async def vendor_answers(conn: Connection, limit: int) -> list[AnswerRow]:
+    """The answers, differences first, then those that are not a plain
+    rate, those we had no row for, and agreements; newest first in each."""
+    cur = await conn.execute(
+        """
+        SELECT l.vendor_name, l.destination, l.origin, l.hs_code, a.charge::text,
+          a.formula, a.note, a.own_rate_numerator, a.own_rate_denominator,
+          a.own_line_no, a.answered_at,
+          CASE
+            WHEN a.rate_numerator IS NULL THEN 'not_a_rate'
+            WHEN a.own_rate_numerator IS NULL THEN 'own_none'
+            WHEN a.rate_numerator * a.own_rate_denominator
+              = a.own_rate_numerator * a.rate_denominator THEN 'agrees'
+            ELSE 'differs'
+          END AS comparison
+        FROM duty_answer a JOIN duty_lookup l ON l.id = a.lookup_id
+        ORDER BY
+          CASE
+            WHEN a.rate_numerator IS NULL THEN 1
+            WHEN a.own_rate_numerator IS NULL THEN 2
+            WHEN a.rate_numerator * a.own_rate_denominator
+              = a.own_rate_numerator * a.rate_denominator THEN 3
+            ELSE 0
+          END,
+          a.answered_at DESC, l.destination, a.charge
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    rows: list[AnswerRow] = []
+    for (
+        vendor,
+        destination,
+        origin,
+        hs_code,
+        charge,
+        formula,
+        note,
+        own_numerator,
+        own_denominator,
+        own_line_no,
+        answered_at,
+        comparison,
+    ) in await cur.fetchall():
+        own_rate: Fraction | None = None
+        if own_numerator is not None and own_denominator is not None:
+            own_rate = Fraction(own_numerator, own_denominator)
+        rows.append(
+            AnswerRow(
+                vendor,
+                destination,
+                origin,
+                hs_code,
+                Charge(charge),
+                formula,
+                note,
+                own_rate,
+                own_line_no,
+                _comparison(comparison),
+                answered_at,
+            )
+        )
+    return rows
+
+
+def _comparison(text: str) -> Comparison:
+    match text:
+        case "differs" | "not_a_rate" | "own_none" | "agrees":
+            return text
+        case _:
+            raise AssertionError(f"comparison {text!r} from our own query")

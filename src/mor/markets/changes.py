@@ -13,9 +13,12 @@ from fractions import Fraction
 
 from mor.dates import format_day
 from mor.markets.records import (
+    CardRate,
+    CardZone,
     Category,
     Country,
     DutySource,
+    FeeRule,
     FxRate,
     Group,
     HsRate,
@@ -26,8 +29,14 @@ from mor.markets.records import (
     PerLine,
     PerParcel,
     Preference,
+    RateCard,
     Registration,
     Scope,
+    Service,
+    ServiceRestriction,
+    ShippingRoute,
+    Surcharge,
+    Transit,
 )
 from mor.money.amount import Money, format_major
 
@@ -39,7 +48,10 @@ def describe_changes(old: MarketSet | None, new: MarketSet) -> list[str]:
             f" {len(new.categories)} categories, {len(new.landed_rates)} landed"
             f" rates, {len(new.registrations)} registrations,"
             f" {len(new.fx_rates)} FX rates, {len(new.hs_rates)} HS rates,"
-            f" {len(new.duty_sources)} duty sources"
+            f" {len(new.duty_sources)} duty sources, {len(new.services)} services,"
+            f" {len(new.rate_cards)} rate cards, {len(new.rates)} weight rates,"
+            f" {len(new.surcharges)} surcharges, {len(new.routes)} shipping routes,"
+            f" {len(new.fees)} fee rules"
         ]
     lines: list[str] = []
     lines.extend(_table("category", old.categories, new.categories, _category_key))
@@ -54,7 +66,59 @@ def describe_changes(old: MarketSet | None, new: MarketSet) -> list[str]:
     lines.extend(
         _table("duty source", old.duty_sources, new.duty_sources, _duty_source_key)
     )
+    lines.extend(_table("service", old.services, new.services, _service_key))
+    lines.extend(_table("rate card", old.rate_cards, new.rate_cards, _card_key))
+    lines.extend(_table("zone", old.zones, new.zones, _zone_key))
+    lines.extend(_table("weight rate", old.rates, new.rates, _card_rate_key))
+    lines.extend(_table("surcharge", old.surcharges, new.surcharges, _surcharge_key))
+    lines.extend(_table("transit", old.transit, new.transit, _transit_key))
+    lines.extend(
+        _table("restriction", old.restrictions, new.restrictions, _restriction_key)
+    )
+    lines.extend(_table("shipping route", old.routes, new.routes, _route_key))
+    lines.extend(_table("fee rule", old.fees, new.fees, _fee_key))
     return lines
+
+
+def _service_key(row: Service) -> Hashable:
+    return row.code
+
+
+def _card_key(row: RateCard) -> Hashable:
+    return row.code
+
+
+def _zone_key(row: CardZone) -> Hashable:
+    return f"{row.rate_card} {row.destination}"
+
+
+def _card_rate_key(row: CardRate) -> Hashable:
+    return f"{row.rate_card} zone {row.zone} {decimal_text(row.weight_kg)} kg"
+
+
+def _surcharge_key(row: Surcharge) -> Hashable:
+    card = row.rate_card or "every card"
+    places = " ".join(row.destinations) or "everywhere"
+    return f"{row.service} {card} {row.name} {places}"
+
+
+def _transit_key(row: Transit) -> Hashable:
+    return f"{row.service} {row.scope.country or row.scope.group}"
+
+
+def _restriction_key(row: ServiceRestriction) -> Hashable:
+    return f"{row.service} {row.category}"
+
+
+def _route_key(row: ShippingRoute) -> Hashable:
+    return f"{row.scope.country or row.scope.group} {row.rate_card}"
+
+
+def _fee_key(row: FeeRule) -> Hashable:
+    place = "default"
+    if row.scope is not None:
+        place = row.scope.country or row.scope.group or ""
+    return f"{row.component.value} {place} from {format_day(row.effective_from)}"
 
 
 def _category_key(row: Category) -> Hashable:
@@ -162,7 +226,13 @@ def _field_text(row: object, name: str) -> str:
     if isinstance(row, Group) and name == "members":
         return " ".join(row.members)
     if isinstance(row, HsRate) and name == "rate":
-        return _percent(row.rate)
+        return percent_text(row.rate)
+    if isinstance(row, FeeRule) and name == "rate":
+        return percent_text(row.rate)
+    if isinstance(row, Surcharge) and name == "rate" and row.rate is not None:
+        return percent_text(row.rate)
+    if isinstance(row, Surcharge) and name == "destinations":
+        return " ".join(row.destinations) or "everywhere"
     return value_text(getattr(row, name))
 
 
@@ -176,13 +246,13 @@ def value_text(value: object) -> str:
         case Money():
             return f"{format_major(value)} {value.currency.value}"
         case Fraction():
-            return _decimal(value)
+            return decimal_text(value)
         case date():
             return format_day(value)
         case Limit(amount=amount, basis=basis):
             return f"{value_text(amount)} on {basis.value}"
         case Percent(rate=rate, base=base):
-            return f"{_percent(rate)} of {base.value}"
+            return f"{percent_text(rate)} of {base.value}"
         case PerLine(amount=amount):
             return f"{value_text(amount)} per line"
         case PerParcel(amount=amount):
@@ -200,7 +270,7 @@ def value_text(value: object) -> str:
             return str(value)
 
 
-def _percent(rate: Fraction) -> str:
+def percent_text(rate: Fraction) -> str:
     """12.5% from Fraction(1, 8); exact rates that are not a short decimal
     are written as a fraction of a percent."""
     percent = rate * 100
@@ -214,7 +284,7 @@ def _percent(rate: Fraction) -> str:
     return f"{percent.numerator}/{percent.denominator}%"
 
 
-def _decimal(value: Fraction) -> str:
+def decimal_text(value: Fraction) -> str:
     """25600 or 1.4309 when the fraction has a short decimal; else n/d."""
     if value.denominator == 1:
         return str(value.numerator)

@@ -147,6 +147,7 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "destinations",
         "fuel_applies",
         "applies_when",
+        "valid_until",
         "status",
         "source",
         "source_url",
@@ -810,6 +811,7 @@ def check_surcharges(data: Data, known: Known) -> list[str]:
         errors.extend(pattern("surcharges", i, row, ("rate_percent",), DECIMAL))
         errors.extend(one_of("surcharges", i, row, "trigger", TRIGGERS))
         errors.extend(one_of("surcharges", i, row, "fuel_applies", FUEL_APPLIES))
+        errors.extend(check_dates("surcharges", i, row, ("valid_until",)))
         for place in row["destinations"].split():
             if place not in known.places:
                 errors.append(f"{where('surcharges', i)}: unknown destination {place}")
@@ -822,9 +824,13 @@ def check_transit(data: Data, known: Known) -> list[str]:
         errors.extend(check_status_row("transit", i, row, known))
         errors.extend(known_ref("transit", i, row, "service", known.services))
         errors.extend(known_ref("transit", i, row, "destination", known.places))
+        whole = True
         for column in ("days_min", "days_max"):
             if not INTEGER.match(row[column]):
                 errors.append(f"{where('transit', i)}: {column} must be an integer")
+                whole = False
+        if whole and int(row["days_min"]) > int(row["days_max"]):
+            errors.append(f"{where('transit', i)}: days_min is above days_max")
     return errors
 
 

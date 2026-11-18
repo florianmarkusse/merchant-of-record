@@ -19,6 +19,7 @@ from mor.messaging.worker import drain_once
 from mor.web.main import make_app
 from tests.helpers import ENV, wire
 from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
+from tests.quote.fixtures import quote_market
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -168,6 +169,10 @@ def test_a_vendor_country_is_asked_from_the_page_and_its_answer_shown(
         assert "Rate 25% of goods_plus_freight: acme said &#39;25%&#39;" in after
         assert "Our own row differs: 30% (hs_rates.csv line 2)" in after
         assert "Vendor answers against our own rows" in after
+        # Each answer listed beside our row, the difference first.
+        listed = after[after.index("Each answer") :]
+        assert listed.index("acme: 25%") < listed.index("acme: 7%")
+        assert "30% (hs_rates.csv line 2)" in listed
 
     asyncio.run(body())
 
@@ -186,5 +191,29 @@ def test_asking_a_vendor_from_another_site_is_refused(database_url: str) -> None
             cur = await conn.execute("SELECT count(*) FROM duty_lookup")
             row = await cur.fetchone()
         assert row == (0,)
+
+    asyncio.run(body())
+
+
+def test_with_a_parcel_the_check_shows_each_option_and_its_parts(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        async with await connect(database_url) as conn:
+            await load_market(conn, quote_market(), "quote", LOADER, NOW)
+            await conn.commit()
+        page = await _get(
+            database_url,
+            Environment.TEST,
+            "/staff/markets?country=SG&goods=500.00&currency=SGD&hs=610910"
+            "&origin=VN&weight=1000&length=200&width=150&height=100",
+        )
+        text = page.text
+        # The worked example of tests/quote/test_build_quote.py.
+        assert "Express (express): 649.28 SGD" in text
+        assert "fuel rate out of date since 15-Nov-2026" in text
+        assert "eco_card: not duty paid (something is due at the border)" in text
+        assert "Placeholders in this quote: fees.csv line 2 (psp_fee)" in text
+        assert "52.78 SGD" in text and "half_even" in text
 
     asyncio.run(body())

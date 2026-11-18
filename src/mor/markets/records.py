@@ -220,6 +220,197 @@ class FxRate:
     source: str
 
 
+# --- shipping and fees (4c, docs/plan-quote.md §4) ------------------------------
+
+
+class ServiceTier(StrEnum):
+    EXPRESS = "express"
+    DAY_DEFINITE = "day_definite"
+    ECONOMY = "economy"
+    POSTAL = "postal"
+
+
+class DutiesPaid(StrEnum):
+    """Whether the carrier can pay duties and taxes and bill us (DDP)."""
+
+    YES = "yes"
+    MANDATORY = "mandatory"
+    IOSS_ONLY = "ioss_only"  # only into the EU (EU VAT and the flat duty)
+    ON_REQUEST = "on_request"
+    NO = "no"
+    UNKNOWN = "unknown"
+
+
+class CardFuel(StrEnum):
+    EXTRA = "extra"  # a fuel surcharge row adds it
+    INCLUDED = "included"
+    UNKNOWN = "unknown"
+
+
+class SurchargeBasis(StrEnum):
+    PERCENT_OF_FREIGHT = "percent_of_freight"
+    PERCENT_OF_DUTIES = "percent_of_duties"
+    PERCENT_OF_VALUE = "percent_of_value"
+    PER_SHIPMENT = "per_shipment"
+    PER_PIECE = "per_piece"
+    PER_KG = "per_kg"
+    PER_LINE = "per_line"
+
+
+class SurchargeTrigger(StrEnum):
+    """When a surcharge is charged. A quote adds `always`, and
+    `duties_paid` when something is paid at the border; the others are
+    not known at checkout (decided 18-Nov-2026, plan-quote §4)."""
+
+    ALWAYS = "always"
+    DUTIES_PAID = "duties_paid"
+    PASSTHROUGH = "passthrough"
+    OPTIONAL = "optional"
+    ON_EVENT = "on_event"
+
+
+class FuelApplies(StrEnum):
+    YES = "yes"
+    NO = "no"
+    UNKNOWN = "unknown"
+
+
+class RestrictionRule(StrEnum):
+    ALLOWED = "allowed"
+    RESTRICTED = "restricted"
+    PROHIBITED = "prohibited"
+    UNKNOWN = "unknown"
+
+
+class PriceSource(StrEnum):
+    """Where a route's shipping price comes from; `carrier_api` is 4c-2."""
+
+    OWN_TABLE = "own_table"
+
+
+class Standing(StrEnum):
+    """`placeholder`: a stand-in until a contract or a decision exists; prod
+    refuses to quote on one (decided 17-Nov-2026, plan-quote Q5)."""
+
+    PLACEHOLDER = "placeholder"
+    AGREED = "agreed"
+
+
+class FeeComponent(StrEnum):
+    """The named parts of our fee (plan-architecture §8)."""
+
+    PSP_FEE = "psp_fee"
+    FX = "fx"
+    MOR_MARGIN = "mor_margin"
+
+
+@dataclass(frozen=True)
+class Service:
+    code: str
+    provider: str
+    name: str
+    origin: str
+    tier: ServiceTier
+    duties_paid: DutiesPaid
+    volumetric_divisor: int | None  # cm³ per kg
+    max_weight_kg: Fraction | None
+    status: ResearchStatus
+
+
+@dataclass(frozen=True)
+class RateCard:
+    code: str
+    service: str
+    currency: Currency
+    effective_from: date | None
+    effective_to: date | None
+    fuel: CardFuel
+    status: ResearchStatus
+    source: str
+
+
+@dataclass(frozen=True)
+class CardZone:
+    rate_card: str
+    destination: str  # a country
+    zone: str
+    status: ResearchStatus
+
+
+@dataclass(frozen=True)
+class CardRate:
+    """The price of one weight break in one zone, in the card's currency.
+    With a maximum, the card gives a range: an estimate, not a price."""
+
+    rate_card: str
+    zone: str
+    weight_kg: Fraction
+    amount_minor: int
+    amount_max_minor: int | None
+
+
+@dataclass(frozen=True)
+class Surcharge:
+    line_no: int  # the row in surcharges.csv
+    service: str
+    rate_card: str | None  # None: every card of the service
+    name: str
+    basis: SurchargeBasis
+    rate: Fraction | None  # for the percent bases, exact
+    amount_minor: int | None
+    min_amount_minor: int | None
+    currency: Currency
+    trigger: SurchargeTrigger
+    destinations: tuple[str, ...]  # countries or groups; empty: everywhere
+    fuel_applies: FuelApplies
+    valid_until: date | None  # a weekly fuel rate's last day
+    status: ResearchStatus
+    source: str
+
+
+@dataclass(frozen=True)
+class Transit:
+    service: str
+    scope: Scope
+    days_min: int
+    days_max: int
+    status: ResearchStatus
+
+
+@dataclass(frozen=True)
+class ServiceRestriction:
+    service: str
+    category: str
+    rule: RestrictionRule
+    status: ResearchStatus
+
+
+@dataclass(frozen=True)
+class ShippingRoute:
+    """A rate card offered into a country or group."""
+
+    scope: Scope
+    rate_card: str
+    source: PriceSource
+    standing: Standing
+
+
+@dataclass(frozen=True)
+class FeeRule:
+    """One fee component for buyers in a country or group (None: the
+    default), from a date. A percentage of the merchant's price plus an
+    optional fixed amount (decided 18-Nov-2026, plan-quote §4)."""
+
+    line_no: int  # the row in fees.csv
+    component: FeeComponent
+    scope: Scope | None
+    rate: Fraction
+    fixed: Money | None
+    effective_from: date
+    standing: Standing
+    source: str
+
+
 @dataclass(frozen=True)
 class MarketSet:
     """Everything one load holds. Tuples in file order."""
@@ -232,6 +423,15 @@ class MarketSet:
     fx_rates: tuple[FxRate, ...]
     hs_rates: tuple[HsRate, ...]
     duty_sources: tuple[DutySource, ...]  # a destination not listed: own_only
+    services: tuple[Service, ...]
+    rate_cards: tuple[RateCard, ...]
+    zones: tuple[CardZone, ...]
+    rates: tuple[CardRate, ...]
+    surcharges: tuple[Surcharge, ...]
+    transit: tuple[Transit, ...]
+    restrictions: tuple[ServiceRestriction, ...]
+    routes: tuple[ShippingRoute, ...]
+    fees: tuple[FeeRule, ...]
 
 
 def _canonical_lines(market: MarketSet) -> list[str]:
@@ -284,7 +484,71 @@ def _canonical_lines(market: MarketSet) -> list[str]:
             f"duty_source|{duty_source.country}|{duty_source.mode.value}"
             f"|{duty_source.vendor}"
         )
+    for service in market.services:
+        lines.append(
+            f"service|{service.code}|{service.provider}|{service.name}"
+            f"|{service.origin}|{service.tier.value}|{service.duties_paid.value}"
+            f"|{service.volumetric_divisor}|{_fraction_text(service.max_weight_kg)}"
+            f"|{service.status.value}"
+        )
+    for card in market.rate_cards:
+        lines.append(
+            f"rate_card|{card.code}|{card.service}|{card.currency.value}"
+            f"|{card.effective_from}|{card.effective_to}|{card.fuel.value}"
+            f"|{card.status.value}|{card.source}"
+        )
+    for zone in market.zones:
+        lines.append(
+            f"zone|{zone.rate_card}|{zone.destination}|{zone.zone}|{zone.status.value}"
+        )
+    for rate in market.rates:
+        lines.append(
+            f"rate|{rate.rate_card}|{rate.zone}|{_fraction_text(rate.weight_kg)}"
+            f"|{rate.amount_minor}|{rate.amount_max_minor}"
+        )
+    for surcharge in market.surcharges:
+        lines.append(
+            f"surcharge|{surcharge.line_no}|{surcharge.service}|{surcharge.rate_card}"
+            f"|{surcharge.name}|{surcharge.basis.value}"
+            f"|{_fraction_text(surcharge.rate)}|{surcharge.amount_minor}"
+            f"|{surcharge.min_amount_minor}|{surcharge.currency.value}"
+            f"|{surcharge.trigger.value}|{' '.join(surcharge.destinations)}"
+            f"|{surcharge.fuel_applies.value}|{surcharge.valid_until}"
+            f"|{surcharge.status.value}|{surcharge.source}"
+        )
+    for transit in market.transit:
+        lines.append(
+            f"transit|{transit.service}|{transit.scope.country}|{transit.scope.group}"
+            f"|{transit.days_min}|{transit.days_max}|{transit.status.value}"
+        )
+    for restriction in market.restrictions:
+        lines.append(
+            f"restriction|{restriction.service}|{restriction.category}"
+            f"|{restriction.rule.value}|{restriction.status.value}"
+        )
+    for route in market.routes:
+        lines.append(
+            f"route|{route.scope.country}|{route.scope.group}|{route.rate_card}"
+            f"|{route.source.value}|{route.standing.value}"
+        )
+    for fee in market.fees:
+        country = fee.scope.country if fee.scope is not None else None
+        group = fee.scope.group if fee.scope is not None else None
+        fixed = "-"
+        if fee.fixed is not None:
+            fixed = f"{fee.fixed.amount_minor} {fee.fixed.currency.value}"
+        lines.append(
+            f"fee|{fee.line_no}|{fee.component.value}|{country}|{group}"
+            f"|{_fraction_text(fee.rate)}|{fixed}|{fee.effective_from}"
+            f"|{fee.standing.value}|{fee.source}"
+        )
     return lines
+
+
+def _fraction_text(value: Fraction | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value.numerator}/{value.denominator}"
 
 
 def _limit_text(limit: Limit | None) -> str:

@@ -121,8 +121,8 @@ a value waits on a re-fetch, an email or an adviser.
 | `rate_cards.csv` | price list of a service: kind, currency, validity, when received, what it supersedes, its conditions, whether fuel and VAT are included |
 | `zones.csv` | country or group → zone, per rate card, with the mapping's status |
 | `rates.csv` | price per rate card × zone × weight; `ack` on a price that falls as weight rises |
-| `surcharges.csv` | fee per service, or per rate card where a card has its own terms |
-| `transit.csv` | transit days per service × destination |
+| `surcharges.csv` | fee per service, or per rate card where a card has its own terms; `valid_until` is a weekly fuel rate's last day (added 18-Nov-2026: a quote past it still uses the rate and flags it, plan-quote §4) |
+| `transit.csv` | transit days per service × destination (the minimum is checked against the maximum since 18-Nov-2026, when 54 YunExpress rows had the price group's number run into the minimum: "EU 1 8–14 days" read as 18–14) |
 | `service_restrictions.csv` | what a service allows per product category |
 | `scenarios.csv` | reference parcel for the all-in cost: weight, box size, goods value, category |
 | `landed_rates.csv` | duty, customs fee or tax per country or group (× category), with its band (always, up to or above a limit), who collects it and its base |
@@ -130,6 +130,8 @@ a value waits on a re-fetch, an email or an adviser.
 | `fx_rates.csv` | exchange rate: base, quote, exact rate, date, status, source (the ECB reference rates per EUR, and the VND estimate per USD); read by the script for its USD display and loaded for quoting (added 17-Nov-2026) |
 | `hs_rates.csv` | a duty or tax rate for products whose HS code starts with a prefix, into a destination or group, from an origin or any; with an agreement and its conditions for a preferential rate (added 18-Nov-2026, plan-quote §3) |
 | `duty_sources.csv` | who decides a destination's rates per HS code: `vendor` (the named vendor's answer, our rows compared with it), `own_first` (our rows, the vendor fills gaps) or `own_only`; a destination not listed is `own_only` (added 18-Nov-2026, modes plan-quote §3 4b-2) |
+| `shipping_routes.csv` | which rate card is offered into a country or group, its price source (`own_table`; `carrier_api` in 4c-2) and its standing (`placeholder` until a carrier contract; prod refuses to quote on one) (added 18-Nov-2026, plan-quote §4) |
+| `fees.csv` | our fee components (`psp_fee`, `fx`, `mor_margin`) per buyer country, group or default (blank), from a date: a percentage of the merchant's price plus an optional fixed amount, `placeholder` or `agreed` (added 18-Nov-2026, plan-quote §4) |
 | `registrations.csv` | one of our seller-scheme registrations: country, scheme, number, from when; empty until we register (added 17-Nov-2026) |
 
 ## Commands
