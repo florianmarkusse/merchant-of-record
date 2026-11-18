@@ -15,14 +15,17 @@ from mor.dates import format_day
 from mor.markets.records import (
     Category,
     Country,
+    DutySource,
     FxRate,
     Group,
+    HsRate,
     LandedRate,
     Limit,
     MarketSet,
     Percent,
     PerLine,
     PerParcel,
+    Preference,
     Registration,
     Scope,
 )
@@ -35,7 +38,8 @@ def describe_changes(old: MarketSet | None, new: MarketSet) -> list[str]:
             f"first load: {len(new.countries)} countries, {len(new.groups)} groups,"
             f" {len(new.categories)} categories, {len(new.landed_rates)} landed"
             f" rates, {len(new.registrations)} registrations,"
-            f" {len(new.fx_rates)} FX rates"
+            f" {len(new.fx_rates)} FX rates, {len(new.hs_rates)} HS rates,"
+            f" {len(new.duty_sources)} duty sources"
         ]
     lines: list[str] = []
     lines.extend(_table("category", old.categories, new.categories, _category_key))
@@ -46,6 +50,10 @@ def describe_changes(old: MarketSet | None, new: MarketSet) -> list[str]:
         _table("registration", old.registrations, new.registrations, _registration_key)
     )
     lines.extend(_table("FX rate", old.fx_rates, new.fx_rates, _fx_key))
+    lines.extend(_table("HS rate", old.hs_rates, new.hs_rates, _hs_key))
+    lines.extend(
+        _table("duty source", old.duty_sources, new.duty_sources, _duty_source_key)
+    )
     return lines
 
 
@@ -67,6 +75,23 @@ def _registration_key(row: Registration) -> Hashable:
 
 def _fx_key(row: FxRate) -> Hashable:
     return f"{row.base.value}/{row.quote.value}"
+
+
+def _hs_key(rate: HsRate) -> Hashable:
+    place = rate.scope.country or rate.scope.group
+    origin = rate.origin or "any origin"
+    agreement = rate.preference.agreement if rate.preference else "standard"
+    started = ""
+    if rate.effective_from is not None:
+        started = f" from {format_day(rate.effective_from)}"
+    return (
+        f"{place}, HS {rate.hs_prefix}, {rate.charge.value}, {origin},"
+        f" {agreement}{started}"
+    )
+
+
+def _duty_source_key(row: DutySource) -> Hashable:
+    return row.country
 
 
 def _landed_key(rate: LandedRate) -> Hashable:
@@ -136,6 +161,8 @@ def _record_text(row: object) -> str:
 def _field_text(row: object, name: str) -> str:
     if isinstance(row, Group) and name == "members":
         return " ".join(row.members)
+    if isinstance(row, HsRate) and name == "rate":
+        return _percent(row.rate)
     return value_text(getattr(row, name))
 
 
@@ -149,7 +176,7 @@ def value_text(value: object) -> str:
         case Money():
             return f"{format_major(value)} {value.currency.value}"
         case Fraction():
-            return f"{value.numerator}/{value.denominator}"
+            return _decimal(value)
         case date():
             return format_day(value)
         case Limit(amount=amount, basis=basis):
@@ -160,6 +187,13 @@ def value_text(value: object) -> str:
             return f"{value_text(amount)} per line"
         case PerParcel(amount=amount):
             return f"{value_text(amount)} per parcel"
+        case Preference(agreement=agreement, conditions=conditions):
+            needs: list[str] = []
+            for condition in conditions:
+                needs.append(condition.value)
+            if not needs:
+                return agreement
+            return f"{agreement} (needs {', '.join(sorted(needs))})"
         case Scope(country=country, group=group):
             return country or group or "none"
         case _:
@@ -178,3 +212,15 @@ def _percent(rate: Fraction) -> str:
             whole, rest = divmod(scaled.numerator, 10**places)
             return f"{whole}.{rest:0{places}d}%"
     return f"{percent.numerator}/{percent.denominator}%"
+
+
+def _decimal(value: Fraction) -> str:
+    """25600 or 1.4309 when the fraction has a short decimal; else n/d."""
+    if value.denominator == 1:
+        return str(value.numerator)
+    for places in range(1, 9):
+        scaled = value * 10**places
+        if scaled.denominator == 1:
+            whole, rest = divmod(scaled.numerator, 10**places)
+            return f"{whole}.{rest:0{places}d}"
+    return f"{value.numerator}/{value.denominator}"

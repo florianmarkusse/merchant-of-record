@@ -12,4 +12,4 @@ EUR,KRW,1517.02,2026-11-06,verified,ECB euro reference rate,https://www.ecb.euro
 EUR,CHF,0.9143,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
 EUR,NZD,2.0141,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
 EUR,CAD,1.5705,2026-11-06,verified,ECB euro reference rate,https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html,
-USD,VND,26300,2026-11-06,estimate,research/logistics/02,,the ECB publishes no VND rate; research estimate
+USD,VND,25600,2026-11-10,secondary,State Bank of Vietnam daily reference rate as reported by VietnamPlus,https://en.vietnamplus.vn/reference-exchange-rate-down-10-vnd-on-november-10-post355117.vnp,the ECB publishes no VND rate; replaced the research estimate of 26300 on 18-Nov-2026

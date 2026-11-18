@@ -18,9 +18,12 @@ from mor.markets.records import (
     Charge,
     Collector,
     Country,
+    DutySource,
+    DutySourceKind,
     FxRate,
     Group,
     GroupKind,
+    HsRate,
     LandedRate,
     Limit,
     LimitBasis,
@@ -29,6 +32,8 @@ from mor.markets.records import (
     Percent,
     PerLine,
     PerParcel,
+    Preference,
+    PreferenceCondition,
     Registration,
     ResearchStatus,
     Scope,
@@ -178,6 +183,48 @@ async def _insert_rows(conn: Connection, load_id: uuid.UUID, market: MarketSet) 
                 for fx in market.fx_rates
             ],
         )
+        hs_rows: list[tuple[object, ...]] = []
+        for hs in market.hs_rates:
+            hs_rows.append(_hs_params(load_id, hs))
+        await cur.executemany(
+            "INSERT INTO hs_rate"
+            " (load_id, line_no, country_iso2, group_code, hs_prefix, charge,"
+            "  origin_iso2, agreement, conditions, rate_numerator,"
+            "  rate_denominator, effective_from, status, source, source_url)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s,"
+            "  %s::text[]::preference_condition[], %s, %s, %s, %s, %s, %s)",
+            hs_rows,
+        )
+        await cur.executemany(
+            "INSERT INTO duty_source (load_id, iso2, kind) VALUES (%s, %s, %s)",
+            [(load_id, d.country, d.kind.value) for d in market.duty_sources],
+        )
+
+
+def _hs_params(load_id: uuid.UUID, hs: HsRate) -> tuple[object, ...]:
+    agreement: str | None = None
+    conditions: list[str] = []
+    if hs.preference is not None:
+        agreement = hs.preference.agreement
+        for condition in hs.preference.conditions:
+            conditions.append(condition.value)
+    return (
+        load_id,
+        hs.line_no,
+        hs.scope.country,
+        hs.scope.group,
+        hs.hs_prefix,
+        hs.charge.value,
+        hs.origin,
+        agreement,
+        sorted(conditions),
+        hs.rate.numerator,
+        hs.rate.denominator,
+        hs.effective_from,
+        hs.status.value,
+        hs.source,
+        hs.source_url,
+    )
 
 
 def _landed_params(load_id: uuid.UUID, rate: LandedRate) -> tuple[object, ...]:
@@ -338,6 +385,24 @@ async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
                 source,
             )
         )
+    async with conn.cursor(row_factory=class_row(_HsRow)) as hs_cur:
+        await hs_cur.execute(
+            "SELECT line_no, country_iso2, group_code, hs_prefix, charge::text,"
+            " origin_iso2, agreement, conditions::text[], rate_numerator,"
+            " rate_denominator, effective_from, status::text, source, source_url"
+            " FROM hs_rate WHERE load_id = %s ORDER BY line_no",
+            (load_id,),
+        )
+        hs_rates: list[HsRate] = []
+        for row in await hs_cur.fetchall():
+            hs_rates.append(_hs_from_row(row))
+    cur = await conn.execute(
+        "SELECT iso2, kind::text FROM duty_source WHERE load_id = %s ORDER BY iso2",
+        (load_id,),
+    )
+    duty_sources: list[DutySource] = []
+    for iso2, kind in await cur.fetchall():
+        duty_sources.append(DutySource(iso2, DutySourceKind(kind)))
     return MarketSet(
         tuple(categories),
         tuple(countries),
@@ -345,6 +410,48 @@ async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
         tuple(landed),
         tuple(registrations),
         tuple(fx_rates),
+        tuple(hs_rates),
+        tuple(duty_sources),
+    )
+
+
+@dataclass(frozen=True)
+class _HsRow:
+    line_no: int
+    country_iso2: str | None
+    group_code: str | None
+    hs_prefix: str
+    charge: str
+    origin_iso2: str | None
+    agreement: str | None
+    conditions: list[str]
+    rate_numerator: int
+    rate_denominator: int
+    effective_from: date | None
+    status: str
+    source: str
+    source_url: str
+
+
+def _hs_from_row(row: _HsRow) -> HsRate:
+    preference: Preference | None = None
+    if row.agreement is not None:
+        conditions: set[PreferenceCondition] = set()
+        for condition in row.conditions:
+            conditions.add(PreferenceCondition(condition))
+        preference = Preference(row.agreement, frozenset(conditions))
+    return HsRate(
+        row.line_no,
+        Scope(row.country_iso2, row.group_code),
+        row.hs_prefix,
+        Charge(row.charge),
+        row.origin_iso2,
+        preference,
+        Fraction(row.rate_numerator, row.rate_denominator),
+        row.effective_from,
+        ResearchStatus(row.status),
+        row.source,
+        row.source_url,
     )
 
 

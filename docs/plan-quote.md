@@ -109,23 +109,76 @@ Built and confirmed one at a time, each with its checks, tests and fuzzing:
 
 ## 3. The tax path and duty (4b)
 
-- `tax_paths(country_rules, order_value, registrations) -> TaxPaths`,
-  pure, exactly as plan-logistics §4: indirect tax `NotDue`,
-  `SellerCollected` or `BorderPaid`; duty `NotDue` or `BorderPaid`.
-  Limits compared in the limit's own currency through the quote's FX rate,
-  rounding named.
-- Seller-collected tax: one module per jurisdiction (`tax/gb.py` first),
-  holding the rule (what is in the base, per consignment or per item),
-  never the rate, which is data. Until a registration row exists, no order
-  takes `SellerCollected`, so the UK stays as `conditional` in §3 of the
-  logistics plan says.
-- Duty rates per (HS code, origin, destination), effective-dated,
-  append-only, each naming its source and version. Source per destination
-  is routing data: `own_table` (loaded, or entered with its legal
-  reference) or a duty vendor through `duties/registry.py`. A missing
-  combination emits `duty_rate_needed`; the vendor is asked once, not per
-  quote. A fake duty vendor (under `/_fake/`) offers every mode, as the
-  echo fake does.
+Decided 18-Nov-2026. Built in two parts: 4b-1 the rule, the rates per HS
+code and the staff form (pure logic and data); 4b-2 the duty vendor flow
+(fake vendor, `duty_rate_needed`, the worker that asks once, its fuzzer).
+
+- `tax_paths(rules, order, registrations, fx, on)`, pure. VAT/GST and duty
+  are decided independently, so any combination occurs (VAT collected by
+  us and duty at the border, and so on):
+  - import tax: the country's import tax rows, most specific first; the
+    first whose band holds the order's value decides. The value is
+    converted into the limit's currency with the load's exact FX rate and
+    compared exactly, unrounded. A seller band with our registration on
+    that date is `SellerCollected`; a seller band without one is `NotDue`
+    (below the border limit nothing is due until we register; where the
+    law requires registering before selling, the country stays
+    `conditional`); a border band is `BorderPaid`; no band holding is
+    `NotDue`.
+  - duty: `NotDue` or `BorderPaid` from the duty rows' bands the same way.
+    Other border charges (additional duty, fees, other taxes) are listed
+    where their band holds.
+  - a limit measured on goods plus freight with no freight known yet is
+    `NeedsFreight`, not a guess.
+- **Rates per HS code** (`docs/markets/hs_rates.csv`, seeded sparsely; the
+  staff page fills it after slice 4): per destination (or group), HS code
+  prefix, charge (duty, additional duty, import tax, other tax) and origin
+  (or any). The longest matching prefix wins; within it an origin row
+  before an any-origin row. VAT falls back to the category row's rate
+  when no HS row matches; duty never falls back: no rate refuses the
+  quote with "duty rate needed".
+- **Trade agreements, structured** (decided 18-Nov-2026: not free text).
+  A preferential row names its agreement (ATIGA, EVFTA, RCEP: data) and a
+  set of conditions from a closed list: `origin_statement`,
+  `certificate_of_origin`, `exporter_registration`, `direct_shipment`,
+  `not_under_ioss`. It applies only if every condition is met; otherwise
+  the standard rate applies and the quote says which condition was
+  missing. Which conditions a product or merchant meets is recorded with
+  the merchant records (4d); until then none is met, so no preference
+  applies.
+- **Seller-collected tax per country** needs no code of its own yet
+  (decided 18-Nov-2026): limits, bases and rates are data. A jurisdiction
+  module (`tax/gb.py`) is written when we approach our first registration,
+  for what data cannot say (how the UK measures its £135, how it rounds
+  VAT), from verified sources. The general rule is tested with a
+  registration made up inside the test; real registrations go into the
+  registrations table and apply from their date, with no code change.
+- Duty rates per (destination, origin, HS code) come from the source the
+  destination's row names: `own_table` (the HS rates above) or a duty
+  vendor through `duties/registry.py`. Every destination starts on
+  `own_table`; a fake duty vendor under `/_fake/` offers every mode for
+  tests, the fuzzer and the sandbox; Zonos is chosen when we decide to pay
+  for lookups. A vendor is asked once per combination: a unique key on
+  the lookup, `duty_rate_needed` and an effect consumer.
+- **VND** (decided 18-Nov-2026): the State Bank of Vietnam's daily
+  reference rate replaces the research estimate, as the ECB rates do for
+  other currencies (25,600 per US$ on 10-Nov-2026, as reported by
+  VietnamPlus: `secondary`, so usable).
+- The staff page gains a form: country, category, goods value and
+  currency, freight, HS code, origin and date; it shows both paths, the
+  row that decided each and why, and the rates found or missing.
+
+**4b-1 built 18-Nov-2026** (`src/mor/tax/`, `mor.markets.fx`,
+`0009_hs_rates.sql`, `docs/markets/hs_rates.csv`, `duty_sources.csv`):
+`tax.paths.tax_paths` decides both paths; `tax.line_rates.line_rate` the
+rate per HS code with agreements and conditions; `tax.explain` puts a
+decision into words for the staff page's order check. Exchange rates are
+found through the shortest chain of confirmed rates (VND to SGD runs
+VND-USD-EUR-SGD), exact. A planted bug (the limit itself outside its
+`up_to` band) slipped past a test that checked only "not due" and not
+why; the tests now check the reason, and the limit is pinned as an
+example. HS rates are seeded for SG apparel (0%) and TH HS 6109 (30%, and
+ATIGA 0% marked unverified, so reported but not applied).
 
 ## 4. Prices and the quote (4c)
 

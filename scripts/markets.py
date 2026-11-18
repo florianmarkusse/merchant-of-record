@@ -345,22 +345,25 @@ EXPONENT: dict[str, int] = {
 }
 
 
-def read_fx_rates() -> tuple[dict[str, Fraction], str]:
+def read_fx_rates() -> tuple[dict[str, Fraction], str, list[Row]]:
     """Units of USD per unit of each currency, from fx_rates.csv (ECB
-    reference rates per EUR, and the VND estimate per USD), for display
-    only; the same file feeds the database (docs/plan-quote.md §2). Also
-    the date the rates are from."""
+    reference rates per EUR, and rates per USD such as the State Bank of
+    Vietnam's for VND), for display only; the same file feeds the database
+    (docs/plan-quote.md §2). Also the ECB rates' date, and a note per rate
+    given per USD (formatted later: date_text is defined further down)."""
     with (DATA / "fx_rates.csv").open(encoding="utf-8", newline="") as fh:
         rows = list(csv.DictReader(fh))
     per_eur: dict[str, Fraction] = {}
     per_usd: dict[str, Fraction] = {}
     as_of = ""
+    usd_rows: list[Row] = []
     for row in rows:
         if row["base"] == "EUR":
             per_eur[row["quote"]] = Fraction(row["rate"])
             as_of = row["as_of"]
         elif row["base"] == "USD":
             per_usd[row["quote"]] = Fraction(row["rate"])
+            usd_rows.append(row)
     usd_per_eur = per_eur["USD"]
     rates: dict[str, Fraction] = {"USD": Fraction(1), "EUR": usd_per_eur}
     for currency, units in per_eur.items():
@@ -368,18 +371,24 @@ def read_fx_rates() -> tuple[dict[str, Fraction], str]:
             rates[currency] = usd_per_eur / units
     for currency, units in per_usd.items():
         rates[currency] = 1 / units
-    return rates, as_of
+    return rates, as_of, usd_rows
 
 
 # Display-only conversion to compare cards; the page shows the rate and source.
-USD_PER_UNIT, FX_AS_OF = read_fx_rates()
+USD_PER_UNIT, FX_AS_OF, FX_PER_USD_ROWS = read_fx_rates()
 
 
 def usd_rate_note() -> str:
+    usd_notes: list[str] = []
+    for row in FX_PER_USD_ROWS:
+        usd_notes.append(
+            f"{row['quote']} converted at {int(row['rate']):,} per US$"
+            f" ({row['source']}, {date_text(row['as_of'])})"
+        )
+    as_of = FX_AS_OF
     return (
-        "VND converted at 26,300 per US$ (research/logistics/02, estimate), other "
-        f"currencies at the ECB reference rates of {date_text(FX_AS_OF)}, "
-        "rounded half up to whole dollars"
+        f"{', '.join(usd_notes)}; other currencies at the ECB reference rates of"
+        f" {date_text(as_of)}, rounded half up to whole dollars"
     )
 
 

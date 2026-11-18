@@ -75,7 +75,8 @@ a value waits on a re-fetch, an email or an adviser.
   17-Nov-2026, `docs/plan-quote.md` §2): `uv run python -m
   mor.markets.load` shows what changed and `--write` stores a new set.
   Of these files it loads `categories`, `countries`, `groups`,
-  `landed_rates`, `registrations` and `fx_rates`.
+  `landed_rates`, `registrations`, `fx_rates`, `hs_rates` and
+  `duty_sources`.
 - **Open work is in `questions.csv`**: emails to carriers, adviser
   questions and re-fetches. A fact waiting on one has status
   `awaiting_answer` and the question id.
@@ -127,6 +128,8 @@ a value waits on a re-fetch, an email or an adviser.
 | `landed_rates.csv` | duty, customs fee or tax per country or group (× category), with its band (always, up to or above a limit), who collects it and its base |
 | `border_charges.csv` | country or group (× category): duty or tax collected at the border always, never, or above a limit |
 | `fx_rates.csv` | exchange rate: base, quote, exact rate, date, status, source (the ECB reference rates per EUR, and the VND estimate per USD); read by the script for its USD display and loaded for quoting (added 17-Nov-2026) |
+| `hs_rates.csv` | a duty or tax rate for products whose HS code starts with a prefix, into a destination or group, from an origin or any; with an agreement and its conditions for a preferential rate (added 18-Nov-2026, plan-quote §3) |
+| `duty_sources.csv` | where a destination's duty rates come from (`own_table` or `vendor`); a destination not listed uses our own table (added 18-Nov-2026) |
 | `registrations.csv` | one of our seller-scheme registrations: country, scheme, number, from when; empty until we register (added 17-Nov-2026) |
 
 ## Commands

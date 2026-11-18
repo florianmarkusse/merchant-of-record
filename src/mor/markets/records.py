@@ -70,6 +70,25 @@ class Base(StrEnum):
     GOODS_FREIGHT_DUTY = "goods_freight_duty"
 
 
+class PreferenceCondition(StrEnum):
+    """What a trade agreement's preferential rate requires (decided
+    18-Nov-2026: a closed list, not free text). A new kind needs code to
+    check it, so it is an enum."""
+
+    ORIGIN_STATEMENT = "origin_statement"
+    CERTIFICATE_OF_ORIGIN = "certificate_of_origin"
+    EXPORTER_REGISTRATION = "exporter_registration"
+    DIRECT_SHIPMENT = "direct_shipment"
+    NOT_UNDER_IOSS = "not_under_ioss"
+
+
+class DutySourceKind(StrEnum):
+    """Where a destination's duty rates come from."""
+
+    OWN_TABLE = "own_table"
+    VENDOR = "vendor"
+
+
 @dataclass(frozen=True)
 class Category:
     category: str
@@ -147,6 +166,38 @@ class LandedRate:
 
 
 @dataclass(frozen=True)
+class Preference:
+    """A trade agreement's rate: applies only when every condition is met."""
+
+    agreement: str
+    conditions: frozenset[PreferenceCondition]
+
+
+@dataclass(frozen=True)
+class HsRate:
+    """A rate for products whose HS code starts with `hs_prefix`, into one
+    destination (or group), from one origin (None: any)."""
+
+    line_no: int  # the row in hs_rates.csv, 2 for the first
+    scope: Scope
+    hs_prefix: str  # digits only, 2 to 10
+    charge: Charge
+    origin: str | None
+    preference: Preference | None  # None: the standard rate
+    rate: Fraction
+    effective_from: date | None
+    status: ResearchStatus
+    source: str
+    source_url: str
+
+
+@dataclass(frozen=True)
+class DutySource:
+    country: str
+    kind: DutySourceKind
+
+
+@dataclass(frozen=True)
 class Registration:
     country: str
     scheme: str
@@ -176,6 +227,8 @@ class MarketSet:
     landed_rates: tuple[LandedRate, ...]
     registrations: tuple[Registration, ...]
     fx_rates: tuple[FxRate, ...]
+    hs_rates: tuple[HsRate, ...]
+    duty_sources: tuple[DutySource, ...]  # a destination not listed: own_table
 
 
 def _canonical_lines(market: MarketSet) -> list[str]:
@@ -210,6 +263,21 @@ def _canonical_lines(market: MarketSet) -> list[str]:
             f"fx|{fx.base}|{fx.quote}|{fx.rate.numerator}/{fx.rate.denominator}"
             f"|{fx.as_of}|{fx.status.value}|{fx.source}"
         )
+    for hs in market.hs_rates:
+        preference = "-"
+        if hs.preference is not None:
+            conditions: list[str] = []
+            for condition in hs.preference.conditions:
+                conditions.append(condition.value)
+            preference = f"{hs.preference.agreement} {' '.join(sorted(conditions))}"
+        lines.append(
+            f"hs|{hs.line_no}|{hs.scope.country}|{hs.scope.group}|{hs.hs_prefix}"
+            f"|{hs.charge.value}|{hs.origin}|{preference}"
+            f"|{hs.rate.numerator}/{hs.rate.denominator}|{hs.effective_from}"
+            f"|{hs.status.value}|{hs.source}|{hs.source_url}"
+        )
+    for duty_source in market.duty_sources:
+        lines.append(f"duty_source|{duty_source.country}|{duty_source.kind.value}")
     return lines
 
 

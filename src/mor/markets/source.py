@@ -25,9 +25,12 @@ from mor.markets.records import (
     Charge,
     Collector,
     Country,
+    DutySource,
+    DutySourceKind,
     FxRate,
     Group,
     GroupKind,
+    HsRate,
     LandedRate,
     Limit,
     LimitBasis,
@@ -36,6 +39,8 @@ from mor.markets.records import (
     Percent,
     PerLine,
     PerParcel,
+    Preference,
+    PreferenceCondition,
     Registration,
     ResearchStatus,
     Scope,
@@ -51,11 +56,14 @@ FILES = (
     "landed_rates",
     "registrations",
     "fx_rates",
+    "hs_rates",
+    "duty_sources",
 )
 
 _ISO2 = re.compile(r"[A-Z]{2}")
 _INTEGER = re.compile(r"[0-9]+")
 _DECIMAL = re.compile(r"[0-9]+(\.[0-9]+)?")
+_HS_PREFIX = re.compile(r"[0-9]{2,10}")
 
 type Row = Mapping[str, str]
 
@@ -111,6 +119,8 @@ def parse(texts: Mapping[str, str]) -> MarketSet | list[SourceError]:
         tuple(_landed_rates(texts["landed_rates"], country_codes, errors)),
         tuple(_registrations(texts["registrations"], errors)),
         tuple(_fx_rates(texts["fx_rates"], errors)),
+        tuple(_hs_rates(texts["hs_rates"], country_codes, errors)),
+        tuple(_duty_sources(texts["duty_sources"], errors)),
     )
     _check_references(market, errors)
     if errors:
@@ -418,6 +428,102 @@ def _fx_rates(text: str, errors: list[SourceError]) -> list[FxRate]:
     return parsed
 
 
+def _hs_rates(
+    text: str, country_codes: set[str], errors: list[SourceError]
+) -> list[HsRate]:
+    parsed: list[HsRate] = []
+    for at in _rows("hs_rates", text, errors):
+        place = _required(errors, at, "country")
+        prefix = _required(errors, at, "hs_prefix")
+        if isinstance(prefix, str) and not _HS_PREFIX.fullmatch(prefix):
+            _fail(errors, at, f"hs_prefix {prefix!r} is not 2 to 10 digits")
+            prefix = Unparsed()
+        charge = _choice(errors, at, "charge", Charge)
+        origin: str | None | Unparsed = None
+        if at.row.get("origin", ""):
+            origin = _iso2(errors, at, "origin")
+        preference = _preference(errors, at, origin)
+        rate = _decimal(errors, at, "rate_percent")
+        effective_from: date | None | Unparsed = None
+        if at.row.get("effective_from", ""):
+            effective_from = _day(errors, at, "effective_from")
+        status = _choice(errors, at, "status", ResearchStatus)
+        source = _text(errors, at, "source")
+        source_url = _text(errors, at, "source_url")
+        if (
+            isinstance(place, Unparsed)
+            or isinstance(prefix, Unparsed)
+            or isinstance(charge, Unparsed)
+            or isinstance(origin, Unparsed)
+            or isinstance(preference, Unparsed)
+            or isinstance(rate, Unparsed)
+            or isinstance(effective_from, Unparsed)
+            or isinstance(status, Unparsed)
+            or isinstance(source, Unparsed)
+            or isinstance(source_url, Unparsed)
+        ):
+            continue
+        if place in country_codes:
+            scope = Scope(place, None)
+        else:
+            scope = Scope(None, place)
+        parsed.append(
+            HsRate(
+                at.line_no,
+                scope,
+                prefix,
+                charge,
+                origin,
+                preference,
+                rate / 100,
+                effective_from,
+                status,
+                source,
+                source_url,
+            )
+        )
+    return parsed
+
+
+def _preference(
+    errors: list[SourceError], at: At, origin: str | None | Unparsed
+) -> Preference | None | Unparsed:
+    """A trade agreement's rate: an agreement, the origin it is for, and
+    conditions from the closed list. No agreement: the standard rate."""
+    agreement = at.row.get("agreement", "")
+    words = at.row.get("conditions", "").split()
+    if not agreement:
+        if words:
+            _fail(errors, at, "conditions without an agreement")
+            return Unparsed()
+        return None
+    if origin is None:
+        _fail(errors, at, f"agreement {agreement} without the origin it is for")
+        return Unparsed()
+    conditions: set[PreferenceCondition] = set()
+    for word in words:
+        found: PreferenceCondition | None = None
+        for condition in PreferenceCondition:
+            if condition.value == word:
+                found = condition
+        if found is None:
+            allowed = ", ".join(condition.value for condition in PreferenceCondition)
+            _fail(errors, at, f"condition {word!r} is not one of: {allowed}")
+            return Unparsed()
+        conditions.add(found)
+    return Preference(agreement, frozenset(conditions))
+
+
+def _duty_sources(text: str, errors: list[SourceError]) -> list[DutySource]:
+    parsed: list[DutySource] = []
+    for at in _rows("duty_sources", text, errors):
+        country = _iso2(errors, at, "country")
+        kind = _choice(errors, at, "source", DutySourceKind)
+        if isinstance(country, str) and isinstance(kind, DutySourceKind):
+            parsed.append(DutySource(country, kind))
+    return parsed
+
+
 # --- references -----------------------------------------------------------------
 
 
@@ -463,6 +569,24 @@ def _check_references(market: MarketSet, errors: list[SourceError]) -> None:
             problem = f"{registration.country} {registration.scheme} twice"
             errors.append(SourceError("registrations", 0, problem))
         registered.add(key)
+    groups_and_countries = groups | countries
+    for hs in market.hs_rates:
+        place = hs.scope.country or hs.scope.group or ""
+        if place not in groups_and_countries:
+            problem = f"{place} is neither a country code nor a group"
+            errors.append(SourceError("hs_rates", hs.line_no, problem))
+        if hs.origin is not None and hs.origin not in countries:
+            problem = f"unknown origin {hs.origin}"
+            errors.append(SourceError("hs_rates", hs.line_no, problem))
+    sourced: set[str] = set()
+    for duty_source in market.duty_sources:
+        if duty_source.country not in countries:
+            problem = f"unknown country {duty_source.country}"
+            errors.append(SourceError("duty_sources", 0, problem))
+        if duty_source.country in sourced:
+            problem = f"{duty_source.country} twice"
+            errors.append(SourceError("duty_sources", 0, problem))
+        sourced.add(duty_source.country)
     pairs: set[tuple[Currency, Currency]] = set()
     for fx in market.fx_rates:
         if (fx.base, fx.quote) in pairs:

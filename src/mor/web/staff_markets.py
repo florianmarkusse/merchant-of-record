@@ -1,10 +1,14 @@
 """The staff markets page (docs/plan-quote.md §5b): what the market data in
-force decides. It grows with each step of slice 4; this is step 4a: the
-loads, what the newest one changed, and each researched country's answer
-for a category on a day (open with the rates in force, or closed with the
-reason).
+force decides. It grows with each step of slice 4:
+
+- 4a: the loads, what the newest one changed, and each researched
+  country's answer for a category on a day (open with the rates in force,
+  or closed with the reason);
+- 4b: a check of one order (country, category, goods value, freight, HS
+  code, origin): both tax paths, the row that decided each, and the rates.
 
     GET /staff/markets?category=apparel&on=2026-11-17
+    GET /staff/markets?country=TH&goods=50.00&currency=USD&hs=610910&origin=VN
 
 Read-only. Mounted only outside prod until staff sign-in exists.
 """
@@ -30,6 +34,9 @@ from mor.markets.rules import (
     country_rules,
 )
 from mor.markets.store import LoadRow, read_market, recent_loads
+from mor.money.amount import InvalidAmount, Money, parse_major
+from mor.money.currency import Currency
+from mor.tax.explain import OrderCheck, explain
 
 
 LOADS_SHOWN = 10
@@ -42,6 +49,8 @@ class View:
     changes: list[str]
     category: str
     on: date
+    fields: dict[str, str]  # the order check's fields as entered
+    check: list[str] | None  # what the order check says, once asked
 
 
 def _answer_text(answer: Open | Closed) -> str:
@@ -139,6 +148,57 @@ def _loads_table(loads: list[LoadRow]) -> htpy.Node:
     ]
 
 
+def _check_form(view: View) -> htpy.Element:
+    def field(name: str, label: str, size: int, placeholder: str = "") -> htpy.Node:
+        return htpy.label[
+            f"{label} ",
+            htpy.input(
+                name=name,
+                value=view.fields.get(name, ""),
+                size=size,
+                placeholder=placeholder,
+            ),
+        ]
+
+    currencies: list[htpy.Node] = []
+    chosen = view.fields.get("currency", "USD")
+    for currency in Currency:
+        currencies.append(
+            htpy.option(value=currency.value, selected=currency.value == chosen)[
+                currency.value
+            ]
+        )
+    return htpy.form(method="get", action="/staff/markets")[
+        htpy.input(type="hidden", name="category", value=view.category),
+        htpy.input(type="hidden", name="on", value=view.on.isoformat()),
+        field("country", "Country", 3, "TH"),
+        " ",
+        field("goods", "goods", 9, "50.00"),
+        " ",
+        htpy.select(name="currency")[currencies],
+        " ",
+        field("freight", "freight", 9, "optional"),
+        " ",
+        field("hs", "HS code", 10, "610910"),
+        " ",
+        field("origin", "origin", 3, "VN"),
+        " ",
+        htpy.button(type="submit")["check"],
+    ]
+
+
+def _check_result(view: View) -> htpy.Node:
+    if view.check is None:
+        return htpy.p[
+            "Enter an order to see who collects the VAT/GST, whether duty is due,"
+            " and at which rates. The category and date are those above."
+        ]
+    items: list[htpy.Node] = []
+    for line in view.check:
+        items.append(htpy.li[line])
+    return htpy.ul[items]
+
+
 def render(view: View) -> str:
     changes: htpy.Node = htpy.p["The first load: nothing to compare with."]
     if len(view.loads) > 1:
@@ -158,6 +218,9 @@ def render(view: View) -> str:
             _loads_table(view.loads),
             htpy.h2["What the newest load changed"],
             changes,
+            htpy.h2[f"Check an order ({view.category}, {format_day(view.on)})"],
+            _check_form(view),
+            _check_result(view),
             htpy.h2[f"Countries on {format_day(view.on)}"],
             _filter_form(view),
             htpy.p[
@@ -188,9 +251,42 @@ def _day(text: str | None, default: date) -> date:
         return default
 
 
+def _order_check(fields: dict[str, str], category: str) -> OrderCheck | str | None:
+    """The order check from the form, an error to show, or None when not
+    asked."""
+    country = fields.get("country", "").strip().upper()
+    if not country:
+        return None
+    currency: Currency | None = None
+    for option in Currency:
+        if option.value == fields.get("currency", ""):
+            currency = option
+    if currency is None:
+        return "Choose a currency."
+    goods = parse_major(fields.get("goods", "").strip(), currency)
+    if isinstance(goods, InvalidAmount):
+        return f"Goods value: {goods.reason.replace('_', ' ')}."
+    freight: Money | None = None
+    if fields.get("freight", "").strip():
+        parsed = parse_major(fields["freight"].strip(), currency)
+        if isinstance(parsed, InvalidAmount):
+            return f"Freight: {parsed.reason.replace('_', ' ')}."
+        freight = parsed
+    hs_code = fields.get("hs", "").replace(".", "").replace(" ", "") or None
+    if hs_code is not None and not hs_code.isdigit():
+        return "HS code: digits only."
+    origin = fields.get("origin", "").strip().upper() or "VN"
+    return OrderCheck(country, category, goods, freight, hs_code, origin)
+
+
 async def show(request: Request, database_url: str, now: datetime) -> Response:
     on = _day(request.query_params.get("on"), now.date())
     category = request.query_params.get("category", "apparel")
+    fields: dict[str, str] = {}
+    for name in ("country", "goods", "currency", "freight", "hs", "origin"):
+        value = request.query_params.get(name)
+        if value is not None:
+            fields[name] = value
     async with await connect(database_url) as conn:
         loads = await recent_loads(conn, LOADS_SHOWN)
         market: MarketSet | None = None
@@ -200,4 +296,13 @@ async def show(request: Request, database_url: str, now: datetime) -> Response:
         if len(loads) > 1 and market is not None:
             previous = await read_market(conn, loads[1].id)
             changes = describe_changes(previous, market)
-    return HTMLResponse(render(View(loads, market, changes, category, on)))
+    check: list[str] | None = None
+    order = _order_check(fields, category)
+    if isinstance(order, str):
+        check = [order]
+    elif order is not None and market is None:
+        check = ["No market data loaded yet."]
+    elif order is not None and market is not None:
+        check = explain(market, order, on)
+    view = View(loads, market, changes, category, on, fields, check)
+    return HTMLResponse(render(view))

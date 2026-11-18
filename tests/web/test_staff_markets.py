@@ -13,7 +13,7 @@ from mor.db.connect import connect
 from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.web.main import make_app
-from tests.markets.fixtures import SG_GST, market_texts
+from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -24,8 +24,8 @@ AHEAD = (
 )
 
 
-async def _load(url: str, rows: str, commit: str) -> None:
-    market = parse(market_texts(rows))
+async def _load(url: str, rows: str, commit: str, hs_rows: str = "") -> None:
+    market = parse(market_texts(rows, hs_rows=hs_rows))
     assert not isinstance(market, list)
     async with await connect(url) as conn:
         await load_market(conn, market, commit, LOADER, NOW)
@@ -79,5 +79,38 @@ def test_the_page_does_not_exist_in_prod(database_url: str) -> None:
     async def body() -> None:
         page = await _get(database_url, Environment.PROD, "/staff/markets")
         assert page.status_code == 404
+
+    asyncio.run(body())
+
+
+TH_HS = (
+    "TH,6109,duty,,,,30,,secondary,WTO,https://example.test,,,\n"
+    "TH,6109,duty,VN,ATIGA,certificate_of_origin direct_shipment,0,,"
+    "unverified,ASEAN,https://example.test,,,\n"
+)
+
+
+def test_an_order_check_explains_both_paths_and_the_rates(database_url: str) -> None:
+    async def body() -> None:
+        await _load(database_url, SG_GST + TH_BORDER, "one", TH_HS)
+        query = (
+            "/staff/markets?country=TH&goods=50.00&currency=USD&hs=6109.10&origin=VN"
+        )
+        text = (await _get(database_url, Environment.TEST, query)).text
+        assert "VAT/GST: charged at the border" in text
+        assert "Duty: charged at the border" in text
+        assert "Rate 30% of goods_plus_freight: hs_rates.csv line 2" in text
+        assert "Not applied: ATIGA 0%" in text
+        assert "Only duty-paid services may carry this order." in text
+
+    asyncio.run(body())
+
+
+def test_an_order_check_with_a_bad_amount_says_so(database_url: str) -> None:
+    async def body() -> None:
+        await _load(database_url, SG_GST, "one")
+        query = "/staff/markets?country=SG&goods=lots&currency=SGD"
+        text = (await _get(database_url, Environment.TEST, query)).text
+        assert "Goods value: not a number." in text
 
     asyncio.run(body())
