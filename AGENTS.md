@@ -38,7 +38,9 @@ and wins where the two differ.
   until a VPS exists); its steps 1 (serve, `SELF_URL`, seed), 2 (the page at `/_fake/`)
   and 3 (the nightly soak, `deploy/soak.sh`) are built. Slice 4 (markets, tax path,
   prices, the quote) is planned in `docs/plan-quote.md` in four steps; 4a
-  (markets in the database, versioned loads) is built.
+  (markets in the database, versioned loads) and 4b-1 (the tax-path rule,
+  rates per HS code with trade agreements, exact FX chains) are built;
+  4b-2 (the duty vendor flow) is next.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
