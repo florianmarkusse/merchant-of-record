@@ -26,6 +26,7 @@ def market_texts(
     hs_rows: str = "",
     registrations: str = "",
     fx_rows: str = FX_ROWS,
+    duty_sources: str = "",
 ) -> dict[str, str]:
     """A small synthetic set: SG and TH open, DE in the EU and closed. A
     registration here is made up for the test, never real data."""
@@ -46,7 +47,7 @@ def market_texts(
         "registrations": "country,scheme,number,effective_from,notes\n" + registrations,
         "fx_rates": "base,quote,rate,as_of,status,source,source_url,notes\n" + fx_rows,
         "hs_rates": HS_HEADER + hs_rows,
-        "duty_sources": "country,source,notes\n",
+        "duty_sources": "country,mode,vendor,notes\n" + duty_sources,
     }
 
 

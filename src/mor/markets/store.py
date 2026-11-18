@@ -18,8 +18,8 @@ from mor.markets.records import (
     Charge,
     Collector,
     Country,
+    DutyMode,
     DutySource,
-    DutySourceKind,
     FxRate,
     Group,
     GroupKind,
@@ -196,8 +196,9 @@ async def _insert_rows(conn: Connection, load_id: uuid.UUID, market: MarketSet) 
             hs_rows,
         )
         await cur.executemany(
-            "INSERT INTO duty_source (load_id, iso2, kind) VALUES (%s, %s, %s)",
-            [(load_id, d.country, d.kind.value) for d in market.duty_sources],
+            "INSERT INTO duty_source (load_id, iso2, mode, vendor_name)"
+            " VALUES (%s, %s, %s, %s)",
+            [(load_id, d.country, d.mode.value, d.vendor) for d in market.duty_sources],
         )
 
 
@@ -397,12 +398,13 @@ async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
         for row in await hs_cur.fetchall():
             hs_rates.append(_hs_from_row(row))
     cur = await conn.execute(
-        "SELECT iso2, kind::text FROM duty_source WHERE load_id = %s ORDER BY iso2",
+        "SELECT iso2, mode::text, vendor_name FROM duty_source"
+        " WHERE load_id = %s ORDER BY iso2",
         (load_id,),
     )
     duty_sources: list[DutySource] = []
-    for iso2, kind in await cur.fetchall():
-        duty_sources.append(DutySource(iso2, DutySourceKind(kind)))
+    for iso2, mode, vendor_name in await cur.fetchall():
+        duty_sources.append(DutySource(iso2, DutyMode(mode), vendor_name))
     return MarketSet(
         tuple(categories),
         tuple(countries),

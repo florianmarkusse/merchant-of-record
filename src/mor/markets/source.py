@@ -25,8 +25,8 @@ from mor.markets.records import (
     Charge,
     Collector,
     Country,
+    DutyMode,
     DutySource,
-    DutySourceKind,
     FxRate,
     Group,
     GroupKind,
@@ -63,6 +63,7 @@ FILES = (
 _ISO2 = re.compile(r"[A-Z]{2}")
 _INTEGER = re.compile(r"[0-9]+")
 _DECIMAL = re.compile(r"[0-9]+(\.[0-9]+)?")
+_VENDOR_NAME = re.compile(r"[a-z][a-z0-9_]*")
 _HS_PREFIX = re.compile(r"[0-9]{2,10}")
 
 type Row = Mapping[str, str]
@@ -518,9 +519,18 @@ def _duty_sources(text: str, errors: list[SourceError]) -> list[DutySource]:
     parsed: list[DutySource] = []
     for at in _rows("duty_sources", text, errors):
         country = _iso2(errors, at, "country")
-        kind = _choice(errors, at, "source", DutySourceKind)
-        if isinstance(country, str) and isinstance(kind, DutySourceKind):
-            parsed.append(DutySource(country, kind))
+        mode = _choice(errors, at, "mode", DutyMode)
+        vendor = _text(errors, at, "vendor")
+        if isinstance(mode, Unparsed) or isinstance(vendor, Unparsed):
+            continue
+        if mode == DutyMode.OWN_ONLY and vendor != "":
+            _fail(errors, at, "own_only names no vendor")
+            continue
+        if mode != DutyMode.OWN_ONLY and not _VENDOR_NAME.fullmatch(vendor):
+            _fail(errors, at, f"{mode.value} needs a vendor name (a-z, 0-9, _)")
+            continue
+        if isinstance(country, str):
+            parsed.append(DutySource(country, mode, vendor or None))
     return parsed
 
 

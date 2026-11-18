@@ -45,14 +45,22 @@ def make_app(
     async def staff_markets_page(request: Request) -> Response:
         return await staff_markets.show(request, url, clock())
 
+    async def staff_ask_vendor(request: Request) -> Response:
+        return await staff_markets.ask_vendor(request, url, clock())
+
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
     ]
     # Staff pages: outside prod only until staff sign-in exists
     # (plan-quote.md §5b); then mounted in prod behind it.
     if settings.environment != Environment.PROD:
-        routes.append(
-            Route("/staff/markets", staff_markets_page, methods=["GET"]),
+        routes.extend(
+            [
+                Route("/staff/markets", staff_markets_page, methods=["GET"]),
+                Route(
+                    "/staff/markets/duty_lookups", staff_ask_vendor, methods=["POST"]
+                ),
+            ]
         )
     if fakes is not None:
         if settings.environment == Environment.PROD:

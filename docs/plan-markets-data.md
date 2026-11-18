@@ -129,7 +129,7 @@ a value waits on a re-fetch, an email or an adviser.
 | `border_charges.csv` | country or group (× category): duty or tax collected at the border always, never, or above a limit |
 | `fx_rates.csv` | exchange rate: base, quote, exact rate, date, status, source (the ECB reference rates per EUR, and the VND estimate per USD); read by the script for its USD display and loaded for quoting (added 17-Nov-2026) |
 | `hs_rates.csv` | a duty or tax rate for products whose HS code starts with a prefix, into a destination or group, from an origin or any; with an agreement and its conditions for a preferential rate (added 18-Nov-2026, plan-quote §3) |
-| `duty_sources.csv` | where a destination's duty rates come from (`own_table` or `vendor`); a destination not listed uses our own table (added 18-Nov-2026) |
+| `duty_sources.csv` | who decides a destination's rates per HS code: `vendor` (the named vendor's answer, our rows compared with it), `own_first` (our rows, the vendor fills gaps) or `own_only`; a destination not listed is `own_only` (added 18-Nov-2026, modes plan-quote §3 4b-2) |
 | `registrations.csv` | one of our seller-scheme registrations: country, scheme, number, from when; empty until we register (added 17-Nov-2026) |
 
 ## Commands

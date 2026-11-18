@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 import httpx2
 import uvicorn
 
-import mor.fakes.echo
+import mor.fakes.app
 from mor.config import Environment, Settings, load_settings
 from mor.web.main import Fakes, make_app
 
@@ -39,7 +39,7 @@ async def serve(settings: Settings) -> None:
         fakes = None
         if settings.environment != Environment.PROD:
             fakes = Fakes(
-                mor.fakes.echo.make_app(settings.database_url, outgoing), outgoing
+                mor.fakes.app.make_app(settings.database_url, outgoing), outgoing
             )
         app = make_app(settings, fakes, _now)
         config = uvicorn.Config(app, host=address.hostname, port=address.port)

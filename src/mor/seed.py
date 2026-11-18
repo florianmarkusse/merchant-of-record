@@ -9,6 +9,11 @@ accounts subscribe their webhooks at the fake over HTTP. Refused in prod.
 Running it again creates nothing and subscribes again, which the fake
 treats as an update.
 
+Every duty vendor the market data in force names (`zonos`) gets an account
+pointing at the fake duty vendor, which is given a few rates
+(FAKE_DUTY_RATES), one of them differing from our own rows so the staff
+page shows a disagreement.
+
 Transitional with the echo flow: the seed grows a merchant per mode
 combination as the real ports arrive (plan-architecture.md §6).
 """
@@ -26,9 +31,12 @@ import httpx2
 from mor.audit import Actor, ActorKind
 from mor.config import Environment, Settings, load_settings
 from mor.db.connect import Connection, connect
+from mor.duties.lookups import create_vendor_account, vendor_account
+from mor.duties.port import DutyProvider
 from mor.echo.flow import create_echo_account
 from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
+from mor.markets.store import latest_load, read_market
 
 
 SEEDER = Actor(ActorKind.SYSTEM, "seed")
@@ -37,6 +45,14 @@ POLL_INTERVAL = timedelta(minutes=1)
 # One seed at a time: a second waits for the first to commit, then finds
 # its accounts. Released with the transaction.
 SEED_LOCK = "seed:echo_accounts"
+
+# (destination, HS prefix, duty, tax) as the fake writes them. TH 6109
+# duty differs from our hs_rates.csv on purpose.
+FAKE_DUTY_RATES = (
+    ("TH", "6109", "25%", "7%"),
+    ("SG", "61", "0%", "9%"),
+    ("SG", "62", "0%", "9%"),
+)
 
 
 @dataclass(frozen=True)
@@ -116,6 +132,52 @@ async def seed_accounts(
     return seeded
 
 
+async def seed_duty_vendors(
+    conn: Connection, settings: Settings
+) -> list[str] | SeedInProd:
+    """An account at the fake for every vendor the market data in force
+    names and this database lacks; the names created. Never commits."""
+    if settings.environment == Environment.PROD:
+        return SeedInProd()
+    load = await latest_load(conn)
+    if load is None:
+        return []
+    market = await read_market(conn, load.id)
+    created: list[str] = []
+    for source in market.duty_sources:
+        name = source.vendor
+        if name is None or name in created:
+            continue
+        if await vendor_account(conn, name) is not None:
+            continue
+        url = f"{settings.self_url}/_fake/duty/sandbox-{name}"
+        await create_vendor_account(conn, name, DutyProvider.FAKE, url, TIMEOUT)
+        created.append(name)
+    return created
+
+
+async def set_fake_duty_rates(
+    http: httpx2.AsyncClient, settings: Settings
+) -> FakeUnreachable | None:
+    """The vendor side: the fake's rates, as the vendor holds them."""
+    for destination, hs_prefix, duty, tax in FAKE_DUTY_RATES:
+        try:
+            response = await http.post(
+                f"{settings.self_url}/_fake/duty/rates",
+                json={
+                    "destination": destination,
+                    "hs_prefix": hs_prefix,
+                    "duty": duty,
+                    "tax": tax,
+                },
+            )
+        except httpx2.TransportError as error:
+            return FakeUnreachable(repr(error))
+        if response.status_code != 204:
+            return FakeUnreachable(f"status {response.status_code}")
+    return None
+
+
 async def subscribe_webhooks(
     http: httpx2.AsyncClient, settings: Settings, seeded: list[SeededAccount]
 ) -> FakeUnreachable | None:
@@ -152,9 +214,13 @@ async def _main() -> int:
         if isinstance(seeded, SeedInProd):
             print("refused: the seed never runs in prod")
             return 1
+        vendors = await seed_duty_vendors(conn, settings)
+        assert not isinstance(vendors, SeedInProd)
         await conn.commit()
     async with httpx2.AsyncClient() as http:
         unreachable = await subscribe_webhooks(http, settings, seeded)
+        if unreachable is None:
+            unreachable = await set_fake_duty_rates(http, settings)
     if unreachable is not None:
         print(f"accounts seeded, webhooks not subscribed: {unreachable.detail}")
         print(f"is the server running at {settings.self_url}? Then seed again.")
@@ -164,6 +230,7 @@ async def _main() -> int:
         if account.created:
             created += 1
     print(f"{len(seeded)} echo accounts, {created} new; webhooks subscribed")
+    print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
     return 0
 
 

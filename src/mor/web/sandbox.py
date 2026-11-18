@@ -20,7 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import urlencode
 
 import htpy
 import httpx2
@@ -35,6 +35,7 @@ from mor.db.connect import Connection, connect
 from mor.echo.flow import create_echo_job
 from mor.echo.inbound import JobNotFound, record_manual_event
 from mor.echo.port import EventKind
+from mor.web.forms import read_form, same_origin
 
 
 PAGE = "/_fake/"
@@ -69,28 +70,6 @@ class FaultForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     flavour: Literal["keyed", "cancellable", "plain"]
     fault: Literal["fail_500", "fail_500_after_work", "timeout_after_work", "refuse"]
     operation: Literal["send", "events"]
-
-
-async def _form[T](request: Request, form_type: type[T]) -> T | None:
-    """A URL-encoded form into its record, or None if it is not one."""
-    body = await request.body()
-    try:
-        fields = dict(parse_qsl(body.decode("utf-8"), strict_parsing=False))
-        return msgspec.convert(fields, form_type)
-    except UnicodeDecodeError, msgspec.ValidationError:
-        return None
-
-
-def same_origin(request: Request) -> bool:
-    """The cross-site guard for every POST here: the browser's Origin must
-    name the host the request was sent to. No login or session cookie
-    exists yet, so a SameSite cookie would guard nothing; it comes with the
-    login (plan-test-setup §1)."""
-    origin = request.headers.get("origin")
-    host = request.headers.get("host")
-    if origin is None or host is None:
-        return False
-    return urlsplit(origin).netloc == host
 
 
 def _back(note: str) -> Response:
@@ -308,7 +287,7 @@ async def create_job(
 ) -> Response:
     if not same_origin(request):
         return Response("cross-site POST refused", status_code=403)
-    form = await _form(request, CreateJobForm)
+    form = await read_form(request, CreateJobForm)
     if form is None:
         return Response("bad form", status_code=400)
     async with await connect(database_url) as conn:
@@ -324,7 +303,7 @@ async def record_by_hand(
 ) -> Response:
     if not same_origin(request):
         return Response("cross-site POST refused", status_code=403)
-    form = await _form(request, ManualEventForm)
+    form = await read_form(request, ManualEventForm)
     if form is None:
         return Response("bad form", status_code=400)
     now = clock()
@@ -376,7 +355,7 @@ async def release(
 ) -> Response:
     if not same_origin(request):
         return Response("cross-site POST refused", status_code=403)
-    form = await _form(request, ReleaseForm)
+    form = await read_form(request, ReleaseForm)
     if form is None:
         return Response("bad form", status_code=400)
     at_vendor = await _job_at_vendor(database_url, form.job_id)
@@ -404,7 +383,7 @@ async def _account_call(
 ) -> Response:
     if not same_origin(request):
         return Response("cross-site POST refused", status_code=403)
-    form = await _form(request, AccountForm)
+    form = await read_form(request, AccountForm)
     if form is None:
         return Response("bad form", status_code=400)
     base_url = await _account_url(database_url, form.account_id)
@@ -416,7 +395,7 @@ async def _account_call(
 async def fault(request: Request, self_url: str, http: httpx2.AsyncClient) -> Response:
     if not same_origin(request):
         return Response("cross-site POST refused", status_code=403)
-    form = await _form(request, FaultForm)
+    form = await read_form(request, FaultForm)
     if form is None:
         return Response("bad form", status_code=400)
     body = {"flavour": form.flavour, "fault": form.fault, "operation": form.operation}

@@ -82,11 +82,13 @@ class PreferenceCondition(StrEnum):
     NOT_UNDER_IOSS = "not_under_ioss"
 
 
-class DutySourceKind(StrEnum):
-    """Where a destination's duty rates come from."""
+class DutyMode(StrEnum):
+    """Who decides a country's rates per HS code (duty and import tax);
+    matches `duty_mode` (docs/plan-quote.md §3, 4b-2)."""
 
-    OWN_TABLE = "own_table"
-    VENDOR = "vendor"
+    VENDOR = "vendor"  # the vendor's answer; our rows are compared with it
+    OWN_FIRST = "own_first"  # our rows; the vendor fills the gaps
+    OWN_ONLY = "own_only"  # our rows; none refuses the quote
 
 
 @dataclass(frozen=True)
@@ -194,7 +196,8 @@ class HsRate:
 @dataclass(frozen=True)
 class DutySource:
     country: str
-    kind: DutySourceKind
+    mode: DutyMode
+    vendor: str | None  # the vendor's name (`zonos`); None exactly for own_only
 
 
 @dataclass(frozen=True)
@@ -228,7 +231,7 @@ class MarketSet:
     registrations: tuple[Registration, ...]
     fx_rates: tuple[FxRate, ...]
     hs_rates: tuple[HsRate, ...]
-    duty_sources: tuple[DutySource, ...]  # a destination not listed: own_table
+    duty_sources: tuple[DutySource, ...]  # a destination not listed: own_only
 
 
 def _canonical_lines(market: MarketSet) -> list[str]:
@@ -277,7 +280,10 @@ def _canonical_lines(market: MarketSet) -> list[str]:
             f"|{hs.status.value}|{hs.source}|{hs.source_url}"
         )
     for duty_source in market.duty_sources:
-        lines.append(f"duty_source|{duty_source.country}|{duty_source.kind.value}")
+        lines.append(
+            f"duty_source|{duty_source.country}|{duty_source.mode.value}"
+            f"|{duty_source.vendor}"
+        )
     return lines
 
 

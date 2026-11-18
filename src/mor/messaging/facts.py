@@ -19,6 +19,7 @@ class AggregateType(StrEnum):
     PROBE = "probe"
     ECHO_JOB = "echo_job"  # transitional, with the echo flow
     ECHO_ACCOUNT = "echo_account"  # transitional, with the echo flow
+    DUTY_LOOKUP = "duty_lookup"
 
 
 class MessageType(StrEnum):
@@ -38,6 +39,11 @@ class MessageType(StrEnum):
     ECHO_POLL_DUE = "echo_poll_due"
     ECHO_EVENTS_WANTED = "echo_events_wanted"
     ECHO_REPORT_DUE = "echo_report_due"
+    DUTY_RATE_NEEDED = "duty_rate_needed"
+    DUTY_RATE_FOUND = "duty_rate_found"
+    DUTY_RATE_UNKNOWN_CODE = "duty_rate_unknown_code"
+    DUTY_RATE_NEEDS_PERSON = "duty_rate_needs_person"
+    DUTY_RATE_DISAGREED = "duty_rate_disagreed"
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,41 @@ class EchoReportDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     account_id: uuid.UUID
 
 
+class DutyRateNeededV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A combination (vendor, destination, origin, HS code) was seen for
+    the first time: ask the vendor once."""
+
+    duty_lookup_id: uuid.UUID
+
+
+class DutyRateFoundV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    duty_lookup_id: uuid.UUID
+
+
+class DutyRateUnknownCodeV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The vendor does not know the HS code."""
+
+    duty_lookup_id: uuid.UUID
+
+
+class DutyRateNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The vendor's answer could not be read."""
+
+    duty_lookup_id: uuid.UUID
+    detail: str
+
+
+class DutyRateDisagreedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The vendor's rate for a charge differs from our own row's. Rates are
+    exact fractions written as "numerator/denominator"."""
+
+    duty_lookup_id: uuid.UUID
+    charge: str
+    vendor_rate: str
+    own_rate: str
+    own_line_no: int
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -138,6 +179,11 @@ type Fact = (
     | EchoPollDueV1
     | EchoEventsWantedV1
     | EchoReportDueV1
+    | DutyRateNeededV1
+    | DutyRateFoundV1
+    | DutyRateUnknownCodeV1
+    | DutyRateNeedsPersonV1
+    | DutyRateDisagreedV1
 )
 
 
@@ -183,6 +229,16 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.ECHO_EVENTS_WANTED, 1)
         case EchoReportDueV1():
             return FactType(MessageType.ECHO_REPORT_DUE, 1)
+        case DutyRateNeededV1():
+            return FactType(MessageType.DUTY_RATE_NEEDED, 1)
+        case DutyRateFoundV1():
+            return FactType(MessageType.DUTY_RATE_FOUND, 1)
+        case DutyRateUnknownCodeV1():
+            return FactType(MessageType.DUTY_RATE_UNKNOWN_CODE, 1)
+        case DutyRateNeedsPersonV1():
+            return FactType(MessageType.DUTY_RATE_NEEDS_PERSON, 1)
+        case DutyRateDisagreedV1():
+            return FactType(MessageType.DUTY_RATE_DISAGREED, 1)
         case _:
             assert_never(fact)
 
@@ -209,6 +265,14 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | EchoReportDueV1(account_id=account_id)
         ):
             return Aggregate(AggregateType.ECHO_ACCOUNT, account_id)
+        case (
+            DutyRateNeededV1(duty_lookup_id=lookup_id)
+            | DutyRateFoundV1(duty_lookup_id=lookup_id)
+            | DutyRateUnknownCodeV1(duty_lookup_id=lookup_id)
+            | DutyRateNeedsPersonV1(duty_lookup_id=lookup_id)
+            | DutyRateDisagreedV1(duty_lookup_id=lookup_id)
+        ):
+            return Aggregate(AggregateType.DUTY_LOOKUP, lookup_id)
         case _:
             assert_never(fact)
 
@@ -259,6 +323,16 @@ def decode(
             decoded = _decode(payload, EchoEventsWantedV1)
         case MessageType.ECHO_REPORT_DUE:
             decoded = _decode(payload, EchoReportDueV1)
+        case MessageType.DUTY_RATE_NEEDED:
+            decoded = _decode(payload, DutyRateNeededV1)
+        case MessageType.DUTY_RATE_FOUND:
+            decoded = _decode(payload, DutyRateFoundV1)
+        case MessageType.DUTY_RATE_UNKNOWN_CODE:
+            decoded = _decode(payload, DutyRateUnknownCodeV1)
+        case MessageType.DUTY_RATE_NEEDS_PERSON:
+            decoded = _decode(payload, DutyRateNeedsPersonV1)
+        case MessageType.DUTY_RATE_DISAGREED:
+            decoded = _decode(payload, DutyRateDisagreedV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

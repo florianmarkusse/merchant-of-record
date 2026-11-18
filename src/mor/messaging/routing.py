@@ -16,6 +16,7 @@ class ConsumerName(StrEnum):
     ECHO_TRACKING_START = "echo_tracking_start"
     ECHO_POLL = "echo_poll"
     ECHO_REPORT_FETCH = "echo_report_fetch"
+    DUTY_RATE_ASK = "duty_rate_ask"
 
 
 type ConsumerKind = Literal["local", "effect"]
@@ -42,11 +43,18 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.ECHO_POLL,)
         case MessageType.ECHO_REPORT_DUE:
             return (ConsumerName.ECHO_REPORT_FETCH,)
+        case MessageType.DUTY_RATE_NEEDED:
+            return (ConsumerName.DUTY_RATE_ASK,)
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
             | MessageType.ECHO_JOB_CONFIRMED
             | MessageType.ECHO_JOB_ARCHIVED
+            # The quote flow (4d) resumes waiting quotes on these.
+            | MessageType.DUTY_RATE_FOUND
+            | MessageType.DUTY_RATE_UNKNOWN_CODE
+            | MessageType.DUTY_RATE_NEEDS_PERSON
+            | MessageType.DUTY_RATE_DISAGREED
         ):
             return ()
         case _:
@@ -69,6 +77,7 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             ConsumerName.ECHO_SEND
             | ConsumerName.ECHO_POLL
             | ConsumerName.ECHO_REPORT_FETCH
+            | ConsumerName.DUTY_RATE_ASK
         ):
             return "effect"
         case _:

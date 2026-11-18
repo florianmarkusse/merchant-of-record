@@ -153,13 +153,10 @@ code and the staff form (pure logic and data); 4b-2 the duty vendor flow
   VAT), from verified sources. The general rule is tested with a
   registration made up inside the test; real registrations go into the
   registrations table and apply from their date, with no code change.
-- Duty rates per (destination, origin, HS code) come from the source the
-  destination's row names: `own_table` (the HS rates above) or a duty
-  vendor through `duties/registry.py`. Every destination starts on
-  `own_table`; a fake duty vendor under `/_fake/` offers every mode for
-  tests, the fuzzer and the sandbox; Zonos is chosen when we decide to pay
-  for lookups. A vendor is asked once per combination: a unique key on
-  the lookup, `duty_rate_needed` and an effect consumer.
+- Duty and VAT rates per (destination, origin, HS code) come from our
+  own rows, a vendor, or both, by a mode per country: see 4b-2 below,
+  which replaces the first idea here (a plain `own_table` or `vendor`
+  switch).
 - **VND** (decided 18-Nov-2026): the State Bank of Vietnam's daily
   reference rate replaces the research estimate, as the ECB rates do for
   other currencies (25,600 per US$ on 10-Nov-2026, as reported by
@@ -179,6 +176,145 @@ VND-USD-EUR-SGD), exact. A planted bug (the limit itself outside its
 why; the tests now check the reason, and the limit is pinned as an
 example. HS rates are seeded for SG apparel (0%) and TH HS 6109 (30%, and
 ATIGA 0% marked unverified, so reported but not applied).
+
+### 4b-2: duty and VAT rates from vendors (decided 18-Nov-2026)
+
+**What a real vendor gives** (Zonos docs, read 18-Nov-2026: the
+import-duty page, the calculate page, the landed cost object and the
+pricing page). Zonos calculates a landed cost for a cart; it is not a rate
+lookup. Per item it returns `duties[]` and `taxes[]` with an `amount` and
+a `formula` as text (`"32%"`, or a specific duty), the HS code it used
+(possibly corrected: `hs_code_source` = `hs_correction`), and free-text
+`note`s. It applies a preferential rate on its own when the origin
+qualifies, without saying which agreement. It is priced per order (US$2
+plus 10% of the duties and taxes), and the pages say nothing about
+idempotency keys or about storing its answers for later orders.
+
+- **The port asks for one item's rates**: `ask_rates(account,
+  destination, origin, hs_code) -> VendorRates | UnknownCode |
+  Unavailable | OutcomeUnknown | UndecodableBody`. `VendorRates` holds the
+  HS code the vendor used and, per charge (duty, import tax), the formula
+  as the vendor wrote it, our exact rate when the formula is a percentage,
+  and its note. A Zonos module would send a one-item cart.
+- **Duty and VAT from the same answer** (VAT is in the same Zonos call, so
+  it costs nothing extra).
+- **Answers are always reused** for later orders of the same combination
+  (decided 18-Nov-2026). If a vendor's terms forbid it, this becomes a
+  setting on its account; nothing else changes.
+- **Several vendors**: each is a module behind the port, picked by one
+  registry with an exhaustive `match`. Adding one is a module, a
+  `duty_provider` value and an account row.
+- **Open before Zonos goes live**: whether it can be asked for the
+  standard rate only, and whether its terms allow reuse. Until then an
+  answer carrying a note (a preference the vendor may have applied) is
+  shown to staff and not used. It can be used automatically once the
+  vendor names the agreement it applied, so our conditions (§3) can be
+  checked against it, or once the merchant records (4d) say the
+  conditions are met.
+
+**Who decides the rate: a mode per country** (`duty_sources.csv`:
+country, mode, vendor). Trust in our own tables is earned country by
+country, measured against the vendor:
+
+| Mode | Decides | Our own rows |
+|---|---|---|
+| `vendor` | the vendor's answer | compared with every answer; a difference is a `duty_rate_disagreed` fact |
+| `own_first` | our row when we have one; the vendor fills the gaps | the truth where present |
+| `own_only` | our rows; none refuses the quote, as in 4b-1 | the only source |
+
+A country not listed is `own_only`. To start, every open country is
+listed as `vendor` (vendor `zonos`). A country moves to `own_first` when
+the agreement count on the staff page shows its rows hold up, judged on
+the counted matches and differences. A scheduled spot check
+(`duty_rate_check_due`, asking the vendor again for a sample of stored
+combinations) keeps checking countries we trust; it needs the scheduler
+the quote flow brings, so it comes with 4d. The mode covers the rates
+asked per HS code: duty and the import tax (VAT/GST). The band rows
+(who collects, which threshold) stay ours.
+
+The vendor is named (`zonos`), not its endpoint: each environment's
+database holds a `duty_vendor_account` per name. In prod it points at the
+real API; in dev and the test setup the same name points at the fake,
+and the registry refuses a fake provider in prod. So the CSV is the same
+everywhere.
+
+**Tables** (0010):
+
+- `duty_vendor_account` (id, vendor_name unique, provider: `duty_provider`
+  enum, `fake` for now; base_url, timeout_ms).
+- `duty_lookup` (id, vendor_name, destination, origin, hs_code, state
+  `requested | answered | unknown_code | needs_person`, calls, detail,
+  timestamps), `UNIQUE (vendor_name, destination, origin, hs_code)`: the
+  "ask once" guard. A switch of vendor asks the new vendor afresh.
+- `duty_answer` (lookup_id, charge, formula, rate or NULL when the
+  formula is not a percentage, note, hs_code_used, and what our own table
+  said at the time: load_id, own rate and line, or none), append-only by
+  trigger, `UNIQUE (lookup_id, charge)`.
+- `duty_source` changes shape: `mode` and `vendor_name` replace `kind`
+  (the table is empty, so the migration alters it).
+
+**Messages** (aggregate `duty_lookup`, version 1):
+
+- `duty_rate_needed`: to the effect consumer `duty_rate_ask`.
+  `prepare` locks the lookup, does nothing unless it is `requested`, and
+  counts the call (committed before it is made, so every billed call is
+  visible). `call` asks the vendor. `complete` stores the answer and our
+  own table's rate beside it, under the lock, and appends:
+- `duty_rate_found`, `duty_rate_unknown_code`, or `duty_rate_needs_person`
+  (an undecodable answer); plus `duty_rate_disagreed` per charge where our
+  own row says something else. No consumers yet: in 4d the quote flow
+  resumes a waiting quote on them.
+- Unavailable and OutcomeUnknown are retried with the worker's backoff.
+  A lookup is a read, so asking again changes nothing at the vendor and
+  needs no duplicate guard; the cost is one more counted call.
+
+**Who asks**: `request_duty_rate`, which inserts the lookup with
+`ON CONFLICT DO NOTHING` and appends `duty_rate_needed` only when it
+inserted. For now from the staff page's order check (outside prod: an
+"Ask the vendor" POST with the same-origin check); in 4d from the quote
+flow, when a buyer opens a checkout for a combination not yet asked.
+
+**The fake vendor** at `/_fake/duty/`, in the `fake_vendor` schema: rates
+per (destination, HS prefix), a default for any other code, a call log
+(tests count billed calls), and faults scripted for the next call:
+unavailable (from the test network), a 5xx, a timeout after answering,
+unknown code, an undecodable body, a specific-duty formula, and a
+preference note.
+
+**The staff page**: the order check shows each rate's source (our row or
+the vendor's answer, with the comparison), the lookup's state, and the
+button; a table of agreement per country (answers compared, matched,
+differed, our table had none).
+
+**Fuzzer** (a Hypothesis state machine): request a combination (also one
+already asked), run a delivery, the worker catches up, a crash after
+`prepare` with or without the call, each fault, a refused connection, a
+redelivered fact. After every action: one `duty_rate_needed` per lookup;
+every answered lookup has exactly one answer per charge; the vendor was
+called no more often than we counted; and every counted call beyond the
+first per lookup has a cause (a fault, a refused connection or a crash);
+a lookup ends unanswered only after a fault that ends it. After draining
+with faults off: no lookup is `requested`.
+
+**4b-2 built 18-Nov-2026** (`src/mor/duties/`, `mor.fakes.duty`,
+`0010_duty_vendors.sql`, fake `0005_duty.sql`, the modes in
+`tax.line_rates`): every open and conditional country is listed as
+`vendor` with `zonos`; the seed gives each vendor the market data names
+an account at the fake. The fuzzer was checked by planting bugs: a second
+request emitting `duty_rate_needed` again, a call counted only after it
+was made, a lost answer ending the lookup as unknown, and a refused
+connection ending it as needing a person. At first only the first was
+caught at the dev budget: faults piled up unused, and the checks counted
+faults scripted rather than used. The fuzzer now starts with one
+combination asked, keeps at most two faults and two refusals waiting,
+and bounds its checks by what the vendor and the network actually took;
+all four are caught. Removing `prepare`'s state check is not caught, and
+cannot be: `complete` and finishing the delivery commit together, so
+`prepare` never meets an answered lookup; the check is a second guard.
+Still to do (asked 18-Nov-2026): the staff page's agreement table shows
+counts only; add a list of each answer (country, origin, HS code, charge,
+what the vendor said, our row and its line), differences first, so a
+person can see which rates differ and by how much.
 
 ## 4. Prices and the quote (4c)
 

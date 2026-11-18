@@ -10,6 +10,8 @@ import httpx2
 
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.duties import lookups as duty_lookups
+from mor.duties import port as duty_port
 from mor.echo import flow as echo_flow
 from mor.echo import inbound as echo_inbound
 from mor.echo import reports as echo_reports
@@ -22,9 +24,12 @@ from mor.probe import flow as probe_flow
 
 
 type EffectCall = (
-    echo_flow.EchoCall | echo_tracking.FetchEventsCall | echo_reports.ReportCall
+    echo_flow.EchoCall
+    | echo_tracking.FetchEventsCall
+    | echo_reports.ReportCall
+    | duty_lookups.AskCall
 )
-type EffectResult = echo_flow.EchoResult | Page | ReportList
+type EffectResult = echo_flow.EchoResult | Page | ReportList | duty_port.AskResult
 
 
 class WrongKind(Exception):
@@ -54,6 +59,7 @@ async def handle(
             ConsumerName.ECHO_SEND
             | ConsumerName.ECHO_POLL
             | ConsumerName.ECHO_REPORT_FETCH
+            | ConsumerName.DUTY_RATE_ASK
         ):
             raise WrongKind(f"{consumer} is an effect consumer")
         case _:
@@ -71,6 +77,8 @@ async def prepare(
             return await echo_tracking.prepare_poll(conn, fact, now)
         case ConsumerName.ECHO_REPORT_FETCH:
             return await echo_reports.prepare_reports(conn, fact, now)
+        case ConsumerName.DUTY_RATE_ASK:
+            return await duty_lookups.prepare(conn, fact, now)
         case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH
@@ -95,6 +103,8 @@ async def call(
             return await echo_tracking.call_poll(http, environment, effect_call)
         case echo_reports.ListReportsCall() | echo_reports.FetchReportCall():
             return await echo_reports.call_reports(http, environment, effect_call)
+        case duty_lookups.AskCall():
+            return await duty_lookups.call(http, environment, effect_call)
         case _:
             assert_never(effect_call)
 
@@ -113,7 +123,16 @@ async def complete(
             if not isinstance(
                 effect_call,
                 echo_flow.SendCall | echo_flow.FindCall | echo_flow.CancelCall,
-            ) or isinstance(result, Page | ReportList):
+            ) or isinstance(
+                result,
+                Page
+                | ReportList
+                | duty_port.VendorRates
+                | duty_port.UnknownCode
+                | duty_port.Unavailable
+                | duty_port.OutcomeUnknown
+                | duty_port.UndecodableBody,
+            ):
                 raise WrongCall(f"echo_send got {effect_call!r}, {result!r}")
             return await echo_flow.complete(conn, fact, effect_call, result, now)
         case ConsumerName.ECHO_POLL:
@@ -134,6 +153,19 @@ async def complete(
             return await echo_reports.complete_reports(
                 conn, fact, effect_call, result, now
             )
+        case ConsumerName.DUTY_RATE_ASK:
+            if not isinstance(effect_call, duty_lookups.AskCall):
+                raise WrongCall(f"duty_rate_ask got {effect_call!r}")
+            if not isinstance(
+                result,
+                duty_port.VendorRates
+                | duty_port.UnknownCode
+                | duty_port.Unavailable
+                | duty_port.OutcomeUnknown
+                | duty_port.UndecodableBody,
+            ):
+                raise WrongCall(f"duty_rate_ask got {result!r}")
+            return await duty_lookups.complete(conn, fact, effect_call, result, now)
         case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH

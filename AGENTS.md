@@ -38,9 +38,11 @@ and wins where the two differ.
   until a VPS exists); its steps 1 (serve, `SELF_URL`, seed), 2 (the page at `/_fake/`)
   and 3 (the nightly soak, `deploy/soak.sh`) are built. Slice 4 (markets, tax path,
   prices, the quote) is planned in `docs/plan-quote.md` in four steps; 4a
-  (markets in the database, versioned loads) and 4b-1 (the tax-path rule,
-  rates per HS code with trade agreements, exact FX chains) are built;
-  4b-2 (the duty vendor flow) is next.
+  (markets in the database, versioned loads), 4b-1 (the tax-path rule,
+  rates per HS code with trade agreements, exact FX chains) and 4b-2
+  (duty and VAT rates from vendors: a mode per country, asked once per
+  combination, compared with our rows) are built; 4c (shipping prices,
+  fees, `build_quote`) is next.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
@@ -131,7 +133,7 @@ uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_v
 uv run python -m mor.messaging.worker    # the worker: runs due deliveries
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod
-uv run python -m mor.seed                # test setup: one echo account per provider and mode (server must run)
+uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor accounts at the fake (server must run)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
 uv run pytest                            # drops and recreates mor_test, then runs the suite

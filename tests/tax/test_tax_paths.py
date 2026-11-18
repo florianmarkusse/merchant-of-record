@@ -157,7 +157,7 @@ def _duty_rate(hs_code: str | None, origin: str, met: frozenset[PreferenceCondit
     paths = _paths(market, "TH", OrderValue(Money(5000, Currency.USD), None))
     assert isinstance(paths.duty, BorderPaid)
     line = Line(hs_code, origin, met)
-    return line_rate(market, "TH", Charge.DUTY, line, paths.duty.rate, ON)
+    return line_rate(market, "TH", Charge.DUTY, line, paths.duty.rate, ON, None)
 
 
 def test_the_longest_prefix_and_the_lines_origin_win() -> None:
@@ -188,7 +188,7 @@ def test_an_unconfirmed_agreement_rate_is_reported_not_applied() -> None:
     assert isinstance(paths.duty, BorderPaid)
     everything = frozenset(PreferenceCondition)
     line = Line("610910", "VN", everything)
-    found = line_rate(market, "TH", Charge.DUTY, line, paths.duty.rate, ON)
+    found = line_rate(market, "TH", Charge.DUTY, line, paths.duty.rate, ON, None)
     assert isinstance(found, Found) and found.rate == Fraction(28, 100)
     assert found.missed[0].unconfirmed
 
@@ -204,7 +204,7 @@ def test_vat_without_an_hs_rate_takes_the_band_rows_rate() -> None:
     assert isinstance(paths.indirect_tax, BorderPaid)
     line = Line("610910", "VN", frozenset())
     found = line_rate(
-        market, "TH", Charge.IMPORT_TAX, line, paths.indirect_tax.rate, ON
+        market, "TH", Charge.IMPORT_TAX, line, paths.indirect_tax.rate, ON, None
     )
     assert isinstance(found, Found)
     assert found.rate == Fraction(7, 100)
@@ -218,7 +218,7 @@ def test_an_unconfirmed_standard_hs_rate_is_not_used() -> None:
     assert isinstance(paths.duty, BorderPaid)
     line = Line("610910", "CN", frozenset())
     assert line_rate(
-        market, "TH", Charge.DUTY, line, paths.duty.rate, ON
+        market, "TH", Charge.DUTY, line, paths.duty.rate, ON, None
     ) == RateNotConfirmed(3)
 
 

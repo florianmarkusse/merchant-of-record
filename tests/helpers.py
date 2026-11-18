@@ -10,7 +10,7 @@ import psycopg
 from starlette.applications import Starlette
 from starlette.types import Receive, Scope, Send
 
-import mor.fakes.echo
+import mor.fakes.app
 import mor.web.main
 from mor.config import Environment, Settings
 
@@ -126,7 +126,7 @@ def wire(database_url: str, clock: Callable[[], datetime]) -> Wired:
         await built[0](scope, receive, send)
 
     outgoing = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=our_app))
-    fakes = mor.fakes.echo.make_app(database_url, outgoing)
+    fakes = mor.fakes.app.make_app(database_url, outgoing)
     app = mor.web.main.make_app(
         Settings(ENV, database_url, "http://mor"),
         mor.web.main.Fakes(fakes, outgoing),
