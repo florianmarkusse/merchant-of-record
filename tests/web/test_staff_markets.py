@@ -220,8 +220,10 @@ def test_with_a_parcel_the_check_shows_each_option_and_its_parts(
         )
         text = page.text
         # The worked example of tests/quote/test_build_quote.py.
-        assert "<h3>Express</h3>" in text
-        assert '<div class="total">649.28 SGD</div>' in text
+        # The options on one line each, then how the chosen one is built.
+        assert 'data-option="exp_card" aria-current="true">Express</a>' in text
+        assert "<h2>How Express comes to 649.28 SGD</h2>" in text
+        assert "= Buyer pays" in text
         assert "fuel rate ended 15-Nov-2026" in text
         # Beside the quote's own currency, for reading (ECB rates in the set).
         assert "≈ 506.62 USD · 453.76 EUR" in text
@@ -269,5 +271,35 @@ def test_while_typing_an_empty_field_is_not_marked(database_url: str) -> None:
         text = (await _get(database_url, Environment.TEST, query)).text
         assert _error(text, "goods") == ""
         assert _error(text, "weight") == ""
+
+    asyncio.run(body())
+
+
+def test_an_option_named_in_the_address_is_the_one_explained(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        async with await connect(database_url) as conn:
+            await load_market(conn, quote_market(), "quote", LOADER, NOW)
+            await conn.commit()
+        # Under the GST band, nothing is due at the border: both cards carry.
+        order = (
+            "/staff/markets?country=SG&goods=50.00&currency=SGD&hs=610910"
+            "&origin=VN&weight=1000"
+        )
+        cheapest = (await _get(database_url, Environment.TEST, order)).text
+        chosen = (
+            await _get(database_url, Environment.TEST, order + "&option=exp_card")
+        ).text
+        unknown = (
+            await _get(database_url, Environment.TEST, order + "&option=gone")
+        ).text
+        assert 'data-option="eco_card" aria-current="true"' in cheapest
+        assert "<h2>How Economy comes to" in cheapest
+        assert "none due on this order" in cheapest
+        assert 'data-option="exp_card" aria-current="true"' in chosen
+        assert "<h2>How Express comes to" in chosen
+        # A card no longer offered falls back to the cheapest.
+        assert "<h2>How Economy comes to" in unknown
 
     asyncio.run(body())

@@ -6,7 +6,8 @@
 //   work without this script;
 // - the day beside the "Rules as of" picker and each field's error follow
 //   it the same way; after Quote is pressed, missing fields are marked too;
-// - "Show every part" opens or closes every option's parts at once.
+// - an option's name in the options table shows how its price is built,
+//   without reloading; without this script it is a plain link.
 
 export {}; // a module: its names stay out of the global scope
 
@@ -62,7 +63,6 @@ async function refresh(): Promise<void> {
         live.replaceWith(update);
       }
     }
-    showToggle();
     history.replaceState(null, "", address);
     status.textContent = "";
   } catch (error) {
@@ -78,12 +78,6 @@ function later(): void {
   timer = window.setTimeout(() => void refresh(), WAIT_MS);
 }
 
-function showToggle(): void {
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-toggle-parts]")) {
-    button.hidden = false;
-  }
-}
-
 form.addEventListener("input", later);
 form.addEventListener("change", later);
 form.addEventListener("submit", (event) => {
@@ -93,29 +87,16 @@ form.addEventListener("submit", (event) => {
   void refresh();
 });
 
+// An option's name shows how its price is built: its rate card goes into
+// the form's hidden field, and the page is fetched as for any change.
+const option = form.elements.namedItem("option") as HTMLInputElement;
 document.addEventListener("click", (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLButtonElement) || !target.matches("[data-toggle-parts]")) {
+  if (!(target instanceof HTMLAnchorElement) || target.dataset.option === undefined) {
     return;
   }
-  const parts = [...document.querySelectorAll<HTMLDetailsElement>("details.parts")];
-  const open = !parts.every((details) => details.open);
-  for (const details of parts) {
-    details.open = open;
-  }
-  target.textContent = open ? "Hide every part" : "Show every part";
-});
-
-showToggle();
-
-// "Every part" on a card opens that option's parts below before jumping there.
-document.addEventListener("click", (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLAnchorElement) || !target.hash.startsWith("#parts-")) {
-    return;
-  }
-  const details = document.getElementById(target.hash.slice(1));
-  if (details instanceof HTMLDetailsElement) {
-    details.open = true;
-  }
+  event.preventDefault();
+  option.value = target.dataset.option;
+  window.clearTimeout(timer);
+  void refresh();
 });

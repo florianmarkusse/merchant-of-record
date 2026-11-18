@@ -132,7 +132,7 @@ class PartKind(StrEnum):
 @dataclass(frozen=True)
 class Part:
     kind: PartKind
-    label: str  # what it is, for a person
+    label: str  # how it was reached, for a person (its order line: `line`)
     line: int | None  # the order line (0 first), for per-line parts
     exact: Fraction  # minor units of the quote currency
     amount: Money  # rounded by `mode`
@@ -263,7 +263,7 @@ def build_quote(
         goods_parts.append(
             _part(
                 PartKind.GOODS,
-                f"line {index + 1}: {line.quantity} x {line.category}",
+                f"{line.quantity} × {line.category}",
                 index,
                 exact,
                 currency,
@@ -500,7 +500,7 @@ def _charges(
             parts.append(
                 _part(
                     _CHARGE_KINDS[charge],
-                    f"line {index + 1}: {how}",
+                    how,
                     None if isinstance(row.amount, PerParcel) else index,
                     exact,
                     currency,
@@ -578,7 +578,7 @@ def _charge(
             on = values.goods + values.freight
         case Base.GOODS_FREIGHT_DUTY:
             on = values.goods + values.freight + values.duty
-    how = f"{percent_text(rate)} of {base.value.replace('_', ' ')}"
+    how = f"{percent_text(rate)} of {BASE_WORDS[base]}"
     return Priced(on * rate, how, source)
 
 
@@ -609,6 +609,15 @@ def _line_goods(goods_parts: list[Part], lines: int, fee_total: int) -> list[Fra
     return result
 
 
+# What a percentage is of, for a person. "The price" is the line's price
+# with its share of our fees: what customs values.
+BASE_WORDS = {
+    Base.GOODS: "the price with fees",
+    Base.GOODS_PLUS_FREIGHT: "the price with fees + freight",
+    Base.GOODS_FREIGHT_DUTY: "the price with fees + freight + duty",
+}
+
+
 _SHIP_KINDS = {
     ShipPartKind.FREIGHT: PartKind.FREIGHT,
     ShipPartKind.SURCHARGE: PartKind.SURCHARGE,
@@ -624,7 +633,7 @@ def _ship_part(ship: ShipPart, card: str, currency: Currency) -> Part:
         source = f"surcharges.csv line {ship.line_no}"
     return _part(
         kind,
-        f"{ship.name}: {ship.how}",
+        ship.how if ship.kind == ShipPartKind.FREIGHT else f"{ship.name}: {ship.how}",
         None,
         ship.exact,
         currency,

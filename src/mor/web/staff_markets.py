@@ -64,7 +64,13 @@ from mor.tax.explain import OrderCheck, explain
 from mor.tax.line_rates import RateNeeded, duty_source_for
 from mor.web.forms import read_form, same_origin
 from mor.web.staff_data_html import DataView, render_answers_page, render_data_page
-from mor.web.staff_quote_html import PAGE, Ask, QuoteView, render_quote_page
+from mor.web.staff_quote_html import (
+    PAGE,
+    Ask,
+    QuoteView,
+    chosen_option,
+    render_quote_page,
+)
 
 
 LOADS_SHOWN = 10
@@ -81,6 +87,7 @@ FIELDS = (
     "length",
     "width",
     "height",
+    "option",  # the rate card whose price is explained; else the cheapest
 )
 
 
@@ -209,9 +216,10 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
             if order.parcel is not None:
                 quote = _quote(market, check, order.parcel, on, lookup)
                 if isinstance(quote, Quote):
-                    # Explained with the cheapest option's freight, so a
-                    # band on goods plus freight is decided as it quoted.
-                    check = replace(check, freight=_freight(quote.options[0]))
+                    # Explained with the shown option's freight, so a band
+                    # on goods plus freight is decided as it quoted.
+                    shown = chosen_option(quote, fields.get("option", ""))
+                    check = replace(check, freight=_freight(shown))
                     references = _references(market, quote.currency)
             explained = explain(market, check, on, lookup)
             why = explained.lines

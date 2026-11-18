@@ -1,14 +1,17 @@
 """The staff quote page's HTML (docs/plan-quote.md §5b): the order form,
-then each shipping option as a card with its total, a summary and every
-part, and why the duties and taxes are what they are. Typed functions
+then every shipping option on one line each, how the chosen one's price
+comes to be (each part, what it is a share of, where it came from), and
+why the duties and taxes are what they are. Typed functions
 from the view to markup; the handler is `staff_markets.quote_page`.
 
 `ts/staff_quote.ts` re-quotes as the form changes, by fetching this same
-page and swapping `#result`; without it the form's button does the same."""
+page and swapping `#result`; without it the form's button does the same,
+and an option's name is a plain link to the page showing it."""
 
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
+from urllib.parse import urlencode
 
 import htpy
 
@@ -127,16 +130,30 @@ NOT_OFFERED_WORDS: dict[NotOfferedReason, str] = {
     "fx_missing": "no exchange rate",
 }
 
-SUMMARY_ROWS: tuple[tuple[str, frozenset[PartKind]], ...] = (
-    ("Merchant's price", frozenset({PartKind.GOODS})),
-    ("Our fees", frozenset({PartKind.PSP_FEE, PartKind.FX, PartKind.MOR_MARGIN})),
+# The groups a price is built from, in order: label, colour class, kinds.
+# The carrier's fee for paying duties is the carrier's, so it is shipping.
+GROUPS: tuple[tuple[str, str, frozenset[PartKind]], ...] = (
+    ("Merchant's price", "s-goods", frozenset({PartKind.GOODS})),
+    (
+        "Our fees",
+        "s-fees",
+        frozenset({PartKind.PSP_FEE, PartKind.FX, PartKind.MOR_MARGIN}),
+    ),
     (
         "Shipping",
-        frozenset({PartKind.FREIGHT, PartKind.SURCHARGE, PartKind.FUEL}),
+        "s-ship",
+        frozenset(
+            {
+                PartKind.FREIGHT,
+                PartKind.SURCHARGE,
+                PartKind.FUEL,
+                PartKind.DUTY_PAID_FEE,
+            }
+        ),
     ),
-    ("Carrier's fee for paying duties", frozenset({PartKind.DUTY_PAID_FEE})),
     (
         "Duties and taxes",
+        "s-tax",
         frozenset(
             {
                 PartKind.DUTY,
@@ -325,6 +342,8 @@ def _form(view: QuoteView) -> htpy.Element:
                 ),
             ],
         ],
+        # The option shown below; a name in the options table sets it.
+        htpy.input(type="hidden", name="option", value=view.fields.get("option", "")),
         htpy.div(class_="actions")[
             # Pressed, the page also marks what is still missing (`go`).
             htpy.button(type="submit", name="go", value="1")["Quote"],
@@ -463,63 +482,34 @@ def _reference_heading(view: QuoteView) -> str:
     return ""
 
 
-def _sum(
-    parts: tuple[Part, ...], kinds: frozenset[PartKind], currency: Currency
-) -> Money:
+def _sum(parts: list[Part], currency: Currency) -> Money:
     total = 0
     for part in parts:
-        if part.kind in kinds:
-            total += part.amount.amount_minor
+        total += part.amount.amount_minor
     return Money(total, currency)
 
 
-def _parts_table(view: QuoteView, parts: tuple[Part, ...]) -> htpy.Element:
-    rows: list[htpy.Node] = []
-    for part in parts:
-        collected = (
-            COLLECTOR_WORDS[part.collector] if part.collector is not None else ""
-        )
-        rows.append(
-            htpy.tr[
-                htpy.td(title=part.kind.value)[PART_WORDS[part.kind]],
-                htpy.td[part.label],
-                htpy.td(class_="num")[money_text(part.amount)],
-                htpy.td(class_="num muted")[_first_reference(view, part.amount)],
-                htpy.td(title=part.mode.value)[ROUNDING_WORDS[part.mode]],
-                htpy.td[collected],
-                htpy.td(class_="source")[part.source],
-            ]
-        )
-    return htpy.div(class_="scroll")[
-        htpy.table(class_="grid")[
-            htpy.tr[
-                htpy.th["Part"],
-                htpy.th["How"],
-                htpy.th(class_="num")["Amount"],
-                htpy.th(class_="num")[_reference_heading(view)],
-                htpy.th["Rounded"],
-                htpy.th["Collected"],
-                htpy.th["From"],
-            ],
-            rows,
-        ]
-    ]
+def chosen_option(quote: Quote, rate_card: str) -> ShippingOption:
+    """The option asked for by its rate card, else the cheapest."""
+    for option in quote.options:
+        if option.rate_card == rate_card:
+            return option
+    return quote.options[0]
 
 
-def _option_card(
-    view: QuoteView, quote: Quote, option: ShippingOption, best: bool
-) -> htpy.Element:
-    everything = quote.goods + option.parts
-    tags: list[htpy.Node] = [
-        htpy.span(class_="tag")[option.tier.value.replace("_", " ")]
-    ]
-    if best:
-        tags.append(htpy.span(class_="tag good")["cheapest"])
-    if option.transit_days is not None:
-        low, high = option.transit_days
-        tags.append(htpy.span(class_="tag")[f"{low}–{high} days"])
-    else:
-        tags.append(htpy.span(class_="tag warn")["transit unknown"])
+def _option_href(view: QuoteView, rate_card: str) -> str:
+    """This page with the same order, showing another option."""
+    params: dict[str, str] = {}
+    for name, value in view.fields.items():
+        if name != "option" and value:
+            params[name] = value
+    params["on"] = view.on.isoformat()
+    params["option"] = rate_card
+    return f"{PAGE}?{urlencode(params)}"
+
+
+def _option_tags(option: ShippingOption) -> list[htpy.Node]:
+    tags: list[htpy.Node] = []
     if option.fuel_stale_since is not None:
         tags.append(
             htpy.span(class_="tag warn")[
@@ -528,53 +518,205 @@ def _option_card(
         )
     if option.standing == Standing.PLACEHOLDER:
         tags.append(htpy.span(class_="tag warn")["placeholder route"])
-    summary: list[htpy.Node] = []
-    for label, kinds in SUMMARY_ROWS:
-        amount = _sum(everything, kinds, quote.currency)
-        if amount.amount_minor == 0 and PartKind.DUTY_PAID_FEE in kinds:
-            continue
-        summary.append(
-            htpy.tr[
-                htpy.td[label],
-                htpy.td[money_text(amount)],
-                htpy.td(class_="muted")[_first_reference(view, amount)],
+    return tags
+
+
+def _days_text(option: ShippingOption) -> str:
+    if option.transit_days is None:
+        return "unknown"
+    low, high = option.transit_days
+    return f"{low}–{high} days"
+
+
+def _options_table(
+    view: QuoteView, quote: Quote, chosen: ShippingOption
+) -> htpy.Element:
+    """Every option on one line each, cheapest first; the chosen one is
+    explained below, and each name shows another."""
+    rows: list[htpy.Node] = []
+    for index, option in enumerate(quote.options):
+        name: list[htpy.Node] = [
+            htpy.a(
+                href=_option_href(view, option.rate_card),
+                data_option=option.rate_card,
+                aria_current="true" if option is chosen else None,
+            )[option.service_name]
+        ]
+        if index == 0 and len(quote.options) > 1:
+            name.append(htpy.span(class_="tag good")["cheapest"])
+        rows.append(
+            htpy.tr(class_="chosen" if option is chosen else None)[
+                htpy.td[name],
+                htpy.td[option.tier.value.replace("_", " ")],
+                htpy.td[_days_text(option)],
+                htpy.td[_option_tags(option)],
+                htpy.td(class_="num")[htpy.strong[money_text(option.total)]],
+                htpy.td(class_="num muted")[approx_text(view, option.total)],
             ]
         )
-    return htpy.article(class_="option best" if best else "option")[
-        htpy.h3[option.service_name],
-        htpy.div(class_="tags")[tags],
-        htpy.div(class_="total")[money_text(option.total)],
-        htpy.div(class_="approx muted")[approx_text(view, option.total)],
-        htpy.table(class_="summary")[summary],
-        htpy.a(href=f"#parts-{option.rate_card}")["Every part"],
+    return htpy.div(class_="scroll")[
+        htpy.table(class_="grid options-table")[
+            htpy.tr[
+                htpy.th["Service"],
+                htpy.th["Type"],
+                htpy.th["Delivery"],
+                htpy.th["Notes"],
+                htpy.th(class_="num")["Buyer pays"],
+                htpy.th(class_="num")[""],
+            ],
+            rows,
+        ]
     ]
 
 
-def _option_parts(
-    view: QuoteView, quote: Quote, option: ShippingOption
+def _grouped(quote: Quote, option: ShippingOption) -> list[tuple[str, str, list[Part]]]:
+    """The chosen option's parts in the order the price is built, by group:
+    (label, css class, parts); empty groups left out."""
+    found: list[tuple[str, str, list[Part]]] = []
+    for label, css, kinds in GROUPS:
+        parts: list[Part] = []
+        for part in quote.goods + option.parts:
+            if part.kind in kinds:
+                parts.append(part)
+        if parts:
+            found.append((label, css, parts))
+    return found
+
+
+def _share_bar(
+    groups: list[tuple[str, str, list[Part]]], quote: Quote, total: Money
 ) -> htpy.Element:
-    """An option's every part, full width under the cards."""
-    return htpy.details(class_="parts panel", id=f"parts-{option.rate_card}")[
-        htpy.summary[
-            f"Every part: {option.service_name} ",
-            htpy.span(class_="muted")[
-                f"({option.rate_card}, {money_text(option.total)})"
-            ],
+    """One bar, each group's share of what the buyer pays."""
+    pieces: list[htpy.Node] = []
+    legend: list[htpy.Node] = []
+    for label, css, parts in groups:
+        amount = _sum(parts, quote.currency)
+        if total.amount_minor <= 0 or amount.amount_minor <= 0:
+            continue
+        share = Fraction(amount.amount_minor * 100, total.amount_minor)
+        percent = round_fraction(share, RoundingMode.HALF_EVEN)
+        width = f"{float(share):.2f}%"
+        pieces.append(
+            htpy.span(class_=f"piece {css}", style=f"width: {width}", title=label)
+        )
+        legend.append(htpy.li[htpy.span(class_=f"swatch {css}"), f"{label} {percent}%"])
+    return htpy.div(class_="shares")[
+        htpy.div(class_="bar", aria_hidden="true")[pieces],
+        htpy.ul(class_="legend")[legend],
+    ]
+
+
+def _part_note(part: Part) -> str:
+    """Where a part's number came from and how it was rounded."""
+    said = [f"from {part.source}", f"rounded {ROUNDING_WORDS[part.mode]}"]
+    if part.collector is not None:
+        said.append(f"paid {COLLECTOR_WORDS[part.collector]}")
+    return " · ".join(said)
+
+
+def _how(part: Part, lines: int) -> list[htpy.Node]:
+    """How a part was reached, and where from; its order line named only
+    when the order has more than one."""
+    how = part.label
+    if part.line is not None and lines > 1:
+        how = f"line {part.line + 1}: {how}"
+    return [
+        htpy.span(class_="how")[how],
+        htpy.span(class_="note")[_part_note(part)],
+    ]
+
+
+def _buildup(view: QuoteView, quote: Quote, option: ShippingOption) -> htpy.Element:
+    """How the chosen option's price comes to be: each group with its
+    subtotal, each part with what it is a share of and where it came from,
+    then what the buyer pays."""
+    groups = _grouped(quote, option)
+    lines = 0
+    for part in quote.goods:
+        if part.kind == PartKind.GOODS:
+            lines += 1
+    body: list[htpy.Node] = []
+    for number, (label, css, parts) in enumerate(groups):
+        subtotal = _sum(parts, quote.currency)
+        sign = "" if number == 0 else "+ "
+        heading: list[htpy.Node] = [
+            htpy.span(class_=f"swatch {css}"),
+            htpy.span(class_="what")[f"{sign}{label}"],
+        ]
+        if len(parts) == 1:
+            # One part: its group's line says how it was reached.
+            heading.extend(_how(parts[0], lines))
+        rows: list[htpy.Node] = [
+            htpy.tr(class_="group")[
+                htpy.th(scope="rowgroup")[heading],
+                htpy.td(class_="num")[money_text(subtotal)],
+                htpy.td(class_="num muted")[_first_reference(view, subtotal)],
+            ]
+        ]
+        for part in parts:
+            if len(parts) == 1:
+                break  # said on the group's line
+            rows.append(
+                htpy.tr(class_="part")[
+                    htpy.td[
+                        htpy.span(class_="what")[PART_WORDS[part.kind]],
+                        _how(part, lines),
+                    ],
+                    htpy.td(class_="num")[money_text(part.amount)],
+                    htpy.td(class_="num muted")[_first_reference(view, part.amount)],
+                ]
+            )
+        body.append(htpy.tbody[rows])
+    if not groups or groups[-1][1] != "s-tax":
+        # Said, not left out: none due is an answer too.
+        none = Money(0, quote.currency)
+        body.append(
+            htpy.tbody[
+                htpy.tr(class_="group")[
+                    htpy.th(scope="rowgroup")[
+                        htpy.span(class_="swatch s-tax"),
+                        htpy.span(class_="what")["+ Duties and taxes"],
+                        htpy.span(class_="how")["none due on this order"],
+                        htpy.span(class_="note")["why: see below"],
+                    ],
+                    htpy.td(class_="num")[money_text(none)],
+                    htpy.td(class_="num muted")[_first_reference(view, none)],
+                ]
+            ]
+        )
+    return htpy.section(class_="panel buildup")[
+        htpy.h2[f"How {option.service_name} comes to {money_text(option.total)}"],
+        _share_bar(groups, quote, option.total),
+        htpy.div(class_="scroll")[
+            htpy.table(class_="build")[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Part"],
+                        htpy.th(class_="num")[quote.currency.value],
+                        htpy.th(class_="num")[_reference_heading(view)],
+                    ]
+                ],
+                body,
+                htpy.tfoot[
+                    htpy.tr(class_="total")[
+                        htpy.th["= Buyer pays"],
+                        htpy.td(class_="num")[money_text(option.total)],
+                        htpy.td(class_="num muted")[
+                            _first_reference(view, option.total)
+                        ],
+                    ]
+                ],
+            ]
         ],
-        _parts_table(view, quote.goods + option.parts),
     ]
 
 
 def _quote_block(view: QuoteView, quote: Quote) -> htpy.Node:
     count = len(quote.options)
     plural = "s" if count != 1 else ""
-    heading = f"{count} shipping option{plural}, paid in {quote.currency.value}"
     blocks: list[htpy.Node] = [
-        htpy.div(class_="result-head")[
-            htpy.h2[heading],
-            htpy.button(
-                type="button", class_="quiet", data_toggle_parts="", hidden=True
-            )["Show every part"],
+        htpy.h2(class_="result-head")[
+            f"{count} shipping option{plural}, paid in {quote.currency.value}"
         ]
     ]
     if view.references:
@@ -593,22 +735,16 @@ def _quote_block(view: QuoteView, quote: Quote) -> htpy.Node:
                 ". Prod refuses to quote on a placeholder.",
             )
         )
-    cards: list[htpy.Node] = []
-    for index, option in enumerate(quote.options):
-        cards.append(_option_card(view, quote, option, index == 0 and count > 1))
-    blocks.append(htpy.div(class_="options")[cards])
-    for option in quote.options:
-        blocks.append(_option_parts(view, quote, option))
+    chosen = chosen_option(quote, view.fields.get("option", ""))
+    blocks.append(_options_table(view, quote, chosen))
     if quote.not_offered:
         blocks.append(
-            htpy.details[
-                htpy.summary[
-                    f"{len(quote.not_offered)} rate card"
-                    f"{'s' if len(quote.not_offered) != 1 else ''} not offered"
-                ],
+            htpy.div(class_="not-offered")[
+                htpy.span(class_="muted")["Not offered: "],
                 _not_offered_list(quote.not_offered),
             ]
         )
+    blocks.append(_buildup(view, quote, chosen))
     return blocks
 
 
