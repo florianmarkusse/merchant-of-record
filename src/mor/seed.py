@@ -19,6 +19,10 @@ gets an account pointing at the fake courier, its prices used for
 PRICE_VALID_FOR under the `carrier_first` rule (decided 19-Nov-2026). The
 fake answers its own default prices.
 
+A synthetic merchant, "Sandbox Shop", with an API key for this
+environment: the key is printed when it is created, and only then
+(docs/plan-quote.md §5, 4d-1).
+
 Transitional with the echo flow: the seed grows a merchant per mode
 combination as the real ports arrive (plan-architecture.md §6).
 """
@@ -45,6 +49,14 @@ from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
 from mor.markets.records import PriceSource
 from mor.markets.store import latest_load, read_market
+from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, NewKey
+from mor.merchants.store import (
+    create_api_key,
+    create_merchant,
+    key_env,
+    merchant_has_key,
+    merchants,
+)
 
 
 SEEDER = Actor(ActorKind.SYSTEM, "seed")
@@ -260,6 +272,8 @@ async def _main() -> int:
         assert not isinstance(vendors, SeedInProd)
         couriers = await seed_couriers(conn, settings)
         assert not isinstance(couriers, SeedInProd)
+        key = await seed_merchant(conn, settings, datetime.now(UTC))
+        assert not isinstance(key, SeedInProd)
         await conn.commit()
     async with httpx2.AsyncClient() as http:
         unreachable = await subscribe_webhooks(http, settings, seeded)
@@ -276,7 +290,40 @@ async def _main() -> int:
     print(f"{len(seeded)} echo accounts, {created} new; webhooks subscribed")
     print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
     print(f"courier accounts created: {', '.join(couriers) or 'none'}")
+    if key is not None:
+        print(f"Sandbox Shop API key (shown once): {key.text}")
     return 0
+
+
+SANDBOX_MERCHANT = ("Sandbox Shop Co., Ltd.", "Sandbox Shop")
+
+
+async def seed_merchant(
+    conn: Connection, settings: Settings, now: datetime
+) -> NewKey | None | SeedInProd:
+    """The sandbox merchant if missing, and a key for it if it has none:
+    the new key, to be shown once. Never commits."""
+    if settings.environment == Environment.PROD:
+        return SeedInProd()
+    legal_name, display_name = SANDBOX_MERCHANT
+    merchant_id: uuid.UUID | None = None
+    for merchant in await merchants(conn):
+        if merchant.legal_name == legal_name:
+            merchant_id = merchant.id
+    if merchant_id is None:
+        created = await create_merchant(
+            conn,
+            legal_name,
+            display_name,
+            "VN",
+            DEFAULT_DAILY_VENDOR_ASKS,
+            SEEDER,
+            now,
+        )
+        merchant_id = created.id
+    if await merchant_has_key(conn, merchant_id):
+        return None
+    return await create_api_key(conn, merchant_id, key_env(settings.environment), now)
 
 
 if __name__ == "__main__":

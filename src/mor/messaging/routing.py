@@ -61,6 +61,8 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             | MessageType.SHIPPING_PRICE_FOUND
             | MessageType.SHIPPING_PRICE_NOT_SERVED
             | MessageType.SHIPPING_PRICE_NEEDS_PERSON
+            # The quote flow (4d-2) and payments (slice 5) consume this.
+            | MessageType.CHECKOUT_SESSION_CREATED
         ):
             return ()
         case _:

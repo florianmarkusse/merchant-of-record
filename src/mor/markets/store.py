@@ -97,6 +97,14 @@ async def latest_load(conn: Connection) -> LoadRow | None:
         return await cur.fetchone()
 
 
+async def market_in_force(conn: Connection) -> MarketSet | None:
+    """The complete set of the load in force, or None before any load."""
+    load = await latest_load(conn)
+    if load is None:
+        return None
+    return await read_market(conn, load.id)
+
+
 async def recent_loads(conn: Connection, limit: int) -> list[LoadRow]:
     """The newest loads first; the first is the one in force."""
     async with conn.cursor(row_factory=class_row(LoadRow)) as cur:

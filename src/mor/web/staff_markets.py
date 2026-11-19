@@ -37,7 +37,6 @@ from mor.couriers.prices import (
     NoCourierAccount,
     courier_account,
     live_prices,
-    read_price,
     request_shipping_price,
 )
 from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
@@ -62,7 +61,7 @@ from mor.markets.records import (
     MarketStatus,
     PriceSource,
 )
-from mor.markets.store import read_market, recent_loads
+from mor.markets.store import market_in_force, read_market, recent_loads
 from mor.money.amount import InvalidAmount, Money, parse_major
 from mor.money.currency import Currency
 from mor.quote.build import (
@@ -76,6 +75,7 @@ from mor.quote.build import (
     ShippingOption,
     build_quote,
 )
+from mor.quote.inputs import held_prices
 from mor.quote.shipping import price_question, routes_to
 from mor.tax.explain import Explained, OrderCheck, explain
 from mor.tax.line_rates import RateNeeded, duty_source_for
@@ -203,13 +203,6 @@ def _researched(market: MarketSet | None) -> list[Country]:
     return countries
 
 
-async def _market_in_force(conn: Connection) -> MarketSet | None:
-    loads = await recent_loads(conn, 1)
-    if not loads:
-        return None
-    return await read_market(conn, loads[0].id)
-
-
 async def quote_page(request: Request, database_url: str, now: datetime) -> Response:
     on = _day(request.query_params.get("on"), now.date())
     fields: dict[str, str] = {}
@@ -227,12 +220,12 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
     ask: Ask | None = None
     no_account: set[str] = set()
     async with await connect(database_url) as conn:
-        market = await _market_in_force(conn)
+        market = await market_in_force(conn)
         if isinstance(order, OrderForm) and market is not None:
             lookup = await _lookup_for(conn, market, order.check)
             check = order.check
             if order.parcel is not None:
-                prices = await _prices_for(conn, market, check.country, order.parcel)
+                prices = await held_prices(conn, market, check.country, order.parcel)
                 quote = _quote(market, check, order.parcel, on, now, lookup, prices)
                 if isinstance(quote, InputsMissing):
                     for question in quote.price_asks:
@@ -351,21 +344,6 @@ def _quote(
     return build_quote(market, request, lookups, prices)
 
 
-async def _prices_for(
-    conn: Connection, market: MarketSet, destination: str, parcel: Parcel
-) -> dict[PriceQuestion, PriceHeld]:
-    """What we hold from carriers for every live route to the destination."""
-    prices: dict[PriceQuestion, PriceHeld] = {}
-    for route in routes_to(market, destination):
-        if route.source != PriceSource.CARRIER_API:
-            continue
-        for service in market.services:
-            if service.code == route.service:
-                question = price_question(service, destination, parcel)
-                prices[question] = await read_price(conn, question)
-    return prices
-
-
 async def _lookup_for(
     conn: Connection, market: MarketSet, order: OrderCheck
 ) -> VendorLookup | None:
@@ -398,7 +376,7 @@ async def ask_vendor(request: Request, database_url: str, now: datetime) -> Resp
     if not hs_code.isdigit() or not 4 <= len(hs_code) <= 10:
         return Response("HS code: 4 to 10 digits", status_code=400)
     async with await connect(database_url) as conn:
-        market = await _market_in_force(conn)
+        market = await market_in_force(conn)
         if market is None:
             return Response("no market data loaded", status_code=409)
         source = duty_source_for(market, country)
@@ -446,7 +424,7 @@ async def ask_carrier(request: Request, database_url: str, now: datetime) -> Res
     parcel = Parcel(sizes[0], sizes[1], sizes[2], sizes[3])
     country = form.country.strip().upper()
     async with await connect(database_url) as conn:
-        market = await _market_in_force(conn)
+        market = await market_in_force(conn)
         if market is None:
             return Response("no market data loaded", status_code=409)
         question: PriceQuestion | None = None

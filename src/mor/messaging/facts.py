@@ -21,6 +21,7 @@ class AggregateType(StrEnum):
     ECHO_ACCOUNT = "echo_account"  # transitional, with the echo flow
     DUTY_LOOKUP = "duty_lookup"
     SHIPPING_PRICE_LOOKUP = "shipping_price_lookup"
+    CHECKOUT_SESSION = "checkout_session"
 
 
 class MessageType(StrEnum):
@@ -49,6 +50,7 @@ class MessageType(StrEnum):
     SHIPPING_PRICE_FOUND = "shipping_price_found"
     SHIPPING_PRICE_NOT_SERVED = "shipping_price_not_served"
     SHIPPING_PRICE_NEEDS_PERSON = "shipping_price_needs_person"
+    CHECKOUT_SESSION_CREATED = "checkout_session_created"
 
 
 @dataclass(frozen=True)
@@ -197,6 +199,13 @@ class ShippingPriceNeedsPersonV1(
     detail: str
 
 
+class CheckoutSessionCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A merchant created a checkout session (4d-1). No consumers yet."""
+
+    checkout_session_id: uuid.UUID
+    merchant_id: uuid.UUID
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -220,6 +229,7 @@ type Fact = (
     | ShippingPriceFoundV1
     | ShippingPriceNotServedV1
     | ShippingPriceNeedsPersonV1
+    | CheckoutSessionCreatedV1
 )
 
 
@@ -283,6 +293,8 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.SHIPPING_PRICE_NOT_SERVED, 1)
         case ShippingPriceNeedsPersonV1():
             return FactType(MessageType.SHIPPING_PRICE_NEEDS_PERSON, 1)
+        case CheckoutSessionCreatedV1():
+            return FactType(MessageType.CHECKOUT_SESSION_CREATED, 1)
         case _:
             assert_never(fact)
 
@@ -324,6 +336,8 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | ShippingPriceNeedsPersonV1(shipping_price_lookup_id=lookup_id)
         ):
             return Aggregate(AggregateType.SHIPPING_PRICE_LOOKUP, lookup_id)
+        case CheckoutSessionCreatedV1(checkout_session_id=session_id):
+            return Aggregate(AggregateType.CHECKOUT_SESSION, session_id)
         case _:
             assert_never(fact)
 
@@ -392,6 +406,8 @@ def decode(
             decoded = _decode(payload, ShippingPriceNotServedV1)
         case MessageType.SHIPPING_PRICE_NEEDS_PERSON:
             decoded = _decode(payload, ShippingPriceNeedsPersonV1)
+        case MessageType.CHECKOUT_SESSION_CREATED:
+            decoded = _decode(payload, CheckoutSessionCreatedV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

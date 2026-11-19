@@ -17,7 +17,7 @@ from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from mor.config import Environment, Settings
-from mor.web import sandbox, staff_markets, webhooks
+from mor.web import api, sandbox, staff_markets, webhooks
 from mor.web.staff_layout import STATIC_DIR
 
 
@@ -44,6 +44,15 @@ def make_app(
     async def echo_webhook(request: Request) -> Response:
         return await webhooks.echo_webhook(request, url, clock())
 
+    async def api_create_checkout_session(request: Request) -> Response:
+        return await api.create_checkout_session(request, settings, clock())
+
+    async def api_get_checkout_session(request: Request) -> Response:
+        return await api.get_checkout_session(request, settings)
+
+    async def api_create_estimate(request: Request) -> Response:
+        return await api.create_estimate(request, settings, clock())
+
     async def staff_quote_page(request: Request) -> Response:
         return await staff_markets.quote_page(request, url, clock())
 
@@ -61,6 +70,14 @@ def make_app(
 
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
+        # The merchant API, in every environment: each has its own keys.
+        Route("/v1/checkout_sessions", api_create_checkout_session, methods=["POST"]),
+        Route(
+            "/v1/checkout_sessions/{session_id}",
+            api_get_checkout_session,
+            methods=["GET"],
+        ),
+        Route("/v1/estimates", api_create_estimate, methods=["POST"]),
         # Stylesheets and compiled scripts (static/js/ comes from ts/).
         Mount(
             "/static",

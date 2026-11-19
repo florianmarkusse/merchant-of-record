@@ -601,6 +601,270 @@ seen on the staff page until one opens.
 - Buyer pages `/c/{session}` (cart, address, quote), server-rendered,
   English first, with the merchant's name. The pay step is slice 5.
 
+Split 19-Nov-2026 into **4d-1** (merchants, API keys, the API with
+idempotency: sessions are created and read, estimates priced) and
+**4d-2** (the stored quote and its waiting flow, the buyer pages, the
+staff view of sessions and quotes; ends with the slice's check).
+
+### 4d-1: merchants, API keys, sessions and estimates (decided 19-Nov-2026)
+
+Applies plan-merchant-surfaces §3 and §4 and plan-architecture §4 and
+§8. Where they differ, the architecture wins: idempotency keys are kept
+for good, not 7 days.
+
+**Merchant.** A minimal row: `id` (uuid7), `legal_name`,
+`display_name` (what buyers see), `country` (VN for now),
+`daily_vendor_asks` (answer 3), `created_at`.
+Created with `python -m mor.merchants create`, which prints the id.
+There is no KYB state yet: until the KYB slice we create every merchant
+ourselves, and prod does not open before staff sign-in anyway. (Compliance
+touchpoint: before a merchant takes a live payment, KYB must say
+`approved`; slice 5 checks it.)
+
+**API keys.**
+- Form: `sk_<env>_<id>_<secret>`. `<env>` is `dev`, `test` or `live`,
+  from `ENVIRONMENT`. `<id>` is a short public id used to look the key up.
+  `<secret>` is 32 random bytes in base32.
+- Stored: `api_key(id, merchant_id, env, secret_sha256, state, created_at,
+  revoked_at)`, with `state` one of `active` and `revoked`. A plain SHA-256
+  suffices because the secret is random and long; a slow password hash
+  only matters for secrets people choose. The comparison is constant-time.
+- `python -m mor.merchants key <merchant>` creates one and prints it
+  once. `... revoke <key id>` revokes it. Scopes and rotation with an
+  overlap come with the dashboard.
+- Requests send `Authorization: Bearer sk_…`. A key from another
+  environment, an unknown key or a revoked one gets 401
+  `authentication_failed`, with no detail on which.
+- The actor recorded for an API change is `merchant_api_key` with the key
+  id; that kind already exists in `actor_kind`.
+
+**Idempotency** (every state-changing POST: today only
+`checkout_sessions`).
+- Table `api_idempotency(merchant_id, key, request_sha256, status,
+  response, created_at)`, with primary key `(merchant_id, key)`. Rows are
+  kept for good.
+- The handler inserts the row first, in the same transaction as the work,
+  then stores the response on it before committing. A concurrent request
+  with the same key blocks on the unique index until the first commits.
+  It then sees the conflict and replays the stored response, or returns
+  409 `idempotency_key_reused` if the request differs. A crash rolls back
+  the row and the work together, so no "in progress" state is ever left
+  behind, and no clock is involved.
+- `request_sha256` hashes the decoded request re-encoded by msgspec (fields
+  in a fixed order), so whitespace and key order in the merchant's JSON
+  don't matter.
+- A request refused before any change (bad JSON, a missing field, an
+  unknown category) stores nothing, so the merchant can fix it and send it
+  again with the same key.
+
+**Errors.** One shape, `{"error": {"type", "code", "message", "param"}}`.
+- `type` is a closed set: `invalid_request`, `authentication`,
+  `idempotency`, `not_found`, `quote_refused`, `pending`,
+  `rate_limited`.
+- `code` is a closed set as well, documented with the API.
+- msgspec's decode errors map onto `invalid_request` and name the field
+  (`param`).
+
+**Ids in the API.** The prefix plus the uuid7 in hex: `cs_…` for sessions
+and `mer_…` for merchants. The database keeps the uuid. The ids sort by
+time and are unguessable enough for a bearer link (uuid7 has 74 random
+bits).
+
+**`POST /v1/checkout_sessions`.**
+- Body: `lines`, `parcel`, `merchant_reference?`, `return_url`,
+  `cancel_url`.
+- Each line: `name`, `quantity`, `unit_price {amount_minor, currency}`,
+  `category`, `merchant_sku?`, and `customs {description, origin_country,
+  weight_g, hs_code?}`.
+- `tax_behavior` is not accepted: v1 is exclusive only.
+- Lines may be priced in different currencies; the quote already converts
+  each one.
+- Stored: a `checkout_session` row (`state` = `open`, `expires_at` 24 h
+  after creation, the parcel, the URLs, the merchant reference) and one
+  `checkout_session_line` row per line, a snapshot that is never changed.
+- The fact `checkout_session_created` v1 goes into the outbox. Nothing
+  consumes it yet.
+- Response: 201 `{id, state, url, expires_at, lines, …}`. `url` is
+  `/c/{id}`, which answers 404 until 4d-2.
+- Expiry is stored only: the step that expires a session, decided under
+  its lock, comes with 4d-2.
+
+**`GET /v1/checkout_sessions/{id}`** returns the same shape, for that
+merchant's sessions only. Another merchant's id gets 404, as if it did
+not exist.
+
+**`POST /v1/estimates`.**
+- Body: the same lines and parcel plus `country`. Response: the quote,
+  without storing it:
+  - the currency;
+  - one option per service (service, tier, transit days, total);
+  - each option's build-up: the merchant's price, each fee component,
+    shipping, and duties and taxes with who collects each;
+  - the services not offered, with their reasons.
+- A refusal (country closed, no service for the lane, a line refused) is
+  422 `quote_refused` with the reason's code.
+- When an input is missing (a duty rate or a carrier price not held), the
+  handler asks for it as the staff page does: outbox facts, deduplicated by
+  the existing guards. It answers 503 `estimate_pending` with
+  `Retry-After: 2`. The merchant repeats the call; no handler calls a
+  vendor.
+- Placeholder fee rules: in prod an estimate that used one is refused
+  (503 `pricing_unavailable`); elsewhere it is answered and lists them.
+  A service whose route is a placeholder is left out in prod, listed as
+  not offered.
+
+**Where it lives.**
+- `src/mor/merchants/` holds the records, the store, the keys and the CLI.
+- `src/mor/api/` holds the decoding at the edge, the errors, the
+  idempotency and the handlers.
+- The routes go in `main.py` in every environment: the API is the product,
+  and each environment has its own keys.
+- Seed: a "Sandbox Shop" merchant if there is none, and one key printed
+  the first time.
+- New migration: `merchant`, `api_key`, `api_idempotency`,
+  `checkout_session`, `checkout_session_line`, `merchant_vendor_asks`
+  (a merchant's count per UTC day); enum values for the aggregate and
+  the fact.
+
+**Tests and fuzzing.**
+- Requests in, responses and rows out:
+  - every auth failure;
+  - a session created and read;
+  - another merchant's session not found;
+  - each refusal and each pending case;
+  - placeholders refused in prod.
+- Idempotency properties:
+  - the same key with the same body gives an identical response and one
+    session;
+  - any change to the body with the same key gives 409;
+  - a refused request leaves the key free.
+- A real-concurrency test: two simultaneous POSTs with one key make one
+  session.
+- Properties for the decoder:
+  - any bytes decode to a request or an `invalid_request` error, never an
+    exception;
+  - any estimate a valid request returns sums: each option's parts equal
+    its total.
+- The new property files join a target in `deploy/soak.sh`, as
+  `tests/test_soak_targets.py` requires.
+
+**Questions** (my recommendation first):
+
+1. **The parcel.** Should the merchant send it (weight and box) on every
+   session and estimate? Recommended: yes, required. Our prices depend on
+   the volumetric weight, and a box we guessed would misprice. The
+   line's `weight_g` stays required for customs. The alternative is to
+   sum the line weights and assume a standard box.
+2. **Category per line.** Should each line name one of our categories
+   (`docs/markets/categories.csv`), with an unknown one refused?
+   Recommended: yes. The tax path and service restrictions are per
+   category, and suggesting one from the description is a later
+   feature. The HS code stays optional.
+3. **Estimates.** No `Idempotency-Key` (an estimate changes nothing but
+   deduplicated asks), and `estimate_pending` with `Retry-After` while
+   inputs are fetched. Recommended: yes. Note that a merchant's estimates
+   can make us pay a vendor for each new combination of HS code and
+   country. Each combination is asked only once, but a request limit per
+   merchant may be needed before prod.
+4. **Fee overrides per merchant** (§4 said 4d). Recommended: later, with
+   the admin pages that enter them. Until then every merchant gets the
+   market's fee rows.
+
+**Answered 19-Nov-2026:**
+
+1. **The parcel is required**, and lines will also come by reference.
+   - A product sent before, or one from a catalog we may build for the
+     merchant later, can be named by its id instead of being sent in full
+     (plan-merchant-surfaces §3, "inline or by reference").
+   - 4d-1 takes inline lines only, and its line shape leaves room for
+     `{product_id, quantity}` as a later, additive v1 change.
+   - Once products exist, a product can carry its own packaging, so an
+     order of one product needs no parcel.
+2. **Category required; classification is ours.**
+   - Correct HS classification is the importer of record's legal
+     responsibility, and neither DDP nor a broker moves it off them. As
+     merchant of record that is our side. Checked 19-Nov-2026 in trade
+     guidance (DSV on DDP; importer-of-record guides), not in law: which
+     party is importer of record per country is a compliance question for
+     an adviser.
+   - So a merchant's HS code is a hint, not the answer:
+     - each line requires a category from our closed list;
+     - a merchant's `hs_code` is accepted and stored as the merchant's,
+       and used for now;
+     - our own classification per `merchant_sku`, by a vendor or a
+       person, comes later and is stored once per SKU, so the merchant's
+       code can be checked and later replaced.
+   - Until that exists, a line with no HS code is priced where our rows
+     need none (a rate per category, or import tax from the band row). A
+     country whose duty mode needs the code refuses it with 422
+     `classification_needed`.
+3. **Estimates: yes, with limits.** Two layers:
+   - **What costs money: vendor asks.** Each merchant has a daily cap
+     (`merchant.daily_vendor_asks`, default 100) on asks that are new.
+     Asks the existing guards deduplicate are not new, so they don't
+     count. The count is a row per merchant and UTC day, read and raised
+     under its row lock in the estimate's transaction, and raised only
+     when an ask inserted a new lookup. Over the cap the ask is not made,
+     and the answer is 429 `rate_limited` with `Retry-After` set to the
+     next UTC midnight. The day is a business rule compared under the
+     lock, not a lease.
+   - **Plain request volume:** a limit per IP address and per key in
+     nginx, set in the deploy slice. In-process counters would break the
+     no-clocks, no-memory rule and would not survive several processes.
+4. **Fee overrides per merchant: later**, with the admin pages.
+
+**4d-1 built 19-Nov-2026.**
+
+What was built:
+- Migration `0013_merchants_api.sql`.
+- `src/mor/merchants/`: records, store and keys, idempotency, the daily
+  count of vendor asks, and the command line (`python -m mor.merchants`).
+- `src/mor/checkout/`: session records and store.
+- `src/mor/quote/inputs.py`: the held inputs and asks, now shared with
+  the staff page.
+- `src/mor/public_ids.py`.
+- In `src/mor/web/`: `api.py`, `api_wire.py` and `api_estimates.py`.
+- The seed adds a "Sandbox Shop" merchant and prints its key once.
+
+Changed while building:
+- **Errors on our side get their own type.** A refusal that is ours to
+  fix (no market data, no fee rule, no exchange rate, no account for a
+  vendor, a placeholder in prod) is type `unavailable` with status 503.
+  It is not a 422 `quote_refused`, which the merchant's request caused.
+- **API times are always in UTC, with the offset written.** A session
+  read back from the database came out in the connection's time zone
+  (+01:00 on the laptop); the test that compares a read with the create
+  caught it. Every machine-read time now goes through
+  `mor.dates.format_instant`: RFC 3339, UTC, to the second
+  (`2026-11-18T09:30:00Z`). This is a shared convention now.
+- **Merchants take no import from the web layer.** The public id helpers
+  live in `mor.public_ids`, so the command line does not import from
+  `web/`.
+
+How it was checked:
+- Six planted bugs were each caught by a test:
+  - the idempotency check ignoring the request;
+  - a refusal after the key's claim not rolled back, which would have
+    committed a key with no response, because psycopg commits on a clean
+    exit;
+  - the estimate dropping the fee parts;
+  - the daily cap ignored;
+  - a session read without its merchant;
+  - the decoder letting an exception out.
+- A seventh plant (validation errors folded into `invalid_body`) is not a
+  bug the properties can see, since msgspec's `ValidationError` is a
+  `DecodeError`. The unit test that checks each error's `param` caught it.
+- End to end on the sandbox over HTTP:
+  - a session was created, replayed byte for byte, refused with 409 for
+    another body under the same key, and read back;
+  - a request without a key got 401;
+  - an SG estimate answered from our tables, with each option's parts
+    summing to its total;
+  - a TH estimate answered `estimate_pending` until the worker had asked
+    the fake duty vendor, then 200, with one new lookup counted for the
+    day;
+  - a DE estimate got 422 `country_closed`, with the reason.
+
 ## 5b. The staff page
 
 A staff page, `/staff/markets`, shows what each step decides, and grows

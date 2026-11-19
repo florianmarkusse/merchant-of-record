@@ -44,8 +44,10 @@ and wins where the two differ.
   combination, compared with our rows), 4c-1 (shipping from our own
   rate tables, fee rules, `build_quote` with one option per service) and
   4c-2 (live carrier prices through a fake courier, held while usable by a
-  rule per courier account) are built; 4d (merchants, sessions, the quote
-  flow) is next.
+  rule per courier account) and 4d-1 (merchants, API keys, the
+  merchant API with idempotency, estimates with a daily cap on new vendor
+  lookups) are built; 4d-2 (the stored quote and its waiting flow, the
+  buyer pages, sessions on the staff page) is next.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
@@ -143,8 +145,9 @@ uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_v
 uv run python -m mor.messaging.worker    # the worker: runs due deliveries; outside prod watchfiles restarts it on a change under src/
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod; uvicorn reloads it on a change under src/
-uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor accounts at the fake (server must run)
+uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor and courier accounts at the fake, the Sandbox Shop merchant and its key (server must run)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
+uv run python -m mor.merchants           # create/list merchants; `key mer_…` prints a new API key once; `revoke <key id>`
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
 npx tsc                                  # compile ts/ into static/js/ (after `npm install` once)
 uv run pytest                            # drops and recreates mor_test, then runs the suite

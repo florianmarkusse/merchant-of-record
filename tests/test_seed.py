@@ -13,6 +13,8 @@ from mor.db.connect import connect
 from mor.echo.flow import create_echo_job
 from mor.echo.port import EchoProvider, EventMode
 from mor.markets.store import load_market
+from mor.merchants.records import KeyEnv, NewKey
+from mor.merchants.store import authenticate
 from mor.messaging.worker import Failed, drain_once
 from mor.seed import (
     SeededAccount,
@@ -20,6 +22,7 @@ from mor.seed import (
     base_url,
     seed_accounts,
     seed_couriers,
+    seed_merchant,
     subscribe_webhooks,
 )
 from tests.helpers import ENV, Wired, wire
@@ -139,5 +142,24 @@ def test_each_carrier_on_a_live_route_gets_one_account_at_the_fake(
         assert account is not None
         assert account.base_url == "http://mor/_fake/courier/sandbox-carrier"
         assert account.price_expiry == PriceExpiry.CARRIER_FIRST
+
+    asyncio.run(body())
+
+
+def test_the_sandbox_merchant_gets_one_key_shown_once(database_url: str) -> None:
+    async def body() -> None:
+        settings = Settings(ENV, database_url, SELF_URL)
+        async with await connect(database_url) as conn:
+            first = await seed_merchant(conn, settings, NOW)
+            again = await seed_merchant(conn, settings, NOW)
+            assert isinstance(first, NewKey) and again is None
+            found = await authenticate(conn, f"Bearer {first.text}", KeyEnv.TEST)
+            refused = await seed_merchant(
+                conn, Settings(Environment.PROD, database_url, SELF_URL), NOW
+            )
+            await conn.commit()
+        assert found is not None and found.merchant.display_name == "Sandbox Shop"
+        assert isinstance(refused, SeedInProd)
+        assert await _count(database_url, b"SELECT count(*) FROM merchant") == 1
 
     asyncio.run(body())
