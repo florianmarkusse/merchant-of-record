@@ -97,12 +97,26 @@ async def latest_load(conn: Connection) -> LoadRow | None:
         return await cur.fetchone()
 
 
-async def market_in_force(conn: Connection) -> MarketSet | None:
-    """The complete set of the load in force, or None before any load."""
+@dataclass(frozen=True)
+class MarketInForce:
+    load_id: uuid.UUID
+    market: MarketSet
+
+
+async def load_in_force(conn: Connection) -> MarketInForce | None:
+    """The load in force with its complete set, or None before any load."""
     load = await latest_load(conn)
     if load is None:
         return None
-    return await read_market(conn, load.id)
+    return MarketInForce(load.id, await read_market(conn, load.id))
+
+
+async def market_in_force(conn: Connection) -> MarketSet | None:
+    """The complete set of the load in force, or None before any load."""
+    loaded = await load_in_force(conn)
+    if loaded is None:
+        return None
+    return loaded.market
 
 
 async def recent_loads(conn: Connection, limit: int) -> list[LoadRow]:

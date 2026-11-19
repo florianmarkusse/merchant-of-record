@@ -46,8 +46,10 @@ and wins where the two differ.
   4c-2 (live carrier prices through a fake courier, held while usable by a
   rule per courier account) and 4d-1 (merchants, API keys, the
   merchant API with idempotency, estimates with a daily cap on new vendor
-  lookups) are built; 4d-2 (the stored quote and its waiting flow, the
-  buyer pages, sessions on the staff page) is next.
+  lookups) and 4d-2 (the stored quote and its waiting flow, the buyer
+  pages at `/c/{session}`, sessions on the staff page) are built: slice 4
+  is done. Slice 5 (payments: the fake PSP, the payment attempt against a
+  quote, capture, the order and the invoice) is next.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored

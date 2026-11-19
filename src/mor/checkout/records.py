@@ -14,12 +14,20 @@ SESSION_LIFETIME = timedelta(hours=24)
 
 
 class SessionState(StrEnum):
-    """Matches the `checkout_session_state` enum type. `quoted`, `paying`
-    and `completed` come with the quote flow (4d-2) and payments (slice 5)."""
+    """Matches the `checkout_session_state` enum type (docs/plan-quote.md §5,
+    4d-2). `paying` and `completed` come with payments (slice 5)."""
 
-    OPEN = "open"
+    OPEN = "open"  # no address yet
+    QUOTING = "quoting"  # an address, and an input being fetched
+    QUOTED = "quoted"  # its quote is made
+    REFUSED = "refused"  # its quote is refused
     EXPIRED = "expired"
     CANCELED = "canceled"
+
+
+# A buyer may give this many addresses per session (answered 19-Nov-2026),
+# so a script cannot sweep countries through one cart.
+MAX_ADDRESSES = 10
 
 
 @dataclass(frozen=True)
@@ -64,3 +72,5 @@ class CheckoutSession:
     cancel_url: str
     created_at: datetime
     expires_at: datetime
+    address_id: uuid.UUID | None  # the newest address given
+    quote_id: uuid.UUID | None  # its quote, once made or refused

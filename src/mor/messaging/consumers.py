@@ -8,6 +8,7 @@ from typing import assert_never
 
 import httpx2
 
+from mor.checkout import flow as checkout_flow
 from mor.config import Environment
 from mor.couriers import port as courier_port
 from mor.couriers import prices as courier_prices
@@ -50,7 +51,11 @@ class WrongCall(Exception):
 
 
 async def handle(
-    conn: Connection, consumer: ConsumerName, fact: Fact, now: datetime
+    conn: Connection,
+    consumer: ConsumerName,
+    fact: Fact,
+    environment: Environment,
+    now: datetime,
 ) -> ConsumerOutcome:
     """A local consumer, in the worker's transaction. Never commits."""
     match consumer:
@@ -64,6 +69,12 @@ async def handle(
             return await echo_inbound.apply_event(conn, fact, now)
         case ConsumerName.ECHO_TRACKING_START:
             return await echo_tracking.start_tracking(conn, fact, now)
+        case ConsumerName.QUOTE_WAIT_NOTIFY:
+            return await checkout_flow.notify_waiting(conn, fact, now)
+        case ConsumerName.QUOTE_BUILD:
+            return await checkout_flow.build_waiting(conn, fact, environment, now)
+        case ConsumerName.CHECKOUT_SESSION_EXPIRE:
+            return await checkout_flow.expire_session(conn, fact, now)
         case (
             ConsumerName.ECHO_SEND
             | ConsumerName.ECHO_POLL
@@ -97,6 +108,9 @@ async def prepare(
             | ConsumerName.ECHO_INBOX_DECODE
             | ConsumerName.ECHO_EVENT_APPLY
             | ConsumerName.ECHO_TRACKING_START
+            | ConsumerName.QUOTE_WAIT_NOTIFY
+            | ConsumerName.QUOTE_BUILD
+            | ConsumerName.CHECKOUT_SESSION_EXPIRE
         ):
             raise WrongKind(f"{consumer} is a local consumer")
         case _:
@@ -204,6 +218,9 @@ async def complete(
             | ConsumerName.ECHO_INBOX_DECODE
             | ConsumerName.ECHO_EVENT_APPLY
             | ConsumerName.ECHO_TRACKING_START
+            | ConsumerName.QUOTE_WAIT_NOTIFY
+            | ConsumerName.QUOTE_BUILD
+            | ConsumerName.CHECKOUT_SESSION_EXPIRE
         ):
             raise WrongKind(f"{consumer} is a local consumer")
         case _:

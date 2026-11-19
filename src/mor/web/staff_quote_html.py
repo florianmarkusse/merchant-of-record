@@ -135,6 +135,7 @@ NOT_OFFERED_WORDS: dict[NotOfferedReason, str] = {
     "fx_missing": "no exchange rate",
     "carrier_not_served": "the carrier does not serve it",
     "carrier_needs_person": "the carrier's answer needs a person",
+    "placeholder": "a placeholder, not offered in prod",
 }
 
 # The groups a price is built from, in order: label, colour class, kinds.

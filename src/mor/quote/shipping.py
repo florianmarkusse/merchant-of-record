@@ -103,6 +103,7 @@ type NotOfferedReason = Literal[
     "fx_missing",
     "carrier_not_served",
     "carrier_needs_person",
+    "placeholder",  # left out in prod (mor.quote.refusals.offered_in)
 ]
 
 

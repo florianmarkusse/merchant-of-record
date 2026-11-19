@@ -11,27 +11,9 @@ from typing import Literal, assert_never
 
 import msgspec
 
-from mor.config import Environment
-from mor.markets.fx import FxMissing
-from mor.markets.records import Collector, Standing
-from mor.markets.rules import NotListed, NotOpen, RatesMissing, RulesNotConfirmed
-from mor.quote.build import (
-    CountryClosed,
-    LineRateRefused,
-    NoCurrency,
-    NoFeeRule,
-    NoServiceForLane,
-    Part,
-    PartKind,
-    Quote,
-    QuoteRefusal,
-)
-from mor.tax.line_rates import (
-    RateNeeded,
-    RateNotConfirmed,
-    VendorNeedsPerson,
-    VendorUnknownCode,
-)
+from mor.markets.records import Collector
+from mor.quote.build import Part, PartKind, Quote
+from mor.quote.refusals import Refusal
 from mor.web.api_wire import ApiError, ErrorType, MoneyOut, money_out
 
 
@@ -124,27 +106,14 @@ def _part(part: Part) -> PartOut:
     )
 
 
-def estimate_out(quote: Quote, environment: Environment) -> bytes | ApiError:
-    """The quote as an estimate. In prod a quote standing on a placeholder
-    is not answered: a placeholder fee rule refuses it, and a placeholder
-    service is left out (decided 17-Nov-2026, plan-quote Q5)."""
-    prod = environment == Environment.PROD
-    if prod and quote.placeholders:
-        return ApiError(
-            503,
-            ErrorType.UNAVAILABLE,
-            "pricing_unavailable",
-            "pricing for this country is not set up yet",
-        )
+def estimate_out(quote: Quote) -> bytes:
+    """A quote as an estimate: `offered_in` has already applied what the
+    environment refuses."""
     goods: list[PartOut] = []
     for part in quote.goods:
         goods.append(_part(part))
     options: list[OptionOut] = []
-    not_offered: list[NotOfferedOut] = []
     for option in quote.options:
-        if prod and option.standing == Standing.PLACEHOLDER:
-            not_offered.append(NotOfferedOut(option.key, "placeholder"))
-            continue
         parts = list(goods)
         for part in option.parts:
             parts.append(_part(part))
@@ -162,112 +131,25 @@ def estimate_out(quote: Quote, environment: Environment) -> bytes | ApiError:
                 parts,
             )
         )
+    not_offered: list[NotOfferedOut] = []
     for refused in quote.not_offered:
         not_offered.append(NotOfferedOut(refused.key, refused.reason))
-    if not options:
-        return _no_service()
-    placeholders: list[str] = []
-    if not prod:
-        placeholders = list(quote.placeholders)
     out = EstimateOut(
         "estimate",
         quote.destination,
         quote.currency.value,
         options,
         not_offered,
-        placeholders,
+        list(quote.placeholders),
     )
     return msgspec.json.encode(out)
 
 
-def _no_service() -> ApiError:
+def refusal_error(refusal: Refusal) -> ApiError:
+    if refusal.ours:
+        return ApiError(
+            503, ErrorType.UNAVAILABLE, refusal.code, refusal.message, refusal.param
+        )
     return ApiError(
-        422,
-        ErrorType.QUOTE_REFUSED,
-        "no_service_for_lane",
-        "no shipping service carries this order to this country",
+        422, ErrorType.QUOTE_REFUSED, refusal.code, refusal.message, refusal.param
     )
-
-
-def _refused(
-    code: Literal["country_closed", "duty_rate_unavailable"],
-    message: str,
-    param: str | None = None,
-) -> ApiError:
-    return ApiError(422, ErrorType.QUOTE_REFUSED, code, message, param)
-
-
-def _unavailable(message: str) -> ApiError:
-    return ApiError(503, ErrorType.UNAVAILABLE, "pricing_unavailable", message)
-
-
-def refusal_error(refusal: QuoteRefusal, country: str) -> ApiError:
-    match refusal:
-        case CountryClosed(category=category, closed=closed):
-            match closed:
-                case NotListed():
-                    return ApiError(
-                        422,
-                        ErrorType.QUOTE_REFUSED,
-                        "country_not_supported",
-                        f"we do not sell into {country}",
-                        "country",
-                    )
-                case NotOpen(note=note):
-                    return _refused(
-                        "country_closed", f"{country} is not open: {note}", "country"
-                    )
-                case RulesNotConfirmed() | RatesMissing():
-                    return _refused(
-                        "country_closed",
-                        f"{category} into {country} is not open yet",
-                        "country",
-                    )
-                case _:
-                    assert_never(closed)
-        case NoCurrency():
-            return ApiError(
-                422,
-                ErrorType.QUOTE_REFUSED,
-                "country_not_supported",
-                f"we cannot charge in {country}'s currency",
-                "country",
-            )
-        case FxMissing(base=base, quote=quote):
-            return _unavailable(f"no exchange rate from {base} to {quote}")
-        case NoFeeRule(component=component):
-            return _unavailable(f"no {component.value} rule for {country}")
-        case LineRateRefused(line=line, charge=charge, problem=problem):
-            match problem:
-                case RateNeeded(reason="no_hs_code"):
-                    return ApiError(
-                        422,
-                        ErrorType.QUOTE_REFUSED,
-                        "classification_needed",
-                        f"{country} needs an HS code to price {charge.value}",
-                        f"lines[{line}].customs.hs_code",
-                    )
-                case RateNeeded() | RateNotConfirmed():
-                    return _refused(
-                        "duty_rate_unavailable",
-                        f"no confirmed {charge.value} rate for this line in {country}",
-                        f"lines[{line}]",
-                    )
-                case VendorUnknownCode():
-                    return _refused(
-                        "duty_rate_unavailable",
-                        f"the HS code is not known for {country}",
-                        f"lines[{line}].customs.hs_code",
-                    )
-                case VendorNeedsPerson():
-                    return _refused(
-                        "duty_rate_unavailable",
-                        f"the {charge.value} rate for this line needs checking",
-                        f"lines[{line}]",
-                    )
-                case _:
-                    assert_never(problem)
-        case NoServiceForLane():
-            return _no_service()
-        case _:
-            assert_never(refusal)

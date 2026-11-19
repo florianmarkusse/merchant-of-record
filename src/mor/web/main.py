@@ -17,7 +17,7 @@ from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from mor.config import Environment, Settings
-from mor.web import api, sandbox, staff_markets, webhooks
+from mor.web import api, buyer, sandbox, staff_markets, webhooks
 from mor.web.staff_layout import STATIC_DIR
 
 
@@ -53,6 +53,15 @@ def make_app(
     async def api_create_estimate(request: Request) -> Response:
         return await api.create_estimate(request, settings, clock())
 
+    async def buyer_page(request: Request) -> Response:
+        return await buyer.buyer_page(request, settings, clock())
+
+    async def buyer_address(request: Request) -> Response:
+        return await buyer.post_address(request, settings, clock())
+
+    async def buyer_refresh(request: Request) -> Response:
+        return await buyer.post_refresh(request, settings, clock())
+
     async def staff_quote_page(request: Request) -> Response:
         return await staff_markets.quote_page(request, url, clock())
 
@@ -61,6 +70,12 @@ def make_app(
 
     async def staff_data_page(request: Request) -> Response:
         return await staff_markets.data_page(request, url, clock())
+
+    async def staff_sessions_page(request: Request) -> Response:
+        return await staff_markets.sessions_page(url, clock())
+
+    async def staff_session_page(request: Request) -> Response:
+        return await staff_markets.session_page(request, url)
 
     async def staff_ask_vendor(request: Request) -> Response:
         return await staff_markets.ask_vendor(request, url, clock())
@@ -78,6 +93,10 @@ def make_app(
             methods=["GET"],
         ),
         Route("/v1/estimates", api_create_estimate, methods=["POST"]),
+        # The buyer's checkout page: its link is its own bearer token.
+        Route("/c/{session_id}", buyer_page, methods=["GET"]),
+        Route("/c/{session_id}/address", buyer_address, methods=["POST"]),
+        Route("/c/{session_id}/refresh", buyer_refresh, methods=["POST"]),
         # Stylesheets and compiled scripts (static/js/ comes from ts/).
         Mount(
             "/static",
@@ -93,6 +112,12 @@ def make_app(
                 Route("/staff/markets", staff_quote_page, methods=["GET"]),
                 Route("/staff/markets/answers", staff_answers_page, methods=["GET"]),
                 Route("/staff/markets/data", staff_data_page, methods=["GET"]),
+                Route("/staff/markets/sessions", staff_sessions_page, methods=["GET"]),
+                Route(
+                    "/staff/markets/sessions/{session_id}",
+                    staff_session_page,
+                    methods=["GET"],
+                ),
                 Route(
                     "/staff/markets/duty_lookups", staff_ask_vendor, methods=["POST"]
                 ),

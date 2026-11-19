@@ -865,6 +865,285 @@ How it was checked:
     day;
   - a DE estimate got 422 `country_closed`, with the reason.
 
+### 4d-2: the stored quote, its waiting flow and the buyer pages (decided 19-Nov-2026)
+
+Applies plan-architecture §2 (stage 2), §4 and §8 ("Waiting"), and
+plan-merchant-surfaces §5 (the address and quote steps; the pay step is
+slice 5). It ends with the slice's check: a merchant creates a session, a
+buyer enters an address and sees an all-in price, on the sandbox.
+
+**The session as a state machine.** `checkout_session` is the aggregate.
+Every change takes its row lock, and facts carry the steps.
+
+```
+open ──address──▶ quoting ──inputs held──▶ quoted ──(slice 5: paying …)
+  ▲                  │  └──refused──▶ refused
+  └─── a new address from any of these makes a new quote ───┘
+any state but completed ──expiry due, under the lock──▶ expired
+```
+
+- `quoting`: the address is stored and a quote is wanted, but an input
+  is missing. The asks are made and the waits recorded.
+- `quoted` and `refused`: they point at the session's current quote or
+  refusal.
+- `expired`: the buyer page sends the buyer to `cancel_url`, and the API
+  shows `expired`.
+- New enum values `quoting`, `quoted` and `refused`. `paying` and
+  `completed` come with slice 5.
+
+**The buyer's address** is a new row, `checkout_address`, one per address
+given. They are never changed, and the session points at the newest.
+- Fields: name, email, phone, address lines, city, region, postcode,
+  country (question 1).
+- This is personal data. It is never logged, only synthetic in tests and
+  the seed, and kept only in the database. Retention and data residency
+  are compliance touchpoints for an adviser, not answered here.
+- A changed address makes a new quote; the old one stays as it was
+  (immutable).
+
+**The stored quote** (plan-architecture §8, "the quote stores every
+input's source and version").
+- Tables:
+  - `quote`: session, address, `market_load_id`, currency, made at and
+    `valid_until` (question 2), placeholders, and state `made` or
+    `refused`;
+  - `quote_option`: key, service, tier, transit and total per option;
+  - `quote_part`: kind, line, exact value as numerator and denominator,
+    amount, rounding mode, collector and source per part;
+  - `quote_input`: each duty lookup and carrier price lookup used, by id.
+- Each table has real columns, no serialized blob, and each is
+  append-only by trigger.
+- A refusal is stored as the quote row with `state = refused` and its
+  code and message, the same codes as the API's.
+- `build_quote` stays pure. Storing it is a function from `Quote` to rows,
+  and a property checks that a stored quote read back equals what was
+  built.
+
+**The flow** (no handler calls a vendor):
+1. `POST /c/{session}/address`. The handler locks the session, stores the
+   address and builds with the held inputs, all in one transaction:
+   - a quote: store it, state `quoted`, fact `quote_made`;
+   - a refusal: store it, state `refused`, fact `quote_refused`;
+   - missing inputs: ask for them as estimates do, record one
+     `quote_wait (quote_attempt, lookup_id)` row per lookup waited on,
+     state `quoting`, fact `quote_requested`.
+
+   It answers 303 to `/c/{session}`.
+2. When a lookup finishes, its fact (`duty_rate_found`,
+   `…_unknown_code`, `…_needs_person`, `shipping_price_found`,
+   `…_not_served`, `…_needs_person`) goes to a new local consumer,
+   `quote_inputs_arrived`. It belongs to the lookup's aggregate and locks
+   no session, as "one step locks one aggregate" requires. It appends
+   `quote_inputs_arrived` for each session waiting on that lookup.
+3. A local consumer of that fact, `quote_build`, locks the session. If it
+   is still `quoting` for the same address, it builds again: a quote, a
+   refusal, or new asks and waits (a second round is possible, say a
+   duty rate after a carrier price). Otherwise it does nothing, so a
+   duplicate or late fact is harmless.
+4. While the session is `quoting`, the page refreshes itself every 2 s
+   with `<meta http-equiv="refresh">` and says it is working out
+   shipping and duties. No JavaScript is needed.
+
+The asks a buyer starts don't count against the merchant's daily cap.
+They are bounded per session instead (question 3).
+
+**Quote validity and session expiry.** Time only triggers; the decision
+is taken under the lock.
+- A quote is valid until `valid_until`. Past it the page shows the old
+  price as expired, with a "Get the current price" button (a POST that
+  quotes the same address again). The pay step (slice 5) compares
+  `valid_until` under the lock.
+- Expiry: creating a session also appends `checkout_session_expiry_due`
+  with `deliver_at = expires_at`. Its consumer locks the session and
+  expires it if it is not completed and `now >= expires_at` (fact
+  `checkout_session_expired`); otherwise it does nothing.
+
+**The buyer pages.** Server-rendered with htpy, English first, mobile
+first, the merchant's display name at the top, and the one line
+"Sold and invoiced by <us> on behalf of <merchant>" (its wording needs
+legal input; a placeholder until then).
+- `GET /c/{session}` renders by state:
+  - the cart without prices, with the address form: country first, from
+    the countries open for every line's category;
+  - waiting, refreshing itself;
+  - the quote: one row per shipping option (name, delivery days, total;
+    the cheapest chosen, others a plain link `?option=`), then the
+    four lines plan-architecture §8 decided (items with our fee inside,
+    shipping, duties and taxes, total), the time it is valid until (in
+    the `01-Jan-2027 14:35 UTC` format), and a disabled "Pay" saying
+    payment comes next (slice 5);
+  - refused: the reason in buyer words, with the address form to try
+    another;
+  - expired: a 303 to the merchant's `cancel_url`.
+- POSTs use plain forms, the same-origin check, and no cookies: the
+  session link is its own bearer token for that cart only.
+- Prod refuses a quote standing on a placeholder, as estimates do.
+
+**The API.** `GET /v1/checkout_sessions/{id}` gains:
+- the new states;
+- `ship_to_country`;
+- `quote`: id, `valid_until`, currency, and per option its key and
+  total, the same shape as an estimate's options.
+
+The full address is not returned. The merchant needs it for fulfilment
+from slice 5 on, and the order's endpoints carry it then. A v1-additive
+change.
+
+**The staff page** gains **Sessions** (`/staff/markets/sessions`):
+- one row per session: merchant, state, country, the quote's total, the
+  waits still open;
+- a session's page with its quotes, each with the same build-up the
+  Quote page shows.
+
+**New messages:** `quote_requested`, `quote_made`, `quote_refused`,
+`quote_inputs_arrived`, `checkout_session_expiry_due` and
+`checkout_session_expired`. Consumers: `quote_inputs_arrived` on the six
+lookup outcome facts, `quote_build`, and `checkout_session_expire`.
+
+**Tests and fuzzing.**
+- Pages through their edge:
+  - each state renders;
+  - an address in, the rows and the page out;
+  - a cross-site POST refused;
+  - an expired session redirects.
+- A Hypothesis state machine for the quote flow, against the test
+  database and the fakes.
+  - Actions:
+    - the buyer posts an address, twice (a double submit), or a new one;
+    - the worker drains;
+    - a vendor or the carrier answers, fails, or times out after doing
+      the work;
+    - a crash between steps;
+    - the clock passes `valid_until` or `expires_at`;
+    - a refresh is asked for.
+  - After every action, the session is in a state the model allows.
+  - After draining with faults off:
+    - no session is still `quoting`;
+    - every quoted session points at a stored quote whose parts sum to
+      each option's total;
+    - no lookup was asked twice.
+- The new fuzzer joins a soak target.
+
+**Questions** (my recommendation first):
+
+1. **Which address fields, now.** Recommended: name, email, phone, two
+   address lines, city, region, postcode and country, all now. The
+   buyer enters them once. The label (slice 9) and the order page's
+   magic link (slice 5) need them, and the quote may use the postcode
+   later (remote-area surcharges). Per-country forms (KR's customs code,
+   no postcode in some countries) come when those countries open. The
+   other choice is the country only now and the rest at the pay step.
+   That's less to store before a sale, but it makes a second form.
+2. **How long a quote holds.** Recommended: 30 minutes (the surfaces
+   plan's example), then "Get the current price".
+3. **Bounding what buyers make us ask.** Recommended: at most 10
+   addresses per session (a buyer can still try a few, while a script
+   can't sweep countries), and none of it counted against the merchant's
+   daily cap, which is for its own estimates. The other choice is to
+   count buyer asks too, but then a buyer could use up a merchant's cap
+   and block real checkouts.
+
+**Answered 19-Nov-2026:** the design is agreed, with 30 minutes per
+quote and at most 10 addresses per session. For the address fields,
+fruggals was the model (`~/Desktop/fruggals/src/addresses.py`): a pure
+parser, the phone's dial code kept apart from its number, and a postcode
+checked strictly where its format is fixed. What changes here:
+
+- **Rules per country, as data.** fruggals relaxes every country but
+  the Netherlands. Here a table per country says whether a postcode is
+  used and its pattern, whether a region (province or state) is
+  required, and the dial code. SG has 6 digits; MY, TH and ID have 5;
+  PH has 4. VN's postcode is optional. A country that opens gets its
+  row; one without a row cannot be chosen.
+- **Free address lines.** fruggals splits "street and house number" for
+  the EU, which doesn't fit Thai, Vietnamese or Indonesian addresses
+  (soi, ward, kelurahan). Two free lines, plus the city or district and
+  the region.
+- **Email and phone are required.** DHL's shipping guide asks for the
+  receiver's contact number, email and full address with postcode. The
+  order page's link (slice 5) also goes to the email. Checked
+  19-Nov-2026 in DHL's guide and its MyDHL field guidelines, not in its
+  API reference: confirm when the courier slice books labels.
+- **No address book**: buyers have no accounts. One address per quote.
+- **A tax id per country later.** DHL asks for a receiver tax id for
+  sales into many countries (KR's customs code, for one). It becomes a
+  per-country field when such a country opens.
+- **No address-checking service yet.** Google's Address Validation API
+  covers SG and MY, but not TH, ID, PH or VN (its coverage page, read
+  19-Nov-2026). It is billed per call, and no one service covers the
+  region. So 4d-2 checks the format per country only. A service can come
+  later behind a port with a mode per country, as duty rates have, once
+  failed deliveries show it is worth paying for.
+
+**4d-2 built 19-Nov-2026.**
+
+What was built:
+- Migrations `0014_quote_flow_values.sql` (the new enum values, in a file
+  of their own because a value cannot be used in the transaction that
+  adds it) and `0015_quote_flow.sql`.
+- `src/mor/checkout/`: `addresses.py`, the parser with its rules per
+  country, `quotes.py`, the stored quote, and `flow.py`, the steps and
+  consumers.
+- `src/mor/quote/refusals.py`: refusals and the prod rule, shared with
+  estimates.
+- `src/mor/web/`: `buyer.py` and `buyer_html.py`, plus
+  `static/css/buyer.css`, and `staff_sessions_html.py`.
+- Local consumers now get the environment (prod refuses quotes on a
+  placeholder).
+
+Changed while building:
+- **A share lock on each lookup waited on.** `still_open` reads a
+  lookup's state with `FOR SHARE`. A completion that commits between the
+  build and the wait would otherwise announce its outcome to no one, and
+  the buyer would wait for ever. The foreign key from the wait row locks
+  the lookup too, but only after the state was read. A test with real
+  concurrent connections (`tests/checkout/test_quote_concurrency.py`)
+  fails without the lock.
+- **The referrer policy is `same-origin`.** `no-referrer` made browsers
+  send `Origin: null` on the page's own POST, so the same-origin check
+  refused every address. The tests, which set the header themselves, could
+  not see this; the sandbox in a real browser did.
+- **An unknown country gives no phone error.** It is only checked once
+  the country, and so its dial code, is known.
+
+How it was checked:
+- Planted bugs, each caught:
+  - no share lock;
+  - a finished lookup telling nobody;
+  - waits not recorded;
+  - only open sessions expiring;
+  - goods parts not stored;
+  - one address too many allowed;
+  - a late rebuild bringing back a replaced address. The fuzzer's first
+    run missed this one, and the check "a session points at its newest
+    address" was added.
+- End to end on the sandbox in a headless browser at phone width:
+  - a wrong SG postcode was shown back on its field, with the other values
+    kept;
+  - SG quoted at once, with two options and the four lines;
+  - a TH cart with an HS code not asked about yet showed the waiting page
+    until the worker had the duty vendor's answer, then the price;
+  - the API and the staff Sessions pages showed both.
+
+Open:
+- SG's quotes carry no GST. `registrations.csv` says we are not
+  registered there yet, so the tax path charges none (correct for the
+  data). Selling into SG before registering is a compliance decision, not
+  a code one.
+- The "Sold and invoiced by" line names `[our company]` until the
+  company and the legal wording exist.
+- **For slice 5: wait without full reloads.** The waiting page reloads
+  itself every 2 s with a meta refresh. That works without JavaScript but
+  flickers and can make a screen reader read the page again. Plan agreed
+  19-Nov-2026:
+  - the refresh tag moves into `<noscript>` (allowed in the head);
+  - a small script in `ts/` polls a status route and swaps the price in
+    without reloading, with a spinner meanwhile;
+  - the server side stays as it is.
+
+  Slice 5's QR payments wait the same way, for the payment provider's
+  webhook, so build it once there for both.
+
 ## 5b. The staff page
 
 A staff page, `/staff/markets`, shows what each step decides, and grows

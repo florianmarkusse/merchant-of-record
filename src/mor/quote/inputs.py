@@ -3,6 +3,7 @@ carrier prices we hold for its questions, and asking for what is missing
 (docs/plan-quote.md §4 and §5). Asking only writes rows and facts; the
 worker makes the calls, so no handler calls a vendor."""
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -69,17 +70,56 @@ def new_asks(missing: InputsMissing) -> int:
     return len(missing.asks) + len(missing.price_asks)
 
 
+@dataclass(frozen=True)
+class Asked:
+    """The lookups now answering what was missing: asked here, or already
+    open."""
+
+    duty_lookups: tuple[uuid.UUID, ...]
+    price_lookups: tuple[uuid.UUID, ...]
+
+
 async def ask_missing(
     conn: Connection, missing: InputsMissing, actor: Actor, now: datetime
-) -> NoAccount | None:
+) -> Asked | NoAccount:
     """Ask for every missing input: lookup rows and their facts, in the
     caller's transaction. Never commits."""
+    duty_lookups = list(missing.waiting)
+    price_lookups = list(missing.price_waiting)
     for ask in missing.asks:
         asked = await request_duty_rate(conn, ask.vendor, ask.question, actor, now)
         if isinstance(asked, NoVendorAccount):
             return NoAccount(asked.vendor)
+        duty_lookups.append(asked)
     for question in missing.price_asks:
         priced = await request_shipping_price(conn, question, actor, now)
         if isinstance(priced, NoCourierAccount):
             return NoAccount(priced.carrier)
-    return None
+        price_lookups.append(priced)
+    return Asked(tuple(duty_lookups), tuple(price_lookups))
+
+
+async def still_open(conn: Connection, asked: Asked) -> bool:
+    """Whether every lookup is still being asked, holding a share lock on
+    each until the caller commits. A lookup finishes under its own row lock
+    and writes its outcome fact in that transaction, so it cannot finish
+    between this check and the caller's commit: whoever waits on it from
+    that commit is told when it does. False: one finished meanwhile, so
+    build again instead of waiting."""
+    for lookup_id in asked.duty_lookups:
+        cur = await conn.execute(
+            "SELECT state::text FROM duty_lookup WHERE id = %s FOR SHARE",
+            (lookup_id,),
+        )
+        row = await cur.fetchone()
+        if row is None or row[0] != "requested":
+            return False
+    for lookup_id in asked.price_lookups:
+        cur = await conn.execute(
+            "SELECT state::text FROM shipping_price_lookup WHERE id = %s FOR SHARE",
+            (lookup_id,),
+        )
+        row = await cur.fetchone()
+        if row is None or row[0] != "requested":
+            return False
+    return True

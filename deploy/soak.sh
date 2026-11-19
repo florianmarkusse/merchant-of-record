@@ -40,14 +40,16 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 # shipping-price fuzzers about 0.11 s an example, so about 18 minutes each,
 # and the quote properties about 1 ms an example, which brings properties
 # to about 12 minutes (19-Nov-2026); the API properties about 1 ms an
-# example too, about 3 minutes more (19-Nov-2026). Every test file using Hypothesis must
+# example too, about 3 minutes more (19-Nov-2026). The quote-flow fuzzer
+# about 0.17 s an example, so about 17 minutes (19-Nov-2026). Every test file using Hypothesis must
 # be in a target: tests/test_soak_targets.py fails otherwise.
 TARGETS=(
   "echo-flow|6000|75m|tests/flow/test_echo_flow_fuzz.py"
   "probe-flow|8000|30m|tests/flow/test_probe_flow.py"
   "duty-flow|10000|45m|tests/flow/test_duty_lookup_fuzz.py"
   "shipping-price-flow|10000|45m|tests/flow/test_shipping_price_fuzz.py"
-  "properties|100000|30m|tests/money tests/echo/test_events.py tests/messaging/test_facts.py tests/markets/test_markets.py tests/tax/test_tax_paths.py tests/tax/test_duty_modes.py tests/quote/test_quote_properties.py tests/api/test_api_properties.py"
+  "quote-flow|6000|45m|tests/flow/test_quote_flow_fuzz.py"
+  "properties|100000|30m|tests/money tests/echo/test_events.py tests/messaging/test_facts.py tests/markets/test_markets.py tests/tax/test_tax_paths.py tests/tax/test_duty_modes.py tests/quote/test_quote_properties.py tests/api/test_api_properties.py tests/checkout/test_addresses.py"
 )
 
 env_value() {

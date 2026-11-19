@@ -9,6 +9,7 @@ from datetime import datetime
 from psycopg.rows import class_row
 
 from mor.audit import Actor
+from mor.checkout.addresses import Address
 from mor.checkout.records import (
     SESSION_LIFETIME,
     CheckoutSession,
@@ -19,7 +20,7 @@ from mor.checkout.records import (
 )
 from mor.couriers.records import Parcel
 from mor.db.connect import Connection
-from mor.messaging.facts import CheckoutSessionCreatedV1
+from mor.messaging.facts import CheckoutSessionCreatedV1, CheckoutSessionExpiryDueV1
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -91,6 +92,14 @@ async def create_session(
         actor,
         now,
     )
+    # Time only starts the step; it expires the session under its lock.
+    await append_fact(
+        conn,
+        CheckoutSessionExpiryDueV1(checkout_session_id=session_id),
+        actor,
+        now,
+        deliver_at=expires_at,
+    )
     return CheckoutSession(
         session_id,
         merchant_id,
@@ -102,6 +111,8 @@ async def create_session(
         draft.cancel_url,
         now,
         expires_at,
+        None,
+        None,
     )
 
 
@@ -119,6 +130,8 @@ class _SessionRow:
     height_mm: int
     created_at: datetime
     expires_at: datetime
+    address_id: uuid.UUID | None
+    quote_id: uuid.UUID | None
 
 
 @dataclass(frozen=True)
@@ -135,21 +148,7 @@ class _LineRow:
     hs_code: str | None
 
 
-async def read_session(
-    conn: Connection, merchant_id: uuid.UUID, session_id: uuid.UUID
-) -> CheckoutSession | None:
-    """The merchant's own session; another merchant's reads as none."""
-    async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
-        await cur.execute(
-            """
-            SELECT id, merchant_id, state::text, merchant_reference, return_url,
-                   cancel_url, weight_g, length_mm, width_mm, height_mm,
-                   created_at, expires_at
-            FROM checkout_session WHERE id = %s AND merchant_id = %s
-            """,
-            (session_id, merchant_id),
-        )
-        row = await cur.fetchone()
+async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession | None:
     if row is None:
         return None
     async with conn.cursor(row_factory=class_row(_LineRow)) as cur:
@@ -160,7 +159,7 @@ async def read_session(
                    hs_code
             FROM checkout_session_line WHERE session_id = %s ORDER BY line_no
             """,
-            (session_id,),
+            (row.id,),
         )
         line_rows = await cur.fetchall()
     lines: list[SoldLine] = []
@@ -191,4 +190,207 @@ async def read_session(
         row.cancel_url,
         row.created_at,
         row.expires_at,
+        row.address_id,
+        row.quote_id,
     )
+
+
+async def read_session(
+    conn: Connection, merchant_id: uuid.UUID, session_id: uuid.UUID
+) -> CheckoutSession | None:
+    """The merchant's own session; another merchant's reads as none."""
+    async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
+        await cur.execute(
+            """
+            SELECT id, merchant_id, state::text, merchant_reference, return_url,
+                   cancel_url, weight_g, length_mm, width_mm, height_mm,
+                   created_at, expires_at, address_id, quote_id
+            FROM checkout_session WHERE id = %s AND merchant_id = %s
+            """,
+            (session_id, merchant_id),
+        )
+        row = await cur.fetchone()
+    return await _session(conn, row)
+
+
+async def session_by_id(
+    conn: Connection, session_id: uuid.UUID
+) -> CheckoutSession | None:
+    """A session by its id alone: the buyer's link is its own bearer token."""
+    async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
+        await cur.execute(
+            """
+            SELECT id, merchant_id, state::text, merchant_reference, return_url,
+                   cancel_url, weight_g, length_mm, width_mm, height_mm,
+                   created_at, expires_at, address_id, quote_id
+            FROM checkout_session WHERE id = %s
+            """,
+            (session_id,),
+        )
+        row = await cur.fetchone()
+    return await _session(conn, row)
+
+
+async def lock_session(
+    conn: Connection, session_id: uuid.UUID
+) -> CheckoutSession | None:
+    """The session under its row lock, for a step that changes it."""
+    async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
+        await cur.execute(
+            """
+            SELECT id, merchant_id, state::text, merchant_reference, return_url,
+                   cancel_url, weight_g, length_mm, width_mm, height_mm,
+                   created_at, expires_at, address_id, quote_id
+            FROM checkout_session WHERE id = %s FOR UPDATE
+            """,
+            (session_id,),
+        )
+        row = await cur.fetchone()
+    return await _session(conn, row)
+
+
+async def set_session_state(
+    conn: Connection,
+    session_id: uuid.UUID,
+    state: SessionState,
+    address_id: uuid.UUID | None,
+    quote_id: uuid.UUID | None,
+) -> None:
+    """Under the lock the caller holds. Never commits."""
+    await conn.execute(
+        """
+        UPDATE checkout_session SET state = %s, address_id = %s, quote_id = %s
+        WHERE id = %s
+        """,
+        (state.value, address_id, quote_id, session_id),
+    )
+
+
+async def add_address(
+    conn: Connection, session_id: uuid.UUID, address: Address, now: datetime
+) -> uuid.UUID:
+    """A new address for the session; addresses are never changed. Under
+    the session's lock. Never commits."""
+    address_id = uuid.uuid7()
+    await conn.execute(
+        """
+        INSERT INTO checkout_address
+          (id, session_id, name, email, phone_dial_code, phone_number, line1,
+           line2, city, region, postcode, country, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            address_id,
+            session_id,
+            address.name,
+            address.email,
+            address.phone_dial_code,
+            address.phone_number,
+            address.line1,
+            address.line2,
+            address.city,
+            address.region,
+            address.postcode,
+            address.country,
+            now,
+        ),
+    )
+    return address_id
+
+
+async def address_count(conn: Connection, session_id: uuid.UUID) -> int:
+    cur = await conn.execute(
+        "SELECT count(*) FROM checkout_address WHERE session_id = %s", (session_id,)
+    )
+    row = await cur.fetchone()
+    assert row is not None
+    return row[0]
+
+
+@dataclass(frozen=True)
+class _AddressRow:
+    name: str
+    email: str
+    phone_dial_code: str
+    phone_number: str
+    line1: str
+    line2: str | None
+    city: str
+    region: str | None
+    postcode: str | None
+    country: str
+
+
+async def read_address(conn: Connection, address_id: uuid.UUID) -> Address | None:
+    async with conn.cursor(row_factory=class_row(_AddressRow)) as cur:
+        await cur.execute(
+            """
+            SELECT name, email, phone_dial_code, phone_number, line1, line2, city,
+                   region, postcode, country
+            FROM checkout_address WHERE id = %s
+            """,
+            (address_id,),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        return None
+    return Address(
+        row.name,
+        row.email,
+        row.phone_dial_code,
+        row.phone_number,
+        row.line1,
+        row.line2,
+        row.city,
+        row.region,
+        row.postcode,
+        row.country,
+    )
+
+
+@dataclass(frozen=True)
+class SessionSummary:
+    """One row of the staff page's session list."""
+
+    id: uuid.UUID
+    merchant_name: str
+    state: str
+    created_at: datetime
+    country: str | None
+    quote_id: uuid.UUID | None
+    open_waits: int  # lookups the current address still waits on
+
+
+async def recent_sessions(conn: Connection, limit: int) -> list[SessionSummary]:
+    async with conn.cursor(row_factory=class_row(SessionSummary)) as cur:
+        await cur.execute(
+            """
+            SELECT s.id, m.display_name AS merchant_name, s.state::text AS state,
+                   s.created_at, a.country, s.quote_id,
+                   (SELECT count(*) FROM quote_wait w
+                      LEFT JOIN duty_lookup d ON d.id = w.duty_lookup_id
+                      LEFT JOIN shipping_price_lookup p
+                        ON p.id = w.shipping_price_lookup_id
+                    WHERE w.address_id = s.address_id
+                      AND (d.state = 'requested' OR p.state = 'requested')
+                   )::int AS open_waits
+            FROM checkout_session s
+            JOIN merchant m ON m.id = s.merchant_id
+            LEFT JOIN checkout_address a ON a.id = s.address_id
+            ORDER BY s.id DESC LIMIT %s
+            """,
+            (limit,),
+        )
+        return await cur.fetchall()
+
+
+async def address_countries(conn: Connection, session_id: uuid.UUID) -> dict[str, str]:
+    """Each of the session's addresses (id in hex) to its country only."""
+    cur = await conn.execute(
+        "SELECT id, country FROM checkout_address WHERE session_id = %s",
+        (session_id,),
+    )
+    countries: dict[str, str] = {}
+    for address_id, country in await cur.fetchall():
+        countries[address_id.hex] = country
+    return countries

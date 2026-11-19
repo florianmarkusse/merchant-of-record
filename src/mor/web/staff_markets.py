@@ -33,6 +33,8 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 from mor.audit import Actor, ActorKind
+from mor.checkout.quotes import session_quotes
+from mor.checkout.sessions import address_countries, recent_sessions, session_by_id
 from mor.couriers.prices import (
     NoCourierAccount,
     courier_account,
@@ -62,8 +64,10 @@ from mor.markets.records import (
     PriceSource,
 )
 from mor.markets.store import market_in_force, read_market, recent_loads
+from mor.merchants.store import read_merchant
 from mor.money.amount import InvalidAmount, Money, parse_major
 from mor.money.currency import Currency
+from mor.public_ids import SESSION_PREFIX, parse_id
 from mor.quote.build import (
     InputsMissing,
     LineRateRefused,
@@ -88,6 +92,7 @@ from mor.web.staff_quote_html import (
     chosen_option,
     render_quote_page,
 )
+from mor.web.staff_sessions_html import render_session_page, render_sessions_page
 
 
 LOADS_SHOWN = 10
@@ -445,3 +450,29 @@ async def ask_carrier(request: Request, database_url: str, now: datetime) -> Res
     separator = "&" if "?" in form.back else "?"
     note = urlencode({"priced": str(asked)})
     return RedirectResponse(f"{form.back}{separator}{note}", status_code=303)
+
+
+SESSIONS_SHOWN = 100
+
+
+async def sessions_page(database_url: str, now: datetime) -> Response:
+    async with await connect(database_url) as conn:
+        rows = await recent_sessions(conn, SESSIONS_SHOWN)
+    return HTMLResponse(render_sessions_page(rows, now))
+
+
+async def session_page(request: Request, database_url: str) -> Response:
+    session_id = parse_id(SESSION_PREFIX, request.path_params["session_id"])
+    if session_id is None:
+        return Response("no such session", status_code=404)
+    async with await connect(database_url) as conn:
+        session = await session_by_id(conn, session_id)
+        if session is None:
+            return Response("no such session", status_code=404)
+        merchant = await read_merchant(conn, session.merchant_id)
+        assert merchant is not None
+        countries = await address_countries(conn, session_id)
+        quotes = await session_quotes(conn, session_id)
+    return HTMLResponse(
+        render_session_page(session, merchant.display_name, countries, quotes)
+    )

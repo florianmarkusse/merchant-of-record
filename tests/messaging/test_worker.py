@@ -206,7 +206,7 @@ def test_a_crash_before_commit_leaves_nothing_and_frees_the_lock(
         candidate = await _only_candidate(crashing, NOW)
         assert await try_lock_aggregate(crashing, candidate)
         await crashing.execute("BEGIN")
-        assert await handle_delivery(crashing, candidate, NOW) == Ran(Applied())
+        assert await handle_delivery(crashing, candidate, ENV, NOW) == Ran(Applied())
         await crash(crashing)  # dies before COMMIT
 
         assert await _state(database_url, probe_id) == ProbeState.STARTED

@@ -283,14 +283,14 @@ async def _defer(
 
 
 async def handle_delivery(
-    conn: Connection, candidate: Candidate, now: datetime
+    conn: Connection, candidate: Candidate, environment: Environment, now: datetime
 ) -> Ran | Skipped:
     """A local consumer's delivery, in the caller's transaction, under the
     aggregate's advisory lock. Never commits."""
     fact = await _open_delivery(conn, candidate, now)
     if isinstance(fact, Skipped):
         return fact
-    outcome = await consumers.handle(conn, candidate.consumer, fact, now)
+    outcome = await consumers.handle(conn, candidate.consumer, fact, environment, now)
     await _finish_delivery(conn, candidate, now)
     return Ran(outcome)
 
@@ -386,7 +386,7 @@ async def run_one(
             match consumer_kind(candidate.consumer):
                 case "local":
                     async with conn.transaction():
-                        return await handle_delivery(conn, candidate, now)
+                        return await handle_delivery(conn, candidate, environment, now)
                 case "effect":
                     return await run_effect(conn, http, environment, candidate, now)
         except Exception as error:

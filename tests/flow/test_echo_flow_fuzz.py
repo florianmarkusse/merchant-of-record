@@ -232,7 +232,7 @@ class EchoFlow(RuleBasedStateMachine):
                     case "local":
                         # One transaction: run it, die before COMMIT.
                         await crashing.execute("BEGIN")
-                        await handle_delivery(crashing, candidate, self.now)
+                        await handle_delivery(crashing, candidate, ENV, self.now)
                     case "effect":
                         async with crashing.transaction():
                             prepared = await prepare_delivery(

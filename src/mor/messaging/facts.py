@@ -51,6 +51,12 @@ class MessageType(StrEnum):
     SHIPPING_PRICE_NOT_SERVED = "shipping_price_not_served"
     SHIPPING_PRICE_NEEDS_PERSON = "shipping_price_needs_person"
     CHECKOUT_SESSION_CREATED = "checkout_session_created"
+    QUOTE_REQUESTED = "quote_requested"
+    QUOTE_MADE = "quote_made"
+    QUOTE_REFUSED = "quote_refused"
+    QUOTE_INPUTS_ARRIVED = "quote_inputs_arrived"
+    CHECKOUT_SESSION_EXPIRY_DUE = "checkout_session_expiry_due"
+    CHECKOUT_SESSION_EXPIRED = "checkout_session_expired"
 
 
 @dataclass(frozen=True)
@@ -206,6 +212,43 @@ class CheckoutSessionCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_field
     merchant_id: uuid.UUID
 
 
+class QuoteRequestedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A buyer gave an address and an input is missing: asked, waiting."""
+
+    checkout_session_id: uuid.UUID
+    address_id: uuid.UUID
+
+
+class QuoteMadeV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    checkout_session_id: uuid.UUID
+    quote_id: uuid.UUID
+
+
+class QuoteRefusedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    checkout_session_id: uuid.UUID
+    quote_id: uuid.UUID
+    code: str
+
+
+class QuoteInputsArrivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A lookup this session's address waited on has finished: build again."""
+
+    checkout_session_id: uuid.UUID
+    address_id: uuid.UUID
+
+
+class CheckoutSessionExpiryDueV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True
+):
+    """Delivered at the session's `expires_at`: expire it unless it is done."""
+
+    checkout_session_id: uuid.UUID
+
+
+class CheckoutSessionExpiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    checkout_session_id: uuid.UUID
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -230,6 +273,12 @@ type Fact = (
     | ShippingPriceNotServedV1
     | ShippingPriceNeedsPersonV1
     | CheckoutSessionCreatedV1
+    | QuoteRequestedV1
+    | QuoteMadeV1
+    | QuoteRefusedV1
+    | QuoteInputsArrivedV1
+    | CheckoutSessionExpiryDueV1
+    | CheckoutSessionExpiredV1
 )
 
 
@@ -295,6 +344,18 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.SHIPPING_PRICE_NEEDS_PERSON, 1)
         case CheckoutSessionCreatedV1():
             return FactType(MessageType.CHECKOUT_SESSION_CREATED, 1)
+        case QuoteRequestedV1():
+            return FactType(MessageType.QUOTE_REQUESTED, 1)
+        case QuoteMadeV1():
+            return FactType(MessageType.QUOTE_MADE, 1)
+        case QuoteRefusedV1():
+            return FactType(MessageType.QUOTE_REFUSED, 1)
+        case QuoteInputsArrivedV1():
+            return FactType(MessageType.QUOTE_INPUTS_ARRIVED, 1)
+        case CheckoutSessionExpiryDueV1():
+            return FactType(MessageType.CHECKOUT_SESSION_EXPIRY_DUE, 1)
+        case CheckoutSessionExpiredV1():
+            return FactType(MessageType.CHECKOUT_SESSION_EXPIRED, 1)
         case _:
             assert_never(fact)
 
@@ -336,7 +397,15 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | ShippingPriceNeedsPersonV1(shipping_price_lookup_id=lookup_id)
         ):
             return Aggregate(AggregateType.SHIPPING_PRICE_LOOKUP, lookup_id)
-        case CheckoutSessionCreatedV1(checkout_session_id=session_id):
+        case (
+            CheckoutSessionCreatedV1(checkout_session_id=session_id)
+            | QuoteRequestedV1(checkout_session_id=session_id)
+            | QuoteMadeV1(checkout_session_id=session_id)
+            | QuoteRefusedV1(checkout_session_id=session_id)
+            | QuoteInputsArrivedV1(checkout_session_id=session_id)
+            | CheckoutSessionExpiryDueV1(checkout_session_id=session_id)
+            | CheckoutSessionExpiredV1(checkout_session_id=session_id)
+        ):
             return Aggregate(AggregateType.CHECKOUT_SESSION, session_id)
         case _:
             assert_never(fact)
@@ -408,6 +477,18 @@ def decode(
             decoded = _decode(payload, ShippingPriceNeedsPersonV1)
         case MessageType.CHECKOUT_SESSION_CREATED:
             decoded = _decode(payload, CheckoutSessionCreatedV1)
+        case MessageType.QUOTE_REQUESTED:
+            decoded = _decode(payload, QuoteRequestedV1)
+        case MessageType.QUOTE_MADE:
+            decoded = _decode(payload, QuoteMadeV1)
+        case MessageType.QUOTE_REFUSED:
+            decoded = _decode(payload, QuoteRefusedV1)
+        case MessageType.QUOTE_INPUTS_ARRIVED:
+            decoded = _decode(payload, QuoteInputsArrivedV1)
+        case MessageType.CHECKOUT_SESSION_EXPIRY_DUE:
+            decoded = _decode(payload, CheckoutSessionExpiryDueV1)
+        case MessageType.CHECKOUT_SESSION_EXPIRED:
+            decoded = _decode(payload, CheckoutSessionExpiredV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

@@ -17,7 +17,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from mor.audit import Actor, ActorKind
-from mor.checkout.sessions import create_session, read_session
+from mor.checkout.quotes import StoredQuote, read_quote
+from mor.checkout.sessions import create_session, read_address, read_session
 from mor.config import Settings
 from mor.db.connect import Connection, connect
 from mor.markets.store import market_in_force
@@ -39,7 +40,14 @@ from mor.quote.build import (
     QuoteRequest,
     build_quote,
 )
-from mor.quote.inputs import ask_missing, held_lookups, held_prices, new_asks
+from mor.quote.inputs import (
+    NoAccount,
+    ask_missing,
+    held_lookups,
+    held_prices,
+    new_asks,
+)
+from mor.quote.refusals import Refusal, offered_in, refusal_of
 from mor.web.api_estimates import estimate_out, refusal_error
 from mor.web.api_wire import (
     ApiError,
@@ -129,7 +137,7 @@ async def create_checkout_session(
             return error_response(draft)
         actor = Actor(ActorKind.MERCHANT_API_KEY, auth.key_id)
         session = await create_session(conn, merchant_id, draft, actor, now)
-        body = session_out(session, settings.self_url)
+        body = session_out(session, settings.self_url, None, None)
         await store_response(conn, merchant_id, key, 201, body)
         await conn.commit()
     return json_response(201, body)
@@ -147,9 +155,17 @@ async def get_checkout_session(request: Request, settings: Settings) -> Response
         if session_id is None:
             return error_response(not_found)
         session = await read_session(conn, auth.merchant.id, session_id)
-    if session is None:
-        return error_response(not_found)
-    return json_response(200, session_out(session, settings.self_url))
+        if session is None:
+            return error_response(not_found)
+        country: str | None = None
+        if session.address_id is not None:
+            address = await read_address(conn, session.address_id)
+            assert address is not None
+            country = address.country
+        quote: StoredQuote | None = None
+        if session.quote_id is not None:
+            quote = await read_quote(conn, session.quote_id)
+    return json_response(200, session_out(session, settings.self_url, country, quote))
 
 
 def _next_utc_midnight_s(now: datetime) -> int:
@@ -200,14 +216,16 @@ async def create_estimate(
         result = build_quote(market, quote_request, lookups, prices)
         match result:
             case Quote():
-                body = estimate_out(result, settings.environment)
-                if isinstance(body, ApiError):
-                    return error_response(body)
-                return json_response(200, body)
+                offered = offered_in(result, settings.environment)
+                if isinstance(offered, Refusal):
+                    return error_response(refusal_error(offered))
+                return json_response(200, estimate_out(offered))
             case InputsMissing():
                 return error_response(await _ask(conn, auth, result, now))
             case _:
-                return error_response(refusal_error(result, decoded.country))
+                return error_response(
+                    refusal_error(refusal_of(result, decoded.country))
+                )
 
 
 async def _ask(
@@ -239,14 +257,14 @@ async def _ask(
             retry_after_s=_next_utc_midnight_s(now),
         )
     actor = Actor(ActorKind.MERCHANT_API_KEY, auth.key_id)
-    no_account = await ask_missing(conn, missing, actor, now)
-    if no_account is not None:
+    asked = await ask_missing(conn, missing, actor, now)
+    if isinstance(asked, NoAccount):
         await conn.rollback()
         return ApiError(
             503,
             ErrorType.UNAVAILABLE,
             "pricing_unavailable",
-            f"pricing through {no_account.name} is not set up here",
+            f"pricing through {asked.name} is not set up here",
         )
     await conn.commit()
     return pending

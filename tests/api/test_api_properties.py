@@ -7,7 +7,8 @@
   that are not even JSON;
 - every estimate made from a quote lists, per option, parts that sum to
   its total in the quote's currency, with the goods and fees of the
-  quote in every option.
+  quote in every option; in prod, a quote on a placeholder is refused
+  as ours to fix, or its placeholder services are left out.
 """
 
 from datetime import UTC, datetime
@@ -21,6 +22,7 @@ from mor.couriers.records import Parcel
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.quote.build import Quote, QuoteLine, QuoteRequest, build_quote
+from mor.quote.refusals import Refusal, offered_in
 from mor.web.api_estimates import estimate_out
 from mor.web.api_wire import ApiError, ErrorType, EstimateIn, SessionIn, decode
 from tests.quote.fixtures import quote_market
@@ -109,19 +111,25 @@ parcels = st.builds(
 )
 
 
-@given(destination=st.sampled_from(("SG", "TH")), order=lines, parcel=parcels)
+@given(
+    destination=st.sampled_from(("SG", "TH")),
+    order=lines,
+    parcel=parcels,
+    prod=st.booleans(),
+)
 def test_every_estimate_option_is_its_parts_summed(
-    destination: str, order: list[QuoteLine], parcel: Parcel
+    destination: str, order: list[QuoteLine], parcel: Parcel, prod: bool
 ) -> None:
     request = QuoteRequest(destination, tuple(order), parcel, NOW.date(), NOW)
     result = build_quote(SYNTHETIC, request, {}, {})
     if not isinstance(result, Quote):
         return
-    body = estimate_out(result, Environment.TEST)
-    if isinstance(body, ApiError):
-        assert body.code == "no_service_for_lane"
+    environment = Environment.PROD if prod else Environment.TEST
+    offered = offered_in(result, environment)
+    if isinstance(offered, Refusal):
+        assert prod and offered.code in ("pricing_unavailable", "no_service_for_lane")
         return
-    estimate = msgspec.json.decode(body)
+    estimate = msgspec.json.decode(estimate_out(offered))
     assert estimate["currency"] == result.currency.value
     goods_total = 0
     for part in result.goods:

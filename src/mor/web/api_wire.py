@@ -17,13 +17,14 @@ import msgspec
 from msgspec import Meta
 from starlette.responses import Response
 
+from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredQuote
 from mor.checkout.records import CheckoutSession, Customs, SessionDraft, SoldLine
 from mor.couriers.records import Parcel
 from mor.dates import format_instant
 from mor.markets.records import MarketSet
 from mor.money.amount import Money
 from mor.money.currency import Currency
-from mor.public_ids import MERCHANT_PREFIX, SESSION_PREFIX, public_id
+from mor.public_ids import MERCHANT_PREFIX, QUOTE_PREFIX, SESSION_PREFIX, public_id
 
 
 # --- what comes in -----------------------------------------------------------------
@@ -290,6 +291,62 @@ class ParcelOut(msgspec.Struct, frozen=True):
     height_mm: int
 
 
+class QuoteOptionOut(msgspec.Struct, frozen=True):
+    key: str
+    service: str
+    name: str
+    total: MoneyOut
+
+
+class RefusalOut(msgspec.Struct, frozen=True):
+    code: str
+    message: str
+
+
+class QuoteOut(msgspec.Struct, frozen=True):
+    """The buyer's quote, without its build-up (the estimate gives that)."""
+
+    id: str
+    state: str
+    currency: str | None
+    valid_until: str | None
+    options: list[QuoteOptionOut]
+    refusal: RefusalOut | None
+
+
+def quote_out(stored: StoredQuote) -> QuoteOut:
+    quote_id = public_id(QUOTE_PREFIX, stored.id)
+    match stored:
+        case MadeQuote():
+            options: list[QuoteOptionOut] = []
+            for option in stored.options:
+                options.append(
+                    QuoteOptionOut(
+                        option.key,
+                        option.service,
+                        option.service_name,
+                        money_out(Money(option.total_minor, stored.currency)),
+                    )
+                )
+            return QuoteOut(
+                quote_id,
+                "made",
+                stored.currency.value,
+                format_instant(stored.valid_until),
+                options,
+                None,
+            )
+        case RefusedQuote():
+            return QuoteOut(
+                quote_id,
+                "refused",
+                None,
+                None,
+                [],
+                RefusalOut(stored.code, stored.message),
+            )
+
+
 class SessionOut(msgspec.Struct, frozen=True):
     id: str
     object: str
@@ -303,9 +360,16 @@ class SessionOut(msgspec.Struct, frozen=True):
     cancel_url: str
     parcel: ParcelOut
     lines: list[LineOut]
+    ship_to_country: str | None  # the full address comes with orders
+    quote: QuoteOut | None
 
 
-def session_out(session: CheckoutSession, self_url: str) -> bytes:
+def session_out(
+    session: CheckoutSession,
+    self_url: str,
+    ship_to_country: str | None,
+    quote: StoredQuote | None,
+) -> bytes:
     """A session as the API shows it; times through `format_instant`."""
     session_id = public_id(SESSION_PREFIX, session.id)
     lines: list[LineOut] = []
@@ -340,5 +404,7 @@ def session_out(session: CheckoutSession, self_url: str) -> bytes:
         session.cancel_url,
         ParcelOut(parcel.weight_g, parcel.length_mm, parcel.width_mm, parcel.height_mm),
         lines,
+        ship_to_country,
+        None if quote is None else quote_out(quote),
     )
     return msgspec.json.encode(out)

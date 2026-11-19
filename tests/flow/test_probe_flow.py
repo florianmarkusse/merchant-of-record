@@ -115,7 +115,7 @@ class ProbeFlow(RuleBasedStateMachine):
             crashing = await connect(TEST_URL, autocommit=True)
             assert await try_lock_aggregate(crashing, candidate)
             await crashing.execute("BEGIN")
-            await handle_delivery(crashing, candidate, self.now)
+            await handle_delivery(crashing, candidate, ENV, self.now)
             await crash(crashing)  # dies before COMMIT
 
         self.run(step())

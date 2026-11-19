@@ -51,7 +51,7 @@ from mor.couriers.records import (
 from mor.db.connect import Connection, connect
 from mor.messaging import consumers
 from mor.messaging.facts import AggregateType
-from mor.messaging.routing import ConsumerName
+from mor.messaging.routing import ConsumerName, consumer_kind
 from mor.messaging.worker import (
     Candidate,
     Failed,
@@ -155,6 +155,8 @@ class ShippingPriceFlow(RuleBasedStateMachine):
         candidate = self._draw_candidate(data)
         if candidate is None:
             return
+        if consumer_kind(candidate.consumer) != "effect":
+            return  # a local step has no call to crash around
 
         async def step() -> bool:
             crashing = await connect(TEST_URL, autocommit=True)

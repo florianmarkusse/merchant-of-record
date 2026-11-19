@@ -18,6 +18,9 @@ class ConsumerName(StrEnum):
     ECHO_REPORT_FETCH = "echo_report_fetch"
     DUTY_RATE_ASK = "duty_rate_ask"
     SHIPPING_PRICE_ASK = "shipping_price_ask"
+    QUOTE_WAIT_NOTIFY = "quote_wait_notify"
+    QUOTE_BUILD = "quote_build"
+    CHECKOUT_SESSION_EXPIRE = "checkout_session_expire"
 
 
 type ConsumerKind = Literal["local", "effect"]
@@ -48,21 +51,33 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.DUTY_RATE_ASK,)
         case MessageType.SHIPPING_PRICE_NEEDED:
             return (ConsumerName.SHIPPING_PRICE_ASK,)
+        # A finished lookup tells the sessions waiting on it (4d-2).
+        case (
+            MessageType.DUTY_RATE_FOUND
+            | MessageType.DUTY_RATE_UNKNOWN_CODE
+            | MessageType.DUTY_RATE_NEEDS_PERSON
+            | MessageType.SHIPPING_PRICE_FOUND
+            | MessageType.SHIPPING_PRICE_NOT_SERVED
+            | MessageType.SHIPPING_PRICE_NEEDS_PERSON
+        ):
+            return (ConsumerName.QUOTE_WAIT_NOTIFY,)
+        case MessageType.QUOTE_INPUTS_ARRIVED:
+            return (ConsumerName.QUOTE_BUILD,)
+        case MessageType.CHECKOUT_SESSION_EXPIRY_DUE:
+            return (ConsumerName.CHECKOUT_SESSION_EXPIRE,)
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
             | MessageType.ECHO_JOB_CONFIRMED
             | MessageType.ECHO_JOB_ARCHIVED
-            # The quote flow (4d) resumes waiting quotes on these.
-            | MessageType.DUTY_RATE_FOUND
-            | MessageType.DUTY_RATE_UNKNOWN_CODE
-            | MessageType.DUTY_RATE_NEEDS_PERSON
             | MessageType.DUTY_RATE_DISAGREED
-            | MessageType.SHIPPING_PRICE_FOUND
-            | MessageType.SHIPPING_PRICE_NOT_SERVED
-            | MessageType.SHIPPING_PRICE_NEEDS_PERSON
-            # The quote flow (4d-2) and payments (slice 5) consume this.
+            # Records for now; payments (slice 5) and merchant webhooks
+            # consume them.
             | MessageType.CHECKOUT_SESSION_CREATED
+            | MessageType.QUOTE_REQUESTED
+            | MessageType.QUOTE_MADE
+            | MessageType.QUOTE_REFUSED
+            | MessageType.CHECKOUT_SESSION_EXPIRED
         ):
             return ()
         case _:
@@ -79,6 +94,9 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.ECHO_INBOX_DECODE
             | ConsumerName.ECHO_EVENT_APPLY
             | ConsumerName.ECHO_TRACKING_START
+            | ConsumerName.QUOTE_WAIT_NOTIFY
+            | ConsumerName.QUOTE_BUILD
+            | ConsumerName.CHECKOUT_SESSION_EXPIRE
         ):
             return "local"
         case (

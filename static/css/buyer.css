@@ -1,0 +1,119 @@
+/* The buyer's checkout page (src/mor/web/buyer_html.py): mobile first,
+   small, light and dark. The merchant's own colours come later. */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c2026;
+  --muted: #5c6470;
+  --line: #dde1e7;
+  --accent: #1d5fd1;
+  --on-accent: #ffffff;
+  --bad: #b3261e;
+  --bad-soft: #fbe5e3;
+  --radius: 8px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --surface: #1c2027;
+    --text: #e6e8eb;
+    --muted: #9aa3ae;
+    --line: #2e343d;
+    --accent: #7aa7ff;
+    --on-accent: #0b1220;
+    --bad: #ff8a80;
+    --bad-soft: #3a1d1b;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+header, main, footer {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+header h1 { font-size: 1.25rem; margin: 1.25rem 0 0.5rem; }
+h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+
+section, form.address, details {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+
+.cart ul { margin: 0; padding-left: 1.1rem; }
+
+form.address label, form.address fieldset {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  border: 0;
+  padding: 0;
+}
+
+form.address label span, form.address legend { color: var(--muted); font-size: 0.9rem; }
+
+input, select, button {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+
+fieldset.phone { grid-template-columns: 5.5rem 1fr; }
+fieldset.phone legend { grid-column: 1 / -1; }
+fieldset.phone .error { grid-column: 1 / -1; }
+
+input[aria-invalid="true"] { border-color: var(--bad); }
+
+button {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.error { color: var(--bad); font-size: 0.9rem; }
+
+.refused, .notice {
+  background: var(--bad-soft);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.waiting { color: var(--muted); }
+
+table { width: 100%; border-collapse: collapse; }
+td, th { padding: 6px 0; text-align: left; font-weight: normal; }
+td.amount { text-align: right; font-variant-numeric: tabular-nums; }
+.options tr { border-bottom: 1px solid var(--line); }
+.options tr[aria-current="true"] td { font-weight: 600; }
+.breakdown tr.total th, .breakdown tr.total td {
+  font-weight: 700;
+  border-top: 1px solid var(--line);
+}
+
+details summary { cursor: pointer; }
+details form.address { border: 0; padding: 0; margin-top: 12px; }
+
+footer { color: var(--muted); font-size: 0.85rem; padding-bottom: 2rem; }
