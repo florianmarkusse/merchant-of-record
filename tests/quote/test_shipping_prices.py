@@ -2,16 +2,18 @@
 on the synthetic set of `tests/quote/fixtures.py`: billed weight, fuel on
 freight and surcharges, and every reason a card is not offered."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from fractions import Fraction
 
+from mor.couriers.records import Parcel
 from mor.markets.records import MarketSet
 from mor.money.currency import Currency
-from mor.quote.shipping import NotOffered, Offer, Parcel, ShipPartKind, offers
+from mor.quote.shipping import NotOffered, Offer, PriceMissing, ShipPartKind, offers
 from tests.quote.fixtures import SHIPPING, quote_market
 
 
 ON = date(2026, 11, 18)
+NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 
 
 def _offers(
@@ -19,9 +21,19 @@ def _offers(
 ) -> dict[str, Offer | NotOffered]:
     found: dict[str, Offer | NotOffered] = {}
     for offer in offers(
-        market, "SG", frozenset({category}), parcel, 1, Fraction(0), Currency.SGD, on
+        market,
+        "SG",
+        frozenset({category}),
+        parcel,
+        1,
+        Fraction(0),
+        Currency.SGD,
+        on,
+        {},
+        NOW,
     ):
-        code = offer.rate_card if isinstance(offer, NotOffered) else offer.card.code
+        assert not isinstance(offer, PriceMissing), "no live route in the set"
+        code = offer.key if isinstance(offer, NotOffered) else offer.route.key
         found[code] = offer
     return found
 

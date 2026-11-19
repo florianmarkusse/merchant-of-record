@@ -5,46 +5,65 @@
 
 Listens on SELF_URL's host and port. Outside prod the fakes are part of
 the app, and their webhooks come back to SELF_URL over real HTTP, as a
-vendor's would.
+vendor's would. Outside prod uvicorn reloads it when a file under src/
+changes (`--reload`, which needs the app as a factory it imports by name);
+a reload does not migrate, load markets or seed.
 """
 
-import asyncio
 import os
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx2
 import uvicorn
+from starlette.applications import Starlette
 
 import mor.fakes.app
-from mor.config import Environment, Settings, load_settings
+from mor.config import Environment, load_settings
 from mor.web.main import Fakes, make_app
 
 
 # Longer than any handler of ours takes; a fake's webhook that gets no
 # answer in time counts as failed and is redelivered.
 WEBHOOK_TIMEOUT_SECONDS = 10
+SOURCE = Path(__file__).resolve().parent.parent.parent  # src/
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
 
 
-async def serve(settings: Settings) -> None:
+def create_app() -> Starlette:
+    """uvicorn's app factory: settings from the environment, and the
+    outgoing client closed when the app shuts down."""
+    settings = load_settings(os.environ)
+    outgoing = httpx2.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS)
+    fakes = None
+    if settings.environment != Environment.PROD:
+        fakes = Fakes(mor.fakes.app.make_app(settings.database_url, outgoing), outgoing)
+
+    @asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncGenerator[None]:
+        yield
+        await outgoing.aclose()
+
+    return Starlette(routes=make_app(settings, fakes, _now).routes, lifespan=lifespan)
+
+
+if __name__ == "__main__":
+    settings = load_settings(os.environ)
     address = urlsplit(settings.self_url)
     assert address.hostname is not None and address.port is not None, (
         f"SELF_URL needs a host and a port, got {settings.self_url!r}"
     )
-    async with httpx2.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS) as outgoing:
-        fakes = None
-        if settings.environment != Environment.PROD:
-            fakes = Fakes(
-                mor.fakes.app.make_app(settings.database_url, outgoing), outgoing
-            )
-        app = make_app(settings, fakes, _now)
-        config = uvicorn.Config(app, host=address.hostname, port=address.port)
-        await uvicorn.Server(config).serve()
-
-
-if __name__ == "__main__":
-    asyncio.run(serve(load_settings(os.environ)))
+    uvicorn.run(
+        "mor.web.serve:create_app",
+        factory=True,
+        host=address.hostname,
+        port=address.port,
+        reload=settings.environment != Environment.PROD,
+        reload_dirs=[str(SOURCE)],
+    )

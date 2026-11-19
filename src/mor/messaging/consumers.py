@@ -9,6 +9,8 @@ from typing import assert_never
 import httpx2
 
 from mor.config import Environment
+from mor.couriers import port as courier_port
+from mor.couriers import prices as courier_prices
 from mor.db.connect import Connection
 from mor.duties import lookups as duty_lookups
 from mor.duties import port as duty_port
@@ -28,8 +30,15 @@ type EffectCall = (
     | echo_tracking.FetchEventsCall
     | echo_reports.ReportCall
     | duty_lookups.AskCall
+    | courier_prices.PriceCall
 )
-type EffectResult = echo_flow.EchoResult | Page | ReportList | duty_port.AskResult
+type EffectResult = (
+    echo_flow.EchoResult
+    | Page
+    | ReportList
+    | duty_port.AskResult
+    | courier_port.QuoteRateResult
+)
 
 
 class WrongKind(Exception):
@@ -60,6 +69,7 @@ async def handle(
             | ConsumerName.ECHO_POLL
             | ConsumerName.ECHO_REPORT_FETCH
             | ConsumerName.DUTY_RATE_ASK
+            | ConsumerName.SHIPPING_PRICE_ASK
         ):
             raise WrongKind(f"{consumer} is an effect consumer")
         case _:
@@ -79,6 +89,8 @@ async def prepare(
             return await echo_reports.prepare_reports(conn, fact, now)
         case ConsumerName.DUTY_RATE_ASK:
             return await duty_lookups.prepare(conn, fact, now)
+        case ConsumerName.SHIPPING_PRICE_ASK:
+            return await courier_prices.prepare(conn, fact, now)
         case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH
@@ -105,6 +117,8 @@ async def call(
             return await echo_reports.call_reports(http, environment, effect_call)
         case duty_lookups.AskCall():
             return await duty_lookups.call(http, environment, effect_call)
+        case courier_prices.PriceCall():
+            return await courier_prices.call(http, environment, effect_call)
         case _:
             assert_never(effect_call)
 
@@ -131,7 +145,12 @@ async def complete(
                 | duty_port.UnknownCode
                 | duty_port.Unavailable
                 | duty_port.OutcomeUnknown
-                | duty_port.UndecodableBody,
+                | duty_port.UndecodableBody
+                | courier_port.CarrierPrice
+                | courier_port.NotServed
+                | courier_port.Unavailable
+                | courier_port.OutcomeUnknown
+                | courier_port.UndecodableBody,
             ):
                 raise WrongCall(f"echo_send got {effect_call!r}, {result!r}")
             return await echo_flow.complete(conn, fact, effect_call, result, now)
@@ -166,6 +185,19 @@ async def complete(
             ):
                 raise WrongCall(f"duty_rate_ask got {result!r}")
             return await duty_lookups.complete(conn, fact, effect_call, result, now)
+        case ConsumerName.SHIPPING_PRICE_ASK:
+            if not isinstance(effect_call, courier_prices.PriceCall):
+                raise WrongCall(f"shipping_price_ask got {effect_call!r}")
+            if not isinstance(
+                result,
+                courier_port.CarrierPrice
+                | courier_port.NotServed
+                | courier_port.Unavailable
+                | courier_port.OutcomeUnknown
+                | courier_port.UndecodableBody,
+            ):
+                raise WrongCall(f"shipping_price_ask got {result!r}")
+            return await courier_prices.complete(conn, fact, effect_call, result, now)
         case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH

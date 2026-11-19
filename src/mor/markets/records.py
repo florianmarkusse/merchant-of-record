@@ -283,9 +283,11 @@ class RestrictionRule(StrEnum):
 
 
 class PriceSource(StrEnum):
-    """Where a route's shipping price comes from; `carrier_api` is 4c-2."""
+    """Where a route's shipping price comes from: our rate card, or the
+    carrier's live rate call (4c-2)."""
 
     OWN_TABLE = "own_table"
+    CARRIER_API = "carrier_api"
 
 
 class Standing(StrEnum):
@@ -387,12 +389,21 @@ class ServiceRestriction:
 
 @dataclass(frozen=True)
 class ShippingRoute:
-    """A rate card offered into a country or group."""
+    """A service offered into a country or group, priced from a rate card
+    (`own_table`) or by the carrier (`carrier_api`, no card)."""
 
     scope: Scope
-    rate_card: str
+    service: str
+    rate_card: str | None  # set exactly when the source is own_table
     source: PriceSource
     standing: Standing
+
+    @property
+    def key(self) -> str:
+        """What names the option it gives: the card, or the live service."""
+        if self.rate_card is not None:
+            return self.rate_card
+        return f"live:{self.service}"
 
 
 @dataclass(frozen=True)

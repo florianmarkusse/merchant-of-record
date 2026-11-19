@@ -35,12 +35,18 @@ LOGS="${STATE}/logs"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 # Targets: a name, its example budget (per test), its hang guard, and the
-# tests it runs. Plain data. Budgets measured 17-Nov-2026 on the laptop:
-# about 30, 10 and 5 minutes.
+# tests it runs. Plain data. Budgets measured on the laptop: echo, probe
+# and properties about 30, 10 and 5 minutes (17-Nov-2026); the duty and
+# shipping-price fuzzers about 0.11 s an example, so about 18 minutes each,
+# and the quote properties about 1 ms an example, which brings properties
+# to about 12 minutes (19-Nov-2026). Every test file using Hypothesis must
+# be in a target: tests/test_soak_targets.py fails otherwise.
 TARGETS=(
   "echo-flow|6000|75m|tests/flow/test_echo_flow_fuzz.py"
   "probe-flow|8000|30m|tests/flow/test_probe_flow.py"
-  "properties|100000|30m|tests/money tests/echo/test_events.py tests/messaging/test_facts.py"
+  "duty-flow|10000|45m|tests/flow/test_duty_lookup_fuzz.py"
+  "shipping-price-flow|10000|45m|tests/flow/test_shipping_price_fuzz.py"
+  "properties|100000|30m|tests/money tests/echo/test_events.py tests/messaging/test_facts.py tests/markets/test_markets.py tests/tax/test_tax_paths.py tests/tax/test_duty_modes.py tests/quote/test_quote_properties.py"
 )
 
 env_value() {

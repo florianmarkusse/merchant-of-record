@@ -41,9 +41,11 @@ and wins where the two differ.
   (markets in the database, versioned loads), 4b-1 (the tax-path rule,
   rates per HS code with trade agreements, exact FX chains) and 4b-2
   (duty and VAT rates from vendors: a mode per country, asked once per
-  combination, compared with our rows) and 4c-1 (shipping from our own
-  rate tables, fee rules, `build_quote` with one option per service) are
-  built; 4c-2 (live carrier prices through a fake courier) is next.
+  combination, compared with our rows), 4c-1 (shipping from our own
+  rate tables, fee rules, `build_quote` with one option per service) and
+  4c-2 (live carrier prices through a fake courier, held while usable by a
+  rule per courier account) are built; 4d (merchants, sessions, the quote
+  flow) is next.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
@@ -138,9 +140,9 @@ and wins where the two differ.
 ```
 uv run python -m mor.db.migrate          # apply migrations/ to DATABASE_URL (default mor_dev)
 uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_vendor); refused in prod
-uv run python -m mor.messaging.worker    # the worker: runs due deliveries
+uv run python -m mor.messaging.worker    # the worker: runs due deliveries; outside prod watchfiles restarts it on a change under src/
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
-uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod
+uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod; uvicorn reloads it on a change under src/
 uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor accounts at the fake (server must run)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
@@ -158,6 +160,9 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
   for `database_url`. Tests commit for real, so commit-time triggers (the
   ledger balance check) run as in prod. The runner's own tests use a
   throwaway `mor_test_migrations`.
+- A new property test or fuzzer joins a target in `deploy/soak.sh` in the
+  same change, with a budget from a timed run; `tests/test_soak_targets.py`
+  fails until it does.
 - Async tests: pytest functions are synchronous and run their async body
   with `asyncio.run`, one event loop per call; no pytest async plugin.
 - The ledger refuses `UPDATE` and `DELETE` by trigger but not `TRUNCATE`

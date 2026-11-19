@@ -5,17 +5,20 @@ loads, what the newest changed, each researched country's answer).
 row shows."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 import htpy
 
+from mor.couriers.prices import LivePriceRow
+from mor.couriers.records import PriceState
 from mor.dates import format_day, format_moment
 from mor.duties.lookups import Agreement, AnswerRow
 from mor.markets.changes import percent_text, value_text
 from mor.markets.records import LandedRate, MarketSet, MarketStatus
 from mor.markets.rules import Open, country_rules
 from mor.markets.store import LoadRow
-from mor.web.staff_layout import day_input, staff_page
+from mor.money.amount import Money
+from mor.web.staff_layout import day_input, money_text, staff_page
 from mor.web.staff_quote_html import closed_text
 
 
@@ -116,7 +119,103 @@ def _answers_table(rows: list[AnswerRow]) -> htpy.Node:
     ]
 
 
-def render_answers_page(agreement: list[Agreement], answers: list[AnswerRow]) -> str:
+PRICE_STATE_WORDS = {
+    PriceState.REQUESTED: "asking",
+    PriceState.ANSWERED: "priced",
+    PriceState.NOT_SERVED: "not served",
+    PriceState.NEEDS_PERSON: "needs a person",
+}
+
+
+def _difference(row: LivePriceRow) -> Money | None:
+    """The carrier's price less our card's, both in the carrier's currency."""
+    if row.total is None or row.own is None:
+        return None
+    return Money(
+        row.total.amount_minor - row.own.total.amount_minor, row.total.currency
+    )
+
+
+def _prices_table(rows: list[LivePriceRow], now: datetime) -> htpy.Node:
+    if not rows:
+        return None
+    differing: list[LivePriceRow] = []
+    rest: list[LivePriceRow] = []
+    for row in rows:
+        difference = _difference(row)
+        if difference is not None and difference.amount_minor != 0:
+            differing.append(row)
+        else:
+            rest.append(row)
+    lines: list[htpy.Node] = []
+    for row in differing + rest:
+        question = row.question
+        parcel = question.parcel
+        difference = _difference(row)
+        ours = "no card prices it"
+        if row.own is not None:
+            ours = f"{money_text(row.own.total)} ({row.own.rate_card})"
+        said = PRICE_STATE_WORDS[row.state]
+        if row.total is not None:
+            said = money_text(row.total)
+        elif row.detail:
+            said = f"{said}: {row.detail}"
+        until = ""
+        if row.usable_until is not None:
+            until = format_moment(row.usable_until)
+            if row.usable_until <= now:
+                until += " (expired)"
+        lines.append(
+            htpy.tr(
+                class_="differs"
+                if difference is not None and difference.amount_minor
+                else None
+            )[
+                htpy.td[htpy.code[question.destination]],
+                htpy.td[f"{question.carrier} {question.service}"],
+                htpy.td[
+                    f"{parcel.weight_g} g, {parcel.length_mm}x{parcel.width_mm}"
+                    f"x{parcel.height_mm} mm"
+                ],
+                htpy.td[said],
+                htpy.td[ours],
+                htpy.td(class_="num")[
+                    "" if difference is None else money_text(difference)
+                ],
+                htpy.td[
+                    "" if row.finished_at is None else format_moment(row.finished_at)
+                ],
+                htpy.td[until],
+                htpy.td(class_="num")[str(row.calls)],
+            ]
+        )
+    return [
+        _filters("prices", "differs", "differences only"),
+        htpy.div(class_="scroll")[
+            htpy.table(id="prices", class_="grid")[
+                htpy.tr[
+                    htpy.th["Country"],
+                    htpy.th["Carrier"],
+                    htpy.th["Parcel"],
+                    htpy.th["Carrier said"],
+                    htpy.th["Our card"],
+                    htpy.th(class_="num")["Difference"],
+                    htpy.th["Answered"],
+                    htpy.th["Used until"],
+                    htpy.th(class_="num")["Calls"],
+                ],
+                lines,
+            ]
+        ],
+    ]
+
+
+def render_answers_page(
+    agreement: list[Agreement],
+    answers: list[AnswerRow],
+    prices: list[LivePriceRow],
+    now: datetime,
+) -> str:
     return staff_page(
         "Vendor answers",
         ANSWERS_PAGE,
@@ -131,6 +230,14 @@ def render_answers_page(agreement: list[Agreement], answers: list[AnswerRow]) ->
         _agreement_table(agreement),
         htpy.h2["Each answer, differences first"],
         _answers_table(answers) or htpy.p(class_="muted")["None yet."],
+        htpy.h2["Live carrier prices against our cards, differences first"],
+        htpy.p(class_="muted")[
+            "Each price a carrier gave, beside what our own card for the same"
+            " service charged for that parcel when it came (freight, the"
+            " surcharges that always apply, and fuel). How long a price is"
+            " used is a setting on the carrier's account."
+        ],
+        _prices_table(prices, now) or htpy.p(class_="muted")["None yet."],
     )
 
 

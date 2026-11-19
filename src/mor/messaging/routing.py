@@ -17,6 +17,7 @@ class ConsumerName(StrEnum):
     ECHO_POLL = "echo_poll"
     ECHO_REPORT_FETCH = "echo_report_fetch"
     DUTY_RATE_ASK = "duty_rate_ask"
+    SHIPPING_PRICE_ASK = "shipping_price_ask"
 
 
 type ConsumerKind = Literal["local", "effect"]
@@ -45,6 +46,8 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.ECHO_REPORT_FETCH,)
         case MessageType.DUTY_RATE_NEEDED:
             return (ConsumerName.DUTY_RATE_ASK,)
+        case MessageType.SHIPPING_PRICE_NEEDED:
+            return (ConsumerName.SHIPPING_PRICE_ASK,)
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
@@ -55,6 +58,9 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             | MessageType.DUTY_RATE_UNKNOWN_CODE
             | MessageType.DUTY_RATE_NEEDS_PERSON
             | MessageType.DUTY_RATE_DISAGREED
+            | MessageType.SHIPPING_PRICE_FOUND
+            | MessageType.SHIPPING_PRICE_NOT_SERVED
+            | MessageType.SHIPPING_PRICE_NEEDS_PERSON
         ):
             return ()
         case _:
@@ -78,6 +84,7 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.ECHO_POLL
             | ConsumerName.ECHO_REPORT_FETCH
             | ConsumerName.DUTY_RATE_ASK
+            | ConsumerName.SHIPPING_PRICE_ASK
         ):
             return "effect"
         case _:

@@ -77,7 +77,7 @@ SHIPPING_HEADERS = {
     "service_restrictions": (
         "service,category,rule,status,research_ref,checked_on,notes\n"
     ),
-    "shipping_routes": "destination,rate_card,source,standing,notes\n",
+    "shipping_routes": "destination,service,rate_card,source,standing,notes\n",
     "fees": (
         "component,country,percent,fixed_minor,currency,effective_from,standing,"
         "source,notes\n"

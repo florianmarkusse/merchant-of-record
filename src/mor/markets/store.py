@@ -362,13 +362,14 @@ async def _insert_shipping(
         )
         await cur.executemany(
             "INSERT INTO shipping_route"
-            " (load_id, country_iso2, group_code, rate_card, source, standing)"
-            " VALUES (%s, %s, %s, %s, %s, %s)",
+            " (load_id, country_iso2, group_code, service, rate_card, source,"
+            " standing) VALUES (%s, %s, %s, %s, %s, %s, %s)",
             [
                 (
                     load_id,
                     r.scope.country,
                     r.scope.group,
+                    r.service,
                     r.rate_card,
                     r.source.value,
                     r.standing.value,
@@ -811,16 +812,20 @@ async def _read_shipping(conn: Connection, load_id: uuid.UUID) -> _Shipping:
             )
         )
     cur = await conn.execute(
-        "SELECT country_iso2, group_code, rate_card, source::text, standing::text"
-        " FROM shipping_route WHERE load_id = %s"
-        " ORDER BY rate_card, country_iso2, group_code",
+        "SELECT country_iso2, group_code, service, rate_card, source::text,"
+        " standing::text FROM shipping_route WHERE load_id = %s"
+        " ORDER BY service, rate_card, country_iso2, group_code",
         (load_id,),
     )
     routes: list[ShippingRoute] = []
-    for country, group, card, source, standing in await cur.fetchall():
+    for country, group, service, card, source, standing in await cur.fetchall():
         routes.append(
             ShippingRoute(
-                Scope(country, group), card, PriceSource(source), Standing(standing)
+                Scope(country, group),
+                service,
+                card,
+                PriceSource(source),
+                Standing(standing),
             )
         )
     cur = await conn.execute(

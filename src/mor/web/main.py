@@ -48,13 +48,16 @@ def make_app(
         return await staff_markets.quote_page(request, url, clock())
 
     async def staff_answers_page(request: Request) -> Response:
-        return await staff_markets.answers_page(url)
+        return await staff_markets.answers_page(url, clock())
 
     async def staff_data_page(request: Request) -> Response:
         return await staff_markets.data_page(request, url, clock())
 
     async def staff_ask_vendor(request: Request) -> Response:
         return await staff_markets.ask_vendor(request, url, clock())
+
+    async def staff_ask_carrier(request: Request) -> Response:
+        return await staff_markets.ask_carrier(request, url, clock())
 
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
@@ -75,6 +78,11 @@ def make_app(
                 Route("/staff/markets/data", staff_data_page, methods=["GET"]),
                 Route(
                     "/staff/markets/duty_lookups", staff_ask_vendor, methods=["POST"]
+                ),
+                Route(
+                    "/staff/markets/shipping_prices",
+                    staff_ask_carrier,
+                    methods=["POST"],
                 ),
             ]
         )

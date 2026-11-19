@@ -10,9 +10,9 @@ How a total is built (plan-architecture §8, decided 18-Nov-2026):
 2. Our fee components, each a percentage of the merchant's price (plus
    an optional fixed amount), rounded half to even. They sit inside the
    goods value the buyer pays, so customs and the tax bands see them.
-3. Per routed rate card: freight, the surcharges that always apply, and
-   fuel, each rounded up (we never under-collect the carrier's bill).
-   That is the freight customs counts.
+3. Per routed service: freight, the surcharges that always apply, and
+   fuel, from our card or the carrier's price, each rounded up (we never
+   under-collect the carrier's bill). That is the freight customs counts.
 4. The tax paths (4b) with that goods value and freight, per category in
    the order. A card that is not duty-paid cannot carry an order on which
    anything is due at the border.
@@ -28,10 +28,11 @@ difference is the rounding remainder, booked when the order is paid
 
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 from fractions import Fraction
 
+from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
 from mor.markets.changes import BASE_WORDS, percent_text
@@ -55,9 +56,11 @@ from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
 from mor.quote.fees import fee_rule_for
 from mor.quote.shipping import (
+    FromCard,
+    FromCarrier,
     NotOffered,
     Offer,
-    Parcel,
+    PriceMissing,
     ShipPart,
     ShipPartKind,
     carries_duties_paid,
@@ -110,7 +113,8 @@ class QuoteRequest:
     destination: str
     lines: tuple[QuoteLine, ...]
     parcel: Parcel
-    on: date
+    on: date  # which rules and cards are in force
+    now: datetime  # a carrier's price is used only before its usable_until
 
 
 class PartKind(StrEnum):
@@ -143,7 +147,9 @@ class Part:
 
 @dataclass(frozen=True)
 class ShippingOption:
-    rate_card: str
+    key: str  # the route's: its card, or `live:<service>`
+    rate_card: str | None  # None: priced by the carrier
+    live: FromCarrier | None  # the carrier's price it used
     service: str
     service_name: str
     tier: ServiceTier
@@ -220,11 +226,14 @@ class VendorAsk:
 
 @dataclass(frozen=True)
 class InputsMissing:
-    """A rate a vendor decides is not stored yet: ask (`asks`) or wait
-    for an answer already asked for (`waiting`), then quote again."""
+    """A rate a vendor decides, or a carrier's price, is not held yet: ask
+    (`asks`, `price_asks`) or wait for an answer already asked for
+    (`waiting`, `price_waiting`), then quote again."""
 
     asks: tuple[VendorAsk, ...]
     waiting: tuple[uuid.UUID, ...]
+    price_asks: tuple[PriceQuestion, ...] = ()
+    price_waiting: tuple[uuid.UUID, ...] = ()
 
 
 type QuoteResult = Quote | QuoteRefusal | InputsMissing
@@ -234,8 +243,11 @@ def build_quote(
     market: MarketSet,
     request: QuoteRequest,
     lookups: dict[RateQuestion, VendorLookup],
+    prices: dict[PriceQuestion, PriceHeld],
 ) -> QuoteResult:
-    """`lookups`: what we hold from the destination's vendor, per question."""
+    """`lookups`: what we hold from the destination's vendor, per question;
+    `prices`: what we hold from carriers, per question. Anything missing
+    from either, for any option, is gathered into one `InputsMissing`."""
     assert request.lines, "an order has lines: the edge checks this"
     destination = request.destination
     rules: dict[str, Open] = {}
@@ -310,6 +322,10 @@ def build_quote(
     categories = frozenset(rules)
     options: list[ShippingOption] = []
     not_offered: list[NotOffered] = []
+    asks: list[VendorAsk] = []
+    waiting: list[uuid.UUID] = []
+    price_asks: list[PriceQuestion] = []
+    price_waiting: list[uuid.UUID] = []
     for offer in offers(
         market,
         destination,
@@ -319,9 +335,17 @@ def build_quote(
         merchant_exact,
         currency,
         request.on,
+        prices,
+        request.now,
     ):
         if isinstance(offer, NotOffered):
             not_offered.append(offer)
+            continue
+        if isinstance(offer, PriceMissing):
+            if offer.open_id is not None:
+                _add_once(price_waiting, offer.open_id)
+            else:
+                _add_once(price_asks, offer.question)
             continue
         option = _option(
             market,
@@ -338,12 +362,22 @@ def build_quote(
         if isinstance(option, NotOffered):
             not_offered.append(option)
             continue
+        if isinstance(option, InputsMissing):
+            for ask in option.asks:
+                _add_once(asks, ask)
+            for lookup_id in option.waiting:
+                _add_once(waiting, lookup_id)
+            continue
         if not isinstance(option, ShippingOption):
             return option
         options.append(option)
+    if asks or waiting or price_asks or price_waiting:
+        return InputsMissing(
+            tuple(asks), tuple(waiting), tuple(price_asks), tuple(price_waiting)
+        )
     if not options:
         return NoServiceForLane(tuple(not_offered))
-    options.sort(key=lambda option: (option.total.amount_minor, option.rate_card))
+    options.sort(key=lambda option: (option.total.amount_minor, option.key))
     return Quote(
         destination,
         currency,
@@ -366,10 +400,17 @@ def _option(
     goods_value: Money,
     merchant_exact: Fraction,
 ) -> ShippingOption | NotOffered | QuoteRefusal | InputsMissing:
-    card = offer.card.code
+    key = offer.route.key
+    live: FromCarrier | None = None
+    match offer.priced_by:
+        case FromCarrier():
+            live = offer.priced_by
+            ship_source = f"{offer.service.provider} rate call"
+        case FromCard(card=priced_card):
+            ship_source = priced_card.code
     shipping: list[Part] = []
     for ship in offer.parts:
-        shipping.append(_ship_part(ship, card, currency))
+        shipping.append(_ship_part(ship, ship_source, currency))
     freight = Money(sum(_rounded(shipping)), currency)
     paths: dict[str, TaxPaths] = {}
     at_border = False
@@ -387,7 +428,7 @@ def _option(
     if at_border and not carries_duties_paid(
         market, offer.service, request.destination
     ):
-        return NotOffered(card, "not_duty_paid", "something is due at the border")
+        return NotOffered(key, "not_duty_paid", "something is due at the border")
 
     charges = _charges(market, request, lookups, paths, line_goods, freight, currency)
     if not isinstance(charges, list):
@@ -404,14 +445,16 @@ def _option(
         if isinstance(fees, NotOffered):
             return fees
         for ship in fees:
-            duty_paid.append(_ship_part(ship, card, currency))
+            duty_paid.append(_ship_part(ship, ship_source, currency))
     parts = shipping + duty_paid + charges
     total = sum(_rounded(goods_parts)) + sum(_rounded(parts))
     transit = None
     if offer.transit is not None:
         transit = (offer.transit.days_min, offer.transit.days_max)
     return ShippingOption(
-        card,
+        key,
+        offer.route.rate_card,
+        live,
         offer.service.code,
         offer.service.name,
         offer.service.tier,
@@ -617,9 +660,14 @@ _SHIP_KINDS = {
 }
 
 
-def _ship_part(ship: ShipPart, card: str, currency: Currency) -> Part:
+def _add_once[T](items: list[T], item: T) -> None:
+    if item not in items:
+        items.append(item)
+
+
+def _ship_part(ship: ShipPart, ship_source: str, currency: Currency) -> Part:
     kind = _SHIP_KINDS[ship.kind]
-    source = card
+    source = ship_source
     if ship.line_no is not None:
         source = f"surcharges.csv line {ship.line_no}"
     return _part(

@@ -829,16 +829,27 @@ def _routes(
     parsed: list[ShippingRoute] = []
     for at in _rows("shipping_routes", text, errors):
         scope = _place(errors, at, "destination", country_codes)
-        card = _required(errors, at, "rate_card")
+        service = _required(errors, at, "service")
+        card = at.row.get("rate_card", "") or None
         source = _choice(errors, at, "source", PriceSource)
         standing = _choice(errors, at, "standing", Standing)
+        if isinstance(source, PriceSource):
+            match source:
+                case PriceSource.OWN_TABLE:
+                    if card is None:
+                        problem = "own_table needs a rate_card"
+                        errors.append(SourceError(at.file, at.line_no, problem))
+                case PriceSource.CARRIER_API:
+                    if card is not None:
+                        problem = "carrier_api is priced by the carrier: no rate_card"
+                        errors.append(SourceError(at.file, at.line_no, problem))
         if (
             isinstance(scope, Scope)
-            and isinstance(card, str)
+            and isinstance(service, str)
             and isinstance(source, PriceSource)
             and isinstance(standing, Standing)
         ):
-            parsed.append(ShippingRoute(scope, card, source, standing))
+            parsed.append(ShippingRoute(scope, service, card, source, standing))
     return parsed
 
 
@@ -1038,13 +1049,20 @@ def _check_shipping(
     routed: set[str] = set()
     for route in market.routes:
         place = route.scope.country or route.scope.group or ""
-        _once(errors, "shipping_routes", routed, f"{place} {route.rate_card}")
+        _once(errors, "shipping_routes", routed, f"{place} {route.service}")
         if place not in places:
             problem = f"{place} is neither a country code nor a group"
             errors.append(SourceError("shipping_routes", 0, problem))
-        if route.rate_card not in card_service:
-            problem = f"unknown rate_card {route.rate_card}"
+        if route.service not in services:
+            problem = f"unknown service {route.service}"
             errors.append(SourceError("shipping_routes", 0, problem))
+        if route.rate_card is not None:
+            if route.rate_card not in card_service:
+                problem = f"unknown rate_card {route.rate_card}"
+                errors.append(SourceError("shipping_routes", 0, problem))
+            elif card_service[route.rate_card] != route.service:
+                problem = f"{route.rate_card} is not a card of {route.service}"
+                errors.append(SourceError("shipping_routes", 0, problem))
     ruled: set[str] = set()
     for fee in market.fees:
         place = "default"

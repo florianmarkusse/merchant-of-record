@@ -5,6 +5,7 @@ import httpx2
 from starlette.applications import Starlette
 from starlette.routing import BaseRoute
 
+import mor.fakes.courier
 import mor.fakes.duty
 import mor.fakes.echo
 
@@ -15,4 +16,5 @@ def make_app(database_url: str, outgoing: httpx2.AsyncClient) -> Starlette:
     routes: list[BaseRoute] = []
     routes.extend(mor.fakes.echo.make_app(database_url, outgoing).routes)
     routes.extend(mor.fakes.duty.make_app(database_url).routes)
+    routes.extend(mor.fakes.courier.make_app(database_url).routes)
     return Starlette(routes=routes)

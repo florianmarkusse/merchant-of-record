@@ -112,7 +112,7 @@ def _restriction_key(row: ServiceRestriction) -> Hashable:
 
 
 def _route_key(row: ShippingRoute) -> Hashable:
-    return f"{row.scope.country or row.scope.group} {row.rate_card}"
+    return f"{row.scope.country or row.scope.group} {row.service}"
 
 
 def _fee_key(row: FeeRule) -> Hashable:

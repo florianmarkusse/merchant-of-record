@@ -12,6 +12,8 @@ import httpx2
 
 from mor.audit import Actor, ActorKind
 from mor.config import Environment, Settings
+from mor.couriers.prices import create_courier_account
+from mor.couriers.records import CourierProvider, PriceExpiry
 from mor.db.connect import connect
 from mor.duties.lookups import create_vendor_account
 from mor.duties.port import DutyProvider
@@ -21,7 +23,7 @@ from mor.messaging.worker import drain_once
 from mor.web.main import make_app
 from tests.helpers import ENV, wire
 from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
-from tests.quote.fixtures import quote_market
+from tests.quote.fixtures import live_market, quote_market
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -319,5 +321,106 @@ def test_an_option_named_in_the_address_is_the_one_explained(
         assert "<h2>How Express comes to" in chosen
         # A card no longer offered falls back to the cheapest.
         assert "<h2>How Economy comes to" in unknown
+
+    asyncio.run(body())
+
+
+LIVE_QUOTE = (
+    "/staff/markets?country=SG&goods=500.00&currency=SGD&hs=610910"
+    "&origin=VN&weight=1000&length=200&width=150&height=100"
+)
+
+
+def test_a_live_route_is_priced_by_asking_the_carrier_from_the_page(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        async with await connect(database_url) as conn:
+            await load_market(conn, live_market(), "live", LOADER, NOW)
+            await create_courier_account(
+                conn,
+                "carrier",
+                CourierProvider.FAKE,
+                "http://mor/_fake/courier/acct",
+                timedelta(seconds=5),
+                timedelta(hours=24),
+                PriceExpiry.CARRIER_FIRST,
+            )
+            await conn.commit()
+        wired = wire(database_url, lambda: NOW)
+
+        before = (await wired.control.get(f"http://mor{LIVE_QUOTE}")).text
+        assert "No usable carrier price for this parcel." in before
+        assert "Ask carrier for exp" in before
+
+        asked = await wired.control.post(
+            "http://mor/staff/markets/shipping_prices",
+            data={
+                "country": "SG",
+                "service": "exp",
+                "weight": "1000",
+                "length": "200",
+                "width": "150",
+                "height": "100",
+                "back": LIVE_QUOTE,
+            },
+            headers={"origin": "http://mor"},
+        )
+        assert asked.status_code == 303
+        waiting = (await wired.control.get(f"http://mor{LIVE_QUOTE}")).text
+        assert "Waiting for the carrier." in waiting
+
+        async with await connect(database_url, autocommit=True) as worker:
+            await drain_once(worker, wired.http, ENV, NOW)
+        after = (await wired.control.get(f"http://mor{LIVE_QUOTE}")).text
+        assert 'data-option="live:exp"' in after
+        assert "carrier&#39;s price, used until 18-Nov-2026 09:30 UTC" in after
+        # Our exp_card for the same parcel, in the carrier's currency.
+        assert "our card" in after and "carrier rate call" in after
+        answers = (await wired.control.get("http://mor/staff/markets/answers")).text
+        listed = answers[answers.index("Live carrier prices") :]
+        assert "carrier exp" in listed and "(exp_card)" in listed
+
+    asyncio.run(body())
+
+
+def test_asking_a_carrier_from_another_site_is_refused(database_url: str) -> None:
+    async def body() -> None:
+        async with await connect(database_url) as conn:
+            await load_market(conn, live_market(), "live", LOADER, NOW)
+            await conn.commit()
+        wired = wire(database_url, lambda: NOW)
+        refused = await wired.control.post(
+            "http://mor/staff/markets/shipping_prices",
+            data={
+                "country": "SG",
+                "service": "exp",
+                "weight": "1000",
+                "length": "200",
+                "width": "150",
+                "height": "100",
+                "back": LIVE_QUOTE,
+            },
+            headers={"origin": "http://evil.example"},
+        )
+        assert refused.status_code == 403
+        async with await connect(database_url) as conn:
+            cur = await conn.execute("SELECT count(*) FROM shipping_price_lookup")
+            row = await cur.fetchone()
+        assert row == (0,)
+
+    asyncio.run(body())
+
+
+def test_a_carrier_without_an_account_here_is_not_offered_to_ask(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        async with await connect(database_url) as conn:
+            await load_market(conn, live_market(), "live", LOADER, NOW)
+            await conn.commit()
+        page = (await _get(database_url, Environment.TEST, LIVE_QUOTE)).text
+        assert "There is no carrier account in this environment" in page
+        assert "Ask carrier for exp" not in page
 
     asyncio.run(body())

@@ -1,27 +1,46 @@
-"""What each routed rate card charges to carry one parcel to a destination,
-from our own tables (docs/plan-quote.md §4, 4c-1). Pure.
+"""What each routed service charges to carry one parcel to a destination
+(docs/plan-quote.md §4): from our own rate card (4c-1) or from a price the
+carrier gave (4c-2). Pure.
 
-A card is offered when its route names the destination (or a group it is
-in), and everything its price needs is confirmed (Q1): the service, the
-card, the zone, the weight break, and every surcharge charged at checkout.
-Otherwise it is not offered, with the reason, so the staff page can say
-why. The price is the weight break's rate for the zone, plus the
-surcharges that always apply, plus fuel on the freight and on the
-surcharges fuel applies to. Surcharges charged only on duties paid at the
-border are priced once the duties are known (`duty_paid_parts`); those
-only on an event, optional or passed through are not charged at checkout
+A service is offered when its route names the destination (or a group it
+is in), and everything its price needs is confirmed (Q1). Otherwise it is
+not offered, with the reason, so the staff page can say why.
+
+- From our card: the card, the zone, the weight break and every surcharge
+  charged at checkout must be confirmed. The price is the weight break's
+  rate for the zone, plus the surcharges that always apply, plus fuel on
+  the freight and on the surcharges fuel applies to.
+- From the carrier: the price we hold for the exact parcel, while usable
+  (`PriceHeld`); without one the price is missing (`PriceMissing`), and
+  the quote waits for the worker to ask. Every part the carrier gave is
+  charged: it is what the carrier says it will bill.
+
+Either way, surcharges charged only on duties paid at the border are
+ours, priced once the duties are known (`duty_paid_parts`); those only on
+an event, optional or passed through are not charged at checkout
 (decided 18-Nov-2026: a person handles them at invoice import).
 
 Every amount is exact, in the quote currency's minor units; the caller
 rounds each part with a named mode.
 """
 
+import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 from fractions import Fraction
 from typing import Literal
 
+from mor.couriers.records import (
+    FinishedLookup,
+    OwnPrice,
+    Parcel,
+    PriceHeld,
+    PricePartKind,
+    PriceQuestion,
+    PriceState,
+)
+from mor.dates import format_moment
 from mor.markets.changes import decimal_text, percent_text
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
@@ -32,10 +51,13 @@ from mor.markets.records import (
     DutiesPaid,
     FuelApplies,
     MarketSet,
+    PriceSource,
     RateCard,
     RestrictionRule,
+    Scope,
     Service,
     ShippingRoute,
+    Standing,
     Surcharge,
     SurchargeBasis,
     SurchargeTrigger,
@@ -48,16 +70,6 @@ from mor.money.currency import Currency
 FUEL = "fuel"  # the surcharges.csv name of a card's fuel row
 GRAMS_PER_KG = 1000
 MM3_PER_CM3 = 1000
-
-
-@dataclass(frozen=True)
-class Parcel:
-    """One parcel per order (4c): its packed weight and box."""
-
-    weight_g: int
-    length_mm: int
-    width_mm: int
-    height_mm: int
 
 
 class ShipPartKind(StrEnum):
@@ -89,22 +101,40 @@ type NotOfferedReason = Literal[
     "fuel_unknown",
     "not_duty_paid",
     "fx_missing",
+    "carrier_not_served",
+    "carrier_needs_person",
 ]
 
 
 @dataclass(frozen=True)
 class NotOffered:
-    rate_card: str
+    key: str  # the route's key: its card, or `live:<service>`
     reason: NotOfferedReason
     detail: str
 
 
 @dataclass(frozen=True)
+class FromCard:
+    card: RateCard
+    zone: CardZone
+
+
+@dataclass(frozen=True)
+class FromCarrier:
+    """A price the carrier gave, as we hold it."""
+
+    lookup_id: uuid.UUID
+    finished_at: datetime
+    usable_until: datetime
+    carrier_total: Money
+    own: OwnPrice | None  # our card's price when the carrier answered
+
+
+@dataclass(frozen=True)
 class Offer:
     route: ShippingRoute
-    card: RateCard
     service: Service
-    zone: CardZone
+    priced_by: FromCard | FromCarrier
     chargeable_kg: Fraction
     billed_kg: Fraction
     # Freight, the surcharges that always apply, and fuel: what customs
@@ -112,9 +142,20 @@ class Offer:
     parts: tuple[ShipPart, ...]
     # Charged when something is paid at the border (`duty_paid_parts`).
     duty_paid_rows: tuple[Surcharge, ...]
-    fuel_rate: Fraction
+    # Fuel on a duty-paid fee. From the carrier: our fuel row for the
+    # service, None when it has no usable one.
+    fuel_rate: Fraction | None
     fuel_stale_since: date | None  # the fuel row's last day, when past
     transit: Transit | None
+
+
+@dataclass(frozen=True)
+class PriceMissing:
+    """A carrier route without a usable price: ask (`open_id` None) or wait
+    for the request already open."""
+
+    question: PriceQuestion
+    open_id: uuid.UUID | None
 
 
 def offers(
@@ -126,31 +167,49 @@ def offers(
     goods_exact: Fraction,
     currency: Currency,
     on: date,
-) -> list[Offer | NotOffered]:
-    """Every card routed to the destination, priced or not offered, in
-    card order. `goods_exact` is the goods value in the quote currency, for
-    a surcharge on value."""
-    result: list[Offer | NotOffered] = []
+    prices: dict[PriceQuestion, PriceHeld],
+    now: datetime,
+) -> list[Offer | NotOffered | PriceMissing]:
+    """Every service routed to the destination, priced, not offered or
+    waiting for the carrier, in route order. `goods_exact` is the goods
+    value in the quote currency, for a surcharge on value; `prices` what we
+    hold from carriers, compared with `now`."""
+    result: list[Offer | NotOffered | PriceMissing] = []
     for route in routes_to(market, destination):
-        result.append(
-            _offer(
-                market,
-                route,
-                destination,
-                categories,
-                parcel,
-                line_count,
-                goods_exact,
-                currency,
-                on,
-            )
-        )
+        match route.source:
+            case PriceSource.OWN_TABLE:
+                result.append(
+                    _offer(
+                        market,
+                        route,
+                        destination,
+                        categories,
+                        parcel,
+                        line_count,
+                        goods_exact,
+                        currency,
+                        on,
+                    )
+                )
+            case PriceSource.CARRIER_API:
+                result.append(
+                    _live_offer(
+                        market,
+                        route,
+                        destination,
+                        categories,
+                        parcel,
+                        currency,
+                        prices,
+                        now,
+                    )
+                )
     return result
 
 
 def routes_to(market: MarketSet, destination: str) -> list[ShippingRoute]:
     """The routes whose place is the destination or a group it is in, one
-    per card (the country's own row before a group's), by card."""
+    per service (the country's own row before a group's), by key."""
     groups: set[str] = set()
     for group in market.groups:
         if destination in group.members:
@@ -158,14 +217,63 @@ def routes_to(market: MarketSet, destination: str) -> list[ShippingRoute]:
     chosen: dict[str, ShippingRoute] = {}
     for route in market.routes:
         if route.scope.country == destination:
-            chosen[route.rate_card] = route
+            chosen[route.service] = route
     for route in market.routes:
-        if route.scope.group in groups and route.rate_card not in chosen:
-            chosen[route.rate_card] = route
-    ordered: list[ShippingRoute] = []
-    for code in sorted(chosen):
-        ordered.append(chosen[code])
+        if route.scope.group in groups and route.service not in chosen:
+            chosen[route.service] = route
+    ordered = list(chosen.values())
+    ordered.sort(key=lambda route: route.key)
     return ordered
+
+
+def price_question(service: Service, destination: str, parcel: Parcel) -> PriceQuestion:
+    return PriceQuestion(
+        service.provider, service.code, service.origin, destination, parcel
+    )
+
+
+def own_card_price(
+    market: MarketSet,
+    service_code: str,
+    destination: str,
+    parcel: Parcel,
+    currency: Currency,
+    on: date,
+) -> tuple[str, Fraction] | None:
+    """Our own price for a service, lane and parcel, from the first of its
+    cards in force that can price it (by code), whether routed or not: for
+    comparing a carrier's price with. Freight, the surcharges that always
+    apply, and fuel; with no goods value and one line, so a surcharge on
+    value counts as zero."""
+    codes: list[str] = []
+    for card in market.rate_cards:
+        if card.service == service_code:
+            codes.append(card.code)
+    for code in sorted(codes):
+        route = ShippingRoute(
+            Scope(destination, None),
+            service_code,
+            code,
+            PriceSource.OWN_TABLE,
+            Standing.PLACEHOLDER,
+        )
+        offer = _offer(
+            market,
+            route,
+            destination,
+            frozenset(),
+            parcel,
+            1,
+            Fraction(0),
+            currency,
+            on,
+        )
+        if isinstance(offer, Offer):
+            total = Fraction(0)
+            for part in offer.parts:
+                total += part.exact
+            return code, total
+    return None
 
 
 def carries_duties_paid(market: MarketSet, service: Service, destination: str) -> bool:
@@ -202,8 +310,9 @@ def _offer(
     currency: Currency,
     on: date,
 ) -> Offer | NotOffered:
-    code = route.rate_card
-    card = _card(market, code)
+    code = route.key
+    assert route.rate_card is not None, "an own_table route names its card"
+    card = _card(market, route.rate_card)
     service = _service(market, card.service)
     if service.status not in USABLE_STATUSES:
         return NotOffered(code, "service_not_confirmed", service.status.value)
@@ -247,7 +356,7 @@ def _offer(
     fuel_names: list[str] = []
     fuel_row: Surcharge | None = None
     duty_paid_rows: list[Surcharge] = []
-    for row in surcharges_for(market, card, destination):
+    for row in surcharges_for(market, service.code, card, destination):
         if row.name == FUEL:
             fuel_row = row
             continue
@@ -312,15 +421,126 @@ def _offer(
         )
     return Offer(
         route,
-        card,
         service,
-        zone,
+        FromCard(card, zone),
         chargeable,
         rate.weight_kg,
         tuple(parts),
         tuple(duty_paid_rows),
         fuel,
         stale,
+        _transit(market, service.code, destination),
+    )
+
+
+def _live_offer(
+    market: MarketSet,
+    route: ShippingRoute,
+    destination: str,
+    categories: frozenset[str],
+    parcel: Parcel,
+    currency: Currency,
+    prices: dict[PriceQuestion, PriceHeld],
+    now: datetime,
+) -> Offer | NotOffered | PriceMissing:
+    """A carrier route: what stays ours is checked first (the service, the
+    categories it carries, its maximum weight), so a carrier is never asked
+    for a parcel we would not send; then the price we hold."""
+    code = route.key
+    service = _service(market, route.service)
+    if service.status not in USABLE_STATUSES:
+        return NotOffered(code, "service_not_confirmed", service.status.value)
+    for category in sorted(categories):
+        restricted = _restriction(market, service.code, category)
+        if restricted is not None:
+            return NotOffered(code, "category_restricted", restricted)
+    chargeable = chargeable_kg(service, parcel)
+    if service.max_weight_kg is not None and chargeable > service.max_weight_kg:
+        detail = f"{_kg(chargeable)} kg over the service's {_kg(service.max_weight_kg)}"
+        return NotOffered(code, "over_weight", detail)
+    question = price_question(service, destination, parcel)
+    held = prices.get(question, PriceHeld(None, None))
+    latest = held.latest
+    if latest is None or latest.usable_until <= now:
+        return PriceMissing(question, held.open_id)
+    match latest.state:
+        case PriceState.NOT_SERVED:
+            return NotOffered(code, "carrier_not_served", latest.detail or "")
+        case PriceState.NEEDS_PERSON:
+            return NotOffered(code, "carrier_needs_person", latest.detail or "")
+        case PriceState.REQUESTED:
+            raise AssertionError("a finished lookup is never requested")
+        case PriceState.ANSWERED:
+            pass
+    return _from_carrier(
+        market, route, service, destination, latest, chargeable, currency
+    )
+
+
+def _from_carrier(
+    market: MarketSet,
+    route: ShippingRoute,
+    service: Service,
+    destination: str,
+    latest: FinishedLookup,
+    chargeable: Fraction,
+    currency: Currency,
+) -> Offer | NotOffered:
+    code = route.key
+    assert latest.price is not None, "an answered lookup has its price"
+    carrier_currency = latest.price.total.currency
+    asked = f"the carrier's price, asked {format_moment(latest.finished_at)}"
+    parts: list[ShipPart] = []
+    for part in latest.price.parts:
+        exact = convert_minor(
+            market, Money(part.amount_minor, carrier_currency), currency
+        )
+        if isinstance(exact, FxMissing):
+            return NotOffered(
+                code, "fx_missing", f"{carrier_currency.value} to {currency.value}"
+            )
+        match part.kind:
+            case PricePartKind.FREIGHT:
+                kind = ShipPartKind.FREIGHT
+            case PricePartKind.FUEL:
+                kind = ShipPartKind.FUEL
+            case PricePartKind.SURCHARGE:
+                kind = ShipPartKind.SURCHARGE
+        parts.append(ShipPart(kind, part.name, exact, asked, None))
+    duty_paid_rows: list[Surcharge] = []
+    fuel_row: Surcharge | None = None
+    for row in surcharges_for(market, service.code, None, destination):
+        if row.name == FUEL:
+            fuel_row = row
+            continue
+        if row.trigger == SurchargeTrigger.DUTIES_PAID or (
+            row.trigger == SurchargeTrigger.ALWAYS
+            and row.basis == SurchargeBasis.PERCENT_OF_DUTIES
+        ):
+            duty_paid_rows.append(row)
+    fuel_rate: Fraction | None = None
+    if (
+        fuel_row is not None
+        and fuel_row.status in USABLE_STATUSES
+        and fuel_row.rate is not None
+    ):
+        fuel_rate = fuel_row.rate
+    return Offer(
+        route,
+        service,
+        FromCarrier(
+            latest.id,
+            latest.finished_at,
+            latest.usable_until,
+            latest.price.total,
+            latest.price.own,
+        ),
+        chargeable,
+        chargeable,
+        tuple(parts),
+        tuple(duty_paid_rows),
+        fuel_rate,
+        None,
         _transit(market, service.code, destination),
     )
 
@@ -337,7 +557,11 @@ def duty_paid_parts(
     (`at_border_exact`, in the quote currency), with fuel where it applies.
     Called only when something is paid at the border."""
     parts: list[ShipPart] = []
-    code = offer.card.code
+    code = offer.route.key
+    freight = Fraction(0)
+    for part in offer.parts:
+        if part.kind == ShipPartKind.FREIGHT:
+            freight += part.exact
     for row in offer.duty_paid_rows:
         unusable = _unusable(row)
         if unusable is not None:
@@ -347,7 +571,7 @@ def duty_paid_parts(
             row,
             offer.billed_kg,
             line_count,
-            offer.parts[0].exact,  # the freight
+            freight,
             goods_exact,
             currency,
             at_border_exact,
@@ -363,6 +587,9 @@ def duty_paid_parts(
         parts.append(
             ShipPart(ShipPartKind.DUTY_PAID_FEE, row.name, exact, taken, row.line_no)
         )
+        if row.fuel_applies == FuelApplies.YES and offer.fuel_rate is None:
+            detail = f"no usable fuel row for {offer.service.code}"
+            return NotOffered(code, "fuel_unknown", detail)
         if row.fuel_applies == FuelApplies.YES and offer.fuel_rate:
             parts.append(
                 ShipPart(
@@ -377,18 +604,19 @@ def duty_paid_parts(
 
 
 def surcharges_for(
-    market: MarketSet, card: RateCard, destination: str
+    market: MarketSet, service: str, card: RateCard | None, destination: str
 ) -> list[Surcharge]:
-    """The surcharges on a card's prices into a destination: rows for every
-    card of the service, except where the card has its own row of that
-    name, and no fuel row when the card's prices include fuel (as
-    `scripts/markets.py` reads them)."""
+    """The surcharges on a service's prices into a destination: rows for
+    every card of the service, except where the card has its own row of
+    that name, and no fuel row when the card's prices include fuel (as
+    `scripts/markets.py` reads them). Without a card (a carrier's price),
+    only the rows for every card."""
     service_rows: list[Surcharge] = []
     own_names: set[str] = set()
     for row in market.surcharges:
-        if row.service != card.service:
+        if row.service != service:
             continue
-        if row.rate_card is not None and row.rate_card != card.code:
+        if row.rate_card is not None and (card is None or row.rate_card != card.code):
             continue
         if row.destinations and not _in_places(market, destination, row.destinations):
             continue
@@ -399,7 +627,7 @@ def surcharges_for(
     for row in service_rows:
         if row.rate_card is None and row.name in own_names:
             continue
-        if row.name == FUEL and card.fuel == CardFuel.INCLUDED:
+        if row.name == FUEL and card is not None and card.fuel == CardFuel.INCLUDED:
             continue
         kept.append(row)
     return kept

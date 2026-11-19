@@ -15,7 +15,8 @@ from urllib.parse import urlencode
 
 import htpy
 
-from mor.dates import format_day
+from mor.couriers.records import PriceQuestion
+from mor.dates import format_day, format_moment
 from mor.markets.records import Collector, Country, Standing
 from mor.markets.rules import (
     Closed,
@@ -76,12 +77,15 @@ class QuoteView:
     quote: QuoteResult | None
     why: Explained | None  # the tax decision, once a country and price are given
     ask: Ask | None
-    asked: bool  # the vendor was just asked from this page
+    asked: bool  # the vendor or a carrier was just asked from this page
     back: str  # this page's URL, to come back to after a POST
     # Units of each reference currency per unit of the quote's currency,
     # from the load's exchange rates: amounts shown beside the quote's own,
     # for reading only.
     references: tuple[tuple[Currency, Fraction], ...]
+    # Carriers a live route needs a price from but this environment has no
+    # account for: nothing can be asked.
+    carriers_without_account: frozenset[str] = frozenset()
 
 
 # --- words for people --------------------------------------------------------
@@ -129,6 +133,8 @@ NOT_OFFERED_WORDS: dict[NotOfferedReason, str] = {
     "fuel_unknown": "fuel rate unknown",
     "not_duty_paid": "not duty-paid",
     "fx_missing": "no exchange rate",
+    "carrier_not_served": "the carrier does not serve it",
+    "carrier_needs_person": "the carrier's answer needs a person",
 }
 
 # The groups a price is built from, in order: label, colour class, kinds.
@@ -373,6 +379,75 @@ def _ask_form(view: QuoteView) -> htpy.Node:
     ]
 
 
+def _price_form(view: QuoteView, question: PriceQuestion) -> htpy.Element:
+    parcel = question.parcel
+    return htpy.form(method="post", action=f"{PAGE}/shipping_prices")[
+        htpy.input(type="hidden", name="country", value=question.destination),
+        htpy.input(type="hidden", name="service", value=question.service),
+        htpy.input(type="hidden", name="weight", value=str(parcel.weight_g)),
+        htpy.input(type="hidden", name="length", value=str(parcel.length_mm)),
+        htpy.input(type="hidden", name="width", value=str(parcel.width_mm)),
+        htpy.input(type="hidden", name="height", value=str(parcel.height_mm)),
+        htpy.input(type="hidden", name="back", value=view.back),
+        htpy.button(type="submit")[f"Ask {question.carrier} for {question.service}"],
+    ]
+
+
+def _missing_notices(view: QuoteView, missing: InputsMissing) -> list[htpy.Node]:
+    """What the quote waits for: the duty vendor, the carriers, or both."""
+    notices: list[htpy.Node] = []
+    if missing.asks:
+        notices.append(
+            _notice(
+                "info",
+                htpy.strong["The vendor has not been asked about this product yet."],
+                " Its duty and tax rates decide here.",
+                _ask_form(view),
+            )
+        )
+    elif missing.waiting:
+        notices.append(
+            _notice(
+                "info",
+                htpy.strong["Waiting for the vendor."],
+                " It was asked about this product; the worker records its"
+                " answer, then this page quotes.",
+            )
+        )
+    if missing.price_asks:
+        forms: list[htpy.Node] = []
+        for question in missing.price_asks:
+            if question.carrier in view.carriers_without_account:
+                forms.append(
+                    htpy.p[
+                        f"There is no {question.carrier} account in this"
+                        " environment, so it cannot be asked."
+                    ]
+                )
+            else:
+                forms.append(_price_form(view, question))
+        notices.append(
+            _notice(
+                "info",
+                htpy.strong["No usable carrier price for this parcel."],
+                " A live route is priced by the carrier: it is asked for this"
+                " parcel, and its price is used until the account's period"
+                " ends.",
+                forms,
+            )
+        )
+    elif missing.price_waiting:
+        notices.append(
+            _notice(
+                "info",
+                htpy.strong["Waiting for the carrier."],
+                " It was asked for this parcel's price; the worker records its"
+                " answer, then this page quotes.",
+            )
+        )
+    return notices
+
+
 def _notice(kind: str, *content: htpy.Node) -> htpy.Element:
     return htpy.div(class_=f"notice {kind}")[content]
 
@@ -381,20 +456,8 @@ def _refusal(view: QuoteView, quote: QuoteResult) -> htpy.Node:
     match quote:
         case Quote():
             return None
-        case InputsMissing(asks=asks, waiting=waiting):
-            if waiting and not asks:
-                return _notice(
-                    "info",
-                    htpy.strong["Waiting for the vendor."],
-                    " It was asked about this product; the worker records its"
-                    " answer, then this page quotes.",
-                )
-            return _notice(
-                "info",
-                htpy.strong["The vendor has not been asked about this product yet."],
-                " Its duty and tax rates decide here.",
-                _ask_form(view),
-            )
+        case InputsMissing():
+            return _missing_notices(view, quote)
         case CountryClosed(category=category, closed=closed):
             return _notice(
                 "bad",
@@ -441,13 +504,13 @@ def _rate_problem_text(problem: LineRateProblem) -> str:
 
 
 def _not_offered_rows(items: tuple[NotOffered, ...], span: int) -> list[htpy.Node]:
-    """A table row per rate card that cannot carry the order: its code, then
-    why across `span` columns."""
+    """A table row per route that cannot carry the order: its card or live
+    service, then why across `span` columns."""
     rows: list[htpy.Node] = []
     for item in items:
         rows.append(
             htpy.tr(class_="not-offered")[
-                htpy.td[htpy.code[item.rate_card]],
+                htpy.td[htpy.code[item.key]],
                 htpy.td(colspan=str(span))[
                     f"Not offered: {NOT_OFFERED_WORDS[item.reason]} ",
                     htpy.span(class_="muted")[f"({item.detail})"],
@@ -494,22 +557,22 @@ def _sum(parts: list[Part], currency: Currency) -> Money:
     return Money(total, currency)
 
 
-def chosen_option(quote: Quote, rate_card: str) -> ShippingOption:
-    """The option asked for by its rate card, else the cheapest."""
+def chosen_option(quote: Quote, key: str) -> ShippingOption:
+    """The option asked for by its key, else the cheapest."""
     for option in quote.options:
-        if option.rate_card == rate_card:
+        if option.key == key:
             return option
     return quote.options[0]
 
 
-def _option_href(view: QuoteView, rate_card: str) -> str:
+def _option_href(view: QuoteView, key: str) -> str:
     """This page with the same order, showing another option."""
     params: dict[str, str] = {}
     for name, value in view.fields.items():
         if name != "option" and value:
             params[name] = value
     params["on"] = view.on.isoformat()
-    params["option"] = rate_card
+    params["option"] = key
     return f"{PAGE}?{urlencode(params)}"
 
 
@@ -523,6 +586,20 @@ def _option_tags(option: ShippingOption) -> list[htpy.Node]:
         )
     if option.standing == Standing.PLACEHOLDER:
         tags.append(htpy.span(class_="tag warn")["placeholder route"])
+    if option.live is not None:
+        tags.append(
+            htpy.span(class_="tag")[
+                f"carrier's price, used until {format_moment(option.live.usable_until)}"
+            ]
+        )
+        if option.live.own is not None:
+            carrier = option.live.carrier_total
+            ours = option.live.own.total
+            tags.append(
+                htpy.span(class_="tag")[
+                    f"carrier {money_text(carrier)}, our card {money_text(ours)}"
+                ]
+            )
     return tags
 
 
@@ -542,8 +619,8 @@ def _options_table(
     for index, option in enumerate(quote.options):
         name: list[htpy.Node] = [
             htpy.a(
-                href=_option_href(view, option.rate_card),
-                data_option=option.rate_card,
+                href=_option_href(view, option.key),
+                data_option=option.key,
                 aria_current="true" if option is chosen else None,
             )[option.service_name]
         ]

@@ -392,6 +392,201 @@ gate per country and category (no data for it beyond the services'
 restrictions), several parcels per order, and prod's refusal of
 placeholders, which belongs to the quote flow (4d).
 
+### 4c-2: live carrier prices (decided 19-Nov-2026)
+
+**What a real carrier gives** (read 19-Nov-2026). DHL Express's rates call
+(`/mydhlapi/rates`) and FedEx's (`rate/v1/rates/quotes`) take origin,
+destination, a parcel's weight and box and the service. They return a
+total with its parts: freight, fuel and each surcharge that applies.
+FedEx's docs say every quote is an estimate that may differ from the
+bill. Neither documents how long a price stays valid, and fuel changes
+weekly. A rate call costs nothing per call on a carrier account, but we
+count calls anyway, as for duty vendors.
+
+**The port** (`src/mor/couriers/`, the courier port of plan-architecture
+§7, which grows its other operations in slice 6): `quote_rate(account,
+PriceQuestion) -> CarrierPrice | NotServed | Unavailable | OutcomeUnknown
+| UndecodableBody`. `PriceQuestion` is the service code, origin,
+destination and the exact parcel (grams and millimetres). We do not send
+the goods value: we price duty and tax ourselves. `CarrierPrice` is the
+total and its parts (kind `freight | fuel | surcharge`, name, amount), all
+in one currency, and a `valid_until` when the carrier gives one. Decoding
+checks that the parts add up to the total. When they don't, the answer is
+`UndecodableBody`. `NotServed` is the carrier saying it does not carry
+this lane or parcel. One registry picks the module by `courier_provider`
+with an exhaustive `match`, and refuses the fake in prod.
+
+**Which price a route uses**: `price_source` gains `carrier_api`. A route
+names a service, plus a rate card only when the source is `own_table`.
+Migration 0012 adds `shipping_route.service`, fills it from the card on
+existing rows, and lets `rate_card` be NULL only for `carrier_api`. The
+fill needs the append-only trigger switched off for that one UPDATE. That
+is safe because no prod database exists yet, and each local one gets the
+same fill. One source per service and lane: a buyer never sees the same
+service twice.
+
+The account is found from the service's carrier
+(`shipping_service.provider`, e.g. `dhl_express`). Each environment's
+database holds one `courier_account` per carrier: the real API in prod,
+the fake elsewhere, as with duty vendors. The CSV is the same everywhere.
+
+**What stays ours for a live route**: whether the service, route and
+category are confirmed, the service's maximum weight (checked before
+asking), transit days, and the duty-paid fee from `surcharges.csv`. The
+fee needs the duties, which we compute after the price, so the carrier is
+never asked for it. Everything the carrier returns is charged, since it is
+what the carrier says it will bill. The parts become `ShipPart`s,
+converted at the load's FX rates and rounded up, as from our own tables.
+Customs counts their sum as the freight.
+
+**Tables** (0012):
+
+- `courier_account` (id, carrier unique, provider: `courier_provider`
+  enum, `fake` for now; base_url, timeout_ms, price_valid_for_s,
+  price_expiry). Slice 6 adds credentials and the billing currency.
+- `shipping_price_lookup` (id, carrier, service, origin, destination,
+  weight_g, length_mm, width_mm, height_mm, state `requested | answered |
+  not_served | needs_person`, calls, detail, answered_at,
+  carrier_valid_until, timestamps).
+- `shipping_price_part` (lookup_id, line_no, kind, name, amount_minor,
+  currency), append-only. The total and the carrier's currency are on the
+  lookup. So is our own card's price for the same service and lane at the
+  time, when one is in force (load_id and amount, or none), so a person
+  can see how far the two differ.
+
+**The guard: one open request at a time, not one for good.** A price
+depends on the parcel and expires, so it cannot be "asked once" like a
+duty rate. A partial unique index on (carrier, service, origin,
+destination, the parcel) `WHERE state = 'requested'` allows one
+outstanding request per combination. `request_shipping_price` returns the
+newest answered lookup still valid at `now`, or else inserts a
+`requested` row with `ON CONFLICT DO NOTHING`. It appends
+`shipping_price_needed` only when it inserted, and otherwise returns the
+open lookup. Two buyers after an expiry therefore cause one call. A race
+in which a request inserts just after another was answered costs one
+extra read, and nothing else.
+
+**How long a price is used is a setting per account, not stored on the
+answer** (decided 19-Nov-2026: reusing a price the carrier calls expired
+may be fine for some carriers, so it must be a switch, not impossible).
+The lookup stores what happened: `answered_at` and the carrier's
+`carrier_valid_until` (or none). `courier_account` holds the rule:
+`price_valid_for_s` (24 hours by default) and `price_expiry`, a
+`price_expiry` enum:
+
+- `carrier_first`: usable until the earlier of the carrier's own validity
+  and `answered_at + price_valid_for_s` (the default).
+- `own_period`: usable until `answered_at + price_valid_for_s`, whatever
+  the carrier said.
+
+One pure function, `usable_until(lookup, account)`, decides, and both
+`request_shipping_price` and `build_quote` call it. Switching an account's
+rule therefore applies at once to prices already stored, and no stored row
+changes. This is time as a promise: it is compared at `now` and never
+takes over a request. A price used after the carrier's own validity can
+differ from the bill. That difference is ours, and invoice import shows it
+like any other (slice 6).
+
+**Messages** (aggregate `shipping_price_lookup`, version 1):
+`shipping_price_needed` goes to the effect consumer `shipping_price_ask`.
+Its `prepare`, `call` and `complete` steps work as for duty lookups: lock,
+act only on `requested`, count the call before it is made, and store the
+answer under the lock. `complete` then appends `shipping_price_found`,
+`shipping_price_not_served` or `shipping_price_needs_person`.
+`Unavailable` and `OutcomeUnknown` are retried with the worker's backoff.
+There are no consumers of the results yet: in 4d they resume a waiting
+quote.
+
+**`build_quote`** stays pure. It gains the stored prices,
+`dict[PriceQuestion, PriceLookup]`, and `QuoteRequest` gains `now`
+(a timestamp, for expiry) beside `on`. For a live route:
+
+- a valid answer becomes an `Offer`;
+- a missing or expired one adds to `InputsMissing` (`price_asks`, or
+  `price_waiting` for a request already open);
+- `not_served` or `needs_person` leaves the option out, with new
+  `NotOffered` reasons `carrier_not_served` and `carrier_needs_person`.
+
+An option is keyed by its route (the card, or `live:<service>`), not by
+its card alone.
+
+**The fake courier** at `/_fake/courier/`, in `fake_vendor`: per
+(service, destination) a base price, a price per kg of billed weight and a
+fuel percentage; a validity it states (or none); a call log; and faults
+scripted for the next call: a 5xx, a timeout after answering, not served,
+an undecodable body, parts that don't sum to the total, an answer in
+another currency, and a validity already past. The seed gives each
+carrier named on a live route an account at the fake.
+
+**The staff page**: a live option shows "carrier price, asked
+01-Jan-2027 14:35 UTC, valid until …" and our card's price beside it when
+one exists. Without a usable price it shows a greyed row ("waiting for
+the carrier", "not served") with an "Ask the carrier" POST (outside prod,
+same-origin check), like "Ask the vendor". The answers page gets a table
+of live prices against our cards, differences first.
+
+**Tests and fuzzer**:
+
+- Pure: a live answer's parts, once converted and rounded, sum to the
+  option's shipping. A price is never used past `usable_until`; after it,
+  `build_quote` returns `InputsMissing`.
+- A Hypothesis state machine like the duty one, plus a clock action that
+  passes a price's `usable_until`, and a switch of the account's
+  `price_expiry`. After every action:
+  - at most one `requested` lookup per combination;
+  - one `shipping_price_needed` per lookup;
+  - every answered lookup's parts sum to its total;
+  - the carrier was called no more often than we counted;
+  - an extra call always has a cause.
+- After draining with faults off, nothing is `requested`. Planted bugs to
+  catch: a second request while one is open, using an expired answer, a
+  call counted after it is made, and parts that don't sum accepted.
+
+**Answered 19-Nov-2026**:
+
+1. DHL Express Worldwide goes to OCEANIA through `carrier_api`, marked
+   placeholder, so the test setup and the staff page exercise it. Every
+   other lane stays on our cards.
+2. A price is usable for 24 hours by default, per account, with
+   `price_expiry` as above.
+3. Each live price is stored and shown beside our card's price for the
+   same service and lane, with no `shipping_price_disagreed` fact until
+   something consumes it.
+
+**4c-2 built 19-Nov-2026** (`src/mor/couriers/`, `mor.fakes.courier`,
+`0012_carrier_prices.sql`, fake `0006_courier.sql`). As designed, with
+these changes made while building:
+
+- A lookup that ends `not_served` or `needs_person` is held for the
+  account's period too (from `finished_at`, which replaced `answered_at`),
+  or every request in the meantime would ask again.
+- `usable_until` is worked out where a lookup is read (`read_price`), by
+  the account's rule at that moment, and `build_quote` compares it with
+  `QuoteRequest.now`.
+- `InputsMissing` gathers what every option lacks, duty rates and carrier
+  prices alike, instead of stopping at the first.
+- A carrier's price is converted part by part and rounded up, as from our
+  own tables. A duty-paid fee with fuel on it uses our fuel row for the
+  service; without a usable one the option is left out (`fuel_unknown`).
+- Our card's price for comparison comes from the first card of the service
+  that can price the parcel (by code), whether routed or not, with no
+  goods value: a surcharge on value counts as zero there.
+- The staff page says when a live route's carrier has no account in this
+  environment, instead of offering a button that cannot work.
+
+The fuzzer was checked by planting bugs: an expired price reused, a call
+counted only after it was made, parts that do not sum accepted, and a
+second request while one is open. All four were caught; the last by the
+partial unique index itself, which is the guard. The quote property
+catches a carrier part left out of the quote. Checked end to end on a
+scratch database with DHL routed live into SEA: the page asks, the worker
+asks the fake, and the quote shows the live option beside our card's
+price.
+
+Open: no research country in OCEANIA quotes today (AU's rules are not
+confirmed; NZ has no import tax recorded), so the live route there is not
+seen on the staff page until one opens.
+
 ## 5. Session, API and pages (4d)
 
 - `Merchant` (a minimal row now; KYB is a later slice), API keys stored

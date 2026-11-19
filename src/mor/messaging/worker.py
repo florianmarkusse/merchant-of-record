@@ -10,13 +10,17 @@ A lock guards; time only decides when to try again (`not_before`).
 
 import asyncio
 import os
+import signal
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Literal, assert_never
 
 import httpx2
+import watchfiles
 from psycopg.rows import class_row
+from watchfiles import PythonFilter
 
 from mor.config import Environment, Settings, load_settings
 from mor.dates import format_moment
@@ -43,6 +47,7 @@ FALLBACK_POLL = timedelta(seconds=5)
 MAX_BACKOFF = timedelta(hours=1)
 # A bound on prepare/call/complete rounds in one run; more is a bug.
 MAX_EFFECT_STEPS = 50
+SOURCE = Path(__file__).resolve().parent.parent.parent  # src/, watched outside prod
 
 
 @dataclass(frozen=True)
@@ -484,5 +489,37 @@ async def run_worker(settings: Settings) -> None:
                 await wait_for_work(conn, idle_wait(now, retry_at, FALLBACK_POLL))
 
 
+def _run(settings: Settings) -> None:
+    """One worker process. Started by watchfiles outside prod, which stops
+    it with SIGINT on a change: a crash the worker is built to survive."""
+    # A shell's background job starts with SIGINT ignored, and children
+    # keep that: the worker would then only stop when killed (seen
+    # 19-Nov-2026). Python's own handler makes SIGINT stop it again.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    try:
+        asyncio.run(run_worker(settings))
+    except KeyboardInterrupt:  # Ctrl-C, or a reload
+        pass
+
+
+def _reloading(changes: set[tuple[watchfiles.Change, str]]) -> None:
+    paths: list[str] = []
+    for _change, path in changes:
+        paths.append(Path(path).relative_to(SOURCE).as_posix())
+    print(f"worker: {', '.join(sorted(paths))} changed, restarting", flush=True)
+
+
 if __name__ == "__main__":
-    asyncio.run(run_worker(load_settings(os.environ)))
+    settings = load_settings(os.environ)
+    if settings.environment == Environment.PROD:
+        _run(settings)
+    else:
+        # Restarted on a change under src/; a reload does not migrate,
+        # load markets or seed.
+        watchfiles.run_process(
+            SOURCE,
+            target=_run,
+            args=(settings,),
+            watch_filter=PythonFilter(),
+            callback=_reloading,
+        )

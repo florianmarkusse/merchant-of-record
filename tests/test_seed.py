@@ -7,18 +7,23 @@ from datetime import UTC, datetime
 
 from mor.audit import Actor, ActorKind
 from mor.config import Environment, Settings
+from mor.couriers.prices import courier_account
+from mor.couriers.records import PriceExpiry
 from mor.db.connect import connect
 from mor.echo.flow import create_echo_job
 from mor.echo.port import EchoProvider, EventMode
+from mor.markets.store import load_market
 from mor.messaging.worker import Failed, drain_once
 from mor.seed import (
     SeededAccount,
     SeedInProd,
     base_url,
     seed_accounts,
+    seed_couriers,
     subscribe_webhooks,
 )
 from tests.helpers import ENV, Wired, wire
+from tests.quote.fixtures import live_market
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -113,5 +118,26 @@ def test_a_seeded_push_account_receives_the_vendors_events(database_url: str) ->
                     (job_id,),
                 )
                 assert await cur.fetchone() == ("confirmed",)
+
+    asyncio.run(body())
+
+
+def test_each_carrier_on_a_live_route_gets_one_account_at_the_fake(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        settings = Settings(ENV, database_url, SELF_URL)
+        async with await connect(database_url) as conn:
+            await load_market(
+                conn, live_market(), "live", Actor(ActorKind.SYSTEM, "t"), NOW
+            )
+            first = await seed_couriers(conn, settings)
+            again = await seed_couriers(conn, settings)
+            account = await courier_account(conn, "carrier")
+            await conn.commit()
+        assert first == ["carrier"] and again == []
+        assert account is not None
+        assert account.base_url == "http://mor/_fake/courier/sandbox-carrier"
+        assert account.price_expiry == PriceExpiry.CARRIER_FIRST
 
     asyncio.run(body())

@@ -29,6 +29,12 @@ long fuzz runs happen.
   them at the dev server's own address").
 - Two processes, as in prod: the server and `python -m
   mor.messaging.worker`. On the laptop they run as systemd user units.
+- Outside prod both restart when a `.py` file under `src/` changes
+  (19-Nov-2026): the server through uvicorn's `--reload` (with an app
+  factory, `create_app`), the worker under `watchfiles.run_process`. A
+  restart is a crash the worker is built to survive. A reload does not
+  migrate, load markets or seed: run those by hand after a change that
+  needs them.
 
 ## 3. Seed
 
@@ -67,11 +73,15 @@ may be while it is in use):
   (`MOR_TEST_DATABASE=mor_soak`, a closed choice in `tests/helpers.py`),
   and its own `.hypothesis/`, so a pytest run by hand never drops a
   database under it.
-- Targets, as plain data in the script: the echo fuzzer, the probe
-  fuzzer, the pure properties. Each gets an example budget
-  (`SOAK_EXAMPLES`, read by the soak profile) sized to about 30, 10 and 5
-  minutes, stops at its first failure, and has a time limit only as a
-  guard against a hang.
+- Targets, as plain data in the script: one per flow fuzzer, and one for
+  the pure properties. Each gets an example budget (`SOAK_EXAMPLES`,
+  read by the soak profile) sized from a measured run (the script's
+  comment has the figures), stops at its first failure, and has a time
+  limit only as a guard against a hang.
+- Every test file that uses Hypothesis is in a target, checked by
+  `tests/test_soak_targets.py` (19-Nov-2026: the duty and shipping-price
+  fuzzers and four property files had been added since the soak without
+  joining it).
 - A target is judged by its log: a `FAILED` line is a failure, else exit 0
   is a pass, else the run broke. Failures and broken runs send one
   Telegram message to `TELEGRAM_CHAT_ID_ALERTS` (token and chat id from

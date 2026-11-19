@@ -4,9 +4,10 @@ each with its full total; the parts sum to it, every part is rounded by
 its named mode, and a card is left out with its reason."""
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from fractions import Fraction
 
+from mor.couriers.records import Parcel
 from mor.duties.port import RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
 from mor.markets.records import Charge, Collector, FeeComponent
@@ -26,12 +27,13 @@ from mor.quote.build import (
     VendorAsk,
     build_quote,
 )
-from mor.quote.shipping import NotOffered, Parcel
+from mor.quote.shipping import NotOffered
 from mor.tax.line_rates import RateNeeded
 from tests.quote.fixtures import quote_market
 
 
 ON = date(2026, 11, 18)
+NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 BOX = Parcel(1000, 200, 150, 100)  # 1 kg; 0.6 kg by volume
 T_SHIRT = RateQuestion("TH", "VN", "610910")
 
@@ -55,7 +57,7 @@ def _amounts(quote: Quote, rate_card: str) -> dict[str, int]:
             amounts.get(part.kind.value, 0) + part.amount.amount_minor
         )
     for option in quote.options:
-        if option.rate_card != rate_card:
+        if option.key != rate_card:
             continue
         for part in option.parts:
             key = part.kind.value
@@ -65,8 +67,8 @@ def _amounts(quote: Quote, rate_card: str) -> dict[str, int]:
 
 
 def test_an_order_above_the_border_limit_adds_tax_and_the_duty_paid_fee() -> None:
-    request = QuoteRequest("SG", (_line(50000),), BOX, ON)
-    quote = _quote(build_quote(quote_market(), request, {}))
+    request = QuoteRequest("SG", (_line(50000),), BOX, ON, NOW)
+    quote = _quote(build_quote(quote_market(), request, {}, {}))
     # Worked by hand: SGD 500.00; fees 3% and 5%; 1 kg at SGD 30.00,
     # demand SGD 1.00, fuel 50% of 31.00; GST 9% of (540.00 + 46.50) is
     # 52.785, half to even 52.78; the duty-paid fee's 2% is 1.06, so its
@@ -94,11 +96,11 @@ def test_an_order_above_the_border_limit_adds_tax_and_the_duty_paid_fee() -> Non
 def test_below_the_limit_nothing_is_due_and_every_card_is_offered_cheapest_first() -> (
     None
 ):
-    request = QuoteRequest("SG", (_line(10000),), BOX, ON)
-    quote = _quote(build_quote(quote_market(), request, {}))
+    request = QuoteRequest("SG", (_line(10000),), BOX, ON, NOW)
+    quote = _quote(build_quote(quote_market(), request, {}, {}))
     cards: list[str] = []
     for option in quote.options:
-        cards.append(option.rate_card)
+        cards.append(option.key)
         for part in option.parts:
             assert part.kind not in (PartKind.IMPORT_TAX, PartKind.DUTY_PAID_FEE)
     assert cards == ["eco_card", "exp_card"]
@@ -107,7 +109,9 @@ def test_below_the_limit_nothing_is_due_and_every_card_is_offered_cheapest_first
 
 def test_duty_and_tax_are_shared_over_the_lines_by_their_value() -> None:
     lines = (_line(20000), _line(60000))
-    quote = _quote(build_quote(quote_market(), QuoteRequest("SG", lines, BOX, ON), {}))
+    quote = _quote(
+        build_quote(quote_market(), QuoteRequest("SG", lines, BOX, ON, NOW), {}, {})
+    )
     [option] = quote.options
     taxed: list[Fraction] = []
     for part in option.parts:
@@ -123,12 +127,12 @@ def test_duty_and_tax_are_shared_over_the_lines_by_their_value() -> None:
 
 def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
     market = quote_market(duty_sources="TH,vendor,acme,\n")
-    request = QuoteRequest("TH", (_line(5000, Currency.USD),), BOX, ON)
-    assert build_quote(market, request, {}) == InputsMissing(
+    request = QuoteRequest("TH", (_line(5000, Currency.USD),), BOX, ON, NOW)
+    assert build_quote(market, request, {}, {}) == InputsMissing(
         (VendorAsk("acme", T_SHIRT),), ()
     )
     asked = VendorLookup(uuid.uuid7(), "acme", LookupState.REQUESTED, 1, None, ())
-    assert build_quote(market, request, {T_SHIRT: asked}) == InputsMissing(
+    assert build_quote(market, request, {T_SHIRT: asked}, {}) == InputsMissing(
         (), (asked.id,)
     )
     answered = VendorLookup(
@@ -146,7 +150,7 @@ def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
             ),
         ),
     )
-    quote = _quote(build_quote(market, request, {T_SHIRT: answered}))
+    quote = _quote(build_quote(market, request, {T_SHIRT: answered}, {}))
     sources: set[str] = set()
     for part in quote.options[0].parts:
         if part.kind in (PartKind.DUTY, PartKind.IMPORT_TAX):
@@ -155,8 +159,8 @@ def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
 
 
 def test_a_line_without_the_hs_code_its_duty_needs_is_refused() -> None:
-    request = QuoteRequest("TH", (_line(5000, Currency.USD, hs=None),), BOX, ON)
-    result = build_quote(quote_market(), request, {})
+    request = QuoteRequest("TH", (_line(5000, Currency.USD, hs=None),), BOX, ON, NOW)
+    result = build_quote(quote_market(), request, {}, {})
     assert result == LineRateRefused(
         0, Charge.DUTY, RateNeeded(Charge.DUTY, "no_hs_code")
     )
@@ -164,7 +168,7 @@ def test_a_line_without_the_hs_code_its_duty_needs_is_refused() -> None:
 
 def test_a_closed_country_or_a_missing_fee_rule_is_refused() -> None:
     closed = build_quote(
-        quote_market(), QuoteRequest("DE", (_line(5000),), BOX, ON), {}
+        quote_market(), QuoteRequest("DE", (_line(5000),), BOX, ON, NOW), {}, {}
     )
     assert isinstance(closed, CountryClosed) and isinstance(closed.closed, NotOpen)
     no_margin = quote_market(
@@ -173,13 +177,15 @@ def test_a_closed_country_or_a_missing_fee_rule_is_refused() -> None:
             "fx,,0,,,2026-01-01,agreed,made up,\n"
         }
     )
-    request = QuoteRequest("SG", (_line(5000),), BOX, ON)
-    assert build_quote(no_margin, request, {}) == NoFeeRule(FeeComponent.MOR_MARGIN)
+    request = QuoteRequest("SG", (_line(5000),), BOX, ON, NOW)
+    assert build_quote(no_margin, request, {}, {}) == NoFeeRule(FeeComponent.MOR_MARGIN)
 
 
 def test_a_quote_names_the_placeholder_fee_rules_it_used() -> None:
     quote = _quote(
-        build_quote(quote_market(), QuoteRequest("SG", (_line(5000),), BOX, ON), {})
+        build_quote(
+            quote_market(), QuoteRequest("SG", (_line(5000),), BOX, ON, NOW), {}, {}
+        )
     )
     assert quote.placeholders == (
         "fees.csv line 2 (psp_fee)",

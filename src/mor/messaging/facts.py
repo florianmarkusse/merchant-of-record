@@ -20,6 +20,7 @@ class AggregateType(StrEnum):
     ECHO_JOB = "echo_job"  # transitional, with the echo flow
     ECHO_ACCOUNT = "echo_account"  # transitional, with the echo flow
     DUTY_LOOKUP = "duty_lookup"
+    SHIPPING_PRICE_LOOKUP = "shipping_price_lookup"
 
 
 class MessageType(StrEnum):
@@ -44,6 +45,10 @@ class MessageType(StrEnum):
     DUTY_RATE_UNKNOWN_CODE = "duty_rate_unknown_code"
     DUTY_RATE_NEEDS_PERSON = "duty_rate_needs_person"
     DUTY_RATE_DISAGREED = "duty_rate_disagreed"
+    SHIPPING_PRICE_NEEDED = "shipping_price_needed"
+    SHIPPING_PRICE_FOUND = "shipping_price_found"
+    SHIPPING_PRICE_NOT_SERVED = "shipping_price_not_served"
+    SHIPPING_PRICE_NEEDS_PERSON = "shipping_price_needs_person"
 
 
 @dataclass(frozen=True)
@@ -165,6 +170,33 @@ class DutyRateDisagreedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tru
     own_line_no: int
 
 
+class ShippingPriceNeededV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """No usable price is held for a (carrier, service, lane, parcel) and
+    none is being asked: ask the carrier."""
+
+    shipping_price_lookup_id: uuid.UUID
+
+
+class ShippingPriceFoundV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    shipping_price_lookup_id: uuid.UUID
+
+
+class ShippingPriceNotServedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The carrier does not carry this service, lane or parcel."""
+
+    shipping_price_lookup_id: uuid.UUID
+    detail: str
+
+
+class ShippingPriceNeedsPersonV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True
+):
+    """The carrier's answer could not be read."""
+
+    shipping_price_lookup_id: uuid.UUID
+    detail: str
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -184,6 +216,10 @@ type Fact = (
     | DutyRateUnknownCodeV1
     | DutyRateNeedsPersonV1
     | DutyRateDisagreedV1
+    | ShippingPriceNeededV1
+    | ShippingPriceFoundV1
+    | ShippingPriceNotServedV1
+    | ShippingPriceNeedsPersonV1
 )
 
 
@@ -239,6 +275,14 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.DUTY_RATE_NEEDS_PERSON, 1)
         case DutyRateDisagreedV1():
             return FactType(MessageType.DUTY_RATE_DISAGREED, 1)
+        case ShippingPriceNeededV1():
+            return FactType(MessageType.SHIPPING_PRICE_NEEDED, 1)
+        case ShippingPriceFoundV1():
+            return FactType(MessageType.SHIPPING_PRICE_FOUND, 1)
+        case ShippingPriceNotServedV1():
+            return FactType(MessageType.SHIPPING_PRICE_NOT_SERVED, 1)
+        case ShippingPriceNeedsPersonV1():
+            return FactType(MessageType.SHIPPING_PRICE_NEEDS_PERSON, 1)
         case _:
             assert_never(fact)
 
@@ -273,6 +317,13 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | DutyRateDisagreedV1(duty_lookup_id=lookup_id)
         ):
             return Aggregate(AggregateType.DUTY_LOOKUP, lookup_id)
+        case (
+            ShippingPriceNeededV1(shipping_price_lookup_id=lookup_id)
+            | ShippingPriceFoundV1(shipping_price_lookup_id=lookup_id)
+            | ShippingPriceNotServedV1(shipping_price_lookup_id=lookup_id)
+            | ShippingPriceNeedsPersonV1(shipping_price_lookup_id=lookup_id)
+        ):
+            return Aggregate(AggregateType.SHIPPING_PRICE_LOOKUP, lookup_id)
         case _:
             assert_never(fact)
 
@@ -333,6 +384,14 @@ def decode(
             decoded = _decode(payload, DutyRateNeedsPersonV1)
         case MessageType.DUTY_RATE_DISAGREED:
             decoded = _decode(payload, DutyRateDisagreedV1)
+        case MessageType.SHIPPING_PRICE_NEEDED:
+            decoded = _decode(payload, ShippingPriceNeededV1)
+        case MessageType.SHIPPING_PRICE_FOUND:
+            decoded = _decode(payload, ShippingPriceFoundV1)
+        case MessageType.SHIPPING_PRICE_NOT_SERVED:
+            decoded = _decode(payload, ShippingPriceNotServedV1)
+        case MessageType.SHIPPING_PRICE_NEEDS_PERSON:
+            decoded = _decode(payload, ShippingPriceNeedsPersonV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

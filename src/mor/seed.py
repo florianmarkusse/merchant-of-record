@@ -14,6 +14,11 @@ pointing at the fake duty vendor, which is given a few rates
 (FAKE_DUTY_RATES), one of them differing from our own rows so the staff
 page shows a disagreement.
 
+Every carrier a live route names (`carrier_api` in shipping_routes.csv)
+gets an account pointing at the fake courier, its prices used for
+PRICE_VALID_FOR under the `carrier_first` rule (decided 19-Nov-2026). The
+fake answers its own default prices.
+
 Transitional with the echo flow: the seed grows a merchant per mode
 combination as the real ports arrive (plan-architecture.md §6).
 """
@@ -30,18 +35,22 @@ import httpx2
 
 from mor.audit import Actor, ActorKind
 from mor.config import Environment, Settings, load_settings
+from mor.couriers.prices import courier_account, create_courier_account
+from mor.couriers.records import CourierProvider, PriceExpiry
 from mor.db.connect import Connection, connect
 from mor.duties.lookups import create_vendor_account, vendor_account
 from mor.duties.port import DutyProvider
 from mor.echo.flow import create_echo_account
 from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
+from mor.markets.records import PriceSource
 from mor.markets.store import latest_load, read_market
 
 
 SEEDER = Actor(ActorKind.SYSTEM, "seed")
 TIMEOUT = timedelta(seconds=5)
 POLL_INTERVAL = timedelta(minutes=1)
+PRICE_VALID_FOR = timedelta(hours=24)
 # One seed at a time: a second waits for the first to commit, then finds
 # its accounts. Released with the transaction.
 SEED_LOCK = "seed:echo_accounts"
@@ -156,6 +165,39 @@ async def seed_duty_vendors(
     return created
 
 
+async def seed_couriers(conn: Connection, settings: Settings) -> list[str] | SeedInProd:
+    """An account at the fake courier for every carrier a live route in the
+    market data in force names and this database lacks; the carriers
+    created. Never commits."""
+    if settings.environment == Environment.PROD:
+        return SeedInProd()
+    load = await latest_load(conn)
+    if load is None:
+        return []
+    market = await read_market(conn, load.id)
+    created: list[str] = []
+    for route in market.routes:
+        if route.source != PriceSource.CARRIER_API:
+            continue
+        for service in market.services:
+            if service.code != route.service:
+                continue
+            carrier = service.provider
+            if carrier in created or await courier_account(conn, carrier) is not None:
+                continue
+            await create_courier_account(
+                conn,
+                carrier,
+                CourierProvider.FAKE,
+                f"{settings.self_url}/_fake/courier/sandbox-{carrier}",
+                TIMEOUT,
+                PRICE_VALID_FOR,
+                PriceExpiry.CARRIER_FIRST,
+            )
+            created.append(carrier)
+    return created
+
+
 async def set_fake_duty_rates(
     http: httpx2.AsyncClient, settings: Settings
 ) -> FakeUnreachable | None:
@@ -216,6 +258,8 @@ async def _main() -> int:
             return 1
         vendors = await seed_duty_vendors(conn, settings)
         assert not isinstance(vendors, SeedInProd)
+        couriers = await seed_couriers(conn, settings)
+        assert not isinstance(couriers, SeedInProd)
         await conn.commit()
     async with httpx2.AsyncClient() as http:
         unreachable = await subscribe_webhooks(http, settings, seeded)
@@ -231,6 +275,7 @@ async def _main() -> int:
             created += 1
     print(f"{len(seeded)} echo accounts, {created} new; webhooks subscribed")
     print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
+    print(f"courier accounts created: {', '.join(couriers) or 'none'}")
     return 0
 
 

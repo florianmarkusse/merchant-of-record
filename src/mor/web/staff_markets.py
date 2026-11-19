@@ -5,7 +5,7 @@ in force decides. Three pages under one menu, growing with slice 4:
   and a parcel: every shipping option with each part of its price, and
   why the duties and taxes are what they are, from our own rows or the
   country's vendor; a button to ask the vendor about a product not yet
-  asked.
+  asked, and one to ask a carrier for a live price (4c-2).
 - Vendor answers (4b-2): how the vendor's answers compare with our rows,
   per country and charge, and each answer, differences first.
 - Market data (4a): the loads, what the newest changed, and each
@@ -15,10 +15,12 @@ in force decides. Three pages under one menu, growing with slice 4:
          &origin=VN&weight=600&length=300&width=250&height=50
     GET  /staff/markets/answers
     GET  /staff/markets/data?category=apparel&on=2026-11-17
-    POST /staff/markets/duty_lookups   country, origin, hs, back
+    POST /staff/markets/duty_lookups      country, origin, hs, back
+    POST /staff/markets/shipping_prices   country, service, weight, length,
+                                          width, height, back
 
-Mounted only outside prod until staff sign-in exists. The one POST asks a
-vendor (through the outbox, never from the handler).
+Mounted only outside prod until staff sign-in exists. The POSTs ask a
+vendor or a carrier (through the outbox, never from the handler).
 """
 
 from dataclasses import dataclass, replace
@@ -31,6 +33,14 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 from mor.audit import Actor, ActorKind
+from mor.couriers.prices import (
+    NoCourierAccount,
+    courier_account,
+    live_prices,
+    read_price,
+    request_shipping_price,
+)
+from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
 from mor.db.connect import Connection, connect
 from mor.duties.lookups import (
     NoVendorAccount,
@@ -45,11 +55,18 @@ from mor.duties.records import VendorLookup
 from mor.markets.changes import describe_changes
 from mor.markets.fx import FxMissing
 from mor.markets.fx import rate as fx_rate
-from mor.markets.records import Country, DutyMode, MarketSet, MarketStatus
+from mor.markets.records import (
+    Country,
+    DutyMode,
+    MarketSet,
+    MarketStatus,
+    PriceSource,
+)
 from mor.markets.store import read_market, recent_loads
 from mor.money.amount import InvalidAmount, Money, parse_major
 from mor.money.currency import Currency
 from mor.quote.build import (
+    InputsMissing,
     LineRateRefused,
     PartKind,
     Quote,
@@ -59,7 +76,7 @@ from mor.quote.build import (
     ShippingOption,
     build_quote,
 )
-from mor.quote.shipping import Parcel
+from mor.quote.shipping import price_question, routes_to
 from mor.tax.explain import Explained, OrderCheck, explain
 from mor.tax.line_rates import RateNeeded, duty_source_for
 from mor.web.forms import read_form, same_origin
@@ -87,7 +104,7 @@ FIELDS = (
     "length",
     "width",
     "height",
-    "option",  # the rate card whose price is explained; else the cheapest
+    "option",  # the option (its route's key) explained; else the cheapest
 )
 
 
@@ -208,13 +225,19 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
     references: tuple[tuple[Currency, Fraction], ...] = ()
     why: Explained | None = None
     ask: Ask | None = None
+    no_account: set[str] = set()
     async with await connect(database_url) as conn:
         market = await _market_in_force(conn)
         if isinstance(order, OrderForm) and market is not None:
             lookup = await _lookup_for(conn, market, order.check)
             check = order.check
             if order.parcel is not None:
-                quote = _quote(market, check, order.parcel, on, lookup)
+                prices = await _prices_for(conn, market, check.country, order.parcel)
+                quote = _quote(market, check, order.parcel, on, now, lookup, prices)
+                if isinstance(quote, InputsMissing):
+                    for question in quote.price_asks:
+                        if await courier_account(conn, question.carrier) is None:
+                            no_account.add(question.carrier)
                 if isinstance(quote, Quote):
                     # Explained with the shown option's freight, so a band
                     # on goods plus freight is decided as it quoted.
@@ -249,18 +272,20 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
         quote,
         why,
         ask,
-        "asked" in request.query_params,
+        "asked" in request.query_params or "priced" in request.query_params,
         back,
         references,
+        frozenset(no_account),
     )
     return HTMLResponse(render_quote_page(view))
 
 
-async def answers_page(database_url: str) -> Response:
+async def answers_page(database_url: str, now: datetime) -> Response:
     async with await connect(database_url) as conn:
         rows = await agreement(conn)
         answers = await vendor_answers(conn, ANSWERS_SHOWN)
-    return HTMLResponse(render_answers_page(rows, answers))
+        prices = await live_prices(conn, ANSWERS_SHOWN)
+    return HTMLResponse(render_answers_page(rows, answers, prices, now))
 
 
 async def data_page(request: Request, database_url: str, now: datetime) -> Response:
@@ -313,15 +338,32 @@ def _quote(
     order: OrderCheck,
     parcel: Parcel,
     on: date,
+    now: datetime,
     lookup: VendorLookup | None,
+    prices: dict[PriceQuestion, PriceHeld],
 ) -> QuoteResult:
     """The order as one line of one item, quoted."""
     line = QuoteLine(order.category, order.hs_code, order.origin, 1, order.goods)
-    request = QuoteRequest(order.country, (line,), parcel, on)
+    request = QuoteRequest(order.country, (line,), parcel, on, now)
     lookups: dict[RateQuestion, VendorLookup] = {}
     if lookup is not None and order.hs_code is not None:
         lookups[RateQuestion(order.country, order.origin, order.hs_code)] = lookup
-    return build_quote(market, request, lookups)
+    return build_quote(market, request, lookups, prices)
+
+
+async def _prices_for(
+    conn: Connection, market: MarketSet, destination: str, parcel: Parcel
+) -> dict[PriceQuestion, PriceHeld]:
+    """What we hold from carriers for every live route to the destination."""
+    prices: dict[PriceQuestion, PriceHeld] = {}
+    for route in routes_to(market, destination):
+        if route.source != PriceSource.CARRIER_API:
+            continue
+        for service in market.services:
+            if service.code == route.service:
+                question = price_question(service, destination, parcel)
+                prices[question] = await read_price(conn, question)
+    return prices
 
 
 async def _lookup_for(
@@ -374,4 +416,54 @@ async def ask_vendor(request: Request, database_url: str, now: datetime) -> Resp
         await conn.commit()
     separator = "&" if "?" in form.back else "?"
     note = urlencode({"asked": str(asked)})
+    return RedirectResponse(f"{form.back}{separator}{note}", status_code=303)
+
+
+class PriceForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    country: str
+    service: str
+    weight: str
+    length: str
+    width: str
+    height: str
+    back: str
+
+
+async def ask_carrier(request: Request, database_url: str, now: datetime) -> Response:
+    """Ask a carrier for a live price for one service, lane and parcel,
+    unless a usable one is held or a request is open: the lookup and its
+    `shipping_price_needed` commit together, and the worker asks."""
+    if not same_origin(request):
+        return Response("cross-site POST refused", status_code=403)
+    form = await read_form(request, PriceForm)
+    if form is None or not form.back.startswith(PAGE):
+        return Response("bad form", status_code=400)
+    sizes: list[int] = []
+    for text in (form.weight, form.length, form.width, form.height):
+        if not text.isdigit() or int(text) == 0:
+            return Response("parcel: whole numbers above zero", status_code=400)
+        sizes.append(int(text))
+    parcel = Parcel(sizes[0], sizes[1], sizes[2], sizes[3])
+    country = form.country.strip().upper()
+    async with await connect(database_url) as conn:
+        market = await _market_in_force(conn)
+        if market is None:
+            return Response("no market data loaded", status_code=409)
+        question: PriceQuestion | None = None
+        for route in routes_to(market, country):
+            if route.source != PriceSource.CARRIER_API or route.service != form.service:
+                continue
+            for service in market.services:
+                if service.code == route.service:
+                    question = price_question(service, country, parcel)
+        if question is None:
+            return Response(
+                f"{form.service} is not priced live into {country}", status_code=409
+            )
+        asked = await request_shipping_price(conn, question, PERSON, now)
+        if isinstance(asked, NoCourierAccount):
+            return Response(f"no account for {asked.carrier}", status_code=409)
+        await conn.commit()
+    separator = "&" if "?" in form.back else "?"
+    note = urlencode({"priced": str(asked)})
     return RedirectResponse(f"{form.back}{separator}{note}", status_code=303)

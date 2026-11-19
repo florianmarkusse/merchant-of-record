@@ -58,10 +58,10 @@ SHIPPING = {
         "exp,SG,1,3,verified,,,,\nexp,TH,1,3,verified,,,,\neco,SG,5,8,verified,,,,\n"
     ),
     "shipping_routes": (
-        "SG,exp_card,own_table,placeholder,\n"
-        "TH,exp_card,own_table,placeholder,\n"
-        "SG,eco_card,own_table,agreed,\n"
-        "TH,eco_card,own_table,agreed,\n"
+        "SG,exp,exp_card,own_table,placeholder,\n"
+        "TH,exp,exp_card,own_table,placeholder,\n"
+        "SG,eco,eco_card,own_table,agreed,\n"
+        "TH,eco,eco_card,own_table,agreed,\n"
     ),
     "fees": (
         "psp_fee,,3,,,2026-01-01,placeholder,made up,\n"
@@ -87,3 +87,17 @@ def quote_market(
     )
     assert not isinstance(market, list), market
     return market
+
+
+# The same set with the express service priced live by its carrier into
+# SG and TH (4c-2): no card on those routes.
+LIVE_ROUTES = (
+    "SG,exp,,carrier_api,placeholder,\n"
+    "TH,exp,,carrier_api,placeholder,\n"
+    "SG,eco,eco_card,own_table,agreed,\n"
+    "TH,eco,eco_card,own_table,agreed,\n"
+)
+
+
+def live_market() -> MarketSet:
+    return quote_market({"shipping_routes": LIVE_ROUTES})
