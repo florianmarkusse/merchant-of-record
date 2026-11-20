@@ -14,9 +14,11 @@ from mor.checkout.sessions import SessionSummary
 from mor.dates import format_moment
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.orders.store import Order
 from mor.payments.attempts import Attempt
-from mor.public_ids import QUOTE_PREFIX, SESSION_PREFIX, public_id
-from mor.web.api_estimates import collected_by, group_of
+from mor.public_ids import ORDER_PREFIX, QUOTE_PREFIX, SESSION_PREFIX, public_id
+from mor.quote.groups import group_of
+from mor.web.api_estimates import collected_by
 from mor.web.staff_layout import money_text, staff_page
 
 
@@ -167,6 +169,19 @@ def _attempts(attempts: list[Attempt], account_names: dict[str, str]) -> htpy.No
     ]
 
 
+def _order(order: Order | None, invoice_number: str | None) -> htpy.Node:
+    if order is None:
+        return None
+    return htpy.p[
+        "Order ",
+        htpy.a(href=f"/o/{order.buyer_token}", rel="noreferrer")[
+            public_id(ORDER_PREFIX, order.id)
+        ],
+        f", paid {format_moment(order.paid_at)}; invoice"
+        f" {invoice_number or 'not issued yet'}.",
+    ]
+
+
 def render_session_page(
     session: CheckoutSession,
     merchant_name: str,
@@ -174,9 +189,11 @@ def render_session_page(
     quotes: list[StoredQuote],
     attempts: list[Attempt],
     account_names: dict[str, str],
+    order: Order | None,
+    invoice_number: str | None,
 ) -> str:
-    """`account_names`: each PSP account id (hex) to its name."""
-    """`countries`: each address id (hex) to its country, for the quotes."""
+    """`countries`: each address id (hex) to its country, for the quotes;
+    `account_names`: each PSP account id (hex) to its name."""
     lines: list[htpy.Node] = []
     for line in session.lines:
         lines.append(
@@ -209,6 +226,7 @@ def render_session_page(
             f" {format_moment(session.expires_at)}."
         ],
         htpy.ul[lines],
+        _order(order, invoice_number),
         htpy.h2["Payment attempts, newest first"],
         _attempts(attempts, account_names),
         htpy.h2["Quotes, newest first"],

@@ -1,7 +1,8 @@
 """Pure properties of payments (docs/plan-payments.md §8): the attempt's
 transition table answers every pair and only moves forward; the capture
 entry balances per currency and pays the merchant exactly its prices; the
-fake PSP's amounts round-trip, or are refused when not whole in ours."""
+fake PSP's amounts round-trip, or are refused when not whole in ours; an
+invoice's lines sum to what was paid, as the buyer saw it."""
 
 import uuid
 from datetime import UTC, datetime
@@ -13,6 +14,8 @@ from hypothesis import strategies as st
 from mor.audit import Actor, ActorKind
 from mor.checkout.quotes import MadeQuote, QuoteInputs, StoredOption, StoredPart
 from mor.checkout.records import Customs, SoldLine
+from mor.invoices.lines import invoice_lines
+from mor.invoices.records import InvoiceSection
 from mor.ledger.account import AccountKind
 from mor.markets.records import Collector, ServiceTier, Standing
 from mor.money.amount import Money
@@ -192,6 +195,35 @@ def test_the_capture_entry_balances_and_pays_the_merchant_exactly(
             if line.unit_price.currency == currency
         )
         assert owed.get(currency, 0) == expected
+
+
+@given(_paid_quotes())
+def test_invoice_lines_sum_to_the_total_and_its_goods_lines_to_the_items(
+    paid: tuple[MadeQuote, tuple[SoldLine, ...]],
+) -> None:
+    quote, lines = paid
+    option = quote.options[0]
+    invoice = invoice_lines(quote, 0, lines)
+    assert sum(line.amount_minor for line in invoice) == option.total_minor
+    goods = [line for line in invoice if line.section == InvoiceSection.GOODS]
+    assert len(goods) == len(lines)
+    assert sum(line.amount_minor for line in goods) == sum(
+        part.amount_minor for part in quote.goods
+    )
+    for line in goods:
+        assert line.amount_minor >= 0
+    shipping = [line for line in invoice if line.section == InvoiceSection.SHIPPING]
+    assert len(shipping) == 1
+    # Each duty and tax on its own line, in the section of who collects it.
+    for collector, section in (
+        (Collector.SELLER, InvoiceSection.TAX),
+        (Collector.BORDER, InvoiceSection.BORDER),
+    ):
+        parts = [part for part in option.parts if part.collector == collector]
+        shown = [line for line in invoice if line.section == section]
+        assert [line.amount_minor for line in shown] == [
+            part.amount_minor for part in parts
+        ]
 
 
 @given(st.integers(0, 10**12), st.sampled_from(list(Currency)))

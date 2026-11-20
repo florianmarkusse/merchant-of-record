@@ -27,6 +27,15 @@ class SessionState(StrEnum):
     CANCELED = "canceled"
 
 
+class AfterPayment(StrEnum):
+    """Where the buyer lands once paid, as the merchant chose for the
+    session (docs/plan-payments.md §6.1). Matches the `after_payment` enum
+    type."""
+
+    OUR_PAGE = "our_page"  # the order page, with the invoice
+    MERCHANT_PAGE = "merchant_page"  # return_url, with `session_id` added
+
+
 # A buyer may give this many addresses per session (answered 19-Nov-2026),
 # so a script cannot sweep countries through one cart.
 MAX_ADDRESSES = 10
@@ -60,6 +69,7 @@ class SessionDraft:
     merchant_reference: str | None
     return_url: str
     cancel_url: str
+    after_payment: AfterPayment
 
 
 @dataclass(frozen=True)
@@ -72,6 +82,7 @@ class CheckoutSession:
     merchant_reference: str | None
     return_url: str
     cancel_url: str
+    after_payment: AfterPayment
     created_at: datetime
     expires_at: datetime
     address_id: uuid.UUID | None  # the newest address given

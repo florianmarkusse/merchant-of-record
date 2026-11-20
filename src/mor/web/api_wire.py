@@ -9,6 +9,7 @@ field v1 does not take (`tax_behavior`) is an error, not ignored.
 
 import hashlib
 import re
+import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -17,14 +18,29 @@ import msgspec
 from msgspec import Meta
 from starlette.responses import Response
 
+from mor.checkout.addresses import Address
 from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredQuote
-from mor.checkout.records import CheckoutSession, Customs, SessionDraft, SoldLine
+from mor.checkout.records import (
+    AfterPayment,
+    CheckoutSession,
+    Customs,
+    SessionDraft,
+    SoldLine,
+)
 from mor.couriers.records import Parcel
 from mor.dates import format_instant
 from mor.markets.records import MarketSet
+from mor.merchants.records import Merchant
 from mor.money.amount import Money
 from mor.money.currency import Currency
-from mor.public_ids import MERCHANT_PREFIX, QUOTE_PREFIX, SESSION_PREFIX, public_id
+from mor.orders.store import Order
+from mor.public_ids import (
+    MERCHANT_PREFIX,
+    ORDER_PREFIX,
+    QUOTE_PREFIX,
+    SESSION_PREFIX,
+    public_id,
+)
 
 
 # --- what comes in -----------------------------------------------------------------
@@ -71,6 +87,8 @@ class SessionIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     return_url: Url
     cancel_url: Url
     merchant_reference: Annotated[str, Meta(min_length=1, max_length=200)] | None = None
+    # Where the buyer lands once paid (docs/plan-payments.md §6.1).
+    after_payment: Literal["our_page", "merchant_page"] = "our_page"
 
 
 class EstimateIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -253,6 +271,7 @@ def session_draft(market: MarketSet, request: SessionIn) -> SessionDraft | ApiEr
         request.merchant_reference,
         request.return_url,
         request.cancel_url,
+        AfterPayment(request.after_payment),
     )
 
 
@@ -358,10 +377,12 @@ class SessionOut(msgspec.Struct, frozen=True):
     merchant_reference: str | None
     return_url: str
     cancel_url: str
+    after_payment: str
     parcel: ParcelOut
     lines: list[LineOut]
     ship_to_country: str | None  # the full address comes with orders
     quote: QuoteOut | None
+    order_id: str | None  # once paid
 
 
 def session_out(
@@ -369,11 +390,36 @@ def session_out(
     self_url: str,
     ship_to_country: str | None,
     quote: StoredQuote | None,
+    order_id: uuid.UUID | None,
 ) -> bytes:
     """A session as the API shows it; times through `format_instant`."""
     session_id = public_id(SESSION_PREFIX, session.id)
+    lines = _lines_out(session.lines)
+    parcel = session.parcel
+    out = SessionOut(
+        session_id,
+        "checkout_session",
+        public_id(MERCHANT_PREFIX, session.merchant_id),
+        session.state.value,
+        f"{self_url}/c/{session_id}",
+        format_instant(session.created_at),
+        format_instant(session.expires_at),
+        session.merchant_reference,
+        session.return_url,
+        session.cancel_url,
+        session.after_payment.value,
+        ParcelOut(parcel.weight_g, parcel.length_mm, parcel.width_mm, parcel.height_mm),
+        lines,
+        ship_to_country,
+        None if quote is None else quote_out(quote),
+        None if order_id is None else public_id(ORDER_PREFIX, order_id),
+    )
+    return msgspec.json.encode(out)
+
+
+def _lines_out(sold: tuple[SoldLine, ...]) -> list[LineOut]:
     lines: list[LineOut] = []
-    for line in session.lines:
+    for line in sold:
         customs = line.customs
         lines.append(
             LineOut(
@@ -390,21 +436,115 @@ def session_out(
                 ),
             )
         )
-    parcel = session.parcel
-    out = SessionOut(
-        session_id,
-        "checkout_session",
-        public_id(MERCHANT_PREFIX, session.merchant_id),
-        session.state.value,
-        f"{self_url}/c/{session_id}",
-        format_instant(session.created_at),
-        format_instant(session.expires_at),
+    return lines
+
+
+# --- orders and the merchant (docs/plan-payments.md §6.1) -------------------------
+
+
+class ShippingOut(msgspec.Struct, frozen=True):
+    key: str
+    service: str
+    name: str
+    transit_days_min: int | None
+    transit_days_max: int | None
+
+
+class AddressOut(msgspec.Struct, frozen=True):
+    """The full address, for fulfilment: personal data."""
+
+    name: str
+    email: str
+    phone: str  # the dial code and the digits: `+6591234567`
+    line1: str
+    line2: str | None
+    city: str
+    region: str | None
+    postcode: str | None
+    country: str
+
+
+class OrderOut(msgspec.Struct, frozen=True):
+    id: str
+    object: str
+    merchant: str
+    checkout_session: str
+    merchant_reference: str | None
+    state: str
+    paid_at: str
+    total: MoneyOut
+    lines: list[LineOut]  # as the merchant sent them
+    shipping: ShippingOut
+    ship_to: AddressOut
+    invoice_number: str | None  # once issued, moments after payment
+    order_url: str  # the buyer's order page, with the invoice
+
+
+def order_out(
+    order: Order,
+    session: CheckoutSession,
+    quote: MadeQuote,
+    address: Address,
+    invoice_number: str | None,
+    self_url: str,
+) -> bytes:
+    option = quote.options[order.option_no]
+    low: int | None = None
+    high: int | None = None
+    if option.transit is not None:
+        low, high = option.transit
+    out = OrderOut(
+        public_id(ORDER_PREFIX, order.id),
+        "order",
+        public_id(MERCHANT_PREFIX, order.merchant_id),
+        public_id(SESSION_PREFIX, order.session_id),
         session.merchant_reference,
-        session.return_url,
-        session.cancel_url,
-        ParcelOut(parcel.weight_g, parcel.length_mm, parcel.width_mm, parcel.height_mm),
-        lines,
-        ship_to_country,
-        None if quote is None else quote_out(quote),
+        "paid",
+        format_instant(order.paid_at),
+        money_out(Money(option.total_minor, quote.currency)),
+        _lines_out(session.lines),
+        ShippingOut(option.key, option.service, option.service_name, low, high),
+        AddressOut(
+            address.name,
+            address.email,
+            f"{address.phone_dial_code}{address.phone_number}",
+            address.line1,
+            address.line2,
+            address.city,
+            address.region,
+            address.postcode,
+            address.country,
+        ),
+        invoice_number,
+        f"{self_url}/o/{order.buyer_token}",
     )
     return msgspec.json.encode(out)
+
+
+type Email = Annotated[str, Meta(pattern=r"^[^@\s]+@[^@\s]+$", max_length=254)]
+
+
+class SettingsIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The merchant's own settings; every field is sent, null clears it."""
+
+    support_email: Email | None
+
+
+class MerchantOut(msgspec.Struct, frozen=True):
+    id: str
+    object: str
+    display_name: str
+    kyb_state: str  # ours: only `approved` takes payments
+    support_email: str | None
+
+
+def merchant_out(merchant: Merchant) -> bytes:
+    return msgspec.json.encode(
+        MerchantOut(
+            public_id(MERCHANT_PREFIX, merchant.id),
+            "merchant",
+            merchant.display_name,
+            merchant.kyb_state.value,
+            merchant.support_email,
+        )
+    )

@@ -41,6 +41,7 @@ from mor.checkout.flow import QUOTE_VALID_FOR, refresh_quote, submit_address
 from mor.checkout.records import (
     MAX_ADDRESSES,
     SESSION_LIFETIME,
+    AfterPayment,
     Customs,
     SessionDraft,
     SoldLine,
@@ -382,6 +383,7 @@ class QuoteFlow(RuleBasedStateMachine):
                         None,
                         "https://shop.example/thanks",
                         "https://shop.example/cart",
+                        AfterPayment.OUR_PAGE,
                     ),
                     ACTOR,
                     T0,

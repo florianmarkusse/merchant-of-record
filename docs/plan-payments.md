@@ -1,6 +1,6 @@
 # Slice 5: payments, the order and the invoice
 
-Status: design proposal (19-Nov-2026), awaiting a reply. No code yet.
+Status: 5a built (19-Nov-2026), 5b built (20-Nov-2026); 5c next.
 
 Applies plan-architecture §2 (stages 3 and 4), §4, §5, §6 and §9 (the
 capture entry), and plan-psp-integration §4 and §5 and
@@ -241,6 +241,228 @@ merchant's currency (say USD), per currency its lines use:
 - API: `GET /v1/checkout_sessions/{id}` gains `order_id`;
   `GET /v1/orders/{id}` returns lines, totals, the option, the full
   address (for fulfilment, as 4d-2 promised) and the invoice number.
+
+### 6.1 5b in detail (agreed 20-Nov-2026)
+
+**The merchant** (migrations: new enum values such as `invoice_issued`
+in `0018`, as 5a did; types and tables in `0019`):
+
+- `merchant_kyb_state` enum `pending`, `approved`, `suspended` (question
+  5); `merchant.kyb_state` defaults to `pending`. Every change is also a
+  row in `merchant_kyb_change (merchant_id, state, changed_at, actor)`,
+  append-only, written in the same transaction: the column is what the
+  pay step reads, the table is who changed it and when.
+- KYB is ours, never the merchant's: set by the CLI
+  (`uv run python -m mor.merchants kyb mer_… approved`) until staff
+  sign-in exists, then by a staff page. The seed approves its merchants
+  at once.
+- The gate applies in every environment, so the code that guards prod is
+  the code under test (decided 20-Nov-2026). The pay step reads
+  `kyb_state` with `FOR SHARE` under the session lock and refuses a new
+  attempt unless `approved`; the CLI's change takes the row `FOR UPDATE`,
+  so a suspension and a pay cannot cross. The buyer sees "This shop
+  can't take payments right now", and no PSP call is made. An attempt
+  already open runs to its end.
+- The merchant's own settings go through the API with its key, not the
+  CLI (decided 20-Nov-2026): `POST /v1/merchant/settings` sets
+  `support_email` (or null), with `settings_changed_at` and its actor on
+  `merchant`. Plain settings, not financial state, so no history table.
+  The dashboard (merchant sign-in, plan-merchant-surfaces) later calls the
+  same code. Settings that hold for every checkout (support email, later
+  branding) live on the merchant; what can differ per checkout lives on
+  the session.
+- **`after_payment` is per session** (decided 20-Nov-2026, amends the
+  answer to question 2), as Stripe sets its success URL per session: a
+  field of the create-session body next to `return_url`, `our_page`
+  (default) or `merchant_page`, stored on `checkout_session`. Never a
+  query parameter on the buyer's link, which the buyer can edit.
+
+**The selling entity.** One place, `src/mor/entity.py`: our legal name,
+address and tax registration numbers per country, as plain data, with
+placeholders until the entity is decided (plan-psp-integration §11). The
+buyer page's `OUR_NAME` moves there. The invoice copies what it uses.
+
+**The invoice** (`src/mor/invoices/`):
+
+- Numbering is data, so it can grow without touching issued invoices
+  (asked 20-Nov-2026). A series (code, entity, prefix, with or without
+  the year, width) is plain data in `src/mor/invoices/numbering.py`;
+  `invoice_series (code, next_number)` holds only its counter, a row made
+  on the series' first use (insert, a conflict means it exists). Today one
+  series, `INV`, for the placeholder entity (question 4). One function,
+  `series_for(entity, buyer_country)`, picks it; a per-country series an
+  adviser asks for is an entry in `SERIES` and in `SERIES_BY_COUNTRY`,
+  and credit notes (slice 8) are a series of their own. A code is never
+  reused. Each invoice stores its series code, its number and the
+  finished `number_text`, so a later format change never rewrites an
+  issued number. The uuid stays the invoice's id; the number exists
+  because tax law asks for it (IRAS: an identifying number; TH Revenue
+  Code §86/4: a serial number) and a gap shows a missing invoice, which a
+  uuid cannot.
+- `invoice (id, order_id UNIQUE, series, number, number_text, issued_at,
+  paid_at, currency, total_minor, seller_name, seller_address,
+  seller_tax_label, seller_tax_id, merchant_legal_name, buyer_name,
+  buyer address fields)`, `UNIQUE (series, number)`. `number_text` is
+  `INV-2026-000001`: prefix, the issue year, then the series' running
+  counter, which does not restart each year.
+  Name and address are copied, not referenced, because an invoice is kept
+  for the legal retention period and the session's address may not be
+  (§9). Email and phone are not copied.
+- `invoice_line (invoice_id, line_no, section, description, quantity,
+  amount_minor, rule_text, source)`. `section` is an enum: `goods` (one
+  line per session line, the merchant's price plus its share of our fees
+  in whole minor units by `money.rounding.allocate`, weighted by the
+  rounded goods parts, so the lines sum to the buyer's "Items"),
+  `shipping` (one line: the option's service name, the shipping group),
+  `tax` (each seller-collected tax part: its label as `rule_text`, its
+  source) and `border` (each border duty and tax, "paid on your behalf").
+  The rate stays inside the label text: parts store how they were reached,
+  not a rate field, and re-parsing labels would be clever.
+- Both tables append-only by trigger (`refuse_change`).
+- **Issued by a local consumer** `invoice_issue` on `order_paid`, as
+  planned: lock the order, return `Stale` if its invoice exists, lock
+  the series row, take the number, insert invoice and lines, emit
+  `invoice_issued` v1 (`invoice_id`, `order_id`, `merchant_id`; a record
+  for now, webhooks later). One transaction, so a rollback gives the
+  number back. Lock order always order, then series. Kept apart from
+  `order_create` on purpose: a bug in the invoice code must not hold back
+  the order and the capture's ledger entry. No ledger entry: the capture
+  already booked the tax as owed.
+- The printed dates are the UTC date (`20-Nov-2026`) of `issued_at` and
+  of `paid_at`. Whether a country's tax point must be its local date is
+  for the adviser (§9).
+
+**Rendering.** One htpy function draws the invoice body from the rows;
+the page wraps it in the site layout, the PDF wraps it in a print
+stylesheet (`static/css/invoice.css`, read at render) and goes through
+WeasyPrint in `asyncio.to_thread` (rendering blocks). WeasyPrint gets a
+URL fetcher that refuses everything, so nothing in an invoice can make
+the server fetch a URL. WeasyPrint 70.0 (08-Sep-2026, BSD-3-Clause,
+Python 3.14 listed on PyPI, checked 20-Nov-2026) needs Pango from the
+system: installed on this laptop, and a line in the deploy script for the
+server.
+
+**The order page** `/o/{buyer_token}`:
+
+- What was bought (the invoice's goods lines), shipping by which service
+  and transit days, the total, the delivery address, the invoice as a
+  page (`/o/{token}/invoice`) and a PDF (`/o/{token}/invoice.pdf`), "what
+  happens next" (the merchant ships it; nothing more is due on
+  delivery), the merchant's support email if it has one, our support
+  (placeholder from `entity.py`), and "Back to <merchant>".
+- Until the invoice exists the page says "Your invoice is being
+  prepared" and waits like the other waiting pages (`ts/waiting.ts`,
+  `/o/{token}/status`, meta refresh without JavaScript).
+- The token is in the URL, so the page sends `Referrer-Policy:
+  no-referrer` (the back link must not hand the token to the merchant's
+  site) and `X-Robots-Tag: noindex`. An unknown token is a plain 404.
+
+**Where the buyer lands.** `/c/{session}` in state `completed`, by the
+session's `after_payment`:
+
+- `our_page`: a 303 to `/o/{token}`, until the session's own
+  `expires_at`; after that `/c/{session}` shows "This order is paid" and
+  no link, so a forwarded checkout link does not show the invoice and
+  address for ever (decided 20-Nov-2026; no new time limit).
+- `merchant_page`: a 303 to `return_url` with `session_id=cs_…` added to
+  its query (kept if the URL already has one).
+
+Both happen only in `completed`, which only `order_create` sets after the
+PSP's capture: the browser's return never decides it. The waiting
+script's reload follows the redirect.
+
+**How long the order link lives.** `/o/{token}` does not expire for now:
+it is the buyer's receipt, needed for returns and warranty, and its
+token is 32 random bytes. Revisited with the notify slice, which can
+offer "send me my link again" (Stripe's hosted invoice links expire after
+30 to 120 days and the API hands out a fresh one).
+
+**API** (v1-additive):
+
+- `GET /v1/checkout_sessions/{id}` gains `order_id` (`ord_…`, null until
+  paid).
+- `GET /v1/orders/{id}`, for the merchant that owns it (another's is a
+  404): state, `paid_at`, currency and total, the lines as the merchant
+  sent them, the option (service, name, transit), the full address with
+  email and phone (for fulfilment, as 4d-2 promised), `invoice_number`
+  (null until issued), and `order_url`: the order page's address, so a
+  merchant on `merchant_page` can show the buyer "View your invoice"
+  before emails exist (decided 20-Nov-2026).
+
+**Staff.** The session page shows the order and its invoice number.
+
+**Tests and fuzzing:**
+
+- Through the edges: pay, drain, then the order page, the invoice page
+  and the PDF (`%PDF-` and `application/pdf`); each `after_payment`
+  redirect; the KYB gate (`pending` and `suspended` refused, no attempt,
+  no PSP call); the orders API (own order, another merchant's is 404,
+  `invoice_number` null then set); the session API's `order_id`. The
+  new routes are all GET, so there is no new POST to guard.
+- Properties: the invoice's lines sum to the option's total, and its goods
+  lines to the quote's "Items", for any stored quote option.
+- The payment fuzzer drains `invoice_issue` too. After every action, the
+  numbers per series run 1…n with no gap and the counter is one past the
+  last, and each invoice is for what its payment captured; after
+  draining, every order has its invoice.
+- A crash inside `invoice_issue` before its commit gives the number back
+  (a test of its own), and the concurrency suite has six workers issue
+  invoices for 24 orders at once: numbers still 1…n.
+
+### 6.2 5b built (20-Nov-2026)
+
+What was built:
+- Migrations `0018_invoice_values.sql` (enum values) and
+  `0019_invoices.sql` (KYB state and its history, the merchant's
+  settings, `after_payment` on the session, the series counter, the
+  invoice and its lines, append-only).
+- `src/mor/entity.py` (the selling entity, placeholders);
+  `src/mor/invoices/` (records, `numbering`, `lines`, `store` with the
+  `invoice_issue` step); `src/mor/orders/store.py`; `src/mor/quote/groups.py`
+  (`group_of`, moved out of the web layer so the invoice can use it).
+- The order page and invoice at `/o/{token}` (`web/order_pages.py`,
+  `order_html.py`, `invoice_html.py`, `invoice_pdf.py`,
+  `static/css/invoice.css`); the redirect of a paid `/c/{session}`; the
+  KYB notice and gate; `GET /v1/orders/{id}`, `GET /v1/merchant`,
+  `POST /v1/merchant/settings`, `order_id` and `after_payment` on the
+  session; the order and invoice on the staff session page; `kyb` in the
+  merchants CLI; the seed approves the Sandbox Shop on every run.
+- WeasyPrint 70.0, with a stub of the part we call in `typings/weasyprint/`
+  (it ships no types and pyright is strict).
+
+Changed while building:
+- **The series is data in code, the table only a counter.** The first
+  version kept the format in a row the migration inserted; the test setup
+  empties every table, and a new series would have needed a migration.
+- **The fuzzer reached a paid order in 9 of 354 runs.** It now has a "pays
+  and approves" action (pay, the worker makes the payment, the buyer
+  approves; the rest is left to the other actions), and a crash inside a
+  local step before its commit. Paid orders now come in about a quarter
+  of the runs.
+
+How it was checked:
+- Tests through the pages and the API (above); the invoice-lines
+  property; the fuzzer at 300 and 1,000 examples.
+- Planted bugs: the counter read without `FOR UPDATE` is caught by the
+  concurrency test (3 of 3 runs, a duplicate number refused by the unique
+  key). The number committed apart from the invoice is caught by the
+  crash test, **not by the fuzzer** at 1,000 examples: a crash rarely
+  lands in the moment `invoice_issue` waits. The existence check before
+  issuing is backed by `UNIQUE (order_id)` and tested by a redelivery.
+- On the sandbox in a headless browser at phone width: a card payment
+  waited, reloaded and landed on the order page; the invoice as a page
+  and as a PDF (rendered and looked at); the orders and settings API; a
+  `merchant_page` session paid by QR went to its `return_url` with its
+  own query kept and `session_id` added. The only console error was a 400 from
+  an address form filled in wrong while testing.
+
+Open:
+- The deploy script must install Pango for WeasyPrint on the server
+  (`deploy/deploy.sh` does not exist yet: the deploy slice).
+- Invoice wording, the tax registration numbers and whether a country
+  needs its own series or a local-date tax point: for the adviser (§9).
+- The sandbox market has no tax for the lane tried, so the invoice's tax
+  sections were seen only in tests.
 
 ## 7. Settlement (5c)
 

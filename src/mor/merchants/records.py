@@ -9,6 +9,16 @@ from enum import StrEnum
 DEFAULT_DAILY_VENDOR_ASKS = 100  # decided 19-Nov-2026
 
 
+class KybState(StrEnum):
+    """Ours, never the merchant's: only `approved` may take a new payment
+    (docs/plan-payments.md §6.1). Matches the `merchant_kyb_state` enum
+    type."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    SUSPENDED = "suspended"
+
+
 @dataclass(frozen=True)
 class Merchant:
     id: uuid.UUID
@@ -17,6 +27,8 @@ class Merchant:
     country: str
     daily_vendor_asks: int  # new vendor lookups its estimates may start a day
     created_at: datetime
+    kyb_state: KybState
+    support_email: str | None  # shown to its buyers; set by the merchant
 
 
 class KeyEnv(StrEnum):

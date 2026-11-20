@@ -22,6 +22,7 @@ from mor.checkout.quotes import MadeQuote, read_quote, stored_from
 from mor.checkout.records import (
     MAX_ADDRESSES,
     SESSION_LIFETIME,
+    AfterPayment,
     Customs,
     SessionDraft,
     SoldLine,
@@ -32,8 +33,8 @@ from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import connect
 from mor.markets.records import MarketSet
 from mor.markets.store import load_market
-from mor.merchants.records import KeyEnv
-from mor.merchants.store import create_api_key, create_merchant
+from mor.merchants.records import KeyEnv, KybState
+from mor.merchants.store import create_api_key, create_merchant, set_kyb_state
 from mor.messaging.worker import drain_once
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -100,6 +101,7 @@ async def _with_setup(
         merchant = await create_merchant(
             conn, "Test Shop Co.", "Test Shop", "VN", 100, ACTOR, NOW
         )
+        await set_kyb_state(conn, merchant.id, KybState.APPROVED, ACTOR, NOW)
         key = await create_api_key(conn, merchant.id, KeyEnv.TEST, NOW)
         session = await create_session(
             conn,
@@ -110,6 +112,7 @@ async def _with_setup(
                 "order-1",
                 "https://shop.example/thanks",
                 "https://shop.example/cart",
+                AfterPayment.OUR_PAGE,
             ),
             ACTOR,
             NOW,

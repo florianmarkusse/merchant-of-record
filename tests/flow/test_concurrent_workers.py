@@ -1,6 +1,6 @@
 """Layer 3 (plan-architecture.md §10): real workers on their own connections
-against the same rows, at once. Not shrunk; it checks that the locks do
-what the serial fuzzer assumes."""
+against the same rows, at once (probes, echo jobs, invoice numbers). Not
+shrunk; it checks that the locks do what the serial fuzzer assumes."""
 
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -16,6 +16,15 @@ from mor.fakes.hang import hang_a_minute
 from mor.messaging.worker import Failed, Ran, RunResult, Skipped, drain_once
 from mor.probe.flow import start_probe
 from tests.helpers import ENV, NO_HTTP, advisory_locks_held
+from tests.payments.support import (
+    FAT_SALE_KEYED,
+    SGD_PRICE,
+    Setup,
+    approve_at_the_psp,
+    drain_all_but_invoices,
+    quoted_session,
+    with_setup,
+)
 
 
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -147,3 +156,58 @@ def test_many_workers_send_every_echo_once_across_the_call(database_url: str) ->
         assert await advisory_locks_held(database_url) == 0
 
     asyncio.run(checks())
+
+
+INVOICED_ORDERS = 24
+
+
+async def _invoice_worker(url: str, now: datetime, results: list[RunResult]) -> None:
+    async with await connect(url, autocommit=True) as conn:
+        idle_rounds = 0
+        while idle_rounds < 3:
+            round_results = await drain_once(conn, NO_HTTP, ENV, now, limit=5)
+            results.extend(round_results)
+            ran = False
+            for result in round_results:
+                if isinstance(result, Ran):
+                    ran = True
+            idle_rounds = 0 if ran else idle_rounds + 1
+            await asyncio.sleep(0)
+
+
+def test_many_workers_number_invoices_without_a_gap(database_url: str) -> None:
+    """Paid orders waiting for their invoices, issued by workers at once:
+    the series row's lock hands out 1…n, each once."""
+
+    async def body(setup: Setup) -> None:
+        await approve_at_the_psp(setup)
+        await drain_all_but_invoices(setup)
+        for _ in range(INVOICED_ORDERS - 1):
+            session_id, option = await quoted_session(
+                setup.url, setup.shop.merchant_id, SGD_PRICE, setup.clock[0]
+            )
+            paid = Setup(
+                setup.url, setup.wired, setup.clock, setup.shop, session_id, option
+            )
+            await approve_at_the_psp(paid)
+            await drain_all_but_invoices(paid)
+        assert await _count(setup.url, b"SELECT count(*) FROM invoice") == 0
+        results: list[RunResult] = []
+        await asyncio.gather(
+            *[
+                _invoice_worker(setup.url, setup.clock[0], results)
+                for _ in range(WORKERS)
+            ]
+        )
+        for result in results:
+            assert not isinstance(result, Failed), result
+        async with await connect(setup.url) as conn:
+            cur = await conn.execute("SELECT number FROM invoice ORDER BY number")
+            numbers = [row[0] for row in await cur.fetchall()]
+            cur = await conn.execute("SELECT next_number FROM invoice_series")
+            counters = await cur.fetchall()
+        assert numbers == list(range(1, INVOICED_ORDERS + 1))
+        assert counters == [(INVOICED_ORDERS + 1,)]
+        assert await advisory_locks_held(setup.url) == 0
+
+    asyncio.run(with_setup(database_url, FAT_SALE_KEYED, body))

@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from mor.audit import Actor, ActorKind
 from mor.checkout.addresses import Address
 from mor.checkout.flow import Waiting, submit_address
-from mor.checkout.records import Customs, SessionDraft, SoldLine
+from mor.checkout.records import AfterPayment, Customs, SessionDraft, SoldLine
 from mor.checkout.sessions import create_session, session_by_id
 from mor.couriers.prices import create_courier_account
 from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
@@ -85,7 +85,14 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
                 session = await create_session(
                     conn,
                     merchant.id,
-                    SessionDraft((line,), PARCEL, None, "https://s/t", "https://s/c"),
+                    SessionDraft(
+                        (line,),
+                        PARCEL,
+                        None,
+                        "https://s/t",
+                        "https://s/c",
+                        AfterPayment.OUR_PAGE,
+                    ),
                     ACTOR,
                     NOW,
                 )

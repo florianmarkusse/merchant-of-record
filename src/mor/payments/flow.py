@@ -32,6 +32,8 @@ from mor.checkout.records import SessionState
 from mor.checkout.sessions import lock_session, read_address, set_session_state
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.merchants.records import KybState
+from mor.merchants.store import kyb_state_for_pay
 from mor.messaging.facts import (
     Fact,
     PaymentAttemptCreatedV1,
@@ -108,6 +110,7 @@ class NotPayable:
         "unknown_option",
         "no_route",
         "unknown_method",
+        "merchant_not_approved",
     ]
 
 
@@ -132,6 +135,10 @@ async def pay(
         return NotPayable("not_quoted")
     if now >= session.expires_at:
         return NotPayable("session_over")
+    # KYB, in every environment (docs/plan-payments.md §6.1): held FOR
+    # SHARE, so a suspension and this attempt cannot cross.
+    if await kyb_state_for_pay(conn, session.merchant_id) != KybState.APPROVED:
+        return NotPayable("merchant_not_approved")
     quote = await read_quote(conn, session.quote_id)
     assert isinstance(quote, MadeQuote), f"session {session_id} quoted without one"
     # The price held is a promise until `valid_until`, decided under the lock.

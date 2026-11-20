@@ -53,7 +53,10 @@ and wins where the two differ.
   `docs/plan-payments.md` in three steps (5a pay, 5b invoice and order,
   5c settlement); its questions are answered (19-Nov-2026) and 5a (the
   fake PSP in every wiring, the payment attempt, the order and its capture
-  entry, the buyer's pay pages) is built. 5b is next.
+  entry, the buyer's pay pages) is built. 5b (the invoice with its gapless
+  number, the order page and PDF at `/o/{token}`, the orders and merchant
+  settings API, the KYB gate, `after_payment` per session) is built
+  (20-Nov-2026, `docs/plan-payments.md` §6.1, §6.2). 5c is next.
 - Decided 19-Nov-2026: the test setup may route chosen merchants to a
   real vendor's sandbox next to the fakes, once that vendor's module
   exists; every provider account is `fake`, `sandbox` or `live`, and the
@@ -144,7 +147,9 @@ and wins where the two differ.
   changing a `.ts` file. Every page works without them: a script only
   improves a form or table the server already handles (the quote page
   re-quotes as you type; the data and answers tables get a filter).
-- Checks: the shared order plus `npx tsc`; pyright in strict mode. `scripts/` holds
+- Checks: the shared order plus `npx tsc`; pyright in strict mode.
+  `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
+  the invoice PDF; it also needs Pango from the system). `scripts/` holds
   PEP 723 scripts with their own dependencies (`uv run scripts/markets.py
   check`); they are outside the package's pyright run.
 
@@ -158,7 +163,7 @@ uv run python -m mor.probe               # start a probe, exit 0 once the worker
 uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod; uvicorn reloads it on a change under src/
 uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor and courier accounts at the fake, a fake PSP account per wiring with a default route, the Sandbox Shop merchant and its key (server must run)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
-uv run python -m mor.merchants           # create/list merchants; `key mer_…` prints a new API key once; `revoke <key id>`
+uv run python -m mor.merchants           # create/list merchants; `key mer_…` prints a new API key once; `revoke <key id>`; `kyb mer_… approved` (or pending, suspended)
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
 npx tsc                                  # compile ts/ into static/js/ (after `npm install` once)
 uv run pytest                            # drops and recreates mor_test, then runs the suite

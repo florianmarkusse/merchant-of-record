@@ -1,0 +1,73 @@
+/* The invoice (src/mor/web/invoice_html.py), as a page and as a PDF:
+   one stylesheet for both. A document, so light only. WeasyPrint reads it
+   from disk and fetches nothing. */
+
+@page {
+  size: A4;
+  margin: 18mm 16mm;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: #1c2026;
+  font: 11pt/1.45 "DejaVu Sans", system-ui, sans-serif;
+}
+
+.invoice {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+@media print {
+  .invoice { padding: 0; }
+}
+
+h1 { font-size: 1.5em; margin: 0 0 0.75rem; }
+h2 { font-size: 1em; margin: 0 0 0.25rem; }
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 1rem;
+  margin: 0 0 1.25rem;
+}
+.facts dt { color: #5c6470; }
+.facts dd { margin: 0; }
+
+.parties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 3rem;
+  margin-bottom: 1.25rem;
+}
+.parties > div { flex: 1 1 14rem; }
+.parties p { margin: 0.25rem 0 0; }
+
+address { font-style: normal; }
+address span { display: block; }
+
+.lines {
+  width: 100%;
+  border-collapse: collapse;
+}
+.lines th, .lines td {
+  text-align: left;
+  padding: 0.35rem 0.5rem 0.35rem 0;
+  border-bottom: 1px solid #dde1e7;
+  vertical-align: top;
+}
+.lines .num { text-align: right; white-space: nowrap; }
+.lines thead th { font-weight: 600; color: #5c6470; }
+.lines .section th { padding-top: 0.9rem; font-weight: 600; }
+.lines .rule { display: block; font-size: 0.85em; color: #5c6470; }
+.lines .total th, .lines .total td {
+  font-weight: 700;
+  border-bottom: none;
+  border-top: 2px solid #1c2026;
+}
+
+.note { margin-top: 1rem; color: #5c6470; font-size: 0.9em; }

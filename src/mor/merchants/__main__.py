@@ -1,10 +1,12 @@
-"""Merchants and API keys from the command line, until there is a
-dashboard (docs/plan-quote.md §5, 4d-1).
+"""Merchants, API keys and KYB from the command line, until there is a
+dashboard and staff sign-in (docs/plan-quote.md §5, 4d-1;
+docs/plan-payments.md §6.1).
 
     uv run python -m mor.merchants create "Legal Name Co., Ltd." "Shop Name"
     uv run python -m mor.merchants list
     uv run python -m mor.merchants key mer_…        # prints the key, once
     uv run python -m mor.merchants revoke <key id>
+    uv run python -m mor.merchants kyb mer_… approved   # pending, suspended
 
 Keys are for the environment the command runs in (`ENVIRONMENT`), and
 work only there.
@@ -19,7 +21,7 @@ from datetime import UTC, datetime
 from mor.audit import Actor, ActorKind
 from mor.config import load_settings
 from mor.db.connect import connect
-from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS
+from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, KybState
 from mor.merchants.store import (
     create_api_key,
     create_merchant,
@@ -27,6 +29,7 @@ from mor.merchants.store import (
     merchants,
     read_merchant,
     revoke_api_key,
+    set_kyb_state,
 )
 from mor.public_ids import MERCHANT_PREFIX, parse_id, public_id
 
@@ -49,6 +52,9 @@ async def _main(argv: list[str]) -> int:
     key.add_argument("merchant")
     revoke = commands.add_parser("revoke", help="revoke an API key")
     revoke.add_argument("key_id")
+    kyb = commands.add_parser("kyb", help="set a merchant's KYB state")
+    kyb.add_argument("merchant")
+    kyb.add_argument("state", choices=[state.value for state in KybState])
     args = parser.parse_args(argv)
     settings = load_settings(os.environ)
     now = datetime.now(UTC)
@@ -72,6 +78,7 @@ async def _main(argv: list[str]) -> int:
                         public_id(MERCHANT_PREFIX, merchant.id),
                         merchant.display_name,
                         f"({merchant.legal_name})",
+                        f"kyb {merchant.kyb_state}",
                     )
             case "key":
                 merchant_id = parse_id(MERCHANT_PREFIX, args.merchant)
@@ -93,6 +100,16 @@ async def _main(argv: list[str]) -> int:
                     return 1
                 await conn.commit()
                 print(f"revoked {args.key_id}")
+            case "kyb":
+                merchant_id = parse_id(MERCHANT_PREFIX, args.merchant)
+                state = KybState(args.state)
+                if merchant_id is None or not await set_kyb_state(
+                    conn, merchant_id, state, OPERATOR, now
+                ):
+                    print(f"no merchant {args.merchant}", file=sys.stderr)
+                    return 1
+                await conn.commit()
+                print(f"{args.merchant} kyb {state}")
             case _:
                 raise AssertionError(args.command)
     return 0

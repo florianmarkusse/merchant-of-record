@@ -7,42 +7,15 @@ component, shipping, and each duty and tax with who collects it), and
 they sum to its total.
 """
 
-from typing import Literal, assert_never
+from typing import assert_never
 
 import msgspec
 
 from mor.markets.records import Collector
-from mor.quote.build import Part, PartKind, Quote
+from mor.quote.build import Part, Quote
+from mor.quote.groups import group_of
 from mor.quote.refusals import Refusal
 from mor.web.api_wire import ApiError, ErrorType, MoneyOut, money_out
-
-
-type Group = Literal["goods", "fees", "shipping", "duties_and_taxes"]
-
-
-def group_of(kind: PartKind) -> Group:
-    match kind:
-        case PartKind.GOODS:
-            return "goods"
-        case PartKind.PSP_FEE | PartKind.FX | PartKind.MOR_MARGIN:
-            return "fees"
-        case (
-            PartKind.FREIGHT
-            | PartKind.SURCHARGE
-            | PartKind.FUEL
-            | PartKind.DUTY_PAID_FEE
-        ):
-            return "shipping"
-        case (
-            PartKind.DUTY
-            | PartKind.ADDITIONAL_DUTY
-            | PartKind.CUSTOMS_FEE
-            | PartKind.IMPORT_TAX
-            | PartKind.OTHER_TAX
-        ):
-            return "duties_and_taxes"
-        case _:
-            assert_never(kind)
 
 
 def collected_by(collector: Collector | None) -> str | None:

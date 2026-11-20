@@ -29,6 +29,7 @@ class ConsumerName(StrEnum):
     PSP_INBOX_DECODE = "psp_inbox_decode"
     PAYMENT_EVENT_APPLY = "payment_event_apply"
     ORDER_CREATE = "order_create"
+    INVOICE_ISSUE = "invoice_issue"
     SESSION_PAYMENT_ENDED = "session_payment_ended"
 
 
@@ -93,6 +94,8 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.PAYMENT_EVENT_APPLY,)
         case MessageType.PAYMENT_CAPTURED:
             return (ConsumerName.ORDER_CREATE,)
+        case MessageType.ORDER_PAID:
+            return (ConsumerName.INVOICE_ISSUE,)
         case (
             MessageType.PAYMENT_DECLINED
             | MessageType.PAYMENT_EXPIRED
@@ -113,12 +116,12 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             | MessageType.QUOTE_REFUSED
             | MessageType.CHECKOUT_SESSION_EXPIRED
             # Records for now: what the page shows. A person reads the
-            # needs-person list; the invoice (5b) and merchant webhooks
-            # consume the rest.
+            # needs-person list; merchant webhooks and emails consume the
+            # rest.
             | MessageType.PAYMENT_ACTION_REQUIRED
             | MessageType.PAYMENT_NEEDS_PERSON
             | MessageType.CHECKOUT_SESSION_COMPLETED
-            | MessageType.ORDER_PAID
+            | MessageType.INVOICE_ISSUED
         ):
             return ()
         case _:
@@ -141,6 +144,7 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.PSP_INBOX_DECODE
             | ConsumerName.PAYMENT_EVENT_APPLY
             | ConsumerName.ORDER_CREATE
+            | ConsumerName.INVOICE_ISSUE
             | ConsumerName.SESSION_PAYMENT_ENDED
         ):
             return "local"

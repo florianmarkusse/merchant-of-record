@@ -152,3 +152,7 @@ details summary { cursor: pointer; }
 details form.address { border: 0; padding: 0; margin-top: 12px; }
 
 footer { color: var(--muted); font-size: 0.85rem; padding-bottom: 2rem; }
+
+/* The order page's delivery address (src/mor/web/order_html.py): a line each. */
+address { font-style: normal; }
+address span { display: block; }

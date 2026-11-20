@@ -3,10 +3,12 @@ fake PSP and the worker (docs/plan-payments.md §8). Each run draws the
 account's wiring: how news arrives (fat or thin webhooks, polling), how it
 captures (sale, or authorise then capture) and its duplicate guard.
 
-Actions: the buyer pays (also twice at once), pays another way, approves,
+Actions: the buyer pays (also twice at once), pays and approves at once,
+pays another way, approves,
 declines or lets a payment expire on the PSP's side; the PSP pushes again
 every event, newest first; run a delivery; the worker catches up; crash
-after an effect's `prepare`, or after its call; script a PSP fault; refuse
+after an effect's `prepare`, or after its call, or inside a local step
+before its commit; script a PSP fault; refuse
 the next connection; move the clock, now and then past a quote's hold, a
 QR's life or a session's.
 
@@ -16,10 +18,11 @@ open attempt or one waiting on a person, completed has its order, any
 other state has no open attempt); each order has its one capture entry,
 and `psp_clearing` holds exactly the captured amounts; the PSP charged no
 reference twice, and every charge is an attempt we captured or handed to
-a person; no advisory lock is left held.
+a person; invoice numbers run 1…n per series with no gap, and each
+invoice is for what its payment captured; no advisory lock is left held.
 After draining with faults off: no attempt is stuck, only those waiting
-on the buyer are still open, and every charge the PSP made is booked or
-waits on a person.
+on the buyer are still open, every charge the PSP made is booked or
+waits on a person, and every order has its invoice.
 """
 
 import asyncio
@@ -51,11 +54,12 @@ from mor.messaging.worker import (
     Failed,
     Prepared,
     find_candidates,
+    handle_delivery,
     prepare_delivery,
     run_one,
     try_lock_aggregate,
 )
-from mor.payments.flow import pay, pay_another_way
+from mor.payments.flow import Paying, pay, pay_another_way
 from mor.psp.port import CaptureMode, StatusMode
 from tests.helpers import ENV, TEST_URL, crash, empty_tables, wire
 from tests.payments.support import (
@@ -71,6 +75,10 @@ from tests.payments.support import (
 T0 = NOW
 FAULTS = ("fail_500", "fail_500_after_work", "timeout_after_work", "decline")
 OPERATIONS = ("create", "capture", "cancel", "get")
+
+
+class _CrashBeforeCommit(Exception):
+    """Ends a local step's transaction the way a crash would: unfinished."""
 
 
 class PaymentFlow(RuleBasedStateMachine):
@@ -149,6 +157,45 @@ class PaymentFlow(RuleBasedStateMachine):
                 await asyncio.gather(one(), one())
             else:
                 await one()
+
+        self.run(step())
+
+    @rule(session=st.integers(0, 1), method=st.sampled_from(("card", "qr")))
+    def the_buyer_pays_and_approves(self, session: int, method: str) -> None:
+        """The way most buyers go, as one action, so runs reach a capture,
+        an order and an invoice: pay, the worker makes the payment, the
+        buyer approves it. What follows (the capture, the order, the
+        invoice) is left to the other actions, crashes among them."""
+        session_id = self.sessions[session]
+
+        async def step() -> None:
+            async with await connect(TEST_URL) as conn:
+                paid = await pay(
+                    conn,
+                    session_id,
+                    self.options[session_id],
+                    method,
+                    "http://mor/c/back",
+                    ACTOR,
+                    self.now,
+                )
+                await conn.commit()
+            if not isinstance(paid, Paying):
+                return
+            await self._catch_up()
+            cur = await self.worker.execute(
+                "SELECT id FROM fake_vendor.psp_fake_payment"
+                " WHERE reference = %s AND status = 'requires_action'",
+                (str(paid.attempt_id),),
+            )
+            row = await cur.fetchone()
+            if row is None:  # a fault ended it, or it is still being made
+                return
+            response = await self.control.post(
+                f"http://mor/_fake/psp/acct/payments/{row[0]}/release",
+                json={"outcome": "paid", "push": "once"},
+            )
+            assert response.status_code == 200, response.text
 
         self.run(step())
 
@@ -235,6 +282,16 @@ class PaymentFlow(RuleBasedStateMachine):
                 await crash(crashing)
 
         self.run(step())
+
+    @rule(data=st.data())
+    def crash_inside_a_local_step(self, data: st.DataObject) -> None:
+        """Drawn among local steps only: a local step is one transaction,
+        and the window before it runs is short."""
+        candidates = self.run(find_candidates(self.worker, self.now, 50))
+        local = [c for c in candidates if consumer_kind(c.consumer) == "local"]
+        if not local:
+            return
+        self.run(self._crash_in_a_local_step(data.draw(st.sampled_from(local))))
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
     @rule(operation=st.sampled_from(OPERATIONS), fault=st.sampled_from(FAULTS))
@@ -373,6 +430,39 @@ class PaymentFlow(RuleBasedStateMachine):
         assert self.run(cur.fetchall()) == []
 
     @invariant()
+    def invoice_numbers_run_without_a_gap_and_match_their_payment(self) -> None:
+        """Per series 1…n, no gap and no repeat, and the counter one past
+        the last; each invoice for exactly what its payment captured."""
+        cur = self.run(
+            self.worker.execute(
+                """
+                SELECT s.code, s.next_number,
+                  coalesce((SELECT array_agg(i.number ORDER BY i.number)
+                            FROM invoice i WHERE i.series = s.code), '{}')
+                FROM invoice_series s
+                """
+            )
+        )
+        for code, next_number, numbers in self.run(cur.fetchall()):
+            assert numbers == list(range(1, len(numbers) + 1)), (code, numbers)
+            assert next_number == len(numbers) + 1, (code, next_number)
+        cur = self.run(
+            self.worker.execute(
+                """
+                SELECT i.number_text FROM invoice i
+                JOIN order_ o ON o.id = i.order_id
+                JOIN payment_attempt a ON a.id = o.attempt_id
+                WHERE i.total_minor <> a.amount_minor
+                   OR i.currency <> a.currency
+                   OR i.total_minor <> (SELECT sum(l.amount_minor)
+                                        FROM invoice_line l
+                                        WHERE l.invoice_id = i.id)
+                """
+            )
+        )
+        assert self.run(cur.fetchall()) == []
+
+    @invariant()
     def no_advisory_lock_is_left_held(self) -> None:
         cur = self.run(
             self.worker.execute(
@@ -384,6 +474,21 @@ class PaymentFlow(RuleBasedStateMachine):
         assert self.run(cur.fetchone()) == (0,)
 
     # --- helpers ---------------------------------------------------------
+
+    async def _crash_in_a_local_step(self, candidate: Candidate) -> None:
+        """A local consumer's work done, and the worker gone before its one
+        commit: nothing of it may stay (an invoice number taken, say)."""
+        crashing = await connect(TEST_URL, autocommit=True)
+        try:
+            assert await try_lock_aggregate(crashing, candidate)
+            try:
+                async with crashing.transaction():
+                    await handle_delivery(crashing, candidate, ENV, self.now)
+                    raise _CrashBeforeCommit
+            except _CrashBeforeCommit:
+                pass
+        finally:
+            await crash(crashing)
 
     async def _faults_waiting(self) -> int:
         cur = await self.worker.execute(
@@ -434,6 +539,14 @@ class PaymentFlow(RuleBasedStateMachine):
         )
         unbooked = await cur.fetchall()
         assert unbooked == [], f"charges neither booked nor with a person: {unbooked}"
+        cur = await self.worker.execute(
+            "SELECT o.id FROM order_ o"
+            " WHERE NOT EXISTS (SELECT 1 FROM invoice i WHERE i.order_id = o.id)"
+        )
+        uninvoiced = await cur.fetchall()
+        assert uninvoiced == [], (
+            f"orders without an invoice after the drain: {uninvoiced}"
+        )
 
 
 def _examples() -> int:

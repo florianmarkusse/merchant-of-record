@@ -54,13 +54,14 @@ from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
 from mor.markets.records import PriceSource
 from mor.markets.store import latest_load, read_market
-from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, NewKey
+from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, KybState, NewKey
 from mor.merchants.store import (
     create_api_key,
     create_merchant,
     key_env,
     merchant_has_key,
     merchants,
+    set_kyb_state,
 )
 from mor.messaging.guard import DuplicateGuard
 from mor.provider_accounts import ProviderAccountKind
@@ -400,9 +401,11 @@ async def seed_merchant(
         return SeedInProd()
     legal_name, display_name = SANDBOX_MERCHANT
     merchant_id: uuid.UUID | None = None
+    approved = False
     for merchant in await merchants(conn):
         if merchant.legal_name == legal_name:
             merchant_id = merchant.id
+            approved = merchant.kyb_state == KybState.APPROVED
     if merchant_id is None:
         created = await create_merchant(
             conn,
@@ -414,6 +417,9 @@ async def seed_merchant(
             now,
         )
         merchant_id = created.id
+    if not approved:
+        # The sandbox's KYB is at once (docs/plan-payments.md §6.1).
+        await set_kyb_state(conn, merchant_id, KybState.APPROVED, SEEDER, now)
     if await merchant_has_key(conn, merchant_id):
         return None
     return await create_api_key(conn, merchant_id, key_env(settings.environment), now)

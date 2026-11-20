@@ -8,6 +8,7 @@ import uuid
 SESSION_PREFIX = "cs_"
 MERCHANT_PREFIX = "mer_"
 QUOTE_PREFIX = "qt_"
+ORDER_PREFIX = "ord_"
 
 
 def public_id(prefix: str, value: uuid.UUID) -> str:

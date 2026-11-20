@@ -20,6 +20,7 @@ from mor.echo import inbound as echo_inbound
 from mor.echo import reports as echo_reports
 from mor.echo import tracking as echo_tracking
 from mor.echo.port import OutcomeUnknown, Page, ReportList, Unavailable
+from mor.invoices import store as invoice_store
 from mor.messaging.facts import Fact
 from mor.messaging.outcome import ConsumerOutcome, NoCall, StepResult
 from mor.messaging.routing import ConsumerName
@@ -86,6 +87,8 @@ async def handle(
             return await payment_inbound.apply_event(conn, fact, now)
         case ConsumerName.ORDER_CREATE:
             return await order_flow.create_order(conn, fact, now)
+        case ConsumerName.INVOICE_ISSUE:
+            return await invoice_store.issue_invoice(conn, fact, now)
         case ConsumerName.SESSION_PAYMENT_ENDED:
             return await checkout_flow.end_payment(conn, fact, now)
         case (
@@ -140,6 +143,7 @@ async def prepare(
             | ConsumerName.PSP_INBOX_DECODE
             | ConsumerName.PAYMENT_EVENT_APPLY
             | ConsumerName.ORDER_CREATE
+            | ConsumerName.INVOICE_ISSUE
             | ConsumerName.SESSION_PAYMENT_ENDED
         ):
             raise WrongKind(f"{consumer} is a local consumer")
@@ -294,6 +298,7 @@ async def complete(
             | ConsumerName.PSP_INBOX_DECODE
             | ConsumerName.PAYMENT_EVENT_APPLY
             | ConsumerName.ORDER_CREATE
+            | ConsumerName.INVOICE_ISSUE
             | ConsumerName.SESSION_PAYMENT_ENDED
         ):
             raise WrongKind(f"{consumer} is a local consumer")

@@ -12,6 +12,7 @@ from mor.audit import Actor
 from mor.checkout.addresses import Address
 from mor.checkout.records import (
     SESSION_LIFETIME,
+    AfterPayment,
     CheckoutSession,
     Customs,
     SessionDraft,
@@ -40,9 +41,9 @@ async def create_session(
         """
         INSERT INTO checkout_session
           (id, merchant_id, state, merchant_reference, return_url, cancel_url,
-           weight_g, length_mm, width_mm, height_mm, created_at, expires_at,
-           actor_kind, actor_id)
-        VALUES (%s, %s, 'open', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+           after_payment, weight_g, length_mm, width_mm, height_mm, created_at,
+           expires_at, actor_kind, actor_id)
+        VALUES (%s, %s, 'open', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             session_id,
@@ -50,6 +51,7 @@ async def create_session(
             draft.merchant_reference,
             draft.return_url,
             draft.cancel_url,
+            draft.after_payment.value,
             parcel.weight_g,
             parcel.length_mm,
             parcel.width_mm,
@@ -109,6 +111,7 @@ async def create_session(
         draft.merchant_reference,
         draft.return_url,
         draft.cancel_url,
+        draft.after_payment,
         now,
         expires_at,
         None,
@@ -124,6 +127,7 @@ class _SessionRow:
     merchant_reference: str | None
     return_url: str
     cancel_url: str
+    after_payment: str
     weight_g: int
     length_mm: int
     width_mm: int
@@ -188,6 +192,7 @@ async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession
         row.merchant_reference,
         row.return_url,
         row.cancel_url,
+        AfterPayment(row.after_payment),
         row.created_at,
         row.expires_at,
         row.address_id,
@@ -203,8 +208,9 @@ async def read_session(
         await cur.execute(
             """
             SELECT id, merchant_id, state::text, merchant_reference, return_url,
-                   cancel_url, weight_g, length_mm, width_mm, height_mm,
-                   created_at, expires_at, address_id, quote_id
+                   cancel_url, after_payment::text, weight_g, length_mm,
+                   width_mm, height_mm, created_at, expires_at, address_id,
+                   quote_id
             FROM checkout_session WHERE id = %s AND merchant_id = %s
             """,
             (session_id, merchant_id),
@@ -221,8 +227,9 @@ async def session_by_id(
         await cur.execute(
             """
             SELECT id, merchant_id, state::text, merchant_reference, return_url,
-                   cancel_url, weight_g, length_mm, width_mm, height_mm,
-                   created_at, expires_at, address_id, quote_id
+                   cancel_url, after_payment::text, weight_g, length_mm,
+                   width_mm, height_mm, created_at, expires_at, address_id,
+                   quote_id
             FROM checkout_session WHERE id = %s
             """,
             (session_id,),
@@ -239,8 +246,9 @@ async def lock_session(
         await cur.execute(
             """
             SELECT id, merchant_id, state::text, merchant_reference, return_url,
-                   cancel_url, weight_g, length_mm, width_mm, height_mm,
-                   created_at, expires_at, address_id, quote_id
+                   cancel_url, after_payment::text, weight_g, length_mm,
+                   width_mm, height_mm, created_at, expires_at, address_id,
+                   quote_id
             FROM checkout_session WHERE id = %s FOR UPDATE
             """,
             (session_id,),

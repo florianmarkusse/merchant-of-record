@@ -17,10 +17,11 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from mor.audit import Actor, ActorKind
-from mor.checkout.quotes import StoredQuote, read_quote
+from mor.checkout.quotes import MadeQuote, StoredQuote, read_quote
 from mor.checkout.sessions import create_session, read_address, read_session
 from mor.config import Settings
 from mor.db.connect import Connection, connect
+from mor.invoices.store import invoice_for_order
 from mor.markets.store import market_in_force
 from mor.merchants.idempotency import (
     Claimed,
@@ -30,9 +31,15 @@ from mor.merchants.idempotency import (
     store_response,
 )
 from mor.merchants.records import Authenticated
-from mor.merchants.store import authenticate, key_env
+from mor.merchants.store import (
+    authenticate,
+    key_env,
+    read_merchant,
+    set_support_email,
+)
 from mor.merchants.vendor_asks import take_vendor_asks
-from mor.public_ids import SESSION_PREFIX, parse_id
+from mor.orders.store import order_by_session, read_order
+from mor.public_ids import ORDER_PREFIX, SESSION_PREFIX, parse_id
 from mor.quote.build import (
     InputsMissing,
     Quote,
@@ -54,9 +61,12 @@ from mor.web.api_wire import (
     ErrorType,
     EstimateIn,
     SessionIn,
+    SettingsIn,
     decode,
     error_response,
     json_response,
+    merchant_out,
+    order_out,
     parcel_of,
     request_sha256,
     session_draft,
@@ -137,7 +147,7 @@ async def create_checkout_session(
             return error_response(draft)
         actor = Actor(ActorKind.MERCHANT_API_KEY, auth.key_id)
         session = await create_session(conn, merchant_id, draft, actor, now)
-        body = session_out(session, settings.self_url, None, None)
+        body = session_out(session, settings.self_url, None, None, None)
         await store_response(conn, merchant_id, key, 201, body)
         await conn.commit()
     return json_response(201, body)
@@ -165,7 +175,68 @@ async def get_checkout_session(request: Request, settings: Settings) -> Response
         quote: StoredQuote | None = None
         if session.quote_id is not None:
             quote = await read_quote(conn, session.quote_id)
-    return json_response(200, session_out(session, settings.self_url, country, quote))
+        order = await order_by_session(conn, session.id)
+    order_id = None if order is None else order.id
+    return json_response(
+        200, session_out(session, settings.self_url, country, quote, order_id)
+    )
+
+
+async def get_order(request: Request, settings: Settings) -> Response:
+    """The merchant's own order, with the full address for fulfilment
+    (docs/plan-payments.md §6.1); another merchant's is a 404."""
+    not_found = ApiError(404, ErrorType.NOT_FOUND, "not_found", "no such order", "id")
+    async with await connect(settings.database_url) as conn:
+        auth = await _authenticated(conn, request, settings)
+        if auth is None:
+            return error_response(AUTH_FAILED)
+        order_id = parse_id(ORDER_PREFIX, request.path_params["order_id"])
+        if order_id is None:
+            return error_response(not_found)
+        order = await read_order(conn, auth.merchant.id, order_id)
+        if order is None:
+            return error_response(not_found)
+        session = await read_session(conn, auth.merchant.id, order.session_id)
+        assert session is not None
+        quote = await read_quote(conn, order.quote_id)
+        assert isinstance(quote, MadeQuote)
+        address = await read_address(conn, order.address_id)
+        assert address is not None
+        invoice = await invoice_for_order(conn, order.id)
+    number = None if invoice is None else invoice.number_text
+    return json_response(
+        200, order_out(order, session, quote, address, number, settings.self_url)
+    )
+
+
+async def get_merchant(request: Request, settings: Settings) -> Response:
+    async with await connect(settings.database_url) as conn:
+        auth = await _authenticated(conn, request, settings)
+    if auth is None:
+        return error_response(AUTH_FAILED)
+    return json_response(200, merchant_out(auth.merchant))
+
+
+async def post_merchant_settings(
+    request: Request, settings: Settings, now: datetime
+) -> Response:
+    """The merchant's own settings (docs/plan-payments.md §6.1). No
+    Idempotency-Key: setting the same values again changes nothing."""
+    async with await connect(settings.database_url) as conn:
+        auth = await _authenticated(conn, request, settings)
+        if auth is None:
+            return error_response(AUTH_FAILED)
+        decoded = decode(await request.body(), SettingsIn)
+        if isinstance(decoded, ApiError):
+            return error_response(decoded)
+        actor = Actor(ActorKind.MERCHANT_API_KEY, auth.key_id)
+        await set_support_email(
+            conn, auth.merchant.id, decoded.support_email, actor, now
+        )
+        merchant = await read_merchant(conn, auth.merchant.id)
+        assert merchant is not None
+        await conn.commit()
+    return json_response(200, merchant_out(merchant))
 
 
 def _next_utc_midnight_s(now: datetime) -> int:

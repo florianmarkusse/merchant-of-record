@@ -75,6 +75,7 @@ class MessageType(StrEnum):
     PSP_EVENT_RECEIVED = "psp_event_received"
     CHECKOUT_SESSION_COMPLETED = "checkout_session_completed"
     ORDER_PAID = "order_paid"
+    INVOICE_ISSUED = "invoice_issued"
 
 
 @dataclass(frozen=True)
@@ -366,10 +367,19 @@ class CheckoutSessionCompletedV1(
 
 
 class OrderPaidV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
-    """An order exists and is paid. Its invoice comes in 5b."""
+    """An order exists and is paid; its invoice is issued next."""
 
     order_id: uuid.UUID
     checkout_session_id: uuid.UUID
+    merchant_id: uuid.UUID
+
+
+class InvoiceIssuedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """An order's invoice is issued, numbered in its series. A record for
+    now; merchant webhooks and the buyer's email consume it later."""
+
+    invoice_id: uuid.UUID
+    order_id: uuid.UUID
     merchant_id: uuid.UUID
 
 
@@ -418,6 +428,7 @@ type Fact = (
     | PspEventReceivedV1
     | CheckoutSessionCompletedV1
     | OrderPaidV1
+    | InvoiceIssuedV1
 )
 
 
@@ -525,6 +536,8 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.CHECKOUT_SESSION_COMPLETED, 1)
         case OrderPaidV1():
             return FactType(MessageType.ORDER_PAID, 1)
+        case InvoiceIssuedV1():
+            return FactType(MessageType.INVOICE_ISSUED, 1)
         case _:
             assert_never(fact)
 
@@ -594,7 +607,7 @@ def aggregate_of(fact: Fact) -> Aggregate:
             return Aggregate(AggregateType.PAYMENT_ATTEMPT, attempt_id)
         case PspInboxStoredV1(psp_account_id=account_id):
             return Aggregate(AggregateType.PSP_ACCOUNT, account_id)
-        case OrderPaidV1(order_id=order_id):
+        case OrderPaidV1(order_id=order_id) | InvoiceIssuedV1(order_id=order_id):
             return Aggregate(AggregateType.ORDER, order_id)
         case _:
             assert_never(fact)
@@ -708,6 +721,8 @@ def decode(
             decoded = _decode(payload, CheckoutSessionCompletedV1)
         case MessageType.ORDER_PAID:
             decoded = _decode(payload, OrderPaidV1)
+        case MessageType.INVOICE_ISSUED:
+            decoded = _decode(payload, InvoiceIssuedV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

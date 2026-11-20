@@ -18,6 +18,7 @@ from mor.merchants.records import (
     Authenticated,
     KeyEnv,
     KeyState,
+    KybState,
     Merchant,
     NewKey,
 )
@@ -55,6 +56,8 @@ class _MerchantRow:
     country: str
     daily_vendor_asks: int
     created_at: datetime
+    kyb_state: str
+    support_email: str | None
 
 
 def _merchant(row: _MerchantRow) -> Merchant:
@@ -65,6 +68,8 @@ def _merchant(row: _MerchantRow) -> Merchant:
         row.country,
         row.daily_vendor_asks,
         row.created_at,
+        KybState(row.kyb_state),
+        row.support_email,
     )
 
 
@@ -97,7 +102,14 @@ async def create_merchant(
         ),
     )
     return Merchant(
-        merchant_id, legal_name, display_name, country, daily_vendor_asks, now
+        merchant_id,
+        legal_name,
+        display_name,
+        country,
+        daily_vendor_asks,
+        now,
+        KybState.PENDING,
+        None,
     )
 
 
@@ -106,7 +118,7 @@ async def read_merchant(conn: Connection, merchant_id: uuid.UUID) -> Merchant | 
         await cur.execute(
             """
             SELECT id, legal_name, display_name, country, daily_vendor_asks,
-                   created_at
+                   created_at, kyb_state::text, support_email
             FROM merchant WHERE id = %s
             """,
             (merchant_id,),
@@ -122,7 +134,7 @@ async def merchants(conn: Connection) -> list[Merchant]:
         await cur.execute(
             """
             SELECT id, legal_name, display_name, country, daily_vendor_asks,
-                   created_at
+                   created_at, kyb_state::text, support_email
             FROM merchant ORDER BY id
             """
         )
@@ -131,6 +143,67 @@ async def merchants(conn: Connection) -> list[Merchant]:
     for row in rows:
         found.append(_merchant(row))
     return found
+
+
+async def set_kyb_state(
+    conn: Connection,
+    merchant_id: uuid.UUID,
+    state: KybState,
+    actor: Actor,
+    now: datetime,
+) -> bool:
+    """Under the merchant's row lock, so a change and a pay step (which
+    reads the state `FOR SHARE`) cannot cross. Records who changed it.
+    False if there is no such merchant. Never commits."""
+    cur = await conn.execute(
+        "SELECT 1 FROM merchant WHERE id = %s FOR UPDATE", (merchant_id,)
+    )
+    if await cur.fetchone() is None:
+        return False
+    await conn.execute(
+        "UPDATE merchant SET kyb_state = %s WHERE id = %s",
+        (state.value, merchant_id),
+    )
+    await conn.execute(
+        """
+        INSERT INTO merchant_kyb_change
+          (id, merchant_id, state, changed_at, actor_kind, actor_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (uuid.uuid7(), merchant_id, state.value, now, actor.kind.value, actor.id),
+    )
+    return True
+
+
+async def kyb_state_for_pay(conn: Connection, merchant_id: uuid.UUID) -> KybState:
+    """The state a pay step decides on, held `FOR SHARE` until it commits:
+    a KYB change waits for it, and it waits for a KYB change."""
+    cur = await conn.execute(
+        "SELECT kyb_state::text FROM merchant WHERE id = %s FOR SHARE",
+        (merchant_id,),
+    )
+    row = await cur.fetchone()
+    assert row is not None, f"no merchant {merchant_id}"
+    return KybState(row[0])
+
+
+async def set_support_email(
+    conn: Connection,
+    merchant_id: uuid.UUID,
+    support_email: str | None,
+    actor: Actor,
+    now: datetime,
+) -> None:
+    """The merchant's own setting. Never commits."""
+    await conn.execute(
+        """
+        UPDATE merchant
+        SET support_email = %s, settings_changed_at = %s,
+            settings_actor_kind = %s, settings_actor_id = %s
+        WHERE id = %s
+        """,
+        (support_email, now, actor.kind.value, actor.id, merchant_id),
+    )
 
 
 async def create_api_key(

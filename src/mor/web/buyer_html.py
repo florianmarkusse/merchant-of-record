@@ -20,20 +20,21 @@ from mor.checkout.addresses import Address, AddressError, AddressErrors
 from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredOption, StoredPart
 from mor.checkout.records import CheckoutSession, SessionState
 from mor.dates import format_moment
+from mor.entity import ENTITY
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.payments.attempts import Attempt
 from mor.payments.transitions import AttemptState
 from mor.psp.port import PaymentMethod
+from mor.quote.groups import group_of
 from mor.quote.refusals import RefusalCode
-from mor.web.api_estimates import group_of
 from mor.web.qr import qr_svg
 from mor.web.staff_layout import money_text, static_url
 
 
 # Wording needs legal input per country (plan-merchant-surfaces §5): a
-# placeholder until then, and our name with it.
-OUR_NAME = "[our company]"
+# placeholder until then, and our name with it (src/mor/entity.py).
+OUR_NAME = ENTITY.legal_name
 REFRESH_SECONDS = 2
 
 REFUSAL_WORDS: dict[RefusalCode, str] = {
@@ -87,6 +88,7 @@ class BuyerView:
     now: datetime
     attempt: Attempt | None  # the newest payment attempt
     methods: tuple[PaymentMethod, ...]  # what routing offers; none: no route
+    takes_payments: bool  # the merchant's KYB is approved
     status: str  # what the waiting script compares (`buyer.status_text`)
 
 
@@ -319,6 +321,8 @@ def _quote(view: BuyerView, quote: MadeQuote) -> htpy.Node:
 
 
 def _pay_form(view: BuyerView, chosen: StoredOption, currency: Currency) -> htpy.Node:
+    if not view.takes_payments:
+        return htpy.p(class_="notice")["This shop can't take payments right now."]
     if not view.methods:
         return htpy.p(class_="notice")[
             "Payment isn't available for this country yet. The shop has been told."

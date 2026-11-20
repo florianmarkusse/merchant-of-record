@@ -17,7 +17,7 @@ from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from mor.config import Environment, Settings
-from mor.web import api, buyer, sandbox, staff_markets, webhooks
+from mor.web import api, buyer, order_pages, sandbox, staff_markets, webhooks
 from mor.web.staff_layout import STATIC_DIR
 
 
@@ -56,6 +56,15 @@ def make_app(
     async def api_create_estimate(request: Request) -> Response:
         return await api.create_estimate(request, settings, clock())
 
+    async def api_get_order(request: Request) -> Response:
+        return await api.get_order(request, settings)
+
+    async def api_get_merchant(request: Request) -> Response:
+        return await api.get_merchant(request, settings)
+
+    async def api_merchant_settings(request: Request) -> Response:
+        return await api.post_merchant_settings(request, settings, clock())
+
     async def buyer_page(request: Request) -> Response:
         return await buyer.buyer_page(request, settings, clock())
 
@@ -73,6 +82,18 @@ def make_app(
 
     async def buyer_status(request: Request) -> Response:
         return await buyer.get_status(request, settings)
+
+    async def order_page(request: Request) -> Response:
+        return await order_pages.order_page(request, settings)
+
+    async def order_status(request: Request) -> Response:
+        return await order_pages.order_status_route(request, settings)
+
+    async def invoice_page(request: Request) -> Response:
+        return await order_pages.invoice_page(request, settings)
+
+    async def invoice_pdf(request: Request) -> Response:
+        return await order_pages.invoice_pdf_route(request, settings)
 
     async def staff_quote_page(request: Request) -> Response:
         return await staff_markets.quote_page(request, url, clock())
@@ -106,6 +127,9 @@ def make_app(
             methods=["GET"],
         ),
         Route("/v1/estimates", api_create_estimate, methods=["POST"]),
+        Route("/v1/orders/{order_id}", api_get_order, methods=["GET"]),
+        Route("/v1/merchant", api_get_merchant, methods=["GET"]),
+        Route("/v1/merchant/settings", api_merchant_settings, methods=["POST"]),
         # The buyer's checkout page: its link is its own bearer token.
         Route("/c/{session_id}", buyer_page, methods=["GET"]),
         Route("/c/{session_id}/address", buyer_address, methods=["POST"]),
@@ -113,6 +137,11 @@ def make_app(
         Route("/c/{session_id}/pay", buyer_pay, methods=["POST"]),
         Route("/c/{session_id}/pay-another-way", buyer_another_way, methods=["POST"]),
         Route("/c/{session_id}/status", buyer_status, methods=["GET"]),
+        # The buyer's order page and invoice: its token is the bearer secret.
+        Route("/o/{token}", order_page, methods=["GET"]),
+        Route("/o/{token}/status", order_status, methods=["GET"]),
+        Route("/o/{token}/invoice", invoice_page, methods=["GET"]),
+        Route("/o/{token}/invoice.pdf", invoice_pdf, methods=["GET"]),
         # Stylesheets and compiled scripts (static/js/ comes from ts/).
         Mount(
             "/static",

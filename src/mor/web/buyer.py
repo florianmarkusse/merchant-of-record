@@ -9,7 +9,7 @@ The address is personal data: it is never logged.
 
 import uuid
 from datetime import datetime
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import msgspec
 from starlette.requests import Request
@@ -26,14 +26,16 @@ from mor.checkout.flow import (
     submit_address,
 )
 from mor.checkout.quotes import MadeQuote, RefusedQuote, read_quote
-from mor.checkout.records import CheckoutSession, SessionState
+from mor.checkout.records import AfterPayment, CheckoutSession, SessionState
 from mor.checkout.sessions import read_address, session_by_id
 from mor.config import Settings
 from mor.db.connect import Connection, connect
 from mor.markets.records import MarketSet, MarketStatus
 from mor.markets.rules import Open, country_rules
 from mor.markets.store import market_in_force
+from mor.merchants.records import KybState
 from mor.merchants.store import read_merchant
+from mor.orders.store import order_by_session
 from mor.payments.attempts import Attempt, session_attempts
 from mor.payments.flow import (
     AlreadyPaying,
@@ -160,6 +162,7 @@ async def _view(
         now,
         attempt,
         methods,
+        merchant.kyb_state == KybState.APPROVED,
         status_text(session, attempt),
     )
 
@@ -174,6 +177,10 @@ async def buyer_page(request: Request, settings: Settings, now: datetime) -> Res
             return NOT_FOUND
         if _over(session, now):
             return RedirectResponse(session.cancel_url, status_code=303)
+        if session.state == SessionState.COMPLETED:
+            landing = await _landing(conn, session, now)
+            if landing is not None:
+                return RedirectResponse(landing, status_code=303)
         market = await market_in_force(conn)
         if market is None:
             return Response("Checkout is not available right now.", status_code=503)
@@ -181,6 +188,37 @@ async def buyer_page(request: Request, settings: Settings, now: datetime) -> Res
             conn, session, market, now, request.query_params.get("option", "")
         )
     return HTMLResponse(render_buyer_page(view))
+
+
+def with_session_id(url: str, session_id: uuid.UUID) -> str:
+    """The merchant's return URL with our `session_id` set in its query; any
+    other query and the fragment are kept."""
+    parts = urlsplit(url)
+    query: list[tuple[str, str]] = []
+    for name, value in parse_qsl(parts.query, keep_blank_values=True):
+        if name != "session_id":
+            query.append((name, value))
+    query.append(("session_id", f"{SESSION_PREFIX}{session_id.hex}"))
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
+async def _landing(
+    conn: Connection, session: CheckoutSession, now: datetime
+) -> str | None:
+    """Where a paid session sends the buyer, by its `after_payment`
+    (docs/plan-payments.md §6.1); None: the plain "paid" page. `completed`
+    is only ever set after the PSP's capture, never on the browser's word.
+    The order page only while the session would have lived, so a forwarded
+    checkout link does not show the invoice and address for ever."""
+    match session.after_payment:
+        case AfterPayment.MERCHANT_PAGE:
+            return with_session_id(session.return_url, session.id)
+        case AfterPayment.OUR_PAGE:
+            if now >= session.expires_at:
+                return None
+            order = await order_by_session(conn, session.id)
+            assert order is not None, f"completed session {session.id} has no order"
+            return f"/o/{order.buyer_token}"
 
 
 async def post_address(request: Request, settings: Settings, now: datetime) -> Response:
@@ -280,7 +318,13 @@ async def post_pay(request: Request, settings: Settings, now: datetime) -> Respo
                         return NOT_FOUND
                     case "unknown_option" | "unknown_method":
                         return Response("bad form", status_code=400)
-                    case "not_quoted" | "session_over" | "quote_lapsed" | "no_route":
+                    case (
+                        "not_quoted"
+                        | "session_over"
+                        | "quote_lapsed"
+                        | "no_route"
+                        | "merchant_not_approved"
+                    ):
                         pass  # the page shows why, as it now stands
     return RedirectResponse(page, status_code=303)
 

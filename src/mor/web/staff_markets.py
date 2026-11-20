@@ -53,6 +53,7 @@ from mor.duties.lookups import (
 )
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
+from mor.invoices.store import invoice_for_order
 from mor.markets.changes import describe_changes
 from mor.markets.fx import FxMissing
 from mor.markets.fx import rate as fx_rate
@@ -67,6 +68,7 @@ from mor.markets.store import market_in_force, read_market, recent_loads
 from mor.merchants.store import read_merchant
 from mor.money.amount import InvalidAmount, Money, parse_major
 from mor.money.currency import Currency
+from mor.orders.store import order_by_session
 from mor.payments.attempts import session_attempts
 from mor.psp.accounts import read_psp_account
 from mor.public_ids import SESSION_PREFIX, parse_id
@@ -481,8 +483,17 @@ async def session_page(request: Request, database_url: str) -> Response:
             account = await read_psp_account(conn, attempt.psp_account_id)
             assert account is not None
             account_names[account.id.hex] = account.name
+        order = await order_by_session(conn, session_id)
+        invoice = None if order is None else await invoice_for_order(conn, order.id)
     return HTMLResponse(
         render_session_page(
-            session, merchant.display_name, countries, quotes, attempts, account_names
+            session,
+            merchant.display_name,
+            countries,
+            quotes,
+            attempts,
+            account_names,
+            order,
+            None if invoice is None else invoice.number_text,
         )
     )
