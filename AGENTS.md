@@ -182,6 +182,12 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 - A new property test or fuzzer joins a target in `deploy/soak.sh` in the
   same change, with a budget from a timed run; `tests/test_soak_targets.py`
   fails until it does.
+- A state machine fuzzer lists its milestones and records its reach
+  (`tests/flow/reach.py`); the soak fails a milestone reached by fewer than
+  1 run in 200. Depth comes from structure (machines split by stage, a deep
+  start, per-run fault plans, preconditioned rules), not from
+  `hypothesis.target`, which was measured and dropped
+  (`docs/plan-fuzz-reach.md`).
 - Async tests: pytest functions are synchronous and run their async body
   with `asyncio.run`, one event loop per call; no pytest async plugin.
 - The ledger refuses `UPDATE` and `DELETE` by trigger but not `TRUNCATE`

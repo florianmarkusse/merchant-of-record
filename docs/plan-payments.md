@@ -492,7 +492,9 @@ account reaching zero after each batch is the health figure.
 - Pages at their edge: pay with an expired quote shows the current
   price; a double pay makes one attempt; a cross-site POST is refused;
   each state renders; the return from the hosted page shows waiting.
-- A Hypothesis state machine for the payment flow against the test
+- (Since 20-Nov-2026 two machines, split at the capture, with their reach
+  measured: `docs/plan-fuzz-reach.md`.) A Hypothesis state machine for the
+  payment flow against the test
   database and the fake PSP, drawing the account's modes per run.
   Actions: pay (twice), pay another way, the buyer's approve / decline /
   leave, the PSP's webhook once, twice, late, out of order or badly

@@ -1,33 +1,35 @@
-"""The payment flow as a Hypothesis state machine against mor_test, the
-fake PSP and the worker (docs/plan-payments.md §8). Each run draws the
-account's wiring: how news arrives (fat or thin webhooks, polling), how it
-captures (sale, or authorise then capture) and its duplicate guard.
+"""The payment flow up to the capture as a Hypothesis state machine
+against mor_test, the fake PSP and the worker (docs/plan-payments.md §8,
+docs/plan-fuzz-reach.md). Each run draws the account's wiring: how news
+arrives (fat or thin webhooks, polling), how it captures (sale, or
+authorise then capture) and its duplicate guard. What follows the capture
+is fuzzed in depth by the order machine (test_order_flow_fuzz.py); this
+one drains through it and checks it.
 
-Actions: the buyer pays (also twice at once), pays and approves at once,
-pays another way, approves,
-declines or lets a payment expire on the PSP's side; the PSP pushes again
-every event, newest first; run a delivery; the worker catches up; crash
-after an effect's `prepare`, or after its call, or inside a local step
-before its commit; script a PSP fault; refuse
-the next connection; move the clock, now and then past a quote's hold, a
-QR's life or a session's.
+Setup draws the wiring and up to two PSP faults planned for the whole run.
+Actions: the buyer pays (also twice at once), pays and answers at once
+(approve, decline, let it expire, choose another way, leave), pays another
+way, answers at the PSP; the PSP pushes again every event, newest first;
+run a delivery; the worker catches up; crash after an effect's `prepare`,
+or after its call, or inside a local step before its commit; script a PSP
+fault; refuse the next connection; move the clock, now and then past a
+QR's life, and once a payment was tried past a quote's hold or a
+session's life.
 
-After every action: the PSP made at most one payment per attempt; a
-session's state matches its attempts (paying has an
-open attempt or one waiting on a person, completed has its order, any
-other state has no open attempt); each order has its one capture entry,
-and `psp_clearing` holds exactly the captured amounts; the PSP charged no
-reference twice, and every charge is an attempt we captured or handed to
-a person; invoice numbers run 1…n per series with no gap, and each
-invoice is for what its payment captured; no advisory lock is left held.
-After draining with faults off: no attempt is stuck, only those waiting
-on the buyer are still open, every charge the PSP made is booked or
-waits on a person, and every order has its invoice.
+After every action, the rules in payment_checks.py: a session's state
+matches its attempts; each order has its one capture entry and
+`psp_clearing` holds exactly the captured amounts; the PSP charged no
+reference twice and nothing we did not see; at most one PSP payment per
+attempt; invoice numbers without a gap, each for what its payment
+captured; no advisory lock left held. After draining with faults off: no
+attempt stuck, every charge booked or with a person, every order invoiced.
+Each run's reach is recorded (reach.py).
 """
 
 import asyncio
 import os
 import uuid
+from collections import Counter
 from collections.abc import Coroutine
 from datetime import timedelta
 
@@ -46,22 +48,20 @@ from mor.checkout.flow import QUOTE_VALID_FOR, refresh_quote
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
 from mor.fakes.psp import QR_LIFETIME
-from mor.messaging import consumers
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.routing import consumer_kind
-from mor.messaging.worker import (
-    Candidate,
-    Failed,
-    Prepared,
-    find_candidates,
-    handle_delivery,
-    prepare_delivery,
-    run_one,
-    try_lock_aggregate,
-)
+from mor.messaging.worker import Candidate, Failed, find_candidates, run_one
 from mor.payments.flow import Paying, pay, pay_another_way
 from mor.psp.port import CaptureMode, StatusMode
-from tests.helpers import ENV, TEST_URL, crash, empty_tables, wire
+from tests.flow import reach
+from tests.flow.payment_checks import (
+    catch_up,
+    check_drained,
+    check_every_action,
+    crash_around_a_call,
+    crash_in_a_local_step,
+)
+from tests.helpers import ENV, TEST_URL, empty_tables, wire
 from tests.payments.support import (
     ACTOR,
     NOW,
@@ -76,9 +76,21 @@ T0 = NOW
 FAULTS = ("fail_500", "fail_500_after_work", "timeout_after_work", "decline")
 OPERATIONS = ("create", "capture", "cancel", "get")
 
-
-class _CrashBeforeCommit(Exception):
-    """Ends a local step's transaction the way a crash would: unfinished."""
+# The fact types a run should reach, read from its outbox before the final
+# drain. Several orders at once are the order machine's.
+MILESTONES = (
+    "payment_attempt_created",
+    "payment_action_required",
+    "payment_captured",
+    "payment_declined",
+    "payment_expired",
+    "payment_cancelled",
+    "payment_needs_person",
+    "order_paid",
+    "invoice_issued",
+    "checkout_session_expired",
+)
+TALLY: Counter[str] = Counter()
 
 
 class PaymentFlow(RuleBasedStateMachine):
@@ -94,6 +106,10 @@ class PaymentFlow(RuleBasedStateMachine):
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
         self.sessions: list[uuid.UUID] = []
         self.options: dict[uuid.UUID, str] = {}
+        # The clock's jumps past a quote's hold or a session's life wait
+        # for a first attempt: early, they leave nothing to pay for the
+        # rest of the run (docs/plan-fuzz-reach.md §3).
+        self.attempted = False
 
     def run[T](self, step: Coroutine[object, object, T]) -> T:
         return self.loop.run_until_complete(step)
@@ -101,6 +117,7 @@ class PaymentFlow(RuleBasedStateMachine):
     def teardown(self) -> None:
         try:
             if self.sessions:
+                reach.record(TALLY, self.run(self._reached()))
                 self.run(self._drain_and_check())
         finally:
             self.run(self.http.aclose())
@@ -114,10 +131,24 @@ class PaymentFlow(RuleBasedStateMachine):
         status_mode=st.sampled_from(list(StatusMode)),
         capture_mode=st.sampled_from(list(CaptureMode)),
         guard=st.sampled_from((DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)),
+        planned=st.lists(
+            st.tuples(st.sampled_from(OPERATIONS), st.sampled_from(FAULTS)),
+            max_size=2,
+        ),
     )
     def a_shop_with_two_quoted_sessions(
-        self, status_mode: StatusMode, capture_mode: CaptureMode, guard: DuplicateGuard
+        self,
+        status_mode: StatusMode,
+        capture_mode: CaptureMode,
+        guard: DuplicateGuard,
+        planned: list[tuple[str, str]],
     ) -> None:
+        """`planned`: faults decided for the whole run, each waiting at the
+        PSP for its operation's first call (as FoundationDB's BUGGIFY sites
+        are on or off per run, docs/plan-fuzz-reach.md §2). A fault on the
+        one call that matters (a capture on an unkeyed account) is then
+        common, where scripting it by a later action is rare."""
+
         async def step() -> None:
             shop = await make_shop(
                 TEST_URL, self.control, Wiring(status_mode, capture_mode, guard)
@@ -128,6 +159,8 @@ class PaymentFlow(RuleBasedStateMachine):
                 )
                 self.sessions.append(session_id)
                 self.options[session_id] = option
+            for operation, fault in planned:
+                await self._script_fault(operation, fault)
 
         self.run(step())
 
@@ -141,7 +174,7 @@ class PaymentFlow(RuleBasedStateMachine):
 
         async def one() -> None:
             async with await connect(TEST_URL) as conn:
-                await pay(
+                paid = await pay(
                     conn,
                     session_id,
                     self.options[session_id],
@@ -151,6 +184,8 @@ class PaymentFlow(RuleBasedStateMachine):
                     self.now,
                 )
                 await conn.commit()
+            if isinstance(paid, Paying):
+                self.attempted = True
 
         async def step() -> None:
             if twice:
@@ -160,12 +195,21 @@ class PaymentFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(session=st.integers(0, 1), method=st.sampled_from(("card", "qr")))
-    def the_buyer_pays_and_approves(self, session: int, method: str) -> None:
-        """The way most buyers go, as one action, so runs reach a capture,
-        an order and an invoice: pay, the worker makes the payment, the
-        buyer approves it. What follows (the capture, the order, the
-        invoice) is left to the other actions, crashes among them."""
+    @rule(
+        session=st.integers(0, 1),
+        method=st.sampled_from(("card", "qr")),
+        answer=st.sampled_from(
+            ("paid", "paid", "declined", "expired", "leave", "another_way")
+        ),
+    )
+    def the_buyer_pays_and_answers(
+        self, session: int, method: str, answer: str
+    ) -> None:
+        """The way most buyers go, as one action, so runs reach the PSP's
+        answers: pay, the worker makes the payment, the buyer answers it,
+        chooses another way to pay, or leaves. What follows (the capture or
+        the end, the order) is left to the other actions, crashes among
+        them."""
         session_id = self.sessions[session]
 
         async def step() -> None:
@@ -182,7 +226,15 @@ class PaymentFlow(RuleBasedStateMachine):
                 await conn.commit()
             if not isinstance(paid, Paying):
                 return
-            await self._catch_up()
+            self.attempted = True
+            if answer == "leave":
+                return
+            await catch_up(self.worker, self.http, self.now)
+            if answer == "another_way":
+                async with await connect(TEST_URL) as conn:
+                    await pay_another_way(conn, session_id, ACTOR, self.now)
+                    await conn.commit()
+                return
             cur = await self.worker.execute(
                 "SELECT id FROM fake_vendor.psp_fake_payment"
                 " WHERE reference = %s AND status = 'requires_action'",
@@ -193,7 +245,7 @@ class PaymentFlow(RuleBasedStateMachine):
                 return
             response = await self.control.post(
                 f"http://mor/_fake/psp/acct/payments/{row[0]}/release",
-                json={"outcome": "paid", "push": "once"},
+                json={"outcome": answer, "push": "once"},
             )
             assert response.status_code == 200, response.text
 
@@ -262,26 +314,14 @@ class PaymentFlow(RuleBasedStateMachine):
 
     @rule()
     def the_worker_catches_up(self) -> None:
-        self.run(self._catch_up())
+        self.run(catch_up(self.worker, self.http, self.now))
 
     @rule(data=st.data(), with_call=st.booleans())
     def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None or consumer_kind(candidate.consumer) != "effect":
             return
-
-        async def step() -> None:
-            crashing = await connect(TEST_URL, autocommit=True)
-            try:
-                assert await try_lock_aggregate(crashing, candidate)
-                async with crashing.transaction():
-                    prepared = await prepare_delivery(crashing, candidate, self.now)
-                if with_call and isinstance(prepared, Prepared):
-                    await consumers.call(self.http, ENV, prepared.call)
-            finally:
-                await crash(crashing)
-
-        self.run(step())
+        self.run(crash_around_a_call(candidate, with_call, self.http, self.now))
 
     @rule(data=st.data())
     def crash_inside_a_local_step(self, data: st.DataObject) -> None:
@@ -291,18 +331,12 @@ class PaymentFlow(RuleBasedStateMachine):
         local = [c for c in candidates if consumer_kind(c.consumer) == "local"]
         if not local:
             return
-        self.run(self._crash_in_a_local_step(data.draw(st.sampled_from(local))))
+        self.run(crash_in_a_local_step(data.draw(st.sampled_from(local)), self.now))
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
     @rule(operation=st.sampled_from(OPERATIONS), fault=st.sampled_from(FAULTS))
     def script_a_fault(self, operation: str, fault: str) -> None:
-        response = self.run(
-            self.control.post(
-                "http://mor/_fake/psp/faults",
-                json={"account": "acct", "operation": operation, "fault": fault},
-            )
-        )
-        assert response.status_code == 204
+        self.run(self._script_fault(operation, fault))
 
     @precondition(lambda self: self.network.refuse_next < 2)
     @rule()
@@ -313,6 +347,7 @@ class PaymentFlow(RuleBasedStateMachine):
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
+    @precondition(lambda self: self.attempted)
     @rule()
     def clock_passes_a_quotes_hold(self) -> None:
         self.now += QUOTE_VALID_FOR
@@ -321,7 +356,7 @@ class PaymentFlow(RuleBasedStateMachine):
     def clock_passes_a_qr_codes_life(self) -> None:
         self.now += QR_LIFETIME
 
-    @precondition(lambda self: self.now < T0 + SESSION_LIFETIME)
+    @precondition(lambda self: self.attempted and self.now < T0 + SESSION_LIFETIME)
     @rule()
     def clock_passes_the_sessions_life(self) -> None:
         self.now = T0 + SESSION_LIFETIME
@@ -329,166 +364,17 @@ class PaymentFlow(RuleBasedStateMachine):
     # --- checks after every action ---------------------------------------
 
     @invariant()
-    def each_session_matches_its_attempts(self) -> None:
-        cur = self.run(
-            self.worker.execute(
-                """
-                SELECT s.id, s.state::text,
-                  (SELECT count(*) FROM payment_attempt a WHERE a.session_id = s.id
-                     AND a.state IN ('requested', 'action_required', 'authorised',
-                                     'cancelling')),
-                  (SELECT count(*) FROM payment_attempt a WHERE a.session_id = s.id
-                     AND a.state = 'needs_person'),
-                  (SELECT count(*) FROM order_ o WHERE o.session_id = s.id),
-                  (SELECT count(*) FROM outbox_delivery d
-                    JOIN payment_attempt a ON a.id = d.aggregate_id
-                    WHERE a.session_id = s.id AND d.handled_at IS NULL
-                      AND d.consumer IN ('session_payment_ended', 'order_create'))
-                FROM checkout_session s
-                """
-            )
-        )
-        rows = self.run(cur.fetchall())
-        for session_id, state, open_count, person, orders, ending in rows:
-            match state:
-                case "paying":
-                    # Or its attempt has ended and the session's own step,
-                    # back to quoted or on to its order, is still to run.
-                    assert open_count == 1 or person > 0 or ending > 0, session_id
-                    assert orders == 0
-                case "completed":
-                    assert orders == 1 and open_count == 0, session_id
-                case "quoted" | "quoting" | "refused" | "expired" | "open":
-                    assert open_count == 0 and orders == 0, (session_id, state)
-                case _:
-                    raise AssertionError(state)
-
-    @invariant()
-    def each_order_has_its_capture_entry_and_clearing_matches(self) -> None:
-        cur = self.run(
-            self.worker.execute(
-                """
-                SELECT count(*) FROM order_ o
-                WHERE NOT EXISTS (SELECT 1 FROM journal_entry e
-                  WHERE e.idempotency_key = 'capture:' || o.attempt_id::text)
-                """
-            )
-        )
-        assert self.run(cur.fetchone()) == (0,)
-        cur = self.run(
-            self.worker.execute(
-                """
-                SELECT
-                  (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
-                    WHERE account_kind = 'psp_clearing'),
-                  (SELECT coalesce(sum(a.amount_minor), 0) FROM order_ o
-                    JOIN payment_attempt a ON a.id = o.attempt_id)
-                """
-            )
-        )
-        booked, ordered = self.run(cur.fetchone()) or (None, None)
-        assert booked == ordered
-
-    @invariant()
-    def the_psp_charged_nothing_twice_and_nothing_unseen(self) -> None:
-        cur = self.run(
-            self.worker.execute(
-                """
-                SELECT c.reference, a.state::text, c.amount_minor, a.amount_minor
-                FROM fake_vendor.psp_fake_charge c
-                LEFT JOIN payment_attempt a ON a.id::text = c.reference
-                """
-            )
-        )
-        references: set[str] = set()
-        for reference, state, charged, amount in self.run(cur.fetchall()):
-            assert reference not in references, f"{reference} charged twice"
-            references.add(reference)
-            assert state is not None, f"a charge for no attempt: {reference}"
-            assert charged == amount, (reference, charged, amount)
-            # A charge we have not heard of yet leaves the attempt open.
-            assert state in (
-                "captured",
-                "needs_person",
-                "requested",
-                "action_required",
-                "authorised",
-                "cancelling",
-            ), (reference, state)
-
-    @invariant()
-    def the_psp_made_at_most_one_payment_per_attempt(self) -> None:
-        """A keyed account replays a resent create; on an unkeyed one we
-        never resend. Either way one payment per reference, so a buyer can
-        never be shown, or pay, a second one."""
-        cur = self.run(
-            self.worker.execute(
-                "SELECT reference FROM fake_vendor.psp_fake_payment"
-                " GROUP BY reference HAVING count(*) > 1"
-            )
-        )
-        assert self.run(cur.fetchall()) == []
-
-    @invariant()
-    def invoice_numbers_run_without_a_gap_and_match_their_payment(self) -> None:
-        """Per series 1…n, no gap and no repeat, and the counter one past
-        the last; each invoice for exactly what its payment captured."""
-        cur = self.run(
-            self.worker.execute(
-                """
-                SELECT s.code, s.next_number,
-                  coalesce((SELECT array_agg(i.number ORDER BY i.number)
-                            FROM invoice i WHERE i.series = s.code), '{}')
-                FROM invoice_series s
-                """
-            )
-        )
-        for code, next_number, numbers in self.run(cur.fetchall()):
-            assert numbers == list(range(1, len(numbers) + 1)), (code, numbers)
-            assert next_number == len(numbers) + 1, (code, next_number)
-        cur = self.run(
-            self.worker.execute(
-                """
-                SELECT i.number_text FROM invoice i
-                JOIN order_ o ON o.id = i.order_id
-                JOIN payment_attempt a ON a.id = o.attempt_id
-                WHERE i.total_minor <> a.amount_minor
-                   OR i.currency <> a.currency
-                   OR i.total_minor <> (SELECT sum(l.amount_minor)
-                                        FROM invoice_line l
-                                        WHERE l.invoice_id = i.id)
-                """
-            )
-        )
-        assert self.run(cur.fetchall()) == []
-
-    @invariant()
-    def no_advisory_lock_is_left_held(self) -> None:
-        cur = self.run(
-            self.worker.execute(
-                "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
-                " AND database = (SELECT oid FROM pg_database"
-                " WHERE datname = current_database())"
-            )
-        )
-        assert self.run(cur.fetchone()) == (0,)
+    def the_payment_rules_hold(self) -> None:
+        self.run(check_every_action(self.worker))
 
     # --- helpers ---------------------------------------------------------
 
-    async def _crash_in_a_local_step(self, candidate: Candidate) -> None:
-        """A local consumer's work done, and the worker gone before its one
-        commit: nothing of it may stay (an invoice number taken, say)."""
-        crashing = await connect(TEST_URL, autocommit=True)
-        try:
-            assert await try_lock_aggregate(crashing, candidate)
-            try:
-                async with crashing.transaction():
-                    await handle_delivery(crashing, candidate, ENV, self.now)
-                    raise _CrashBeforeCommit
-            except _CrashBeforeCommit:
-                pass
-        finally:
-            await crash(crashing)
+    async def _script_fault(self, operation: str, fault: str) -> None:
+        response = await self.control.post(
+            "http://mor/_fake/psp/faults",
+            json={"account": "acct", "operation": operation, "fault": fault},
+        )
+        assert response.status_code == 204
 
     async def _faults_waiting(self) -> int:
         cur = await self.worker.execute(
@@ -498,21 +384,17 @@ class PaymentFlow(RuleBasedStateMachine):
         assert row is not None
         return row[0]
 
-    async def _catch_up(self) -> None:
-        for _ in range(100):
-            candidates = await find_candidates(self.worker, self.now, 50)
-            if not candidates:
-                return
-            for candidate in candidates:
-                result = await run_one(self.worker, self.http, ENV, candidate, self.now)
-                assert not isinstance(result, Failed), result
-        raise AssertionError("the worker never caught up")
-
     def _draw_candidate(self, data: st.DataObject) -> Candidate | None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return None
         return data.draw(st.sampled_from(candidates))
+
+    async def _reached(self) -> set[str]:
+        cur = await self.worker.execute(
+            "SELECT DISTINCT message_type::text FROM outbox"
+        )
+        return {row[0] for row in await cur.fetchall()} & set(MILESTONES)
 
     async def _drain_and_check(self) -> None:
         await self.worker.execute("DELETE FROM fake_vendor.psp_fake_fault_next")
@@ -523,30 +405,8 @@ class PaymentFlow(RuleBasedStateMachine):
         )
         for _ in range(20):
             self.now += timedelta(minutes=5)
-            await self._catch_up()
-        cur = await self.worker.execute(
-            "SELECT id, state::text FROM payment_attempt"
-            " WHERE state IN ('requested', 'authorised', 'cancelling')"
-        )
-        stuck = await cur.fetchall()
-        assert stuck == [], f"attempts stuck after the drain: {stuck}"
-        cur = await self.worker.execute(
-            """
-            SELECT c.reference FROM fake_vendor.psp_fake_charge c
-            JOIN payment_attempt a ON a.id::text = c.reference
-            WHERE a.state NOT IN ('captured', 'needs_person')
-            """
-        )
-        unbooked = await cur.fetchall()
-        assert unbooked == [], f"charges neither booked nor with a person: {unbooked}"
-        cur = await self.worker.execute(
-            "SELECT o.id FROM order_ o"
-            " WHERE NOT EXISTS (SELECT 1 FROM invoice i WHERE i.order_id = o.id)"
-        )
-        uninvoiced = await cur.fetchall()
-        assert uninvoiced == [], (
-            f"orders without an invoice after the drain: {uninvoiced}"
-        )
+            await catch_up(self.worker, self.http, self.now)
+        await check_drained(self.worker)
 
 
 def _examples() -> int:
@@ -558,6 +418,8 @@ def _examples() -> int:
 def test_payments_survive_faults_crashes_double_submits_and_deadlines(
     migrated_test_database: str,
 ) -> None:
+    TALLY.clear()
     run_state_machine_as_test(
         PaymentFlow, settings=settings(max_examples=_examples(), deadline=None)
     )
+    reach.finish("payment-flow", MILESTONES, TALLY)

@@ -43,7 +43,10 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 # example too, about 3 minutes more (19-Nov-2026). The quote-flow fuzzer
 # about 0.17 s an example, so about 17 minutes (19-Nov-2026). The payment
 # fuzzer about 0.13 s an example, so about 13 minutes, and the payment
-# properties about 0.4 ms an example, 2 minutes more (19-Nov-2026). Every
+# properties about 0.4 ms an example, 2 minutes more (19-Nov-2026). After
+# the reach work (docs/plan-fuzz-reach.md) the payment fuzzer is about
+# 0.12 s an example and the order fuzzer about 0.19 s, so about 12 and 19
+# minutes (20-Nov-2026). Every
 # test file using Hypothesis must be in a target: tests/test_soak_targets.py
 # fails otherwise.
 TARGETS=(
@@ -53,6 +56,7 @@ TARGETS=(
   "shipping-price-flow|10000|45m|tests/flow/test_shipping_price_fuzz.py"
   "quote-flow|6000|45m|tests/flow/test_quote_flow_fuzz.py"
   "payment-flow|6000|45m|tests/flow/test_payment_flow_fuzz.py"
+  "order-flow|6000|45m|tests/flow/test_order_flow_fuzz.py"
   "properties|100000|30m|tests/money tests/echo/test_events.py tests/messaging/test_facts.py tests/markets/test_markets.py tests/tax/test_tax_paths.py tests/tax/test_duty_modes.py tests/quote/test_quote_properties.py tests/api/test_api_properties.py tests/checkout/test_addresses.py tests/payments/test_payment_properties.py"
 )
 
@@ -114,10 +118,14 @@ run_soak() {
     fi
     local log="${LOGS}/${stamp}-${name}.log"
     local code=0
+    # Each fuzzer writes how far its runs went (docs/plan-fuzz-reach.md);
+    # the tables go at the end of the target's log.
+    rm -rf "${CHECKOUT}/.hypothesis/reach"
     # shellcheck disable=SC2086  # paths is a list of words on purpose
     (cd "$CHECKOUT" && MOR_TEST_DATABASE=mor_soak HYPOTHESIS_PROFILE=soak \
       SOAK_EXAMPLES="$examples" timeout "$guard" \
       uv run pytest -x -q -rf -p no:cacheprovider $paths) >"$log" 2>&1 || code=$?
+    cat "${CHECKOUT}/.hypothesis/reach/"*.txt >>"$log" 2>/dev/null || true
     local outcome="broken"
     if grep -q '^FAILED ' "$log"; then
       outcome="failed"
