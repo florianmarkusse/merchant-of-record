@@ -22,6 +22,9 @@ class AggregateType(StrEnum):
     DUTY_LOOKUP = "duty_lookup"
     SHIPPING_PRICE_LOOKUP = "shipping_price_lookup"
     CHECKOUT_SESSION = "checkout_session"
+    PAYMENT_ATTEMPT = "payment_attempt"
+    PSP_ACCOUNT = "psp_account"
+    ORDER = "order"
 
 
 class MessageType(StrEnum):
@@ -57,6 +60,21 @@ class MessageType(StrEnum):
     QUOTE_INPUTS_ARRIVED = "quote_inputs_arrived"
     CHECKOUT_SESSION_EXPIRY_DUE = "checkout_session_expiry_due"
     CHECKOUT_SESSION_EXPIRED = "checkout_session_expired"
+    PAYMENT_ATTEMPT_CREATED = "payment_attempt_created"
+    PAYMENT_ACTION_REQUIRED = "payment_action_required"
+    PAYMENT_AUTHORISED = "payment_authorised"
+    PAYMENT_CAPTURED = "payment_captured"
+    PAYMENT_DECLINED = "payment_declined"
+    PAYMENT_EXPIRED = "payment_expired"
+    PAYMENT_CANCELLED = "payment_cancelled"
+    PAYMENT_NEEDS_PERSON = "payment_needs_person"
+    PAYMENT_CANCEL_WANTED = "payment_cancel_wanted"
+    PAYMENT_POLL_DUE = "payment_poll_due"
+    PAYMENT_EVENTS_WANTED = "payment_events_wanted"
+    PSP_INBOX_STORED = "psp_inbox_stored"
+    PSP_EVENT_RECEIVED = "psp_event_received"
+    CHECKOUT_SESSION_COMPLETED = "checkout_session_completed"
+    ORDER_PAID = "order_paid"
 
 
 @dataclass(frozen=True)
@@ -249,6 +267,112 @@ class CheckoutSessionExpiredV1(msgspec.Struct, frozen=True, forbid_unknown_field
     checkout_session_id: uuid.UUID
 
 
+class PaymentAttemptCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The buyer chose to pay a quote's option: ask the PSP."""
+
+    payment_attempt_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+
+
+class PaymentActionRequiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The PSP made the payment; the buyer must act on its page or a QR."""
+
+    payment_attempt_id: uuid.UUID
+
+
+class PaymentAuthorisedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Approved and not captured yet: capture it."""
+
+    payment_attempt_id: uuid.UUID
+
+
+class PaymentCapturedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The money is taken, for exactly the attempt's amount."""
+
+    payment_attempt_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+
+
+class PaymentDeclinedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    payment_attempt_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+    reason: str
+
+
+class PaymentExpiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    payment_attempt_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+
+
+class PaymentCancelledV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    payment_attempt_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+
+
+class PaymentNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """An answer lost on a `none` guard, or the PSP reported something that
+    does not fit (another amount, a second capture): a person decides."""
+
+    payment_attempt_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+    detail: str
+
+
+class PaymentCancelWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """The buyer chose to pay another way: tell the PSP."""
+
+    payment_attempt_id: uuid.UUID
+
+
+class PaymentPollDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Scheduled: ask the PSP how the payment stands (a poll account's turn,
+    or a QR's expiry). What it says decides, under the attempt's lock."""
+
+    payment_attempt_id: uuid.UUID
+
+
+class PaymentEventsWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A thin webhook said the payment has news, without saying what."""
+
+    payment_attempt_id: uuid.UUID
+
+
+class PspInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Raw bytes from the PSP (a webhook or a fetched page) were stored."""
+
+    psp_account_id: uuid.UUID
+    inbox_id: uuid.UUID
+
+
+class PspEventReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """One PSP event about an attempt, decoded from stored bytes. The
+    amount is ours, converted from the PSP's units."""
+
+    payment_attempt_id: uuid.UUID
+    vendor_event_id: str
+    provider_payment_id: str
+    kind: Literal["authorised", "captured", "declined", "expired", "cancelled"]
+    amount_minor: int
+    currency: str
+    occurred_at: datetime
+    inbox_id: uuid.UUID
+
+
+class CheckoutSessionCompletedV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True
+):
+    checkout_session_id: uuid.UUID
+    order_id: uuid.UUID
+
+
+class OrderPaidV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """An order exists and is paid. Its invoice comes in 5b."""
+
+    order_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+    merchant_id: uuid.UUID
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -279,6 +403,21 @@ type Fact = (
     | QuoteInputsArrivedV1
     | CheckoutSessionExpiryDueV1
     | CheckoutSessionExpiredV1
+    | PaymentAttemptCreatedV1
+    | PaymentActionRequiredV1
+    | PaymentAuthorisedV1
+    | PaymentCapturedV1
+    | PaymentDeclinedV1
+    | PaymentExpiredV1
+    | PaymentCancelledV1
+    | PaymentNeedsPersonV1
+    | PaymentCancelWantedV1
+    | PaymentPollDueV1
+    | PaymentEventsWantedV1
+    | PspInboxStoredV1
+    | PspEventReceivedV1
+    | CheckoutSessionCompletedV1
+    | OrderPaidV1
 )
 
 
@@ -356,6 +495,36 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.CHECKOUT_SESSION_EXPIRY_DUE, 1)
         case CheckoutSessionExpiredV1():
             return FactType(MessageType.CHECKOUT_SESSION_EXPIRED, 1)
+        case PaymentAttemptCreatedV1():
+            return FactType(MessageType.PAYMENT_ATTEMPT_CREATED, 1)
+        case PaymentActionRequiredV1():
+            return FactType(MessageType.PAYMENT_ACTION_REQUIRED, 1)
+        case PaymentAuthorisedV1():
+            return FactType(MessageType.PAYMENT_AUTHORISED, 1)
+        case PaymentCapturedV1():
+            return FactType(MessageType.PAYMENT_CAPTURED, 1)
+        case PaymentDeclinedV1():
+            return FactType(MessageType.PAYMENT_DECLINED, 1)
+        case PaymentExpiredV1():
+            return FactType(MessageType.PAYMENT_EXPIRED, 1)
+        case PaymentCancelledV1():
+            return FactType(MessageType.PAYMENT_CANCELLED, 1)
+        case PaymentNeedsPersonV1():
+            return FactType(MessageType.PAYMENT_NEEDS_PERSON, 1)
+        case PaymentCancelWantedV1():
+            return FactType(MessageType.PAYMENT_CANCEL_WANTED, 1)
+        case PaymentPollDueV1():
+            return FactType(MessageType.PAYMENT_POLL_DUE, 1)
+        case PaymentEventsWantedV1():
+            return FactType(MessageType.PAYMENT_EVENTS_WANTED, 1)
+        case PspInboxStoredV1():
+            return FactType(MessageType.PSP_INBOX_STORED, 1)
+        case PspEventReceivedV1():
+            return FactType(MessageType.PSP_EVENT_RECEIVED, 1)
+        case CheckoutSessionCompletedV1():
+            return FactType(MessageType.CHECKOUT_SESSION_COMPLETED, 1)
+        case OrderPaidV1():
+            return FactType(MessageType.ORDER_PAID, 1)
         case _:
             assert_never(fact)
 
@@ -405,8 +574,28 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | QuoteInputsArrivedV1(checkout_session_id=session_id)
             | CheckoutSessionExpiryDueV1(checkout_session_id=session_id)
             | CheckoutSessionExpiredV1(checkout_session_id=session_id)
+            | CheckoutSessionCompletedV1(checkout_session_id=session_id)
         ):
             return Aggregate(AggregateType.CHECKOUT_SESSION, session_id)
+        case (
+            PaymentAttemptCreatedV1(payment_attempt_id=attempt_id)
+            | PaymentActionRequiredV1(payment_attempt_id=attempt_id)
+            | PaymentAuthorisedV1(payment_attempt_id=attempt_id)
+            | PaymentCapturedV1(payment_attempt_id=attempt_id)
+            | PaymentDeclinedV1(payment_attempt_id=attempt_id)
+            | PaymentExpiredV1(payment_attempt_id=attempt_id)
+            | PaymentCancelledV1(payment_attempt_id=attempt_id)
+            | PaymentNeedsPersonV1(payment_attempt_id=attempt_id)
+            | PaymentCancelWantedV1(payment_attempt_id=attempt_id)
+            | PaymentPollDueV1(payment_attempt_id=attempt_id)
+            | PaymentEventsWantedV1(payment_attempt_id=attempt_id)
+            | PspEventReceivedV1(payment_attempt_id=attempt_id)
+        ):
+            return Aggregate(AggregateType.PAYMENT_ATTEMPT, attempt_id)
+        case PspInboxStoredV1(psp_account_id=account_id):
+            return Aggregate(AggregateType.PSP_ACCOUNT, account_id)
+        case OrderPaidV1(order_id=order_id):
+            return Aggregate(AggregateType.ORDER, order_id)
         case _:
             assert_never(fact)
 
@@ -489,6 +678,36 @@ def decode(
             decoded = _decode(payload, CheckoutSessionExpiryDueV1)
         case MessageType.CHECKOUT_SESSION_EXPIRED:
             decoded = _decode(payload, CheckoutSessionExpiredV1)
+        case MessageType.PAYMENT_ATTEMPT_CREATED:
+            decoded = _decode(payload, PaymentAttemptCreatedV1)
+        case MessageType.PAYMENT_ACTION_REQUIRED:
+            decoded = _decode(payload, PaymentActionRequiredV1)
+        case MessageType.PAYMENT_AUTHORISED:
+            decoded = _decode(payload, PaymentAuthorisedV1)
+        case MessageType.PAYMENT_CAPTURED:
+            decoded = _decode(payload, PaymentCapturedV1)
+        case MessageType.PAYMENT_DECLINED:
+            decoded = _decode(payload, PaymentDeclinedV1)
+        case MessageType.PAYMENT_EXPIRED:
+            decoded = _decode(payload, PaymentExpiredV1)
+        case MessageType.PAYMENT_CANCELLED:
+            decoded = _decode(payload, PaymentCancelledV1)
+        case MessageType.PAYMENT_NEEDS_PERSON:
+            decoded = _decode(payload, PaymentNeedsPersonV1)
+        case MessageType.PAYMENT_CANCEL_WANTED:
+            decoded = _decode(payload, PaymentCancelWantedV1)
+        case MessageType.PAYMENT_POLL_DUE:
+            decoded = _decode(payload, PaymentPollDueV1)
+        case MessageType.PAYMENT_EVENTS_WANTED:
+            decoded = _decode(payload, PaymentEventsWantedV1)
+        case MessageType.PSP_INBOX_STORED:
+            decoded = _decode(payload, PspInboxStoredV1)
+        case MessageType.PSP_EVENT_RECEIVED:
+            decoded = _decode(payload, PspEventReceivedV1)
+        case MessageType.CHECKOUT_SESSION_COMPLETED:
+            decoded = _decode(payload, CheckoutSessionCompletedV1)
+        case MessageType.ORDER_PAID:
+            decoded = _decode(payload, OrderPaidV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

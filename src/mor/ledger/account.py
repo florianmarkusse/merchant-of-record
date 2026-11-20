@@ -18,6 +18,9 @@ class AccountKind(StrEnum):
     COURIER_VARIANCE = "courier_variance"
     RESERVE = "reserve"
     ROUNDING = "rounding"
+    # The buyer's currency on one side, the merchant's on the other: a
+    # capture converts through it (docs/plan-payments.md §5).
+    FX_POSITION = "fx_position"
 
 
 @dataclass(frozen=True)

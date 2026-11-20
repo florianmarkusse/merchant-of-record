@@ -23,6 +23,9 @@ from mor.echo.port import OutcomeUnknown, Page, ReportList, Unavailable
 from mor.messaging.facts import Fact
 from mor.messaging.outcome import ConsumerOutcome, NoCall, StepResult
 from mor.messaging.routing import ConsumerName
+from mor.orders import flow as order_flow
+from mor.payments import flow as payment_flow
+from mor.payments import inbound as payment_inbound
 from mor.probe import flow as probe_flow
 
 
@@ -32,6 +35,7 @@ type EffectCall = (
     | echo_reports.ReportCall
     | duty_lookups.AskCall
     | courier_prices.PriceCall
+    | payment_flow.PaymentCall
 )
 type EffectResult = (
     echo_flow.EchoResult
@@ -39,6 +43,7 @@ type EffectResult = (
     | ReportList
     | duty_port.AskResult
     | courier_port.QuoteRateResult
+    | payment_flow.PaymentResult
 )
 
 
@@ -75,12 +80,25 @@ async def handle(
             return await checkout_flow.build_waiting(conn, fact, environment, now)
         case ConsumerName.CHECKOUT_SESSION_EXPIRE:
             return await checkout_flow.expire_session(conn, fact, now)
+        case ConsumerName.PSP_INBOX_DECODE:
+            return await payment_inbound.decode_inbox(conn, fact, now)
+        case ConsumerName.PAYMENT_EVENT_APPLY:
+            return await payment_inbound.apply_event(conn, fact, now)
+        case ConsumerName.ORDER_CREATE:
+            return await order_flow.create_order(conn, fact, now)
+        case ConsumerName.SESSION_PAYMENT_ENDED:
+            return await checkout_flow.end_payment(conn, fact, now)
         case (
             ConsumerName.ECHO_SEND
             | ConsumerName.ECHO_POLL
             | ConsumerName.ECHO_REPORT_FETCH
             | ConsumerName.DUTY_RATE_ASK
             | ConsumerName.SHIPPING_PRICE_ASK
+            | ConsumerName.PSP_PAYMENT_CREATE
+            | ConsumerName.PSP_PAYMENT_CAPTURE
+            | ConsumerName.PSP_PAYMENT_CANCEL
+            | ConsumerName.PSP_PAYMENT_POLL
+            | ConsumerName.PSP_PAYMENT_FETCH
         ):
             raise WrongKind(f"{consumer} is an effect consumer")
         case _:
@@ -102,6 +120,14 @@ async def prepare(
             return await duty_lookups.prepare(conn, fact, now)
         case ConsumerName.SHIPPING_PRICE_ASK:
             return await courier_prices.prepare(conn, fact, now)
+        case ConsumerName.PSP_PAYMENT_CREATE:
+            return await payment_flow.prepare_create(conn, fact, now)
+        case ConsumerName.PSP_PAYMENT_CAPTURE:
+            return await payment_flow.prepare_capture(conn, fact, now)
+        case ConsumerName.PSP_PAYMENT_CANCEL:
+            return await payment_flow.prepare_cancel(conn, fact, now)
+        case ConsumerName.PSP_PAYMENT_POLL | ConsumerName.PSP_PAYMENT_FETCH:
+            return await payment_flow.prepare_poll(conn, fact, now)
         case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH
@@ -111,6 +137,10 @@ async def prepare(
             | ConsumerName.QUOTE_WAIT_NOTIFY
             | ConsumerName.QUOTE_BUILD
             | ConsumerName.CHECKOUT_SESSION_EXPIRE
+            | ConsumerName.PSP_INBOX_DECODE
+            | ConsumerName.PAYMENT_EVENT_APPLY
+            | ConsumerName.ORDER_CREATE
+            | ConsumerName.SESSION_PAYMENT_ENDED
         ):
             raise WrongKind(f"{consumer} is a local consumer")
         case _:
@@ -133,6 +163,14 @@ async def call(
             return await duty_lookups.call(http, environment, effect_call)
         case courier_prices.PriceCall():
             return await courier_prices.call(http, environment, effect_call)
+        case (
+            payment_flow.CreateCall()
+            | payment_flow.FindCall()
+            | payment_flow.CaptureCall()
+            | payment_flow.CancelCall()
+            | payment_flow.PollCall()
+        ):
+            return await payment_flow.call(http, environment, effect_call)
         case _:
             assert_never(effect_call)
 
@@ -148,23 +186,27 @@ async def complete(
     """An effect consumer's last step, in its own transaction."""
     match consumer:
         case ConsumerName.ECHO_SEND:
-            if not isinstance(
-                effect_call,
-                echo_flow.SendCall | echo_flow.FindCall | echo_flow.CancelCall,
-            ) or isinstance(
-                result,
-                Page
-                | ReportList
-                | duty_port.VendorRates
-                | duty_port.UnknownCode
-                | duty_port.Unavailable
-                | duty_port.OutcomeUnknown
-                | duty_port.UndecodableBody
-                | courier_port.CarrierPrice
-                | courier_port.NotServed
-                | courier_port.Unavailable
-                | courier_port.OutcomeUnknown
-                | courier_port.UndecodableBody,
+            if (
+                not isinstance(
+                    effect_call,
+                    echo_flow.SendCall | echo_flow.FindCall | echo_flow.CancelCall,
+                )
+                or isinstance(
+                    result,
+                    Page
+                    | ReportList
+                    | duty_port.VendorRates
+                    | duty_port.UnknownCode
+                    | duty_port.Unavailable
+                    | duty_port.OutcomeUnknown
+                    | duty_port.UndecodableBody
+                    | courier_port.CarrierPrice
+                    | courier_port.NotServed
+                    | courier_port.Unavailable
+                    | courier_port.OutcomeUnknown
+                    | courier_port.UndecodableBody,
+                )
+                or payment_flow.is_payment_result(result)
             ):
                 raise WrongCall(f"echo_send got {effect_call!r}, {result!r}")
             return await echo_flow.complete(conn, fact, effect_call, result, now)
@@ -213,6 +255,34 @@ async def complete(
                 raise WrongCall(f"shipping_price_ask got {result!r}")
             return await courier_prices.complete(conn, fact, effect_call, result, now)
         case (
+            ConsumerName.PSP_PAYMENT_CREATE
+            | ConsumerName.PSP_PAYMENT_CAPTURE
+            | ConsumerName.PSP_PAYMENT_CANCEL
+            | ConsumerName.PSP_PAYMENT_POLL
+            | ConsumerName.PSP_PAYMENT_FETCH
+        ):
+            if not payment_flow.is_payment_call(effect_call):
+                raise WrongCall(f"{consumer} got {effect_call!r}")
+            if not payment_flow.is_payment_result(result):
+                raise WrongCall(f"{consumer} got {result!r}")
+            match consumer:
+                case ConsumerName.PSP_PAYMENT_CREATE:
+                    return await payment_flow.complete_create(
+                        conn, fact, effect_call, result, now
+                    )
+                case ConsumerName.PSP_PAYMENT_CAPTURE:
+                    return await payment_flow.complete_capture(
+                        conn, fact, effect_call, result, now
+                    )
+                case ConsumerName.PSP_PAYMENT_CANCEL:
+                    return await payment_flow.complete_cancel(
+                        conn, fact, effect_call, result, now
+                    )
+                case ConsumerName.PSP_PAYMENT_POLL | ConsumerName.PSP_PAYMENT_FETCH:
+                    return await payment_flow.complete_poll(
+                        conn, fact, effect_call, result, now
+                    )
+        case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH
             | ConsumerName.ECHO_INBOX_DECODE
@@ -221,6 +291,10 @@ async def complete(
             | ConsumerName.QUOTE_WAIT_NOTIFY
             | ConsumerName.QUOTE_BUILD
             | ConsumerName.CHECKOUT_SESSION_EXPIRE
+            | ConsumerName.PSP_INBOX_DECODE
+            | ConsumerName.PAYMENT_EVENT_APPLY
+            | ConsumerName.ORDER_CREATE
+            | ConsumerName.SESSION_PAYMENT_ENDED
         ):
             raise WrongKind(f"{consumer} is a local consumer")
         case _:

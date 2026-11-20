@@ -1,0 +1,146 @@
+"""Shared setup for the payment tests and the payment fuzzer: a merchant,
+a session quoted for a made-up Singapore buyer, and a fake PSP account in
+the wiring asked for, set up at the fake as a merchant would on its
+dashboard. Every person and address here is made up."""
+
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
+import httpx2
+
+from mor.audit import Actor, ActorKind
+from mor.checkout import addresses as f
+from mor.checkout.addresses import parse_address
+from mor.checkout.flow import submit_address
+from mor.checkout.quotes import MadeQuote, read_quote
+from mor.checkout.records import Customs, SessionDraft, SoldLine
+from mor.checkout.sessions import create_session, session_by_id
+from mor.couriers.records import Parcel
+from mor.db.connect import connect
+from mor.markets.store import load_market
+from mor.merchants.store import create_merchant
+from mor.messaging.guard import DuplicateGuard
+from mor.money.amount import Money
+from mor.money.currency import Currency
+from mor.provider_accounts import ProviderAccountKind
+from mor.psp.accounts import add_route, create_psp_account
+from mor.psp.port import CaptureMode, PaymentMethod, PspAccount, PspProvider, StatusMode
+from tests.helpers import ENV
+from tests.quote.fixtures import quote_market
+
+
+NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
+ACTOR = Actor(ActorKind.SYSTEM, "test")
+PARCEL = Parcel(1000, 200, 150, 100)
+SECRET = "whsec-test"
+SG_ADDRESS = {
+    f.NAME: "Tan Mei Ling",
+    f.EMAIL: "mei@example.test",
+    f.PHONE: "9123 4567",
+    f.LINE1: "1 Example Road",
+    f.CITY: "Singapore",
+    f.POSTCODE: "123456",
+    f.COUNTRY: "SG",
+}
+
+
+def line(price: Money) -> SoldLine:
+    return SoldLine(
+        "Linen shirt",
+        2,
+        price,
+        "apparel",
+        "LIN-01",
+        Customs("Men's linen shirt, woven", "VN", 300, "610910"),
+    )
+
+
+@dataclass(frozen=True)
+class Wiring:
+    status_mode: StatusMode
+    capture_mode: CaptureMode
+    guard: DuplicateGuard
+
+
+@dataclass(frozen=True)
+class Shop:
+    merchant_id: uuid.UUID
+    account: PspAccount
+
+
+async def make_shop(
+    url: str, control: httpx2.AsyncClient, wiring: Wiring, name: str = "acct"
+) -> Shop:
+    """The merchant, the market, and one PSP account routed by default."""
+    async with await connect(url) as conn:
+        await load_market(conn, quote_market(), "test", ACTOR, NOW)
+        merchant = await create_merchant(
+            conn, "Test Shop Co.", "Test Shop", "VN", 100, ACTOR, NOW
+        )
+        account = await create_psp_account(
+            conn,
+            name,
+            PspProvider.FAKE,
+            ProviderAccountKind.FAKE,
+            f"http://mor/_fake/psp/{name}",
+            timedelta(milliseconds=300),
+            wiring.status_mode,
+            wiring.capture_mode,
+            wiring.guard,
+            (PaymentMethod.CARD, PaymentMethod.QR),
+            SECRET,
+            NOW,
+        )
+        await add_route(conn, account.id, None, None, NOW, ACTOR, NOW)
+        await conn.commit()
+    pushes = wiring.status_mode != StatusMode.POLL
+    response = await control.post(
+        f"http://mor/_fake/psp/{name}/setup",
+        json={
+            "capture": wiring.capture_mode.value,
+            "keyed": wiring.guard == DuplicateGuard.VENDOR_CONSTRAINT,
+            "webhook_url": f"http://mor/webhooks/psp/{account.id}" if pushes else None,
+            "webhook_secret": SECRET if pushes else None,
+            "webhook_payload": (
+                ("thin" if wiring.status_mode == StatusMode.PUSH_THIN else "full")
+                if pushes
+                else None
+            ),
+        },
+    )
+    assert response.status_code == 204, response.text
+    return Shop(merchant.id, account)
+
+
+async def quoted_session(
+    url: str, merchant_id: uuid.UUID, price: Money, now: datetime = NOW
+) -> tuple[uuid.UUID, str]:
+    """A session quoted for the Singapore address: its id and the
+    cheapest option's key."""
+    async with await connect(url) as conn:
+        session = await create_session(
+            conn,
+            merchant_id,
+            SessionDraft(
+                (line(price),),
+                PARCEL,
+                "order-1",
+                "https://shop.example/thanks",
+                "https://shop.example/cart",
+            ),
+            ACTOR,
+            now,
+        )
+        address = parse_address(SG_ADDRESS, frozenset({"SG"}))
+        assert not isinstance(address, dict), address
+        await submit_address(conn, session.id, address, ENV, now)
+        await conn.commit()
+        quoted = await session_by_id(conn, session.id)
+        assert quoted is not None and quoted.quote_id is not None
+        quote = await read_quote(conn, quoted.quote_id)
+    assert isinstance(quote, MadeQuote), quote
+    return session.id, quote.options[0].key
+
+
+SGD_PRICE = Money(2500, Currency.SGD)

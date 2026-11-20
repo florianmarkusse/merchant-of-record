@@ -15,12 +15,14 @@ SESSION_LIFETIME = timedelta(hours=24)
 
 class SessionState(StrEnum):
     """Matches the `checkout_session_state` enum type (docs/plan-quote.md §5,
-    4d-2). `paying` and `completed` come with payments (slice 5)."""
+    4d-2; docs/plan-payments.md §4)."""
 
     OPEN = "open"  # no address yet
     QUOTING = "quoting"  # an address, and an input being fetched
     QUOTED = "quoted"  # its quote is made
     REFUSED = "refused"  # its quote is refused
+    PAYING = "paying"  # an attempt is open; never expires meanwhile
+    COMPLETED = "completed"  # paid: its order exists
     EXPIRED = "expired"
     CANCELED = "canceled"
 

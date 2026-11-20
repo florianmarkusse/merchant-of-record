@@ -67,6 +67,8 @@ from mor.markets.store import market_in_force, read_market, recent_loads
 from mor.merchants.store import read_merchant
 from mor.money.amount import InvalidAmount, Money, parse_major
 from mor.money.currency import Currency
+from mor.payments.attempts import session_attempts
+from mor.psp.accounts import read_psp_account
 from mor.public_ids import SESSION_PREFIX, parse_id
 from mor.quote.build import (
     InputsMissing,
@@ -473,6 +475,14 @@ async def session_page(request: Request, database_url: str) -> Response:
         assert merchant is not None
         countries = await address_countries(conn, session_id)
         quotes = await session_quotes(conn, session_id)
+        attempts = await session_attempts(conn, session_id)
+        account_names: dict[str, str] = {}
+        for attempt in attempts:
+            account = await read_psp_account(conn, attempt.psp_account_id)
+            assert account is not None
+            account_names[account.id.hex] = account.name
     return HTMLResponse(
-        render_session_page(session, merchant.display_name, countries, quotes)
+        render_session_page(
+            session, merchant.display_name, countries, quotes, attempts, account_names
+        )
     )

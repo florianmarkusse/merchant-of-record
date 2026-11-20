@@ -4,8 +4,9 @@ from enum import StrEnum
 
 
 class Environment(StrEnum):
-    """Outside `prod`, registries refuse every provider but the fakes
-    (plan-architecture.md §6)."""
+    """Which provider accounts may be used: fakes in `dev`, fakes and a
+    vendor's sandbox in `test`, live accounts in `prod`
+    (plan-architecture.md §6, `mor.provider_accounts`)."""
 
     DEV = "dev"
     TEST = "test"

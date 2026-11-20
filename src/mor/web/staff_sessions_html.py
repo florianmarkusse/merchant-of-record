@@ -1,7 +1,8 @@
 """The staff Sessions pages (docs/plan-quote.md §5, 4d-2): the checkout
 sessions and every quote made for them, with each part's exact value,
-rounding and source. The buyer's address shows as its country only: the
-rest is personal data, and nothing here needs it."""
+rounding and source, and its payment attempts (docs/plan-payments.md §4).
+The buyer's address shows as its country only: the rest is personal data,
+and nothing here needs it."""
 
 from datetime import datetime
 
@@ -13,6 +14,7 @@ from mor.checkout.sessions import SessionSummary
 from mor.dates import format_moment
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.payments.attempts import Attempt
 from mor.public_ids import QUOTE_PREFIX, SESSION_PREFIX, public_id
 from mor.web.api_estimates import collected_by, group_of
 from mor.web.staff_layout import money_text, staff_page
@@ -132,12 +134,48 @@ def _refused(quote: RefusedQuote) -> htpy.Node:
     ]
 
 
+def _attempts(attempts: list[Attempt], account_names: dict[str, str]) -> htpy.Node:
+    """Newest first; why one ended, and which PSP account and payment."""
+    if not attempts:
+        return htpy.p(class_="muted")["None yet."]
+    rows: list[htpy.Node] = []
+    for attempt in reversed(attempts):
+        rows.append(
+            htpy.tr[
+                htpy.td[format_moment(attempt.created_at)],
+                htpy.td[attempt.method.value],
+                htpy.td(class_="num")[money_text(attempt.amount)],
+                htpy.td[attempt.state.value],
+                htpy.td[attempt.ended_reason or ""],
+                htpy.td[account_names.get(attempt.psp_account_id.hex, "?")],
+                htpy.td[attempt.provider_payment_id or ""],
+            ]
+        )
+    return htpy.table(class_="data")[
+        htpy.thead[
+            htpy.tr[
+                htpy.th["Made"],
+                htpy.th["Method"],
+                htpy.th["Amount"],
+                htpy.th["State"],
+                htpy.th["Why"],
+                htpy.th["PSP account"],
+                htpy.th["PSP payment"],
+            ]
+        ],
+        htpy.tbody[rows],
+    ]
+
+
 def render_session_page(
     session: CheckoutSession,
     merchant_name: str,
     countries: dict[str, str],
     quotes: list[StoredQuote],
+    attempts: list[Attempt],
+    account_names: dict[str, str],
 ) -> str:
+    """`account_names`: each PSP account id (hex) to its name."""
     """`countries`: each address id (hex) to its country, for the quotes."""
     lines: list[htpy.Node] = []
     for line in session.lines:
@@ -171,6 +209,8 @@ def render_session_page(
             f" {format_moment(session.expires_at)}."
         ],
         htpy.ul[lines],
+        htpy.h2["Payment attempts, newest first"],
+        _attempts(attempts, account_names),
         htpy.h2["Quotes, newest first"],
         sections or htpy.p(class_="muted")["None yet."],
     )

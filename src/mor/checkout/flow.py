@@ -7,6 +7,10 @@ and decides under that lock; no step calls a vendor.
                          └──────refused──────▶ refused
     a new address (from open, quoting, quoted, refused) quotes again
     any of those ──expiry due, now >= expires_at──▶ expired
+    quoted ──pay──▶ paying ──captured──▶ completed   (mor.payments, mor.orders)
+    paying ──the attempt ended without money──▶ quoted, or expired if its
+        time passed meanwhile (`end_payment`). `paying` never expires by
+        itself: a payment made is always honoured.
 
 A finished lookup is announced to the sessions waiting on it by
 `notify_waiting`, which locks no session; each session then builds again
@@ -47,6 +51,9 @@ from mor.messaging.facts import (
     DutyRateNeedsPersonV1,
     DutyRateUnknownCodeV1,
     Fact,
+    PaymentCancelledV1,
+    PaymentDeclinedV1,
+    PaymentExpiredV1,
     QuoteInputsArrivedV1,
     QuoteMadeV1,
     QuoteRefusedV1,
@@ -461,5 +468,36 @@ async def expire_session(
     )
     await append_fact(
         conn, CheckoutSessionExpiredV1(checkout_session_id=session.id), FLOW, now
+    )
+    return Applied()
+
+
+async def end_payment(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
+    """Consumer `session_payment_ended`: an attempt ended without money
+    taken, so the buyer may pay another way, or the session expires now if
+    its time passed while it was paying. Decided under the session's
+    lock."""
+    match fact:
+        case (
+            PaymentDeclinedV1(checkout_session_id=session_id)
+            | PaymentExpiredV1(checkout_session_id=session_id)
+            | PaymentCancelledV1(checkout_session_id=session_id)
+        ):
+            pass
+        case _:
+            raise WrongFact(f"session_payment_ended got {fact!r}")
+    session = await lock_session(conn, session_id)
+    if session is None or session.state != SessionState.PAYING:
+        return Stale()
+    if now >= session.expires_at:
+        await set_session_state(
+            conn, session.id, SessionState.EXPIRED, session.address_id, session.quote_id
+        )
+        await append_fact(
+            conn, CheckoutSessionExpiredV1(checkout_session_id=session.id), FLOW, now
+        )
+        return Applied()
+    await set_session_state(
+        conn, session.id, SessionState.QUOTED, session.address_id, session.quote_id
     )
     return Applied()

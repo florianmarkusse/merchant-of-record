@@ -17,12 +17,15 @@ from mor.merchants.records import KeyEnv, NewKey
 from mor.merchants.store import authenticate
 from mor.messaging.worker import Failed, drain_once
 from mor.seed import (
+    DEFAULT_PSP,
     SeededAccount,
     SeedInProd,
     base_url,
     seed_accounts,
     seed_couriers,
     seed_merchant,
+    seed_psp_accounts,
+    set_up_fake_psp,
     subscribe_webhooks,
 )
 from tests.helpers import ENV, Wired, wire
@@ -161,5 +164,49 @@ def test_the_sandbox_merchant_gets_one_key_shown_once(database_url: str) -> None
         assert found is not None and found.merchant.display_name == "Sandbox Shop"
         assert isinstance(refused, SeedInProd)
         assert await _count(database_url, b"SELECT count(*) FROM merchant") == 1
+
+    asyncio.run(body())
+
+
+def test_psp_accounts_are_seeded_once_per_wiring_with_one_default_route(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        wired = wire(database_url, lambda: NOW)
+        settings = Settings(ENV, database_url, SELF_URL)
+        try:
+            names: set[str] = set()
+            for _ in range(2):
+                async with await connect(database_url) as conn:
+                    accounts = await seed_psp_accounts(conn, settings, NOW)
+                    assert not isinstance(accounts, SeedInProd)
+                    await conn.commit()
+                assert await set_up_fake_psp(wired.control, settings, accounts) is None
+                names = {account.name for account in accounts}
+            assert len(names) == 12
+            async with await connect(database_url) as conn:
+                cur = await conn.execute(
+                    "SELECT a.name FROM psp_route r"
+                    " JOIN psp_account a ON a.id = r.psp_account_id"
+                )
+                assert await cur.fetchall() == [(DEFAULT_PSP,)]
+            cur_count = await wired.control.get(
+                f"{SELF_URL}/_fake/psp/{DEFAULT_PSP}/payments?reference=none"
+            )
+            assert cur_count.json() == {"payments": []}
+        finally:
+            await wired.http.aclose()
+            await wired.control.aclose()
+
+    asyncio.run(body())
+
+
+def test_the_psp_seed_is_refused_in_prod(database_url: str) -> None:
+    async def body() -> None:
+        async with await connect(database_url) as conn:
+            result = await seed_psp_accounts(
+                conn, Settings(Environment.PROD, database_url, SELF_URL), NOW
+            )
+        assert isinstance(result, SeedInProd)
 
     asyncio.run(body())

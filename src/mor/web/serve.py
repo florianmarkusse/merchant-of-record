@@ -43,7 +43,9 @@ def create_app() -> Starlette:
     outgoing = httpx2.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS)
     fakes = None
     if settings.environment != Environment.PROD:
-        fakes = Fakes(mor.fakes.app.make_app(settings.database_url, outgoing), outgoing)
+        fakes = Fakes(
+            mor.fakes.app.make_app(settings.database_url, outgoing, _now), outgoing
+        )
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncGenerator[None]:

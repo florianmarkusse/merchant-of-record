@@ -21,6 +21,15 @@ class ConsumerName(StrEnum):
     QUOTE_WAIT_NOTIFY = "quote_wait_notify"
     QUOTE_BUILD = "quote_build"
     CHECKOUT_SESSION_EXPIRE = "checkout_session_expire"
+    PSP_PAYMENT_CREATE = "psp_payment_create"
+    PSP_PAYMENT_CAPTURE = "psp_payment_capture"
+    PSP_PAYMENT_CANCEL = "psp_payment_cancel"
+    PSP_PAYMENT_POLL = "psp_payment_poll"
+    PSP_PAYMENT_FETCH = "psp_payment_fetch"
+    PSP_INBOX_DECODE = "psp_inbox_decode"
+    PAYMENT_EVENT_APPLY = "payment_event_apply"
+    ORDER_CREATE = "order_create"
+    SESSION_PAYMENT_ENDED = "session_payment_ended"
 
 
 type ConsumerKind = Literal["local", "effect"]
@@ -65,6 +74,31 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.QUOTE_BUILD,)
         case MessageType.CHECKOUT_SESSION_EXPIRY_DUE:
             return (ConsumerName.CHECKOUT_SESSION_EXPIRE,)
+        # Payments (docs/plan-payments.md §4).
+        case MessageType.PAYMENT_ATTEMPT_CREATED:
+            return (ConsumerName.PSP_PAYMENT_CREATE,)
+        case MessageType.PAYMENT_AUTHORISED:
+            return (ConsumerName.PSP_PAYMENT_CAPTURE,)
+        case MessageType.PAYMENT_CANCEL_WANTED:
+            return (ConsumerName.PSP_PAYMENT_CANCEL,)
+        case MessageType.PAYMENT_POLL_DUE:
+            return (ConsumerName.PSP_PAYMENT_POLL,)
+        # Its own consumer: deliveries run in order per consumer and
+        # aggregate, and a poll scheduled for later would hold it back.
+        case MessageType.PAYMENT_EVENTS_WANTED:
+            return (ConsumerName.PSP_PAYMENT_FETCH,)
+        case MessageType.PSP_INBOX_STORED:
+            return (ConsumerName.PSP_INBOX_DECODE,)
+        case MessageType.PSP_EVENT_RECEIVED:
+            return (ConsumerName.PAYMENT_EVENT_APPLY,)
+        case MessageType.PAYMENT_CAPTURED:
+            return (ConsumerName.ORDER_CREATE,)
+        case (
+            MessageType.PAYMENT_DECLINED
+            | MessageType.PAYMENT_EXPIRED
+            | MessageType.PAYMENT_CANCELLED
+        ):
+            return (ConsumerName.SESSION_PAYMENT_ENDED,)
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
@@ -78,6 +112,13 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             | MessageType.QUOTE_MADE
             | MessageType.QUOTE_REFUSED
             | MessageType.CHECKOUT_SESSION_EXPIRED
+            # Records for now: what the page shows. A person reads the
+            # needs-person list; the invoice (5b) and merchant webhooks
+            # consume the rest.
+            | MessageType.PAYMENT_ACTION_REQUIRED
+            | MessageType.PAYMENT_NEEDS_PERSON
+            | MessageType.CHECKOUT_SESSION_COMPLETED
+            | MessageType.ORDER_PAID
         ):
             return ()
         case _:
@@ -97,6 +138,10 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.QUOTE_WAIT_NOTIFY
             | ConsumerName.QUOTE_BUILD
             | ConsumerName.CHECKOUT_SESSION_EXPIRE
+            | ConsumerName.PSP_INBOX_DECODE
+            | ConsumerName.PAYMENT_EVENT_APPLY
+            | ConsumerName.ORDER_CREATE
+            | ConsumerName.SESSION_PAYMENT_ENDED
         ):
             return "local"
         case (
@@ -105,6 +150,11 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.ECHO_REPORT_FETCH
             | ConsumerName.DUTY_RATE_ASK
             | ConsumerName.SHIPPING_PRICE_ASK
+            | ConsumerName.PSP_PAYMENT_CREATE
+            | ConsumerName.PSP_PAYMENT_CAPTURE
+            | ConsumerName.PSP_PAYMENT_CANCEL
+            | ConsumerName.PSP_PAYMENT_POLL
+            | ConsumerName.PSP_PAYMENT_FETCH
         ):
             return "effect"
         case _:

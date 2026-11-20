@@ -19,6 +19,11 @@ gets an account pointing at the fake courier, its prices used for
 PRICE_VALID_FOR under the `carrier_first` rule (decided 19-Nov-2026). The
 fake answers its own default prices.
 
+One fake PSP account per wiring (how news arrives, how it captures, its
+duplicate guard), each set up at the fake PSP as a merchant would on its
+dashboard, and a default route to the push / sale / keyed one
+(docs/plan-payments.md §2). Another wiring is tried by adding a route row.
+
 A synthetic merchant, "Sandbox Shop", with an API key for this
 environment: the key is printed when it is created, and only then
 (docs/plan-quote.md §5, 4d-1).
@@ -57,6 +62,10 @@ from mor.merchants.store import (
     merchant_has_key,
     merchants,
 )
+from mor.messaging.guard import DuplicateGuard
+from mor.provider_accounts import ProviderAccountKind
+from mor.psp.accounts import add_route, create_psp_account, psp_account_by_name
+from mor.psp.port import CaptureMode, PaymentMethod, PspAccount, PspProvider, StatusMode
 
 
 SEEDER = Actor(ActorKind.SYSTEM, "seed")
@@ -210,6 +219,85 @@ async def seed_couriers(conn: Connection, settings: Settings) -> list[str] | See
     return created
 
 
+PSP_GUARDS = (DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)
+DEFAULT_PSP = "sandbox-push_fat-sale-vendor_constraint"
+
+
+def psp_name(mode: StatusMode, capture: CaptureMode, guard: DuplicateGuard) -> str:
+    return f"sandbox-{mode.value}-{capture.value}-{guard.value}"
+
+
+async def seed_psp_accounts(
+    conn: Connection, settings: Settings, now: datetime
+) -> list[PspAccount] | SeedInProd:
+    """Every wiring's account, made if missing, and the default route if
+    there is none. Never commits."""
+    if settings.environment == Environment.PROD:
+        return SeedInProd()
+    seeded: list[PspAccount] = []
+    for mode in StatusMode:
+        for capture in CaptureMode:
+            for guard in PSP_GUARDS:
+                name = psp_name(mode, capture, guard)
+                account = await psp_account_by_name(conn, name)
+                if account is None:
+                    account = await create_psp_account(
+                        conn,
+                        name,
+                        PspProvider.FAKE,
+                        ProviderAccountKind.FAKE,
+                        f"{settings.self_url}/_fake/psp/{name}",
+                        TIMEOUT,
+                        mode,
+                        capture,
+                        guard,
+                        (PaymentMethod.CARD, PaymentMethod.QR),
+                        secrets.token_hex(16),
+                        now,
+                        POLL_INTERVAL,
+                    )
+                seeded.append(account)
+    cur = await conn.execute("SELECT 1 FROM psp_route LIMIT 1")
+    if await cur.fetchone() is None:
+        default = await psp_account_by_name(conn, DEFAULT_PSP)
+        assert default is not None
+        await add_route(conn, default.id, None, None, now, SEEDER, now)
+    return seeded
+
+
+async def set_up_fake_psp(
+    http: httpx2.AsyncClient, settings: Settings, accounts: list[PspAccount]
+) -> FakeUnreachable | None:
+    """The PSP side: each account as set on the PSP's dashboard."""
+    for account in accounts:
+        pushes = account.status_mode != StatusMode.POLL
+        payload: str | None = None
+        if account.status_mode == StatusMode.PUSH_FAT:
+            payload = "full"
+        elif account.status_mode == StatusMode.PUSH_THIN:
+            payload = "thin"
+        try:
+            response = await http.post(
+                f"{account.base_url}/setup",
+                json={
+                    "capture": account.capture_mode.value,
+                    "keyed": account.create_guard == DuplicateGuard.VENDOR_CONSTRAINT,
+                    "webhook_url": (
+                        f"{settings.self_url}/webhooks/psp/{account.id}"
+                        if pushes
+                        else None
+                    ),
+                    "webhook_secret": account.webhook_secret if pushes else None,
+                    "webhook_payload": payload,
+                },
+            )
+        except httpx2.TransportError as error:
+            return FakeUnreachable(repr(error))
+        if response.status_code != 204:
+            return FakeUnreachable(f"status {response.status_code}")
+    return None
+
+
 async def set_fake_duty_rates(
     http: httpx2.AsyncClient, settings: Settings
 ) -> FakeUnreachable | None:
@@ -274,11 +362,15 @@ async def _main() -> int:
         assert not isinstance(couriers, SeedInProd)
         key = await seed_merchant(conn, settings, datetime.now(UTC))
         assert not isinstance(key, SeedInProd)
+        psps = await seed_psp_accounts(conn, settings, datetime.now(UTC))
+        assert not isinstance(psps, SeedInProd)
         await conn.commit()
     async with httpx2.AsyncClient() as http:
         unreachable = await subscribe_webhooks(http, settings, seeded)
         if unreachable is None:
             unreachable = await set_fake_duty_rates(http, settings)
+        if unreachable is None:
+            unreachable = await set_up_fake_psp(http, settings, psps)
     if unreachable is not None:
         print(f"accounts seeded, webhooks not subscribed: {unreachable.detail}")
         print(f"is the server running at {settings.self_url}? Then seed again.")
@@ -290,6 +382,7 @@ async def _main() -> int:
     print(f"{len(seeded)} echo accounts, {created} new; webhooks subscribed")
     print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
     print(f"courier accounts created: {', '.join(couriers) or 'none'}")
+    print(f"{len(psps)} fake PSP accounts set up; default route: {DEFAULT_PSP}")
     if key is not None:
         print(f"Sandbox Shop API key (shown once): {key.text}")
     return 0

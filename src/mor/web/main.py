@@ -44,6 +44,9 @@ def make_app(
     async def echo_webhook(request: Request) -> Response:
         return await webhooks.echo_webhook(request, url, clock())
 
+    async def psp_webhook(request: Request) -> Response:
+        return await webhooks.psp_webhook(request, url, clock())
+
     async def api_create_checkout_session(request: Request) -> Response:
         return await api.create_checkout_session(request, settings, clock())
 
@@ -61,6 +64,15 @@ def make_app(
 
     async def buyer_refresh(request: Request) -> Response:
         return await buyer.post_refresh(request, settings, clock())
+
+    async def buyer_pay(request: Request) -> Response:
+        return await buyer.post_pay(request, settings, clock())
+
+    async def buyer_another_way(request: Request) -> Response:
+        return await buyer.post_another_way(request, settings, clock())
+
+    async def buyer_status(request: Request) -> Response:
+        return await buyer.get_status(request, settings)
 
     async def staff_quote_page(request: Request) -> Response:
         return await staff_markets.quote_page(request, url, clock())
@@ -85,6 +97,7 @@ def make_app(
 
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
+        Route("/webhooks/psp/{account_id}", psp_webhook, methods=["POST"]),
         # The merchant API, in every environment: each has its own keys.
         Route("/v1/checkout_sessions", api_create_checkout_session, methods=["POST"]),
         Route(
@@ -97,6 +110,9 @@ def make_app(
         Route("/c/{session_id}", buyer_page, methods=["GET"]),
         Route("/c/{session_id}/address", buyer_address, methods=["POST"]),
         Route("/c/{session_id}/refresh", buyer_refresh, methods=["POST"]),
+        Route("/c/{session_id}/pay", buyer_pay, methods=["POST"]),
+        Route("/c/{session_id}/pay-another-way", buyer_another_way, methods=["POST"]),
+        Route("/c/{session_id}/status", buyer_status, methods=["GET"]),
         # Stylesheets and compiled scripts (static/js/ comes from ts/).
         Mount(
             "/static",

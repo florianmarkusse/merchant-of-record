@@ -1,7 +1,9 @@
-"""The buyer's checkout page (`/c/{session}`, docs/plan-quote.md §5, 4d-2):
-typed htpy, English first, mobile first, the merchant's name on top and
-ours only in the one line the law asks for. No script: while the quote is
-being worked out the page refreshes itself.
+"""The buyer's checkout page (`/c/{session}`, docs/plan-quote.md §5, 4d-2;
+docs/plan-payments.md §4): typed htpy, English first, mobile first, the
+merchant's name on top and ours only in the one line the law asks for.
+While a quote is worked out or a payment confirmed, `ts/waiting.ts` asks
+whether the state changed and reloads once it has; without the script the
+page refreshes itself (the <meta> refresh in its <noscript>).
 
 What the buyer sees of a price is the four lines decided in
 plan-architecture §8: items (our fee inside), shipping, duties and
@@ -20,8 +22,12 @@ from mor.checkout.records import CheckoutSession, SessionState
 from mor.dates import format_moment
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.payments.attempts import Attempt
+from mor.payments.transitions import AttemptState
+from mor.psp.port import PaymentMethod
 from mor.quote.refusals import RefusalCode
 from mor.web.api_estimates import group_of
+from mor.web.qr import qr_svg
 from mor.web.staff_layout import money_text, static_url
 
 
@@ -79,12 +85,41 @@ class BuyerView:
     refused: RefusedQuote | None
     option_key: str  # the option shown; the cheapest if none or unknown
     now: datetime
+    attempt: Attempt | None  # the newest payment attempt
+    methods: tuple[PaymentMethod, ...]  # what routing offers; none: no route
+    status: str  # what the waiting script compares (`buyer.status_text`)
+
+
+METHOD_WORDS: dict[PaymentMethod, str] = {
+    PaymentMethod.CARD: "Card",
+    PaymentMethod.QR: "QR code, with your banking app",
+}
+
+ENDED_WORDS: dict[AttemptState, str] = {
+    AttemptState.DECLINED: "Your payment was declined. You can try again.",
+    AttemptState.EXPIRED: "Your payment ran out of time. You can try again.",
+    AttemptState.CANCELLED: "You can choose another way to pay.",
+}
+
+
+def waiting(view: BuyerView) -> bool:
+    """The page shows a state that changes by itself."""
+    state = view.session.state
+    if state == SessionState.QUOTING:
+        return True
+    if state == SessionState.PAYING:
+        return view.attempt is None or view.attempt.state != AttemptState.NEEDS_PERSON
+    return False
 
 
 def _page(view: BuyerView, *content: htpy.Node) -> str:
     refresh: htpy.Node = None
-    if view.session.state == SessionState.QUOTING:
-        refresh = htpy.meta(http_equiv="refresh", content=str(REFRESH_SECONDS))
+    script: htpy.Node = None
+    if waiting(view):
+        refresh = htpy.noscript[
+            htpy.meta(http_equiv="refresh", content=str(REFRESH_SECONDS))
+        ]
+        script = htpy.script(src=static_url("js/waiting.js"), type="module")
     page = htpy.html(lang="en")[
         htpy.head[
             htpy.meta(charset="utf-8"),
@@ -99,8 +134,12 @@ def _page(view: BuyerView, *content: htpy.Node) -> str:
             refresh,
             htpy.title[f"Checkout · {view.merchant_name}"],
             htpy.link(rel="stylesheet", href=static_url("css/buyer.css")),
+            script,
         ],
-        htpy.body[
+        htpy.body(
+            data_status_url=f"/c/{view.public_id}/status",
+            data_status=view.status,
+        )[
             htpy.header[htpy.h1[view.merchant_name]],
             htpy.main[content],
             htpy.footer[
@@ -275,13 +314,128 @@ def _quote(view: BuyerView, quote: MadeQuote) -> htpy.Node:
         htpy.h2["Your price"],
         htpy.table(class_="breakdown")[htpy.tbody[breakdown]],
         until,
-        htpy.button(type="button", disabled=True)["Pay (coming soon)"],
+        _pay_form(view, chosen, currency) if held else None,
+    ]
+
+
+def _pay_form(view: BuyerView, chosen: StoredOption, currency: Currency) -> htpy.Node:
+    if not view.methods:
+        return htpy.p(class_="notice")[
+            "Payment isn't available for this country yet. The shop has been told."
+        ]
+    choices: list[htpy.Node] = []
+    for number, method in enumerate(view.methods):
+        choices.append(
+            htpy.label(class_="method")[
+                htpy.input(
+                    type="radio",
+                    name="method",
+                    value=method.value,
+                    checked=number == 0,
+                ),
+                " ",
+                METHOD_WORDS[method],
+            ]
+        )
+    ended: htpy.Node = None
+    if view.attempt is not None and view.attempt.state in ENDED_WORDS:
+        ended = htpy.p(class_="refused", role="alert")[ENDED_WORDS[view.attempt.state]]
+    return htpy.form(method="post", action=f"/c/{view.public_id}/pay", class_="pay")[
+        ended,
+        htpy.fieldset[htpy.legend["Pay with"], choices],
+        htpy.input(type="hidden", name="option", value=chosen.key),
+        htpy.button(type="submit")[
+            "Pay ", money_text(Money(chosen.total_minor, currency))
+        ],
+    ]
+
+
+def _another_way(view: BuyerView) -> htpy.Node:
+    return htpy.form(method="post", action=f"/c/{view.public_id}/pay-another-way")[
+        htpy.button(type="submit", class_="secondary")["Pay another way"]
+    ]
+
+
+def _paying(view: BuyerView, attempt: Attempt | None) -> htpy.Node:
+    total = htpy.p[
+        "Total: ",
+        htpy.strong[money_text(attempt.amount)] if attempt is not None else None,
+    ]
+    if attempt is None or attempt.state in (
+        AttemptState.REQUESTED,
+        AttemptState.AUTHORISED,
+        AttemptState.CANCELLING,
+    ):
+        return htpy.section(class_="paying")[
+            total,
+            htpy.p(class_="waiting", role="status")["Confirming your payment…"],
+        ]
+    if attempt.state == AttemptState.NEEDS_PERSON:
+        return htpy.section(class_="paying")[
+            total,
+            htpy.p(role="status")[
+                "We're checking your payment with the payment provider. You won't"
+                " be charged twice, and you can close this page."
+            ],
+        ]
+    action = attempt.action
+    if attempt.state != AttemptState.ACTION_REQUIRED or action is None:
+        return htpy.section(class_="paying")[
+            total,
+            htpy.p(class_="waiting", role="status")["Confirming your payment…"],
+        ]
+    expiry: htpy.Node = None
+    if action.expires_at is not None:
+        expiry = htpy.p[
+            "This code works until ",
+            htpy.time(datetime=action.expires_at.isoformat())[
+                format_moment(action.expires_at)
+            ],
+            ".",
+        ]
+    if action.kind == "qr":
+        return htpy.section(class_="paying")[
+            total,
+            htpy.p["Scan this code with your banking app to pay."],
+            qr_svg(action.url, "QR code to pay"),
+            expiry,
+            htpy.p(class_="waiting", role="status")[
+                "This page updates by itself once you've paid."
+            ],
+            _another_way(view),
+        ]
+    return htpy.section(class_="paying")[
+        total,
+        htpy.p[htpy.a(href=action.url, class_="button")["Continue to payment"]],
+        htpy.p(class_="waiting", role="status")[
+            "Once you've paid, this page updates by itself."
+        ],
+        _another_way(view),
+    ]
+
+
+def _paid(view: BuyerView) -> htpy.Node:
+    total: htpy.Node = None
+    if view.attempt is not None:
+        total = htpy.p["Total paid: ", htpy.strong[money_text(view.attempt.amount)]]
+    return htpy.section(class_="paid")[
+        htpy.h2["Thank you, your order is paid"],
+        total,
+        htpy.p[
+            f"{view.merchant_name} will send it to you. Your invoice comes from"
+            f" {OUR_NAME}."
+        ],
+        htpy.p[htpy.a(href=view.session.return_url)[f"Back to {view.merchant_name}"]],
     ]
 
 
 def render_buyer_page(view: BuyerView) -> str:
     action = f"/c/{view.public_id}/address"
     state = view.session.state
+    if state == SessionState.COMPLETED:
+        return _page(view, _cart(view.session), _paid(view))
+    if state == SessionState.PAYING:
+        return _page(view, _cart(view.session), _paying(view, view.attempt))
     if state == SessionState.QUOTING:
         return _page(
             view,

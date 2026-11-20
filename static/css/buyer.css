@@ -113,6 +113,41 @@ td.amount { text-align: right; font-variant-numeric: tabular-nums; }
   border-top: 1px solid var(--line);
 }
 
+/* Paying (docs/plan-payments.md §4). */
+form.pay fieldset { border: 0; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+form.pay legend { color: var(--muted); font-size: 0.9rem; margin-bottom: 4px; }
+label.method {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+label.method input { width: auto; margin: 0; }
+label.method:has(input:checked) { border-color: var(--accent); }
+
+a.button {
+  display: block;
+  text-align: center;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+  text-decoration: none;
+}
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--line);
+}
+
+/* The code's own white border is its quiet zone: keep it white in dark mode. */
+svg.qr { display: block; width: min(16rem, 100%); height: auto; margin: 12px auto; }
+
+section.paid h2 { margin-top: 0.25rem; }
+
 details summary { cursor: pointer; }
 details form.address { border: 0; padding: 0; margin-top: 12px; }
 

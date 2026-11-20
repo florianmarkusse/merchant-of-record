@@ -211,7 +211,8 @@ def test_an_address_gets_a_stored_quote_and_the_page_shows_four_lines(
         for label in ("Items", "Shipping", "Duties and taxes", "Total"):
             assert label in page
         assert "This price is held until 18-Nov-2026 10:00 UTC" in page
-        assert "Pay (coming soon)" in page
+        # No payment routing in this setup: the page says so instead of a button.
+        assert "Payment isn't available for this country yet" in page
 
         api = await setup.wired.control.get(
             f"http://mor/v1/checkout_sessions/cs_{setup.session_id.hex}",

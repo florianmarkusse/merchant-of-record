@@ -367,6 +367,23 @@ and the long fuzz runs use a database of their own. Contract tests
 against a vendor's sandbox are run by hand with an explicit flag, never
 by `pytest`.
 
+Vendor sandboxes on the test setup (decided 19-Nov-2026, amending the
+rule above): once a real provider module exists, the test setup may also
+hold accounts on that vendor's own sandbox (a PSP's test mode, a
+carrier's test API), next to the fakes. So a merchant, and we, can run
+an order end to end against the real API without real money or parcels.
+- `dev` stays fakes only; `test` allows the fake and a provider's
+  sandbox; `prod` allows live accounts only. Each account row says which
+  of `fake`, `sandbox` or `live` it is, and the registry refuses any
+  account whose kind the environment does not allow, so a live key can
+  never be used outside prod, nor a sandbox key in prod.
+- A sandbox account is routed only to merchants we pick (a routing row
+  per merchant); the default routes stay on the fakes.
+- The fakes remain what the fuzzer, the soak and `pytest` use: a vendor's
+  sandbox has its own limits and outages, and only the fake can be
+  scripted into every fault.
+- Built with the first real provider module of each port, not before.
+
 **Every integration mode has a fake** (decided 15-Nov-2026: the fakes and
 the test setup must exercise every way a provider can be wired, not one
 happy shape). A mode here is any capability value that changes which code

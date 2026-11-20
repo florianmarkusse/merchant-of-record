@@ -49,7 +49,16 @@ and wins where the two differ.
   lookups) and 4d-2 (the stored quote and its waiting flow, the buyer
   pages at `/c/{session}`, sessions on the staff page) are built: slice 4
   is done. Slice 5 (payments: the fake PSP, the payment attempt against a
-  quote, capture, the order and the invoice) is next.
+  quote, capture, the order and the invoice) is next, proposed in
+  `docs/plan-payments.md` in three steps (5a pay, 5b invoice and order,
+  5c settlement); its questions are answered (19-Nov-2026) and 5a (the
+  fake PSP in every wiring, the payment attempt, the order and its capture
+  entry, the buyer's pay pages) is built. 5b is next.
+- Decided 19-Nov-2026: the test setup may route chosen merchants to a
+  real vendor's sandbox next to the fakes, once that vendor's module
+  exists; every provider account is `fake`, `sandbox` or `live`, and the
+  registry refuses a kind the environment does not allow
+  (`docs/plan-architecture.md` §6).
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
@@ -147,7 +156,7 @@ uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_v
 uv run python -m mor.messaging.worker    # the worker: runs due deliveries; outside prod watchfiles restarts it on a change under src/
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod; uvicorn reloads it on a change under src/
-uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor and courier accounts at the fake, the Sandbox Shop merchant and its key (server must run)
+uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor and courier accounts at the fake, a fake PSP account per wiring with a default route, the Sandbox Shop merchant and its key (server must run)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
 uv run python -m mor.merchants           # create/list merchants; `key mer_…` prints a new API key once; `revoke <key id>`
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
