@@ -21,7 +21,6 @@ that does work is logged in `courier_call`. Its state is its own (schema
 `fake_vendor`, its own connections), as a third party's would be.
 """
 
-import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -33,6 +32,8 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+
+from mor.fakes.hang import Hang
 
 
 type Fault = Literal[
@@ -54,8 +55,6 @@ FAULTS: tuple[Fault, ...] = (
     "already_expired",
 )
 
-# Longer than any client timeout: "did the work, then never answered".
-HANG_SECONDS = 60
 VOLUMETRIC_DIVISOR = 5000  # cm³ per kg
 LONG_PAST = datetime(2000, 1, 1, tzinfo=UTC)
 VND_PER_US_CENT = 250  # `other_currency`: roughly 25,000 VND to the dollar
@@ -161,7 +160,7 @@ def _parts(rate: FakeRate, half_kilos: int) -> list[tuple[str, str, int]]:
     return parts
 
 
-def make_app(database_url: str) -> Starlette:
+def make_app(database_url: str, hang: Hang) -> Starlette:
     async def ask(request: Request) -> Response:
         try:
             body = msgspec.json.decode(await request.body(), type=AskBody)
@@ -198,7 +197,7 @@ def make_app(database_url: str) -> Starlette:
         valid_until = rate.valid_until
         match fault:
             case "timeout_after_work":
-                await asyncio.sleep(HANG_SECONDS)
+                await hang()
             case "not_served":
                 return _error(404, "not_served", f"no {body.service} to here")
             case "undecodable":

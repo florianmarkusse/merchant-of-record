@@ -38,7 +38,6 @@ Its state is its own (schema `fake_vendor`, its own connections), as a
 third party's would be; `psp_fake_charge` counts the money it moved.
 """
 
-import asyncio
 import hashlib
 import hmac
 import uuid
@@ -56,6 +55,8 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
+
+from mor.fakes.hang import Hang
 
 
 type Capture = Literal["sale", "authorise_capture"]
@@ -78,9 +79,6 @@ FAULTS: tuple[Fault, ...] = (
 )
 SIGNATURE_HEADER = "Psp-Signature"
 QR_LIFETIME = timedelta(minutes=15)
-
-# Longer than any client timeout: "did the work, then never answered".
-HANG_SECONDS = 60
 
 
 class SetupBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -315,7 +313,10 @@ def _base(request: Request) -> str:
 
 
 def make_app(
-    database_url: str, outgoing: httpx2.AsyncClient, clock: Callable[[], datetime]
+    database_url: str,
+    outgoing: httpx2.AsyncClient,
+    clock: Callable[[], datetime],
+    hang: Hang,
 ) -> Starlette:
     """`outgoing` carries the webhooks: a real client in dev, our app
     in-process in tests. `clock` is the PSP's own clock (a QR's expiry);
@@ -509,7 +510,7 @@ def make_app(
         if fault == "fail_500_after_work":
             return _error(500, "internal_error")
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         if payment.status == "declined":
             return _error(402, "declined", payment)
         return _json({"payment": payment}, status)
@@ -535,7 +536,7 @@ def make_app(
             )
             rows = await cur.fetchall()
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         payments: list[Payment] = []
         for row in rows:
             payments.append(_payment(row, base))
@@ -555,7 +556,7 @@ def make_app(
                 return _error(404, "unknown_payment")
             events = await _events(conn, payment.id)
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         return _json({"payment": payment, "events": events})
 
     async def capture(request: Request) -> Response:
@@ -606,7 +607,7 @@ def make_app(
         if fault == "fail_500_after_work":
             return _error(500, "internal_error")
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         return _json({"payment": payment})
 
     async def cancel(request: Request) -> Response:
@@ -631,7 +632,7 @@ def make_app(
         if fault == "fail_500_after_work":
             return _error(500, "internal_error")
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         return _json({"payment": payment})
 
     async def _release(

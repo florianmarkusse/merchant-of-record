@@ -62,7 +62,14 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
-from tests.helpers import ENV, TEST_URL, crash, empty_tables, wire
+from tests.helpers import (
+    ENV,
+    TEST_URL,
+    VENDOR_TIMEOUT,
+    crash,
+    empty_tables,
+    wire,
+)
 
 
 T0 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -317,7 +324,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
                 "carrier",
                 CourierProvider.FAKE,
                 "http://mor/_fake/courier/acct",
-                timedelta(milliseconds=100),
+                VENDOR_TIMEOUT,
                 VALID_FOR,
                 PriceExpiry.CARRIER_FIRST,
             )

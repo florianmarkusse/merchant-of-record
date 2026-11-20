@@ -23,7 +23,7 @@ from mor.merchants.records import KeyEnv, Merchant
 from mor.merchants.store import create_api_key, create_merchant, revoke_api_key
 from mor.messaging.worker import drain_once
 from mor.web.main import make_app
-from tests.helpers import ENV, wire
+from tests.helpers import ENV, VENDOR_TIMEOUT, wire
 from tests.quote.fixtures import live_market, quote_market
 
 
@@ -433,7 +433,7 @@ def test_a_live_price_is_fetched_once_while_the_merchant_waits(
                 "carrier",
                 CourierProvider.FAKE,
                 "http://mor/_fake/courier/acct",
-                timedelta(milliseconds=200),
+                VENDOR_TIMEOUT,
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,
             )
@@ -475,7 +475,7 @@ def test_new_lookups_over_the_daily_limit_are_not_asked(database_url: str) -> No
                 "carrier",
                 CourierProvider.FAKE,
                 "http://mor/_fake/courier/acct",
-                timedelta(milliseconds=200),
+                VENDOR_TIMEOUT,
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,
             )

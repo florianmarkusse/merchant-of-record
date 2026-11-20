@@ -77,7 +77,10 @@ may be while it is in use):
   the pure properties. Each gets an example budget (`SOAK_EXAMPLES`,
   read by the soak profile) sized from a measured run (the script's
   comment has the figures), stops at its first failure, and has a time
-  limit only as a guard against a hang.
+  limit only as a guard against a hang. The targets are read from the
+  tested commit's copy of the script, not from the working tree's, which
+  is what the timer runs (20-Nov-2026: targets the working tree named for
+  uncommitted test files broke two targets against `main`).
 - Every test file that uses Hypothesis is in a target, checked by
   `tests/test_soak_targets.py` (19-Nov-2026: the duty and shipping-price
   fuzzers and four property files had been added since the soak without

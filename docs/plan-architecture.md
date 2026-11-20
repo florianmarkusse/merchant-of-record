@@ -836,6 +836,15 @@ Two notes on the rules:
   only, because the library offers no other form.
 - Hypothesis test functions are synchronous. Each test owns one event
   loop and runs our async steps on it.
+- A step's outcome depends only on the draws, never on the wall clock
+  (decided 20-Nov-2026). Hypothesis replays a prefix of draws and expects
+  the same states; a different one is `FlakyStrategyDefinition`. The
+  fakes' "timed out after the work" is a `hang` they are given
+  (`mor.fakes.hang`): served, a real one-minute sleep; in the in-process
+  wiring (`tests/helpers.py` `wire`), a transport timeout at once. Vendor
+  accounts there get a 30 s timeout no answer comes near. Before, a
+  100 ms timeout met a stalled event loop (an answer after 148 ms) and two
+  fuzzers failed the 20-Nov-2026 soak as flaky.
 
 ## 11. Compliance touchpoints (named, not answered)
 

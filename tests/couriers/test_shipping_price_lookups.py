@@ -38,7 +38,7 @@ from mor.markets.store import Loaded, load_market
 from mor.messaging.worker import drain_once
 from mor.money.amount import Money
 from mor.money.currency import Currency
-from tests.helpers import ENV, Wired, wire
+from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, wire
 from tests.quote.fixtures import quote_market
 
 
@@ -68,7 +68,7 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
                 "carrier",
                 CourierProvider.FAKE,
                 "http://mor/_fake/courier/acct",
-                timedelta(milliseconds=200),
+                VENDOR_TIMEOUT,
                 VALID_FOR,
                 PriceExpiry.CARRIER_FIRST,
             )

@@ -12,6 +12,7 @@ from mor.db.connect import connect
 from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.port import EchoProvider
 from mor.fakes.echo import make_app
+from mor.fakes.hang import hang_a_minute
 from mor.messaging.worker import Failed, Ran, RunResult, Skipped, drain_once
 from mor.probe.flow import start_probe
 from tests.helpers import ENV, NO_HTTP, advisory_locks_held
@@ -123,7 +124,9 @@ def test_many_workers_send_every_echo_once_across_the_call(database_url: str) ->
                     )
             await conn.commit()
         results: list[RunResult] = []
-        transport = httpx2.ASGITransport(app=make_app(database_url, NO_HTTP))
+        transport = httpx2.ASGITransport(
+            app=make_app(database_url, NO_HTTP, hang_a_minute)
+        )
         async with httpx2.AsyncClient(transport=transport) as http:
             await asyncio.gather(
                 *[_echo_worker(database_url, http, results) for _ in range(WORKERS)]

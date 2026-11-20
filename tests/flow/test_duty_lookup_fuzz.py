@@ -51,7 +51,14 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
-from tests.helpers import ENV, TEST_URL, crash, empty_tables, wire
+from tests.helpers import (
+    ENV,
+    TEST_URL,
+    VENDOR_TIMEOUT,
+    crash,
+    empty_tables,
+    wire,
+)
 from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
 
 
@@ -272,7 +279,7 @@ class DutyLookupFlow(RuleBasedStateMachine):
                 "acme",
                 DutyProvider.FAKE,
                 "http://mor/_fake/duty/acct",
-                timedelta(milliseconds=100),
+                VENDOR_TIMEOUT,
             )
             await conn.commit()
 

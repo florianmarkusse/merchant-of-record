@@ -28,7 +28,6 @@ Transitional with the echo flow: removed once the fake PSP exercises the
 same machinery (slice 5), unless it serves something else by then.
 """
 
-import asyncio
 import hashlib
 import hmac
 import uuid
@@ -44,6 +43,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from mor.fakes.hang import Hang
+
 
 type Flavour = Literal["keyed", "cancellable", "plain"]
 type Fault = Literal["fail_500", "fail_500_after_work", "timeout_after_work", "refuse"]
@@ -51,9 +52,6 @@ type EventKind = Literal["confirmed", "archived"]
 type PushHow = Literal["once", "twice", "bad_signature"]
 FLAVOURS: tuple[Flavour, ...] = ("keyed", "cancellable", "plain")
 SIGNATURE_HEADER = "Echo-Signature"
-
-# Longer than any client timeout: "did the work, then never answered".
-HANG_SECONDS = 60
 
 
 class SendBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -161,7 +159,7 @@ async def _known_key(conn: FakeConnection, flavour: Flavour, key: str | None) ->
     return await cur.fetchone() is not None
 
 
-def make_app(database_url: str, outgoing: httpx2.AsyncClient) -> Starlette:
+def make_app(database_url: str, outgoing: httpx2.AsyncClient, hang: Hang) -> Starlette:
     """`outgoing` carries the fake's webhooks: a real client in dev, our app
     in-process in tests."""
 
@@ -226,7 +224,7 @@ def make_app(database_url: str, outgoing: httpx2.AsyncClient) -> Starlette:
         if fault == "fail_500_after_work":
             return _error(500, "internal_error")
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         return JSONResponse(_echo_json(row), status_code=status)
 
     async def find(request: Request) -> Response:
@@ -458,7 +456,7 @@ def make_app(database_url: str, outgoing: httpx2.AsyncClient) -> Starlette:
             assert kind == "confirmed" or kind == "archived"
             released.append(_Event(event_id, echo_id, ref, kind, occurred_at))
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         return Response(
             msgspec.json.encode(_FullWebhook(events=released)),
             media_type="application/json",
@@ -524,7 +522,7 @@ def make_app(database_url: str, outgoing: httpx2.AsyncClient) -> Starlette:
             )
             rows = await cur.fetchall()
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         names: list[str] = []
         for (name,) in rows:
             assert isinstance(name, str)
@@ -551,7 +549,7 @@ def make_app(database_url: str, outgoing: httpx2.AsyncClient) -> Starlette:
         if row is None:
             return _error(404, "unknown_report")
         if fault == "timeout_after_work":
-            await asyncio.sleep(HANG_SECONDS)
+            await hang()
         body = row[0]
         assert isinstance(body, str)
         return Response(body, media_type="text/csv")

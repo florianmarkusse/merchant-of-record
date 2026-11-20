@@ -99,6 +99,11 @@ prepare_checkout() {
 
 run_soak() {
   prepare_checkout
+  # The targets of the commit under test, not this copy's: the timer runs
+  # the working tree's script, and a target it named for uncommitted test
+  # files broke two targets against `main` (20-Nov-2026).
+  # shellcheck source=/dev/null
+  source <(sed -n '/^TARGETS=($/,/^)$/p' "${CHECKOUT}/deploy/soak.sh")
   local commit stamp failures=()
   commit="$(git -C "$CHECKOUT" rev-parse --short HEAD)"
   stamp="$(date -u +%Y-%m-%dT%H%M%SZ)"

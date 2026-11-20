@@ -5,7 +5,7 @@ dashboard. Every person and address here is made up."""
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import httpx2
 
@@ -26,7 +26,7 @@ from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.accounts import add_route, create_psp_account
 from mor.psp.port import CaptureMode, PaymentMethod, PspAccount, PspProvider, StatusMode
-from tests.helpers import ENV
+from tests.helpers import ENV, VENDOR_TIMEOUT
 from tests.quote.fixtures import quote_market
 
 
@@ -84,7 +84,7 @@ async def make_shop(
             PspProvider.FAKE,
             ProviderAccountKind.FAKE,
             f"http://mor/_fake/psp/{name}",
-            timedelta(milliseconds=300),
+            VENDOR_TIMEOUT,
             wiring.status_mode,
             wiring.capture_mode,
             wiring.guard,

@@ -23,6 +23,7 @@ from starlette.applications import Starlette
 
 import mor.fakes.app
 from mor.config import Environment, load_settings
+from mor.fakes.hang import hang_a_minute
 from mor.web.main import Fakes, make_app
 
 
@@ -44,7 +45,10 @@ def create_app() -> Starlette:
     fakes = None
     if settings.environment != Environment.PROD:
         fakes = Fakes(
-            mor.fakes.app.make_app(settings.database_url, outgoing, _now), outgoing
+            mor.fakes.app.make_app(
+                settings.database_url, outgoing, _now, hang_a_minute
+            ),
+            outgoing,
         )
 
     @asynccontextmanager

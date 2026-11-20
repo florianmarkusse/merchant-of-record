@@ -64,7 +64,14 @@ from mor.messaging.worker import (
 )
 from mor.money.amount import Money
 from mor.money.currency import Currency
-from tests.helpers import ENV, TEST_URL, crash, empty_tables, wire
+from tests.helpers import (
+    ENV,
+    TEST_URL,
+    VENDOR_TIMEOUT,
+    crash,
+    empty_tables,
+    wire,
+)
 from tests.quote.fixtures import live_market
 
 
@@ -352,7 +359,7 @@ class QuoteFlow(RuleBasedStateMachine):
                 "carrier",
                 CourierProvider.FAKE,
                 "http://mor/_fake/courier/acct",
-                timedelta(milliseconds=100),
+                VENDOR_TIMEOUT,
                 timedelta(hours=6),
                 PriceExpiry.CARRIER_FIRST,
             )

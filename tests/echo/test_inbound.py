@@ -18,6 +18,7 @@ from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.inbound import JobNotFound, record_manual_event, store_inbox
 from mor.echo.port import EchoProvider, EventKind, EventMode
 from mor.echo.reports import start_report_schedule
+from mor.fakes.hang import hang_a_minute
 from mor.messaging.worker import Deferred, Failed, RunResult, drain_once
 from mor.web.main import Fakes, FakesInProd, make_app
 from tests.helpers import ENV, NO_HTTP, Wired, wire
@@ -306,7 +307,7 @@ def test_webhooks_for_unknown_or_non_push_accounts_are_refused(
 
 
 def test_the_fakes_are_never_mounted_in_prod() -> None:
-    fakes = mor.fakes.echo.make_app("postgresql:///unused", NO_HTTP)
+    fakes = mor.fakes.echo.make_app("postgresql:///unused", NO_HTTP, hang_a_minute)
     with pytest.raises(FakesInProd):
         make_app(
             Settings(Environment.PROD, "postgresql:///unused", "http://mor"),

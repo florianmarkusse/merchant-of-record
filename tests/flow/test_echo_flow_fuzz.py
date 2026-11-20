@@ -61,7 +61,14 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
-from tests.helpers import ENV, TEST_URL, crash, empty_tables, wire
+from tests.helpers import (
+    ENV,
+    TEST_URL,
+    VENDOR_TIMEOUT,
+    crash,
+    empty_tables,
+    wire,
+)
 
 
 T0 = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -347,7 +354,7 @@ class EchoFlow(RuleBasedStateMachine):
                 conn,
                 provider,
                 base_url,
-                timedelta(milliseconds=100),
+                VENDOR_TIMEOUT,
                 event_mode=mode,
                 webhook_secret=SECRET,
                 poll_interval=timedelta(minutes=1),

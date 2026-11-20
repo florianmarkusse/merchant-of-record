@@ -12,17 +12,22 @@ import mor.fakes.courier
 import mor.fakes.duty
 import mor.fakes.echo
 import mor.fakes.psp
+from mor.fakes.hang import Hang
 
 
 def make_app(
-    database_url: str, outgoing: httpx2.AsyncClient, clock: Callable[[], datetime]
+    database_url: str,
+    outgoing: httpx2.AsyncClient,
+    clock: Callable[[], datetime],
+    hang: Hang,
 ) -> Starlette:
     """`outgoing` carries the fakes' webhooks: a real client in dev, our app
     in-process in tests. `clock` is the vendors' own time (a QR's expiry);
-    tests share theirs with it."""
+    tests share theirs with it. `hang` is how a vendor never answers
+    (`mor.fakes.hang`)."""
     routes: list[BaseRoute] = []
-    routes.extend(mor.fakes.echo.make_app(database_url, outgoing).routes)
-    routes.extend(mor.fakes.duty.make_app(database_url).routes)
-    routes.extend(mor.fakes.courier.make_app(database_url).routes)
-    routes.extend(mor.fakes.psp.make_app(database_url, outgoing, clock).routes)
+    routes.extend(mor.fakes.echo.make_app(database_url, outgoing, hang).routes)
+    routes.extend(mor.fakes.duty.make_app(database_url, hang).routes)
+    routes.extend(mor.fakes.courier.make_app(database_url, hang).routes)
+    routes.extend(mor.fakes.psp.make_app(database_url, outgoing, clock, hang).routes)
     return Starlette(routes=routes)

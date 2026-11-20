@@ -21,6 +21,7 @@ from mor.echo.flow import (
 )
 from mor.echo.port import EchoProvider
 from mor.fakes.echo import make_app
+from mor.fakes.hang import hang_a_minute
 from mor.messaging.outcome import Applied, Stale
 from mor.messaging.worker import (
     Deferred,
@@ -54,7 +55,9 @@ class Setup:
 
 
 async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> None:
-    network = RefusingTransport(httpx2.ASGITransport(app=make_app(url, NO_HTTP)))
+    network = RefusingTransport(
+        httpx2.ASGITransport(app=make_app(url, NO_HTTP, hang_a_minute))
+    )
     async with (
         httpx2.AsyncClient(transport=network) as http,
         await connect(url, autocommit=True) as worker,

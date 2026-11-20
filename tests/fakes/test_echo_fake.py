@@ -5,12 +5,15 @@ import asyncio
 import httpx2
 
 from mor.fakes.echo import make_app
+from mor.fakes.hang import hang_a_minute
 from tests.helpers import NO_HTTP
 
 
 def _client(database_url: str) -> httpx2.AsyncClient:
     return httpx2.AsyncClient(
-        transport=httpx2.ASGITransport(app=make_app(database_url, NO_HTTP)),
+        transport=httpx2.ASGITransport(
+            app=make_app(database_url, NO_HTTP, hang_a_minute)
+        ),
         base_url="http://fake",
     )
 

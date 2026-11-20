@@ -18,7 +18,6 @@ its own (schema `fake_vendor`, its own connections), as a third party's
 would be.
 """
 
-import asyncio
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -29,6 +28,8 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+
+from mor.fakes.hang import Hang
 
 
 type Fault = Literal[
@@ -49,9 +50,6 @@ FAULTS: tuple[Fault, ...] = (
 )
 DEFAULT_DUTY = "5%"
 DEFAULT_TAX = "10%"
-
-# Longer than any client timeout: "did the work, then never answered".
-HANG_SECONDS = 60
 
 
 class AskBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -117,7 +115,7 @@ async def _formulas(
     return row[0], row[1]
 
 
-def make_app(database_url: str) -> Starlette:
+def make_app(database_url: str, hang: Hang) -> Starlette:
     async def ask(request: Request) -> Response:
         try:
             body = msgspec.json.decode(await request.body(), type=AskBody)
@@ -146,7 +144,7 @@ def make_app(database_url: str) -> Starlette:
             await conn.commit()
         match fault:
             case "timeout_after_work":
-                await asyncio.sleep(HANG_SECONDS)
+                await hang()
             case "unknown_code":
                 return _error(404, "unknown_code")
             case "undecodable":

@@ -2,7 +2,7 @@ import asyncio
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 import httpx2
@@ -105,6 +105,22 @@ class RefusingTransport(httpx2.AsyncBaseTransport):
         return await self.inner.handle_async_request(request)
 
 
+async def time_out_at_once() -> None:
+    """A fake vendor's hang (`timeout_after_work`) as the network sees it:
+    the work is done and the call ends as a timeout now, not after a wall
+    clock ran out (`mor.fakes.hang`). Our clients take a transport timeout
+    and their own `asyncio.timeout` alike as "no answer"; the tests that
+    build a fake by hand keep the real hang for the latter."""
+    raise httpx2.ReadTimeout("the fake vendor hung: timed out at once")
+
+
+# Every vendor account's timeout under `wire()`. No call ever needs it (a
+# hang ends at once there), so it only has to be longer than the slowest
+# answer: a stalled event loop once took 148 ms against 100 ms, a timeout
+# the replay did not see, and the soak failed as flaky (20-Nov-2026).
+VENDOR_TIMEOUT = timedelta(seconds=30)
+
+
 @dataclass
 class Wired:
     """Our app with the fakes mounted, all in-process. `http` is how our
@@ -126,7 +142,7 @@ def wire(database_url: str, clock: Callable[[], datetime]) -> Wired:
         await built[0](scope, receive, send)
 
     outgoing = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=our_app))
-    fakes = mor.fakes.app.make_app(database_url, outgoing, clock)
+    fakes = mor.fakes.app.make_app(database_url, outgoing, clock, time_out_at_once)
     app = mor.web.main.make_app(
         Settings(ENV, database_url, "http://mor"),
         mor.web.main.Fakes(fakes, outgoing),

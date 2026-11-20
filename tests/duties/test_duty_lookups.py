@@ -27,6 +27,7 @@ from mor.duties.lookups import (
 from mor.duties.port import DutyProvider, RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
 from mor.fakes.duty import make_app
+from mor.fakes.hang import hang_a_minute
 from mor.markets.records import Charge
 from mor.markets.source import parse
 from mor.markets.store import load_market
@@ -51,7 +52,7 @@ class Setup:
 
 
 async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> None:
-    network = RefusingTransport(httpx2.ASGITransport(app=make_app(url)))
+    network = RefusingTransport(httpx2.ASGITransport(app=make_app(url, hang_a_minute)))
     async with (
         httpx2.AsyncClient(transport=network) as http,
         await connect(url, autocommit=True) as worker,
