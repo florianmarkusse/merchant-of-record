@@ -12,7 +12,6 @@ How a call ends:
 """
 
 import asyncio
-from datetime import datetime
 
 import httpx2
 import msgspec
@@ -31,6 +30,7 @@ from mor.couriers.records import (
     PricePartKind,
     PriceQuestion,
 )
+from mor.dates import AwareDatetime, to_utc
 from mor.money.currency import Currency
 
 
@@ -44,7 +44,7 @@ class _Answer(msgspec.Struct, frozen=True):
     currency: str
     total_minor: int
     parts: list[_Part]
-    valid_until: datetime | None
+    valid_until: AwareDatetime | None
 
 
 class _Error(msgspec.Struct, frozen=True):
@@ -107,12 +107,11 @@ async def quote_rate(
     currency = _currency(answer.currency)
     if currency is None:
         return UndecodableBody(f"unknown currency {answer.currency!r}")
-    if answer.valid_until is not None and answer.valid_until.tzinfo is None:
-        return UndecodableBody("valid_until without a time zone")
     parts: list[PricePart] = []
     for part in answer.parts:
         kind = _kind(part.kind)
         if kind is None:
             return UndecodableBody(f"unknown part kind {part.kind!r}")
         parts.append(PricePart(kind, part.name, part.amount_minor))
-    return carrier_price(currency, answer.total_minor, tuple(parts), answer.valid_until)
+    valid_until = None if answer.valid_until is None else to_utc(answer.valid_until)
+    return carrier_price(currency, answer.total_minor, tuple(parts), valid_until)

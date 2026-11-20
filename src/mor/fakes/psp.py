@@ -31,6 +31,13 @@ A made-up acquirer API, with PSP-side accounts as a path segment
     POST /_fake/psp/faults       {"account", "operation", "fault"}: script
                                  the next call of an operation to fail, or
                                  the next create to be declined
+    POST A/settlements           {"faults"?: [...]}: cut a batch now, one per
+                                 currency, of every captured payment not
+                                 settled yet (docs/plan-payments.md §7.1)
+    GET  A/settlement-files?after=      {"files": [...]}, oldest first
+    GET  A/settlement-files/{name}      a report: CSV
+    GET  A/settlements?after=           {"batches": [...]}, oldest first
+    GET  A/settlements/{id}?page=n      {"batch", "lines", "next_page"}
 
 Amounts are in the PSP's own minor units, ISO 4217's (IDR has 2 here),
 so our client converts. Events are released by a call, never by a timer.
@@ -38,10 +45,13 @@ Its state is its own (schema `fake_vendor`, its own connections), as a
 third party's would be; `psp_fake_charge` counts the money it moved.
 """
 
+import csv
 import hashlib
 import hmac
+import io
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal, assert_never
 from urllib.parse import parse_qsl
@@ -56,6 +66,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
+from mor.db.connect import SESSION_OPTIONS
 from mor.fakes.hang import Hang
 
 
@@ -64,13 +75,46 @@ type Status = Literal[
     "requires_action", "authorised", "captured", "declined", "expired", "cancelled"
 ]
 type EventKind = Literal["authorised", "captured", "declined", "expired", "cancelled"]
-type Operation = Literal["create", "capture", "cancel", "get"]
+type Operation = Literal["create", "capture", "cancel", "get", "settlements"]
 type Fault = Literal["fail_500", "fail_500_after_work", "timeout_after_work", "decline"]
 type Outcome = Literal["paid", "declined", "expired"]
 type PushHow = Literal["once", "twice", "bad_signature"]
 type Push = Literal["not_subscribed", "delivered", "failed"]
 
-OPERATIONS: tuple[Operation, ...] = ("create", "capture", "cancel", "get")
+OPERATIONS: tuple[Operation, ...] = (
+    "create",
+    "capture",
+    "cancel",
+    "get",
+    "settlements",
+)
+# What a cut can be scripted to get wrong, each once, in its first batch:
+# a line for a payment nobody made, a gross that is not what was captured,
+# a payment settled again under a new line id, a line of a type no client
+# books (an adjustment), and a net that is not what the lines add up to.
+type CutFault = Literal[
+    "unknown_reference", "gross_differs", "settled_again", "unknown_type", "net_differs"
+]
+CUT_FAULTS: tuple[CutFault, ...] = (
+    "unknown_reference",
+    "gross_differs",
+    "settled_again",
+    "unknown_type",
+    "net_differs",
+)
+SETTLEMENT_PAGE_SIZE = 2
+CSV_HEADER = (
+    "record",
+    "id",
+    "type",
+    "payment_id",
+    "reference",
+    "currency",
+    "gross_minor",
+    "fee_minor",
+    "net_minor",
+    "paid_out_at",
+)
 FAULTS: tuple[Fault, ...] = (
     "fail_500",
     "fail_500_after_work",
@@ -108,6 +152,10 @@ class ReleaseBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 
 class RedeliverBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     all: bool = False
+
+
+class CutBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    faults: list[CutFault] = []
 
 
 class FaultBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -165,7 +213,7 @@ def sign(secret: str, body: bytes) -> str:
 
 async def _connect(database_url: str) -> FakeConnection:
     return await psycopg.AsyncConnection.connect(
-        database_url, options="-c search_path=fake_vendor"
+        database_url, options=f"-c search_path=fake_vendor {SESSION_OPTIONS}"
     )
 
 
@@ -306,6 +354,37 @@ def _event(row: tuple[object, ...]) -> Event:
                 occurred_at,
             )
     raise AssertionError(f"unknown event kind {kind!r}")
+
+
+def fee_of(method: str, gross_minor: int) -> int:
+    """The fake's own made-up price list, in its minor units: a card 2.9%
+    plus 0.37 of a unit, a QR 0.7%. An IDR fee then has sub-rupiah parts,
+    as a PSP counting IDR at 2 decimals would charge."""
+    if method == "qr":
+        return gross_minor * 7 // 1000
+    return gross_minor * 29 // 1000 + 37
+
+
+def payout_amount(currency: str, net_minor: int) -> int:
+    """What the bank transfer carries: IDR in whole rupiah (half-even), so
+    the payout differs from its lines by the PSP's rounding."""
+    if currency != "IDR":
+        return net_minor
+    units, rest = divmod(net_minor, 100)
+    if rest * 2 > 100 or (rest * 2 == 100 and units % 2 == 1):
+        units += 1
+    return units * 100
+
+
+@dataclass(frozen=True)
+class _CutLine:
+    type: str
+    payment_id: str
+    reference: str
+    gross_minor: int
+    fee_minor: int
+    fault: CutFault | None
+    settles: bool  # a payment settled here for the first time
 
 
 def _base(request: Request) -> str:
@@ -792,6 +871,332 @@ def make_app(
             await conn.commit()
         return RedirectResponse(return_url, status_code=303)
 
+    async def cut_settlement(request: Request) -> Response:
+        account = request.path_params["account"]
+        try:
+            body = msgspec.json.decode(await request.body() or b"{}", type=CutBody)
+        except msgspec.DecodeError:
+            return _error(400, "invalid_body")
+        faults = set(body.faults)
+        async with await _connect(database_url) as conn:
+            cur = await conn.execute(
+                "SELECT 1 FROM psp_fake_account WHERE name = %s FOR UPDATE", (account,)
+            )
+            if await cur.fetchone() is None:
+                return _error(404, "unknown_account")
+            cur = await conn.execute(
+                """
+                SELECT p.id, p.reference, p.amount_minor, p.currency, p.method
+                FROM psp_fake_payment p
+                WHERE p.account = %s AND p.status = 'captured'
+                  AND NOT EXISTS (SELECT 1 FROM psp_fake_settled s
+                                  WHERE s.payment_id = p.id)
+                ORDER BY p.created_at, p.id
+                """,
+                (account,),
+            )
+            groups: dict[str, list[_CutLine]] = {}
+            for payment_id, reference, amount, currency, method in await cur.fetchall():
+                groups.setdefault(currency, []).append(
+                    _CutLine(
+                        "capture",
+                        payment_id,
+                        reference,
+                        amount,
+                        fee_of(method, amount),
+                        None,
+                        True,
+                    )
+                )
+            # Settled again: a payment whose first settlement was clean.
+            if "settled_again" in faults:
+                cur = await conn.execute(
+                    """
+                    SELECT p.id, p.reference, p.amount_minor, p.currency, p.method
+                    FROM psp_fake_settled s
+                    JOIN psp_fake_payment p ON p.id = s.payment_id
+                    JOIN psp_fake_settlement_line l
+                      ON l.payment_id = p.id AND l.fault IS NULL
+                    WHERE p.account = %s ORDER BY p.created_at, p.id LIMIT 1
+                    """,
+                    (account,),
+                )
+                again = await cur.fetchone()
+                if again is not None:
+                    payment_id, reference, amount, currency, method = again
+                    groups.setdefault(currency, []).append(
+                        _CutLine(
+                            "capture",
+                            payment_id,
+                            reference,
+                            amount,
+                            fee_of(method, amount),
+                            "settled_again",
+                            False,
+                        )
+                    )
+            made: list[str] = []
+            for currency in sorted(groups):
+                lines = groups[currency]
+                first = not made
+                if first and "gross_differs" in faults:
+                    for index, line in enumerate(lines):
+                        if line.settles:
+                            lines[index] = _CutLine(
+                                line.type,
+                                line.payment_id,
+                                line.reference,
+                                line.gross_minor + 100,
+                                line.fee_minor,
+                                "gross_differs",
+                                True,
+                            )
+                            break
+                if first and "unknown_reference" in faults:
+                    lines.append(
+                        _CutLine(
+                            "capture",
+                            f"pay_{uuid.uuid4().hex[:12]}",
+                            str(uuid.uuid4()),
+                            1000,
+                            fee_of("card", 1000),
+                            "unknown_reference",
+                            False,
+                        )
+                    )
+                if first and "unknown_type" in faults:
+                    lines.append(
+                        _CutLine("adjustment", "-", "-", -500, 0, "unknown_type", False)
+                    )
+                net = 0
+                for line in lines:
+                    net += line.gross_minor - line.fee_minor
+                net = payout_amount(currency, net)
+                batch_fault: CutFault | None = None
+                if first and "net_differs" in faults:
+                    net -= 100
+                    batch_fault = "net_differs"
+                batch_id = f"stl_{uuid.uuid4().hex[:12]}"
+                await conn.execute(
+                    """
+                    INSERT INTO psp_fake_settlement_batch
+                      (id, account, currency, net_minor, paid_out_at, fault)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (batch_id, account, currency, net, clock(), batch_fault),
+                )
+                for number, line in enumerate(lines, start=1):
+                    await conn.execute(
+                        """
+                        INSERT INTO psp_fake_settlement_line
+                          (id, batch_id, type, payment_id, reference, gross_minor,
+                           fee_minor, fault)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            f"{batch_id}-{number}",
+                            batch_id,
+                            line.type,
+                            line.payment_id,
+                            line.reference,
+                            line.gross_minor,
+                            line.fee_minor,
+                            line.fault,
+                        ),
+                    )
+                    if line.settles:
+                        await conn.execute(
+                            "INSERT INTO psp_fake_settled (payment_id, batch_id)"
+                            " VALUES (%s, %s)",
+                            (line.payment_id, batch_id),
+                        )
+                made.append(batch_id)
+            await conn.commit()
+        return _json({"batches": made})
+
+    async def _batches_after(
+        conn: FakeConnection, account: str, after: str
+    ) -> list[str]:
+        cur = await conn.execute(
+            """
+            SELECT id FROM psp_fake_settlement_batch
+            WHERE account = %(account)s
+              AND seq > coalesce((SELECT seq FROM psp_fake_settlement_batch
+                                  WHERE account = %(account)s AND id = %(after)s), 0)
+            ORDER BY seq
+            """,
+            {"account": account, "after": after},
+        )
+        found: list[str] = []
+        for row in await cur.fetchall():
+            found.append(row[0])
+        return found
+
+    async def _batch(
+        conn: FakeConnection, account: str, batch_id: str
+    ) -> tuple[str, int, datetime] | None:
+        cur = await conn.execute(
+            """
+            SELECT currency, net_minor, paid_out_at FROM psp_fake_settlement_batch
+            WHERE account = %s AND id = %s
+            """,
+            (account, batch_id),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        currency, net, paid_out_at = row
+        assert isinstance(currency, str) and isinstance(net, int)
+        assert isinstance(paid_out_at, datetime)
+        return currency, net, paid_out_at
+
+    async def _batch_lines(
+        conn: FakeConnection, batch_id: str
+    ) -> list[tuple[str, str, str, str, int, int]]:
+        cur = await conn.execute(
+            """
+            SELECT id, type, payment_id, reference, gross_minor, fee_minor
+            FROM psp_fake_settlement_line WHERE batch_id = %s ORDER BY seq
+            """,
+            (batch_id,),
+        )
+        found: list[tuple[str, str, str, str, int, int]] = []
+        for row in await cur.fetchall():
+            line_id, line_type, payment_id, reference, gross, fee = row
+            found.append((line_id, line_type, payment_id, reference, gross, fee))
+        return found
+
+    async def _read_fault(conn: FakeConnection, account: str) -> Fault | None:
+        fault = await _take_fault(conn, account, "settlements")
+        await conn.commit()
+        return fault
+
+    async def list_files(request: Request) -> Response:
+        account = request.path_params["account"]
+        async with await _connect(database_url) as conn:
+            fault = await _read_fault(conn, account)
+            if fault in ("fail_500", "fail_500_after_work"):
+                return _error(500, "internal_error")
+            names: list[str] = []
+            for batch_id in await _batches_after(
+                conn,
+                account,
+                request.query_params.get("after", "").removesuffix(".csv"),
+            ):
+                names.append(f"{batch_id}.csv")
+        if fault == "timeout_after_work":
+            await hang()
+        return _json({"files": names})
+
+    async def get_file(request: Request) -> Response:
+        account = request.path_params["account"]
+        batch_id = str(request.path_params["name"]).removesuffix(".csv")
+        async with await _connect(database_url) as conn:
+            fault = await _read_fault(conn, account)
+            if fault in ("fail_500", "fail_500_after_work"):
+                return _error(500, "internal_error")
+            batch = await _batch(conn, account, batch_id)
+            if batch is None:
+                return _error(404, "unknown_file")
+            lines = await _batch_lines(conn, batch_id)
+        currency, net, paid_out_at = batch
+        out = io.StringIO()
+        writer = csv.writer(out, lineterminator="\n")
+        writer.writerow(CSV_HEADER)
+        writer.writerow(
+            [
+                "batch",
+                batch_id,
+                "",
+                "",
+                "",
+                currency,
+                "",
+                "",
+                net,
+                paid_out_at.isoformat(),
+            ]
+        )
+        for line_id, line_type, payment_id, reference, gross, fee in lines:
+            writer.writerow(
+                [
+                    "line",
+                    line_id,
+                    line_type,
+                    payment_id,
+                    reference,
+                    currency,
+                    gross,
+                    fee,
+                    gross - fee,
+                    "",
+                ]
+            )
+        if fault == "timeout_after_work":
+            await hang()
+        return Response(out.getvalue().encode("utf-8"), media_type="text/csv")
+
+    async def list_batches(request: Request) -> Response:
+        account = request.path_params["account"]
+        async with await _connect(database_url) as conn:
+            fault = await _read_fault(conn, account)
+            if fault in ("fail_500", "fail_500_after_work"):
+                return _error(500, "internal_error")
+            found = await _batches_after(
+                conn, account, request.query_params.get("after", "")
+            )
+        if fault == "timeout_after_work":
+            await hang()
+        return _json({"batches": found})
+
+    async def get_batch_page(request: Request) -> Response:
+        account = request.path_params["account"]
+        batch_id = request.path_params["batch_id"]
+        try:
+            page = int(request.query_params.get("page", "1"))
+        except ValueError:
+            return _error(400, "invalid_page")
+        if page < 1:
+            return _error(400, "invalid_page")
+        async with await _connect(database_url) as conn:
+            fault = await _read_fault(conn, account)
+            if fault in ("fail_500", "fail_500_after_work"):
+                return _error(500, "internal_error")
+            batch = await _batch(conn, account, batch_id)
+            if batch is None:
+                return _error(404, "unknown_batch")
+            lines = await _batch_lines(conn, batch_id)
+        currency, net, paid_out_at = batch
+        start = (page - 1) * SETTLEMENT_PAGE_SIZE
+        shown = lines[start : start + SETTLEMENT_PAGE_SIZE]
+        more = start + SETTLEMENT_PAGE_SIZE < len(lines)
+        page_lines: list[dict[str, object]] = []
+        for line_id, line_type, payment_id, reference, gross, fee in shown:
+            page_lines.append(
+                {
+                    "id": line_id,
+                    "type": line_type,
+                    "payment_id": payment_id,
+                    "reference": reference,
+                    "gross_minor": gross,
+                    "fee_minor": fee,
+                }
+            )
+        if fault == "timeout_after_work":
+            await hang()
+        return _json(
+            {
+                "batch": {
+                    "id": batch_id,
+                    "currency": currency,
+                    "net_minor": net,
+                    "paid_out_at": paid_out_at,
+                },
+                "lines": page_lines,
+                "next_page": page + 1 if more else None,
+            }
+        )
+
     async def script_fault(request: Request) -> Response:
         try:
             body = msgspec.json.decode(await request.body(), type=FaultBody)
@@ -832,5 +1237,16 @@ def make_app(
                 methods=["POST"],
             ),
             Route(f"{account_path}/events/redeliver", redeliver, methods=["POST"]),
+            Route(f"{account_path}/settlements", cut_settlement, methods=["POST"]),
+            Route(f"{account_path}/settlements", list_batches, methods=["GET"]),
+            Route(
+                f"{account_path}/settlements/{{batch_id}}",
+                get_batch_page,
+                methods=["GET"],
+            ),
+            Route(f"{account_path}/settlement-files", list_files, methods=["GET"]),
+            Route(
+                f"{account_path}/settlement-files/{{name}}", get_file, methods=["GET"]
+            ),
         ]
     )

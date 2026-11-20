@@ -56,7 +56,11 @@ and wins where the two differ.
   entry, the buyer's pay pages) is built. 5b (the invoice with its gapless
   number, the order page and PDF at `/o/{token}`, the orders and merchant
   settings API, the KYB gate, `after_payment` per session) is built
-  (20-Nov-2026, `docs/plan-payments.md` §6.1, §6.2). 5c is next.
+  (20-Nov-2026, `docs/plan-payments.md` §6.1, §6.2). 5c is split in three
+  (`docs/plan-payments.md` §7.1, agreed 20-Nov-2026): 5c-1 settlement into
+  `payout_in_transit` (built 20-Nov-2026, §7.2), 5c-2 the bank statement
+  import that moves it to `bank` (next, to be designed), 5c-3 card fields
+  and the Playwright suite; the echo stays until the shipment slice.
 - Decided 19-Nov-2026: the test setup may route chosen merchants to a
   real vendor's sandbox next to the fakes, once that vendor's module
   exists; every provider account is `fake`, `sandbox` or `live`, and the
@@ -203,7 +207,13 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 - Never shadow domain names (`payment`, `merchant`, `invoice`, `ledger`)
   with local variables.
 - Timestamps: local time only at the edge, for display and for
-  tax-point rules that name a local date.
+  tax-point rules that name a local date. Inside the process every moment
+  is aware UTC (decided 20-Nov-2026): a vendor's timestamp is decoded as
+  `mor.dates.AwareDatetime` (one without an offset is refused) and
+  converted with `to_utc`, a CSV cell with `parse_instant`; every database
+  connection sets `TimeZone=UTC` (`mor.db.connect.SESSION_OPTIONS`), so a
+  `timestamptz` comes back in UTC whatever the server's zone. Never patch
+  a read with `.astimezone(UTC)`.
 
 ## Money and Ledger
 

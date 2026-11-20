@@ -23,7 +23,11 @@ from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode
 from mor.orders.posting import capture_entry
 from mor.payments.transitions import AttemptState, Stale, after_event
-from mor.psp.fake_client import from_provider_amount, to_provider_amount
+from mor.psp.fake_client import (
+    decode_events,
+    from_provider_amount,
+    to_provider_amount,
+)
 from mor.psp.port import EventKind, UndecodableBody
 from mor.quote.build import PartKind
 
@@ -235,3 +239,16 @@ def test_fake_psp_amounts_round_trip(amount: int, currency: Currency) -> None:
 @given(st.integers(0, 10**12).filter(lambda n: n % 100 != 0))
 def test_a_fraction_of_a_rupiah_is_refused_not_rounded(amount: int) -> None:
     assert isinstance(from_provider_amount(amount, "IDR"), UndecodableBody)
+
+
+def test_a_psp_event_time_is_taken_in_utc_and_one_without_an_offset_refused() -> None:
+    event = (
+        b'{"events": [{"id": "e", "payment_id": "p", "reference": "r",'
+        b' "kind": "captured", "amount_minor": 100, "currency": "SGD",'
+        b' "occurred_at": "%s"}]}'
+    )
+    decoded = decode_events(event % b"2026-11-18T16:30:00+07:00")
+    assert not isinstance(decoded, UndecodableBody)
+    assert decoded[0].occurred_at.tzinfo == UTC
+    assert decoded[0].occurred_at == datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
+    assert isinstance(decode_events(event % b"2026-11-18T16:30:00"), UndecodableBody)

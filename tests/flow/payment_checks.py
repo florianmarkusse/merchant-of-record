@@ -4,12 +4,17 @@ the worker steps both machines take (catch up, crash inside a local step,
 crash around an effect's call). Each is a plain function on the test
 database's worker connection."""
 
+import uuid
+from dataclasses import dataclass
 from datetime import datetime
 
 import httpx2
+from psycopg.rows import class_row
 
 from mor.db.connect import Connection, connect
 from mor.messaging import consumers
+from mor.messaging.facts import AggregateType, MessageType, UndecodableFact, decode
+from mor.messaging.routing import ConsumerName, consumer_kind
 from mor.messaging.worker import (
     Candidate,
     Failed,
@@ -59,8 +64,9 @@ async def check_sessions_match_their_attempts(conn: Connection) -> None:
 
 
 async def check_orders_are_booked(conn: Connection) -> None:
-    """Each order has its one capture entry, and `psp_clearing` holds
-    exactly the captured amounts."""
+    """Each order has its one capture entry, and the captures put exactly
+    the captured amounts into `psp_clearing` (settlement takes them out:
+    check_settlement)."""
     cur = await conn.execute(
         """
         SELECT count(*) FROM order_ o
@@ -72,8 +78,10 @@ async def check_orders_are_booked(conn: Connection) -> None:
     cur = await conn.execute(
         """
         SELECT
-          (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
-            WHERE account_kind = 'psp_clearing'),
+          (SELECT coalesce(sum(l.amount_minor), 0) FROM journal_line l
+            JOIN journal_entry e ON e.id = l.entry_id
+            WHERE l.account_kind = 'psp_clearing'
+              AND e.idempotency_key LIKE 'capture:%'),
           (SELECT coalesce(sum(a.amount_minor), 0) FROM order_ o
             JOIN payment_attempt a ON a.id = o.attempt_id)
         """
@@ -146,6 +154,45 @@ async def check_invoice_numbers(conn: Connection) -> None:
     assert await cur.fetchall() == []
 
 
+async def check_settlement_is_booked_once(conn: Connection) -> None:
+    """Settlement's rows and the ledger agree (docs/plan-payments.md §7.1):
+    a booked line has its order and its one entry, taking its fee out of
+    `psp_clearing`; a booked batch put its net on the way to the bank. A
+    line booked twice, or a payout booked without its batch, breaks one of
+    the sums."""
+    cur = await conn.execute(
+        """
+        SELECT l.vendor_line_id FROM settlement_line l
+        WHERE l.state = 'booked' AND (
+          NOT EXISTS (SELECT 1 FROM order_ o WHERE o.attempt_id = l.attempt_id)
+          OR NOT EXISTS (
+            SELECT 1 FROM journal_entry e WHERE e.idempotency_key =
+              'settlement:' || l.account_id::text || ':' || l.vendor_line_id))
+        """
+    )
+    assert await cur.fetchall() == []
+    cur = await conn.execute(
+        """
+        SELECT
+          (SELECT coalesce(sum(l.amount_minor), 0) FROM journal_line l
+            JOIN journal_entry e ON e.id = l.entry_id
+            WHERE l.account_kind = 'psp_clearing'
+              AND e.idempotency_key LIKE 'settlement:%'),
+          (SELECT coalesce(-sum(fee_minor), 0) FROM settlement_line
+            WHERE state = 'booked'),
+          (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
+            WHERE account_kind = 'payout_in_transit'),
+          (SELECT coalesce(sum(net_minor), 0) FROM settlement_batch
+            WHERE booked_at IS NOT NULL)
+        """
+    )
+    row = await cur.fetchone()
+    assert row is not None
+    fees_booked, fees_of_lines, in_transit, nets = row
+    assert fees_booked == fees_of_lines, (fees_booked, fees_of_lines)
+    assert in_transit == nets, (in_transit, nets)
+
+
 async def check_no_advisory_lock_is_held(conn: Connection) -> None:
     cur = await conn.execute(
         "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
@@ -161,6 +208,7 @@ async def check_every_action(conn: Connection) -> None:
     await check_the_psp_charged_nothing_twice_or_unseen(conn)
     await check_one_psp_payment_per_attempt(conn)
     await check_invoice_numbers(conn)
+    await check_settlement_is_booked_once(conn)
     await check_no_advisory_lock_is_held(conn)
 
 
@@ -191,6 +239,78 @@ async def check_drained(conn: Connection) -> None:
     )
     uninvoiced = await cur.fetchall()
     assert uninvoiced == [], f"orders without an invoice after the drain: {uninvoiced}"
+
+
+# The exception each fault the fake cut a line with must give.
+EXCEPTION_OF_FAULT = {
+    "unknown_reference": "unknown_reference",
+    "gross_differs": "amount_differs",
+    "settled_again": "settled_twice",
+    "unknown_type": "unknown_type",
+}
+
+
+async def check_settlement_drained(conn: Connection) -> None:
+    """Everything the fake settled is in our books, each line once and as
+    its fault says (docs/plan-payments.md §7.1): a clean line booked, a
+    faulty one its exception, a line whose payment went to a person (no
+    guard) `not_captured`; every batch's payout booked, with `net_differs`
+    exactly where the fake cut it so. `psp_clearing` then holds what the
+    orders put in, less the fees booked and the nets the fake paid out (in
+    SGD, where the fake's units are ours)."""
+    cur = await conn.execute(
+        """
+        SELECT f.id, f.fault, l.state::text, x.kind::text, a.state::text
+        FROM fake_vendor.psp_fake_settlement_line f
+        LEFT JOIN settlement_line l ON l.vendor_line_id = f.id
+        LEFT JOIN settlement_exception x ON x.line_id = l.id
+        LEFT JOIN payment_attempt a ON a.id::text = f.reference
+        """
+    )
+    for line_id, fault, state, kind, attempt_state in await cur.fetchall():
+        assert state is not None, f"settled line {line_id} never stored"
+        if attempt_state == "needs_person":
+            assert (state, kind) == ("exception", "not_captured"), line_id
+        elif fault is None:
+            assert (state, kind) == ("booked", None), (line_id, state, kind)
+        else:
+            assert (state, kind) == ("exception", EXCEPTION_OF_FAULT[fault]), (
+                line_id,
+                fault,
+                state,
+                kind,
+            )
+    cur = await conn.execute(
+        """
+        SELECT f.id, f.fault, b.booked_at IS NOT NULL, x.kind::text
+        FROM fake_vendor.psp_fake_settlement_batch f
+        LEFT JOIN settlement_batch b ON b.vendor_batch_id = f.id
+        LEFT JOIN settlement_exception x ON x.batch_id = b.id
+        """
+    )
+    for batch_id, fault, booked, kind in await cur.fetchall():
+        assert booked, f"batch {batch_id} not booked after the drain"
+        assert kind == fault, (batch_id, fault, kind)
+    cur = await conn.execute(
+        "SELECT count(*) FROM settlement_line WHERE state IN ('received', 'waiting')"
+    )
+    assert await cur.fetchone() == (0,)
+    cur = await conn.execute(
+        """
+        SELECT
+          (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
+            WHERE account_kind = 'psp_clearing'),
+          (SELECT coalesce(sum(a.amount_minor), 0) FROM order_ o
+            JOIN payment_attempt a ON a.id = o.attempt_id)
+          - (SELECT coalesce(sum(fee_minor), 0) FROM settlement_line
+              WHERE state = 'booked')
+          - (SELECT coalesce(sum(net_minor), 0)
+              FROM fake_vendor.psp_fake_settlement_batch)
+        """
+    )
+    row = await cur.fetchone()
+    assert row is not None
+    assert row[0] == row[1], row
 
 
 # --- worker steps -----------------------------------------------------------------
@@ -241,3 +361,63 @@ async def crash_around_a_call(
             await consumers.call(http, ENV, prepared.call)
     finally:
         await crash(crashing)
+
+
+@dataclass(frozen=True)
+class Handled:
+    """A handled delivery and its fact, as stored."""
+
+    message_id: uuid.UUID
+    consumer: str
+    aggregate_type: str
+    aggregate_id: uuid.UUID
+    message_type: str
+    schema_version: int
+    payload: str
+
+
+async def handled_locally(worker: Connection) -> list[Handled]:
+    """Every handled delivery of a local consumer, oldest first."""
+    async with worker.cursor(row_factory=class_row(Handled)) as cur:
+        await cur.execute(
+            """
+            SELECT d.message_id, d.consumer::text AS consumer,
+                   o.aggregate_type::text AS aggregate_type, o.aggregate_id,
+                   o.message_type::text AS message_type, o.schema_version,
+                   o.payload::text AS payload
+            FROM outbox_delivery d JOIN outbox o ON o.id = d.message_id
+            WHERE d.handled_at IS NOT NULL ORDER BY o.seq, d.consumer
+            """
+        )
+        rows = await cur.fetchall()
+    found: list[Handled] = []
+    for row in rows:
+        if consumer_kind(ConsumerName(row.consumer)) == "local":
+            found.append(row)
+    return found
+
+
+async def meet_again(chosen: Handled, now: datetime) -> None:
+    """A handled fact handed to its local consumer once more, past the
+    inbox, and committed, as a broker's redelivery could. A consumer may
+    emit its facts again (decoding a stored webhook does, by design); the
+    guard downstream must hold, which the rules and the drain check."""
+    fact = decode(
+        MessageType(chosen.message_type),
+        chosen.schema_version,
+        chosen.payload.encode(),
+    )
+    assert not isinstance(fact, UndecodableFact), fact
+    candidate = Candidate(
+        chosen.message_id,
+        ConsumerName(chosen.consumer),
+        AggregateType(chosen.aggregate_type),
+        chosen.aggregate_id,
+    )
+    conn = await connect(TEST_URL, autocommit=True)
+    try:
+        assert await try_lock_aggregate(conn, candidate)
+        async with conn.transaction():
+            await consumers.handle(conn, candidate.consumer, fact, ENV, now)
+    finally:
+        await crash(conn)

@@ -12,7 +12,14 @@ from mor.audit import Actor
 from mor.db.connect import Connection
 from mor.messaging.guard import DuplicateGuard
 from mor.provider_accounts import ProviderAccountKind
-from mor.psp.port import CaptureMode, PaymentMethod, PspAccount, PspProvider, StatusMode
+from mor.psp.port import (
+    CaptureMode,
+    PaymentMethod,
+    PspAccount,
+    PspProvider,
+    SettlementMode,
+    StatusMode,
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +37,8 @@ class _AccountRow:
     methods: list[str]
     poll_interval_s: int
     webhook_secret: str
+    settlement_mode: str
+    settlement_interval_s: int
 
 
 def _account(row: _AccountRow) -> PspAccount:
@@ -50,6 +59,8 @@ def _account(row: _AccountRow) -> PspAccount:
         tuple(methods),
         timedelta(seconds=row.poll_interval_s),
         row.webhook_secret,
+        SettlementMode(row.settlement_mode),
+        timedelta(seconds=row.settlement_interval_s),
     )
 
 
@@ -65,11 +76,15 @@ async def create_psp_account(
     guard: DuplicateGuard,
     methods: tuple[PaymentMethod, ...],
     webhook_secret: str,
+    settlement_mode: SettlementMode,
     now: datetime,
     poll_interval: timedelta = timedelta(seconds=30),
+    settlement_interval: timedelta = timedelta(hours=1),
 ) -> PspAccount:
     """One guard for creating and capturing: the fake keeps keys for both or
-    for neither. A real PSP's row can set them apart. Never commits."""
+    for neither. A real PSP's row can set them apart. Its settlement is read
+    once `mor.settlement.fetch.start_settlement_reading` starts it, as the
+    seed does. Never commits."""
     account_id = uuid.uuid7()
     method_values: list[str] = []
     for method in methods:
@@ -79,9 +94,9 @@ async def create_psp_account(
         INSERT INTO psp_account
           (id, name, provider, kind, base_url, timeout_ms, status_mode,
            capture_mode, create_guard, capture_guard, methods, poll_interval_s,
-           webhook_secret, created_at)
+           webhook_secret, settlement_mode, settlement_interval_s, created_at)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::payment_method[], %s,
-                %s, %s)
+                %s, %s, %s, %s)
         """,
         (
             account_id,
@@ -97,6 +112,8 @@ async def create_psp_account(
             method_values,
             int(poll_interval.total_seconds()),
             webhook_secret,
+            settlement_mode.value,
+            int(settlement_interval.total_seconds()),
             now,
         ),
     )
@@ -114,6 +131,8 @@ async def create_psp_account(
         methods,
         poll_interval,
         webhook_secret,
+        settlement_mode,
+        settlement_interval,
     )
 
 
@@ -126,7 +145,7 @@ async def read_psp_account(
             SELECT id, name, provider::text, kind::text, base_url, timeout_ms,
                    status_mode::text, capture_mode::text, create_guard::text,
                    capture_guard::text, methods::text[], poll_interval_s,
-                   webhook_secret
+                   webhook_secret, settlement_mode::text, settlement_interval_s
             FROM psp_account WHERE id = %s
             """,
             (account_id,),
@@ -142,7 +161,7 @@ async def psp_account_by_name(conn: Connection, name: str) -> PspAccount | None:
             SELECT id, name, provider::text, kind::text, base_url, timeout_ms,
                    status_mode::text, capture_mode::text, create_guard::text,
                    capture_guard::text, methods::text[], poll_interval_s,
-                   webhook_secret
+                   webhook_secret, settlement_mode::text, settlement_interval_s
             FROM psp_account WHERE name = %s
             """,
             (name,),

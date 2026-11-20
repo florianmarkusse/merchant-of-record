@@ -31,6 +31,9 @@ class ConsumerName(StrEnum):
     ORDER_CREATE = "order_create"
     INVOICE_ISSUE = "invoice_issue"
     SESSION_PAYMENT_ENDED = "session_payment_ended"
+    PSP_SETTLEMENT_FETCH = "psp_settlement_fetch"
+    SETTLEMENT_LINE_BOOK = "settlement_line_book"
+    SETTLEMENT_PAYOUT_BOOK = "settlement_payout_book"
 
 
 type ConsumerKind = Literal["local", "effect"]
@@ -94,14 +97,28 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.PAYMENT_EVENT_APPLY,)
         case MessageType.PAYMENT_CAPTURED:
             return (ConsumerName.ORDER_CREATE,)
+        # A settled line waiting for its order is booked once the order
+        # exists, or becomes an exception once its payment ended otherwise
+        # (docs/plan-payments.md §7.1).
         case MessageType.ORDER_PAID:
-            return (ConsumerName.INVOICE_ISSUE,)
+            return (ConsumerName.INVOICE_ISSUE, ConsumerName.SETTLEMENT_LINE_BOOK)
         case (
             MessageType.PAYMENT_DECLINED
             | MessageType.PAYMENT_EXPIRED
             | MessageType.PAYMENT_CANCELLED
         ):
-            return (ConsumerName.SESSION_PAYMENT_ENDED,)
+            return (
+                ConsumerName.SESSION_PAYMENT_ENDED,
+                ConsumerName.SETTLEMENT_LINE_BOOK,
+            )
+        case MessageType.PAYMENT_NEEDS_PERSON:
+            return (ConsumerName.SETTLEMENT_LINE_BOOK,)
+        case MessageType.PSP_SETTLEMENT_DUE:
+            return (ConsumerName.PSP_SETTLEMENT_FETCH,)
+        case MessageType.SETTLEMENT_LINE_RECEIVED:
+            return (ConsumerName.SETTLEMENT_LINE_BOOK,)
+        case MessageType.SETTLEMENT_BATCH_RECEIVED:
+            return (ConsumerName.SETTLEMENT_PAYOUT_BOOK,)
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
@@ -119,7 +136,6 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             # needs-person list; merchant webhooks and emails consume the
             # rest.
             | MessageType.PAYMENT_ACTION_REQUIRED
-            | MessageType.PAYMENT_NEEDS_PERSON
             | MessageType.CHECKOUT_SESSION_COMPLETED
             | MessageType.INVOICE_ISSUED
         ):
@@ -146,6 +162,8 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.ORDER_CREATE
             | ConsumerName.INVOICE_ISSUE
             | ConsumerName.SESSION_PAYMENT_ENDED
+            | ConsumerName.SETTLEMENT_LINE_BOOK
+            | ConsumerName.SETTLEMENT_PAYOUT_BOOK
         ):
             return "local"
         case (
@@ -159,6 +177,7 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.PSP_PAYMENT_CANCEL
             | ConsumerName.PSP_PAYMENT_POLL
             | ConsumerName.PSP_PAYMENT_FETCH
+            | ConsumerName.PSP_SETTLEMENT_FETCH
         ):
             return "effect"
         case _:

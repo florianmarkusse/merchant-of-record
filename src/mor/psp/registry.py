@@ -20,6 +20,10 @@ from mor.psp.port import (
     PspAccount,
     PspEvent,
     PspProvider,
+    SettlementDocument,
+    SettlementListResult,
+    SettlementMode,
+    SettlementPageResult,
     ThinNotice,
     UndecodableBody,
 )
@@ -135,5 +139,48 @@ def decode_thin_webhook(
     match account.provider:
         case PspProvider.FAKE:
             return fake_client.decode_thin_webhook(body)
+        case _:
+            assert_never(account.provider)
+
+
+async def list_settlements(
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    account: PspAccount,
+    after: str,
+) -> SettlementListResult | UndecodableBody:
+    _check(environment, account)
+    match account.provider:
+        case PspProvider.FAKE:
+            return await fake_client.list_settlements(http, account, after)
+        case _:
+            assert_never(account.provider)
+
+
+async def fetch_settlement(
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    account: PspAccount,
+    name: str,
+    page: int,
+) -> SettlementPageResult | UndecodableBody:
+    _check(environment, account)
+    match account.provider:
+        case PspProvider.FAKE:
+            return await fake_client.fetch_settlement(http, account, name, page)
+        case _:
+            assert_never(account.provider)
+
+
+def decode_settlement(
+    account: PspAccount, mode: SettlementMode, body: bytes
+) -> SettlementDocument | UndecodableBody:
+    match account.provider:
+        case PspProvider.FAKE:
+            match mode:
+                case SettlementMode.FILE:
+                    return fake_client.decode_settlement_file(body)
+                case SettlementMode.API:
+                    return fake_client.decode_settlement_page(body)
         case _:
             assert_never(account.provider)

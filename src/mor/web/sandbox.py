@@ -8,11 +8,14 @@
     POST /_fake/sandbox/redeliver    vendor side: push failed webhooks again
     POST /_fake/sandbox/cut          vendor side: cut a report
     POST /_fake/sandbox/fault        vendor side: script a fault
+    POST /_fake/sandbox/settlement   PSP side: cut a settlement, maybe with
+                                     a fault (docs/plan-payments.md §7.1)
 
 Forms are plain POSTs answered with a redirect back to the page, which
 carries a short note on what happened. The vendor-side buttons call the
 fake's own API over HTTP, as the fuzzer does; nothing here writes the
-fake's tables. Transitional with the echo flow.
+fake's tables. The echo part is transitional with the echo flow; the PSP
+settlement part stays.
 """
 
 import uuid
@@ -35,6 +38,7 @@ from mor.db.connect import Connection, connect
 from mor.echo.flow import create_echo_job
 from mor.echo.inbound import JobNotFound, record_manual_event
 from mor.echo.port import EventKind
+from mor.fakes.psp import CUT_FAULTS
 from mor.web.forms import read_form, same_origin
 
 
@@ -72,6 +76,11 @@ class FaultForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     operation: Literal["send", "events"]
 
 
+class SettlementForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    account_id: uuid.UUID
+    fault: str = ""
+
+
 def _back(note: str) -> Response:
     return RedirectResponse(f"{PAGE}?{urlencode({'note': note})}", status_code=303)
 
@@ -105,10 +114,18 @@ class EventRow:
 
 
 @dataclass(frozen=True)
+class PspRow:
+    id: uuid.UUID
+    name: str
+    settlement_mode: str
+
+
+@dataclass(frozen=True)
 class View:
     accounts: list[AccountRow]
     jobs: list[JobRow]
     events: list[EventRow]
+    psp_accounts: list[PspRow]
     note: str | None
 
 
@@ -133,7 +150,13 @@ async def read_view(conn: Connection, note: str | None) -> View:
             " ORDER BY recorded_at"
         )
         events = await cur.fetchall()
-    return View(accounts, jobs, events, note)
+    async with conn.cursor(row_factory=class_row(PspRow)) as cur:
+        await cur.execute(
+            "SELECT id, name, settlement_mode::text AS settlement_mode"
+            " FROM psp_account WHERE kind = 'fake' ORDER BY name"
+        )
+        psp_accounts = await cur.fetchall()
+    return View(accounts, jobs, events, psp_accounts, note)
 
 
 def _button(action: str, label: str, fields: dict[str, str]) -> htpy.Element:
@@ -248,6 +271,38 @@ def _fault_form() -> htpy.Element:
     ]
 
 
+def _settlement_section(view: View) -> htpy.Node:
+    if not view.psp_accounts:
+        return None
+    options: list[htpy.Element] = [htpy.option(value="")["no fault"]]
+    for fault in CUT_FAULTS:
+        options.append(htpy.option(value=fault)[fault])
+    rows: list[htpy.Node] = []
+    for account in view.psp_accounts:
+        rows.append(
+            htpy.li[
+                htpy.form(method="post", action="/_fake/sandbox/settlement")[
+                    htpy.input(type="hidden", name="account_id", value=str(account.id)),
+                    f"{account.name} (settles by {account.settlement_mode}) ",
+                    htpy.select(name="fault")[options],
+                    " ",
+                    htpy.button(type="submit")["cut a settlement"],
+                ]
+            ]
+        )
+    return htpy.section[
+        htpy.h2["PSP settlement"],
+        htpy.p[
+            "The fake PSP settles every captured payment not settled yet, one"
+            " batch per currency. Our side reads it at the account's next look;"
+            " see ",
+            htpy.a(href="/staff/settlement")["the Settlement staff page"],
+            ".",
+        ],
+        htpy.ul[rows],
+    ]
+
+
 def render(view: View) -> str:
     sections: list[htpy.Node] = []
     for account in view.accounts:
@@ -265,6 +320,7 @@ def render(view: View) -> str:
                 " reports. The worker does the rest; reload to see it."
             ],
             htpy.p(role="status")[htpy.strong[view.note]] if view.note else None,
+            _settlement_section(view),
             _fault_form(),
             sections or htpy.p["No accounts: run `python -m mor.seed`."],
         ],
@@ -400,3 +456,23 @@ async def fault(request: Request, self_url: str, http: httpx2.AsyncClient) -> Re
         return Response("bad form", status_code=400)
     body = {"flavour": form.flavour, "fault": form.fault, "operation": form.operation}
     return _back(await _vendor_call(http, f"{self_url}/_fake/echo/faults", body))
+
+
+async def cut_settlement(
+    request: Request, database_url: str, http: httpx2.AsyncClient
+) -> Response:
+    if not same_origin(request):
+        return Response("cross-site POST refused", status_code=403)
+    form = await read_form(request, SettlementForm)
+    if form is None or (form.fault and form.fault not in CUT_FAULTS):
+        return Response("bad form", status_code=400)
+    async with await connect(database_url) as conn:
+        cur = await conn.execute(
+            "SELECT base_url FROM psp_account WHERE id = %s AND kind = 'fake'",
+            (form.account_id,),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        return _back(f"no fake PSP account {form.account_id}")
+    faults = [form.fault] if form.fault else []
+    return _back(await _vendor_call(http, f"{row[0]}/settlements", {"faults": faults}))

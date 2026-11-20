@@ -43,6 +43,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from mor.db.connect import SESSION_OPTIONS
 from mor.fakes.hang import Hang
 
 
@@ -108,7 +109,7 @@ def sign(secret: str, body: bytes) -> str:
 
 async def _connect(database_url: str) -> FakeConnection:
     return await psycopg.AsyncConnection.connect(
-        database_url, options="-c search_path=fake_vendor"
+        database_url, options=f"-c search_path=fake_vendor {SESSION_OPTIONS}"
     )
 
 

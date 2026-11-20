@@ -12,10 +12,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from fractions import Fraction
 from typing import Literal
 
 from mor.messaging.guard import DuplicateGuard
 from mor.money.amount import Money
+from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
 
 
@@ -31,6 +33,25 @@ class StatusMode(StrEnum):
     PUSH_FAT = "push_fat"  # a signed webhook carrying the event
     PUSH_THIN = "push_thin"  # a signed webhook saying only "news": we fetch
     POLL = "poll"  # we ask, on a schedule
+
+
+class SettlementMode(StrEnum):
+    """How settlement reaches us; matches `psp_settlement_mode`
+    (docs/plan-payments.md §7.1). Both are reads."""
+
+    FILE = "file"  # a report file per batch
+    API = "api"  # a batch read page by page
+
+
+class InboundMode(StrEnum):
+    """What stored bytes are; matches `psp_inbound_mode`. The first three
+    are the status modes' own."""
+
+    PUSH_FAT = "push_fat"
+    PUSH_THIN = "push_thin"
+    POLL = "poll"
+    SETTLEMENT_FILE = "settlement_file"
+    SETTLEMENT_PAGE = "settlement_page"
 
 
 class CaptureMode(StrEnum):
@@ -64,6 +85,8 @@ class PspAccount:
     methods: tuple[PaymentMethod, ...]
     poll_interval: timedelta
     webhook_secret: str
+    settlement_mode: SettlementMode
+    settlement_interval: timedelta
 
 
 @dataclass(frozen=True)
@@ -186,3 +209,68 @@ class ThinNotice:
     """A thin webhook: which of our payments has news."""
 
     reference: str
+
+
+# --- settlement (docs/plan-payments.md §7.1) ---------------------------------
+
+
+@dataclass(frozen=True)
+class SettlementList:
+    """Reports (file) or batches (api) after the one named, oldest first."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SettlementPage:
+    """A report, or one page of a batch, raw: stored before decoding.
+    `next_page` is the batch's next page, None when this was its last."""
+
+    body: bytes
+    next_page: int | None
+
+
+type SettlementListResult = SettlementList | Unavailable | OutcomeUnknown
+type SettlementPageResult = SettlementPage | Unavailable | OutcomeUnknown
+
+
+class LineType(StrEnum):
+    """Matches `settlement_line_type`. A type we do not book yet (refunds and
+    chargebacks come in slice 8, a PSP's own charges) is `unknown`, with the
+    PSP's word kept beside it."""
+
+    CAPTURE = "capture"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class SettlementBatch:
+    """One payout. Amounts are exact in our minor units: a PSP may count
+    finer than we do (IDR at 2 decimals)."""
+
+    vendor_batch_id: str
+    currency: Currency
+    net: Fraction
+    paid_out_at: datetime
+
+
+@dataclass(frozen=True)
+class SettledLine:
+    vendor_line_id: str
+    line_type: LineType
+    vendor_type: str
+    provider_payment_id: str
+    reference: str
+    currency: Currency
+    gross: Fraction
+    fee: Fraction
+
+
+@dataclass(frozen=True)
+class SettlementDocument:
+    """A decoded report, or a decoded page of a batch. `last` says the
+    batch's lines are all read with this one."""
+
+    batch: SettlementBatch
+    lines: tuple[SettledLine, ...]
+    last: bool

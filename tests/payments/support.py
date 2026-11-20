@@ -34,7 +34,14 @@ from mor.money.currency import Currency
 from mor.payments.attempts import Attempt, session_attempts
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.accounts import add_route, create_psp_account
-from mor.psp.port import CaptureMode, PaymentMethod, PspAccount, PspProvider, StatusMode
+from mor.psp.port import (
+    CaptureMode,
+    PaymentMethod,
+    PspAccount,
+    PspProvider,
+    SettlementMode,
+    StatusMode,
+)
 from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, wire
 from tests.quote.fixtures import quote_market
 
@@ -70,6 +77,7 @@ class Wiring:
     status_mode: StatusMode
     capture_mode: CaptureMode
     guard: DuplicateGuard
+    settlement_mode: SettlementMode = SettlementMode.FILE
 
 
 @dataclass(frozen=True)
@@ -100,6 +108,7 @@ async def make_shop(
             wiring.guard,
             (PaymentMethod.CARD, PaymentMethod.QR),
             SECRET,
+            wiring.settlement_mode,
             NOW,
         )
         await add_route(conn, account.id, None, None, NOW, ACTOR, NOW)

@@ -4,7 +4,9 @@
     raw bytes (webhook or fetched page) ─▶ store_inbox (unique per account
         and body hash) + psp_inbox_stored
     psp_inbox_decode (per account): a thin notice becomes
-        payment_events_wanted; events become one psp_event_received each
+        payment_events_wanted; events become one psp_event_received each;
+        a settlement report or page becomes its batch and lines
+        (mor.settlement.store, docs/plan-payments.md §7.1)
     payment_event_apply (per attempt): the event once, by the PSP's id,
         through the transition table
 
@@ -16,6 +18,7 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import assert_never
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
@@ -34,7 +37,8 @@ from mor.payments.transitions import Stale as StaleEvent
 from mor.payments.transitions import after_event
 from mor.psp import registry
 from mor.psp.accounts import read_psp_account
-from mor.psp.port import StatusMode, UndecodableBody
+from mor.psp.port import InboundMode, SettlementMode, UndecodableBody
+from mor.settlement.store import record_document
 
 
 RECEIVER = Actor(ActorKind.SYSTEM, "psp_inbox")
@@ -70,7 +74,7 @@ class AlreadyStored:
 async def store_inbox(
     conn: Connection,
     account_id: uuid.UUID,
-    mode: StatusMode,
+    mode: InboundMode,
     body: bytes,
     now: datetime,
 ) -> Stored | AlreadyStored:
@@ -111,12 +115,29 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
     )
     row = await cur.fetchone()
     assert row is not None, f"no inbox row {inbox_id}"
-    mode = StatusMode(row[0])
+    mode = InboundMode(row[0])
     body = bytes(row[1])
     account = await read_psp_account(conn, account_id)
     assert account is not None, f"no psp account {account_id}"
 
-    if mode == StatusMode.PUSH_THIN:
+    settlement: SettlementMode | None = None
+    match mode:
+        case InboundMode.SETTLEMENT_FILE:
+            settlement = SettlementMode.FILE
+        case InboundMode.SETTLEMENT_PAGE:
+            settlement = SettlementMode.API
+        case InboundMode.PUSH_FAT | InboundMode.PUSH_THIN | InboundMode.POLL:
+            pass
+        case _:
+            assert_never(mode)
+    if settlement is not None:
+        # A settlement report or page (docs/plan-payments.md §7.1).
+        failed = await record_document(conn, account, inbox_id, settlement, body, now)
+        if failed is not None:
+            raise UndecodableInbox(f"inbox {inbox_id}: {failed.detail}")
+        return Applied()
+
+    if mode == InboundMode.PUSH_THIN:
         notice = registry.decode_thin_webhook(account, body)
         if isinstance(notice, UndecodableBody):
             raise UndecodableInbox(f"inbox {inbox_id}: {notice.detail}")

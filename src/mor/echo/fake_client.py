@@ -15,12 +15,12 @@ import csv
 import hashlib
 import hmac
 import io
-from datetime import datetime
 from typing import Literal
 
 import httpx2
 import msgspec
 
+from mor.dates import AwareDatetime, parse_instant, to_utc
 from mor.echo.port import (
     Cancelled,
     CancelResult,
@@ -163,7 +163,7 @@ class _WebhookEvent(msgspec.Struct, frozen=True):
     echo_id: str
     reference: str
     kind: Literal["confirmed", "archived"]
-    occurred_at: datetime
+    occurred_at: AwareDatetime
 
 
 class _FullWebhook(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -188,7 +188,10 @@ def decode_full_webhook(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBod
     for event in webhook.events:
         events.append(
             VendorEvent(
-                event.id, event.reference, EventKind(event.kind), event.occurred_at
+                event.id,
+                event.reference,
+                EventKind(event.kind),
+                to_utc(event.occurred_at),
             )
         )
     return tuple(events)
@@ -277,11 +280,8 @@ def decode_report(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBody:
         event_id, _, reference, kind, occurred_at = row
         if kind not in ("confirmed", "archived"):
             return UndecodableBody(f"row {number}: unknown kind {kind!r}")
-        try:
-            moment = datetime.fromisoformat(occurred_at)
-        except ValueError:
-            return UndecodableBody(f"row {number}: bad time {occurred_at!r}")
-        if moment.utcoffset() is None:
-            return UndecodableBody(f"row {number}: time without a zone")
+        moment = parse_instant(occurred_at)
+        if moment is None:
+            return UndecodableBody(f"row {number}: no time with a zone {occurred_at!r}")
         events.append(VendorEvent(event_id, reference, EventKind(kind), moment))
     return tuple(events)

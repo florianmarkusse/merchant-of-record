@@ -19,7 +19,7 @@ from mor.echo.port import EventMode
 from mor.payments.inbound import store_inbox as store_psp_inbox
 from mor.psp import registry as psp_registry
 from mor.psp.accounts import read_psp_account
-from mor.psp.port import StatusMode
+from mor.psp.port import InboundMode, StatusMode
 
 
 async def echo_webhook(request: Request, database_url: str, now: datetime) -> Response:
@@ -60,7 +60,9 @@ async def psp_webhook(request: Request, database_url: str, now: datetime) -> Res
         signature = request.headers.get(psp_registry.signature_header(account))
         if not psp_registry.verify_webhook(account, body, signature):
             return Response(status_code=401)
-        await store_psp_inbox(conn, account_id, account.status_mode, body, now)
+        await store_psp_inbox(
+            conn, account_id, InboundMode(account.status_mode.value), body, now
+        )
         await conn.commit()
     # Stored now or before: either way the PSP may stop sending it.
     return Response(status_code=200)

@@ -25,6 +25,8 @@ class AggregateType(StrEnum):
     PAYMENT_ATTEMPT = "payment_attempt"
     PSP_ACCOUNT = "psp_account"
     ORDER = "order"
+    SETTLEMENT_LINE = "settlement_line"
+    SETTLEMENT_BATCH = "settlement_batch"
 
 
 class MessageType(StrEnum):
@@ -76,6 +78,9 @@ class MessageType(StrEnum):
     CHECKOUT_SESSION_COMPLETED = "checkout_session_completed"
     ORDER_PAID = "order_paid"
     INVOICE_ISSUED = "invoice_issued"
+    PSP_SETTLEMENT_DUE = "psp_settlement_due"
+    SETTLEMENT_LINE_RECEIVED = "settlement_line_received"
+    SETTLEMENT_BATCH_RECEIVED = "settlement_batch_received"
 
 
 @dataclass(frozen=True)
@@ -383,6 +388,29 @@ class InvoiceIssuedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     merchant_id: uuid.UUID
 
 
+class PspSettlementDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Scheduled: look for settlement the PSP has published, one report or
+    page per look (docs/plan-payments.md §7.1)."""
+
+    psp_account_id: uuid.UUID
+
+
+class SettlementLineReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A settled line, stored once by the PSP's line id: book it."""
+
+    settlement_line_id: uuid.UUID
+    psp_account_id: uuid.UUID
+
+
+class SettlementBatchReceivedV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True
+):
+    """A batch with all its lines stored: book its payout."""
+
+    settlement_batch_id: uuid.UUID
+    psp_account_id: uuid.UUID
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -429,6 +457,9 @@ type Fact = (
     | CheckoutSessionCompletedV1
     | OrderPaidV1
     | InvoiceIssuedV1
+    | PspSettlementDueV1
+    | SettlementLineReceivedV1
+    | SettlementBatchReceivedV1
 )
 
 
@@ -538,6 +569,12 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.ORDER_PAID, 1)
         case InvoiceIssuedV1():
             return FactType(MessageType.INVOICE_ISSUED, 1)
+        case PspSettlementDueV1():
+            return FactType(MessageType.PSP_SETTLEMENT_DUE, 1)
+        case SettlementLineReceivedV1():
+            return FactType(MessageType.SETTLEMENT_LINE_RECEIVED, 1)
+        case SettlementBatchReceivedV1():
+            return FactType(MessageType.SETTLEMENT_BATCH_RECEIVED, 1)
         case _:
             assert_never(fact)
 
@@ -605,8 +642,15 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | PspEventReceivedV1(payment_attempt_id=attempt_id)
         ):
             return Aggregate(AggregateType.PAYMENT_ATTEMPT, attempt_id)
-        case PspInboxStoredV1(psp_account_id=account_id):
+        case (
+            PspInboxStoredV1(psp_account_id=account_id)
+            | PspSettlementDueV1(psp_account_id=account_id)
+        ):
             return Aggregate(AggregateType.PSP_ACCOUNT, account_id)
+        case SettlementLineReceivedV1(settlement_line_id=line_id):
+            return Aggregate(AggregateType.SETTLEMENT_LINE, line_id)
+        case SettlementBatchReceivedV1(settlement_batch_id=batch_id):
+            return Aggregate(AggregateType.SETTLEMENT_BATCH, batch_id)
         case OrderPaidV1(order_id=order_id) | InvoiceIssuedV1(order_id=order_id):
             return Aggregate(AggregateType.ORDER, order_id)
         case _:
@@ -723,6 +767,12 @@ def decode(
             decoded = _decode(payload, OrderPaidV1)
         case MessageType.INVOICE_ISSUED:
             decoded = _decode(payload, InvoiceIssuedV1)
+        case MessageType.PSP_SETTLEMENT_DUE:
+            decoded = _decode(payload, PspSettlementDueV1)
+        case MessageType.SETTLEMENT_LINE_RECEIVED:
+            decoded = _decode(payload, SettlementLineReceivedV1)
+        case MessageType.SETTLEMENT_BATCH_RECEIVED:
+            decoded = _decode(payload, SettlementBatchReceivedV1)
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):

@@ -69,6 +69,7 @@ from mor.psp.port import (
     FetchResult,
     FindResult,
     Found,
+    InboundMode,
     NotCapturable,
     OutcomeUnknown,
     Page,
@@ -768,7 +769,7 @@ async def complete_poll(
     match result:
         case Page(body=body):
             # Stored raw and decoded on the webhook's path.
-            await store_inbox(conn, account.id, StatusMode.POLL, body, now)
+            await store_inbox(conn, account.id, InboundMode.POLL, body, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"poll: {detail}")
         case _:

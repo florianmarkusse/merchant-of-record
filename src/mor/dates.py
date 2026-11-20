@@ -1,4 +1,12 @@
+"""Moments and days: what a person reads, what a machine reads, and what
+comes in. Inside the process every moment is aware and in UTC: inbound ones
+are converted where they are decoded (`AwareDatetime`, `parse_instant`),
+and the database hands them back in UTC (`mor.db.connect`)."""
+
 from datetime import UTC, date, datetime
+from typing import Annotated
+
+import msgspec
 
 
 _MONTHS = (
@@ -13,6 +21,31 @@ def format_moment(moment: datetime) -> str:
     process locale."""
     utc = moment.astimezone(UTC)
     return f"{utc.day:02d}-{_MONTHS[utc.month - 1]}-{utc.year} {utc:%H:%M} UTC"
+
+
+# For a datetime field of a record decoded at the edge: msgspec refuses one
+# without an offset, so a vendor's local time is never taken for ours. The
+# decoder then converts it with `to_utc`.
+type AwareDatetime = Annotated[datetime, msgspec.Meta(tz=True)]
+
+
+def to_utc(moment: datetime) -> datetime:
+    """An aware moment, in UTC. A naive one is a bug: it would be read in
+    the process's local zone without saying so."""
+    assert moment.tzinfo is not None, "a naive datetime inside the process"
+    return moment.astimezone(UTC)
+
+
+def parse_instant(text: str) -> datetime | None:
+    """An ISO 8601 moment from text a vendor wrote (a CSV cell), in UTC, or
+    None if it is not one or names no offset."""
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        return None
+    return moment.astimezone(UTC)
 
 
 def format_day(day: date) -> str:

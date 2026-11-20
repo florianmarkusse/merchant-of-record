@@ -17,7 +17,15 @@ from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from mor.config import Environment, Settings
-from mor.web import api, buyer, order_pages, sandbox, staff_markets, webhooks
+from mor.web import (
+    api,
+    buyer,
+    order_pages,
+    sandbox,
+    staff_markets,
+    staff_settlement,
+    webhooks,
+)
 from mor.web.staff_layout import STATIC_DIR
 
 
@@ -116,6 +124,15 @@ def make_app(
     async def staff_ask_carrier(request: Request) -> Response:
         return await staff_markets.ask_carrier(request, url, clock())
 
+    async def staff_settlement_accounts(request: Request) -> Response:
+        return await staff_settlement.accounts_page(url)
+
+    async def staff_settlement_account(request: Request) -> Response:
+        return await staff_settlement.account_page(request, url)
+
+    async def staff_settlement_resolve(request: Request) -> Response:
+        return await staff_settlement.resolve(request, url, clock())
+
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
         Route("/webhooks/psp/{account_id}", psp_webhook, methods=["POST"]),
@@ -171,6 +188,17 @@ def make_app(
                     staff_ask_carrier,
                     methods=["POST"],
                 ),
+                Route("/staff/settlement", staff_settlement_accounts, methods=["GET"]),
+                Route(
+                    "/staff/settlement/{account_id}",
+                    staff_settlement_account,
+                    methods=["GET"],
+                ),
+                Route(
+                    "/staff/settlement/{account_id}/exceptions/{exception_id}",
+                    staff_settlement_resolve,
+                    methods=["POST"],
+                ),
             ]
         )
     if fakes is not None:
@@ -199,6 +227,9 @@ def make_app(
         async def sandbox_fault(request: Request) -> Response:
             return await sandbox.fault(request, settings.self_url, http)
 
+        async def sandbox_settlement(request: Request) -> Response:
+            return await sandbox.cut_settlement(request, url, http)
+
         routes.extend(
             [
                 Route("/_fake/", sandbox_page, methods=["GET"]),
@@ -208,6 +239,9 @@ def make_app(
                 Route("/_fake/sandbox/redeliver", sandbox_redeliver, methods=["POST"]),
                 Route("/_fake/sandbox/cut", sandbox_cut, methods=["POST"]),
                 Route("/_fake/sandbox/fault", sandbox_fault, methods=["POST"]),
+                Route(
+                    "/_fake/sandbox/settlement", sandbox_settlement, methods=["POST"]
+                ),
             ]
         )
         routes.extend(fakes.app.routes)

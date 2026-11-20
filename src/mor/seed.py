@@ -23,6 +23,8 @@ One fake PSP account per wiring (how news arrives, how it captures, its
 duplicate guard), each set up at the fake PSP as a merchant would on its
 dashboard, and a default route to the push / sale / keyed one
 (docs/plan-payments.md §2). Another wiring is tried by adding a route row.
+Each reads its settlement, keyed accounts by report file and the others
+through the API (§7.1).
 
 A synthetic merchant, "Sandbox Shop", with an API key for this
 environment: the key is printed when it is created, and only then
@@ -66,7 +68,15 @@ from mor.merchants.store import (
 from mor.messaging.guard import DuplicateGuard
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.accounts import add_route, create_psp_account, psp_account_by_name
-from mor.psp.port import CaptureMode, PaymentMethod, PspAccount, PspProvider, StatusMode
+from mor.psp.port import (
+    CaptureMode,
+    PaymentMethod,
+    PspAccount,
+    PspProvider,
+    SettlementMode,
+    StatusMode,
+)
+from mor.settlement.fetch import start_settlement_reading
 
 
 SEEDER = Actor(ActorKind.SYSTEM, "seed")
@@ -224,6 +234,20 @@ PSP_GUARDS = (DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)
 DEFAULT_PSP = "sandbox-push_fat-sale-vendor_constraint"
 
 
+# Short on the test setup, so a settlement cut on the sandbox page shows up
+# soon (docs/plan-payments.md §7.1).
+SETTLEMENT_INTERVAL = timedelta(minutes=1)
+
+
+def settlement_mode_for(guard: DuplicateGuard) -> SettlementMode:
+    """Both settlement modes on the test setup without doubling the
+    accounts: keyed accounts read reports, the others the API. The fuzzer
+    draws the two apart."""
+    if guard == DuplicateGuard.VENDOR_CONSTRAINT:
+        return SettlementMode.FILE
+    return SettlementMode.API
+
+
 def psp_name(mode: StatusMode, capture: CaptureMode, guard: DuplicateGuard) -> str:
     return f"sandbox-{mode.value}-{capture.value}-{guard.value}"
 
@@ -254,9 +278,14 @@ async def seed_psp_accounts(
                         guard,
                         (PaymentMethod.CARD, PaymentMethod.QR),
                         secrets.token_hex(16),
+                        settlement_mode_for(guard),
                         now,
                         POLL_INTERVAL,
+                        SETTLEMENT_INTERVAL,
                     )
+                # Every account reads its settlement; the cursor's insert
+                # keeps a second seed run from starting a second reader.
+                await start_settlement_reading(conn, account.id, SEEDER, now)
                 seeded.append(account)
     cur = await conn.execute("SELECT 1 FROM psp_route LIMIT 1")
     if await cur.fetchone() is None:

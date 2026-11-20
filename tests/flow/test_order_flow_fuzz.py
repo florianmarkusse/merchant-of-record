@@ -23,7 +23,6 @@ import os
 import uuid
 from collections import Counter
 from collections.abc import Coroutine
-from dataclasses import dataclass
 from datetime import timedelta
 
 from hypothesis import settings
@@ -36,12 +35,9 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
-from psycopg.rows import class_row
 
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
-from mor.messaging import consumers
-from mor.messaging.facts import AggregateType, MessageType, UndecodableFact, decode
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.routing import ConsumerName, consumer_kind
 from mor.messaging.worker import (
@@ -49,7 +45,6 @@ from mor.messaging.worker import (
     Failed,
     find_candidates,
     run_one,
-    try_lock_aggregate,
 )
 from mor.payments.flow import Paying, pay
 from mor.psp.port import CaptureMode, StatusMode
@@ -60,8 +55,10 @@ from tests.flow.payment_checks import (
     check_every_action,
     crash_around_a_call,
     crash_in_a_local_step,
+    handled_locally,
+    meet_again,
 )
-from tests.helpers import ENV, TEST_URL, crash, empty_tables, wire
+from tests.helpers import ENV, TEST_URL, empty_tables, wire
 from tests.payments.support import (
     ACTOR,
     NOW,
@@ -90,19 +87,6 @@ MILESTONES = (
     "sessions' life passed",
 )
 TALLY: Counter[str] = Counter()
-
-
-@dataclass(frozen=True)
-class _Handled:
-    """A handled delivery and its fact, as stored."""
-
-    message_id: uuid.UUID
-    consumer: str
-    aggregate_type: str
-    aggregate_id: uuid.UUID
-    message_type: str
-    schema_version: int
-    payload: str
 
 
 class OrderFlow(RuleBasedStateMachine):
@@ -233,45 +217,13 @@ class OrderFlow(RuleBasedStateMachine):
 
     @rule(data=st.data())
     def a_consumer_meets_its_fact_again(self, data: st.DataObject) -> None:
-        """A handled fact handed to its local consumer once more, past the
-        inbox, and committed, as a broker's redelivery could. A consumer may
-        emit its facts again (decoding a stored webhook does, by design);
-        the guard downstream must hold, which the rules and the drain
-        check."""
-        handled: list[_Handled] = []
-        for row in self.run(self._handled()):
-            if consumer_kind(ConsumerName(row.consumer)) == "local":
-                handled.append(row)
+        """See payment_checks.meet_again."""
+        handled = self.run(handled_locally(self.worker))
         if not handled:
             return
         chosen = data.draw(st.sampled_from(handled))
-        fact = decode(
-            MessageType(chosen.message_type),
-            chosen.schema_version,
-            chosen.payload.encode(),
-        )
-        assert not isinstance(fact, UndecodableFact), fact
-        consumer = chosen.consumer
-        candidate = Candidate(
-            chosen.message_id,
-            ConsumerName(consumer),
-            AggregateType(chosen.aggregate_type),
-            chosen.aggregate_id,
-        )
-        self.met.add(f"met again: {consumer}")
-
-        async def step() -> None:
-            conn = await connect(TEST_URL, autocommit=True)
-            try:
-                assert await try_lock_aggregate(conn, candidate)
-                async with conn.transaction():
-                    await consumers.handle(
-                        conn, candidate.consumer, fact, ENV, self.now
-                    )
-            finally:
-                await crash(conn)
-
-        self.run(step())
+        self.met.add(f"met again: {chosen.consumer}")
+        self.run(meet_again(chosen, self.now))
 
     @rule()
     def the_psp_sends_everything_again(self) -> None:
@@ -309,20 +261,6 @@ class OrderFlow(RuleBasedStateMachine):
         if not found:
             return None
         return data.draw(st.sampled_from(found))
-
-    async def _handled(self) -> list[_Handled]:
-        async with self.worker.cursor(row_factory=class_row(_Handled)) as cur:
-            await cur.execute(
-                """
-                SELECT d.message_id, d.consumer::text AS consumer,
-                       o.aggregate_type::text AS aggregate_type, o.aggregate_id,
-                       o.message_type::text AS message_type, o.schema_version,
-                       o.payload::text AS payload
-                FROM outbox_delivery d JOIN outbox o ON o.id = d.message_id
-                WHERE d.handled_at IS NOT NULL ORDER BY o.seq, d.consumer
-                """
-            )
-            return await cur.fetchall()
 
     async def _captures_due(self) -> list[Candidate]:
         found: list[Candidate] = []

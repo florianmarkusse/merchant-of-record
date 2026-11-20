@@ -28,6 +28,9 @@ from mor.orders import flow as order_flow
 from mor.payments import flow as payment_flow
 from mor.payments import inbound as payment_inbound
 from mor.probe import flow as probe_flow
+from mor.psp.port import SettlementList, SettlementPage
+from mor.settlement import fetch as settlement_fetch
+from mor.settlement import store as settlement_store
 
 
 type EffectCall = (
@@ -37,6 +40,7 @@ type EffectCall = (
     | duty_lookups.AskCall
     | courier_prices.PriceCall
     | payment_flow.PaymentCall
+    | settlement_fetch.SettlementCall
 )
 type EffectResult = (
     echo_flow.EchoResult
@@ -45,6 +49,7 @@ type EffectResult = (
     | duty_port.AskResult
     | courier_port.QuoteRateResult
     | payment_flow.PaymentResult
+    | settlement_fetch.SettlementResult
 )
 
 
@@ -91,6 +96,10 @@ async def handle(
             return await invoice_store.issue_invoice(conn, fact, now)
         case ConsumerName.SESSION_PAYMENT_ENDED:
             return await checkout_flow.end_payment(conn, fact, now)
+        case ConsumerName.SETTLEMENT_LINE_BOOK:
+            return await settlement_store.book_lines(conn, fact, now)
+        case ConsumerName.SETTLEMENT_PAYOUT_BOOK:
+            return await settlement_store.book_payout(conn, fact, now)
         case (
             ConsumerName.ECHO_SEND
             | ConsumerName.ECHO_POLL
@@ -102,6 +111,7 @@ async def handle(
             | ConsumerName.PSP_PAYMENT_CANCEL
             | ConsumerName.PSP_PAYMENT_POLL
             | ConsumerName.PSP_PAYMENT_FETCH
+            | ConsumerName.PSP_SETTLEMENT_FETCH
         ):
             raise WrongKind(f"{consumer} is an effect consumer")
         case _:
@@ -131,6 +141,8 @@ async def prepare(
             return await payment_flow.prepare_cancel(conn, fact, now)
         case ConsumerName.PSP_PAYMENT_POLL | ConsumerName.PSP_PAYMENT_FETCH:
             return await payment_flow.prepare_poll(conn, fact, now)
+        case ConsumerName.PSP_SETTLEMENT_FETCH:
+            return await settlement_fetch.prepare_fetch(conn, fact, now)
         case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH
@@ -145,6 +157,8 @@ async def prepare(
             | ConsumerName.ORDER_CREATE
             | ConsumerName.INVOICE_ISSUE
             | ConsumerName.SESSION_PAYMENT_ENDED
+            | ConsumerName.SETTLEMENT_LINE_BOOK
+            | ConsumerName.SETTLEMENT_PAYOUT_BOOK
         ):
             raise WrongKind(f"{consumer} is a local consumer")
         case _:
@@ -175,6 +189,8 @@ async def call(
             | payment_flow.PollCall()
         ):
             return await payment_flow.call(http, environment, effect_call)
+        case settlement_fetch.ListCall() | settlement_fetch.FetchCall():
+            return await settlement_fetch.call_fetch(http, environment, effect_call)
         case _:
             assert_never(effect_call)
 
@@ -199,6 +215,8 @@ async def complete(
                     result,
                     Page
                     | ReportList
+                    | SettlementList
+                    | SettlementPage
                     | duty_port.VendorRates
                     | duty_port.UnknownCode
                     | duty_port.Unavailable
@@ -286,6 +304,20 @@ async def complete(
                     return await payment_flow.complete_poll(
                         conn, fact, effect_call, result, now
                     )
+        case ConsumerName.PSP_SETTLEMENT_FETCH:
+            if not isinstance(
+                effect_call, settlement_fetch.ListCall | settlement_fetch.FetchCall
+            ):
+                raise WrongCall(f"psp_settlement_fetch got {effect_call!r}")
+            if not settlement_fetch.is_settlement_result(result):
+                raise WrongCall(f"psp_settlement_fetch got {result!r}")
+            return await settlement_fetch.complete_fetch(
+                conn,
+                fact,
+                effect_call,
+                result,
+                now,
+            )
         case (
             ConsumerName.PROBE_ECHO
             | ConsumerName.PROBE_FINISH
@@ -300,6 +332,8 @@ async def complete(
             | ConsumerName.ORDER_CREATE
             | ConsumerName.INVOICE_ISSUE
             | ConsumerName.SESSION_PAYMENT_ENDED
+            | ConsumerName.SETTLEMENT_LINE_BOOK
+            | ConsumerName.SETTLEMENT_PAYOUT_BOOK
         ):
             raise WrongKind(f"{consumer} is a local consumer")
         case _:

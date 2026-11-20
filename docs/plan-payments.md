@@ -1,6 +1,8 @@
 # Slice 5: payments, the order and the invoice
 
-Status: 5a built (19-Nov-2026), 5b built (20-Nov-2026); 5c next.
+Status: 5a built (19-Nov-2026), 5b built (20-Nov-2026); 5c split in
+three (§7.1): 5c-1 (settlement) built (20-Nov-2026, §7.2); 5c-2 (the bank
+statement) is next, to be designed.
 
 Applies plan-architecture §2 (stages 3 and 4), §4, §5, §6 and §9 (the
 capture entry), and plan-psp-integration §4 and §5 and
@@ -482,6 +484,331 @@ Cr psp_clearing            settled
 A line that matches nothing, or an amount that differs from the capture,
 is a `settlement_exception` row on a staff page. `psp_clearing` per
 account reaching zero after each batch is the health figure.
+
+### 7.1 5c in detail (agreed 20-Nov-2026; wins over the sketch above)
+
+**Split.** §1 put four things in 5c. Settlement is the slice's money
+work; the other three are not about settlement. Proposed (question 8):
+
+- **5c-1: settlement.** Below.
+- **5c-2: the bank statement** (added 20-Nov-2026 with question 9): a
+  fake bank and the import of its statements, matching each PSP payout
+  to the credit that shows it arrived. Designed after 5c-1 is built.
+- **5c-3: the browser side.** The fake's card-fields component (the first
+  PSP JavaScript, under the prod CSP) and the Playwright smoke suite.
+- **Echo retirement waits** for the shipment slice. The PSP covers push,
+  thin push and poll, and 5c-1 covers file; but the echo is still the
+  only flow that exercises the `compensable` guard (money is never
+  `compensable`) and a status derived from a set of events, both of
+  which come back with courier booking and tracking (plan-architecture
+  §9). Retiring it now leaves both untested until then.
+
+**What real PSPs send** (plan-psp-integration §2): a report per payout
+batch, as a file (Adyen's settlement detail report, 2C2P's SFTP CSV) or
+through a report API (Xendit, Checkout.com). One batch is one bank
+transfer in one currency; its lines are per payment (gross, fee, net),
+plus refunds, chargebacks and the PSP's own charges. Fees are known only
+here. Fees may carry the PSP's VAT or GST (§9).
+
+**Capability**, a new column on `psp_account`, so the fuzzer and the
+seed draw it:
+
+| Capability | Values |
+|---|---|
+| settlement reaches us by | `file` (a list of report names after a cursor, then one CSV per batch), `api` (a list of batch ids after a cursor, then pages of one batch) |
+
+Both read only, so neither needs a guard: a repeat after a crash is
+absorbed by the inbox and the vendor's ids.
+
+**The fake PSP** (`/_fake/psp/{account}`):
+
+```
+POST A/settlements              {"faults": [...]}  cut a batch now, per
+                                currency, of every captured payment not
+                                settled yet; the staff page, the seed and
+                                the fuzzer call it ("cut" in the sandbox)
+GET  A/settlement-files?after=  report names, oldest first     (file)
+GET  A/settlement-files/{name}  CSV: a header row for the batch (id,
+                                currency, net, paid-out date), one row
+                                per line (line id, type, payment id,
+                                our reference, gross, fee, net)
+GET  A/settlements?after=       batch ids, oldest first        (api)
+GET  A/settlements/{id}?page=n  JSON: the batch header, a page of lines,
+                                `next_page` or null
+```
+
+- Fees are the fake's own made-up rule per method (card a percentage
+  plus a fixed part, QR a percentage), in its own minor units: IDR has
+  2, so an IDR fee has sub-rupiah parts, as Stripe's would.
+- Faults per cut: a line for a reference nobody made, a gross that
+  differs from the capture, a payment settled again in a later batch
+  under a new line id, a line of a type we do not know (`adjustment`), a
+  net that is not what the lines add up to, and the list or fetch
+  answering 500 or timing out. The fake records what it cut; the fuzzer
+  compares.
+
+**Our side.** The same one inbound path as webhooks and polls
+(plan-messaging §12): raw bytes into `psp_inbox` first, decoding after.
+
+```
+psp_settlement_due (scheduled, per account)
+  └▶ psp_settlement_fetch (effect, reads only): one look, at most one
+     report or page, as echo_report_fetch does (a backlog reads as looks
+     that follow each other at once)
+       └▶ store_inbox (mode settlement_file | settlement_page)
+            └▶ psp_inbox_decode (per account): inserts the batch and its
+               lines, each once by the vendor's id; one
+               settlement_line_received per new line; on the batch's last
+               page, settlement_batch_received
+                 ├▶ settlement_line_book (per attempt, local)
+                 └▶ settlement_payout_book (per batch, local)
+```
+
+The cursor is `psp_settlement_cursor (account_id, last, pending)`, as
+the echo's report cursor: `last` is a report name or a batch id and page.
+
+**Booking a line** (`settlement_line_book`, under the attempt's lock):
+
+- The line names our reference (the attempt id) and the PSP's payment id;
+  both must agree with one attempt of this account. The attempt must be
+  `captured`, its gross and currency equal to what was captured, and no
+  other line booked for it (a partial unique index on
+  `settlement_line (attempt_id) WHERE type = 'capture' AND state =
+  'booked'`).
+- The entry, keyed `settlement:{account}:{vendor line id}`, in the
+  line's currency:
+
+  ```
+  Dr psp_fee_collected               the estimate, read from the capture
+                                     entry's own line (what was booked,
+                                     not recomputed from the quote)
+  Cr psp_clearing:{account}          the fee, rounded to our exponent
+  Dr/Cr psp_fee_variance:{account}   the gap, ours (skipped when zero)
+  ```
+
+- The net stays in `psp_clearing` until the payout. A fee in sub-units
+  of our exponent (IDR 1,234.56) is rounded half-even at import, the one
+  place that rounds it (plan-psp-integration §4); the exact value and the
+  mode are stored on the line.
+- Anything that does not fit is a `settlement_exception` and books
+  nothing: `unknown_reference`, `not_captured` (the attempt ended
+  otherwise, or is a second capture already with a person),
+  `amount_differs`, `currency_differs`, `settled_twice`, `unknown_type`.
+- A line for an attempt still open (settlement got ahead of our webhook)
+  asks for the payment's state (`payment_events_wanted`, as a thin
+  webhook does) and returns `RetryLater`. Time only triggers the retry;
+  the attempt's state under the lock decides. The PSP's settling it
+  is not taken as the capture itself.
+
+**Booking the payout** (`settlement_payout_book`, under the batch's
+lock), keyed `payout:{account}:{vendor batch id}`:
+
+```
+Dr payout_in_transit:{account}   the net the PSP says it paid   (new kind)
+Cr psp_clearing:{account}        the same
+```
+
+- Booked as reported, whatever the lines say: the PSP says the money
+  left it. It is not in our bank until the bank's statement shows it
+  (question 9): the statement import (5c-2) moves it from
+  `payout_in_transit` to `bank:{entity}`. Only `bank` is money we can
+  pay merchants from.
+- The check is exact, never a tolerance: from the lines' gross and
+  their exact fees, the exact net is known; the reported net must be
+  that value rounded either way to our exponent. Then the difference
+  between the reported net and (gross − booked fees) is a `rounding`
+  line in the same entry. Otherwise a `settlement_exception`
+  (`net_differs`) on the batch, and the gap stays in `psp_clearing`,
+  where the health figure shows it.
+- Lines and the payout can be booked in any order; only the end balance
+  is checked. A batch is in one currency; a header with a currency the
+  account cannot take is an exception.
+
+**The health figure.** `psp_clearing` per account and currency, beside
+the captures the PSP has not settled yet: zero once everything captured
+is settled and paid out. Beside it, `payout_in_transit` per account: what
+the PSP says it sent and the bank has not shown yet. Shown on a staff page
+with the open exceptions.
+
+**Tables** (`0020_settlement_values.sql` for enum values, then
+`0021_settlement.sql`):
+
+- `psp_settlement_mode` enum and `psp_account.settlement_mode`,
+  `settlement_interval_s`.
+- `settlement_batch (id, account_id, vendor_batch_id, currency,
+  net_minor, net_exact text, paid_out_on date, inbox_id, recorded_at,
+  state)` with `UNIQUE (account_id, vendor_batch_id)`; state `received`,
+  `booked`, `exception`.
+- `settlement_line (id, batch_id, account_id, vendor_line_id, type,
+  provider_payment_id, our_reference, gross_minor, fee_exact text,
+  fee_minor, fee_rounding, currency, attempt_id, state)` with `UNIQUE
+  (account_id, vendor_line_id)`; type `capture` (refunds and chargebacks
+  join in slice 8) or `unknown` with the raw type kept; state
+  `received`, `booked`, `exception`.
+- `settlement_exception (id, line_id?, batch_id?, kind, detail,
+  created_at)` and `settlement_exception_resolved (exception_id unique,
+  note, actor, resolved_at)`: append-only. Resolving books nothing in
+  5c; it records that a person looked (question 10).
+- `AccountKind.PAYOUT_IN_TRANSIT`, scoped by the PSP account; `BANK`,
+  scoped by the entity, comes with 5c-2.
+
+**Facts**: `settlement_line_received`, `settlement_batch_received`,
+`psp_settlement_due`, each `V1`. No change to an existing fact's shape.
+
+**Staff and sandbox.** A staff page per PSP account: the health figure,
+the batches, the open exceptions, and a form per exception to resolve it
+with a note (question 10). Like the other staff POSTs it is mounted
+outside prod only until staff sign-in exists, then behind it; it is
+guarded against cross-site posts as every form is. Until sign-in the
+actor is a placeholder staff actor. The sandbox page gets "cut a
+settlement" per account, with a fault to pick.
+
+**Testing.**
+
+- Pure: the line entry and the payout entry balance for any estimate,
+  fee and net; a fee in sub-units rounds, and exact = rounded +
+  remainder; the decoders turn any bytes into a batch, its lines or a
+  typed error.
+- Through the edge: per mode, a cut settles every captured payment once
+  and `psp_clearing` reaches zero; each fault gives exactly its
+  exception and books nothing wrong; a report stored twice books once;
+  settlement ahead of the webhook waits and then books.
+- The post-capture fuzzer (`test_order_flow_fuzz.py`, plan-fuzz-reach)
+  gains: cut a settlement (faults drawn), the fetch's faults, a crash at
+  each new commit, the settlement mode drawn per run. After draining with
+  faults off: every payment the fake settled is booked once; each
+  account's `psp_clearing` equals the model's captured-but-unpaid sum
+  plus the gaps the exceptions name; one exception per fault cut. New
+  milestones: a line booked, a payout booked, each exception kind.
+- Planted bugs: no unique line id (booked twice), matching by amount
+  instead of reference, the variance line dropped, the payout's rounding
+  line taken as a tolerance.
+- Soak targets and budgets updated with timed runs.
+
+**Compliance touchpoints** (named, not answered):
+
+- Fees with the PSP's VAT or GST on them: whether we can reclaim it as
+  input tax, per country. 5c books the fee as the PSP charged it, tax
+  included, and stores the tax part if the report shows one.
+- Funds the PSP holds for us between capture and payout, and in our bank
+  before the merchant's payout: safeguarding rules under payment
+  licences (MAS PSA and others), with §9's licensing question.
+
+**Questions for 5c** (my recommendation first; numbered after §11's):
+
+8. **Split 5c.** Recommended: 5c-1 settlement, 5c-2 card fields and the
+   Playwright suite (now 5c-3, after question 9), and the echo retired only with the shipment slice,
+   which takes over `compensable` and the set-derived status. The other
+   choice retires it now and loses that coverage for a slice or two.
+   **Answered 20-Nov-2026: as recommended.**
+9. **The payout's debit.** Recommended: `bank:{entity}` on the PSP's
+   word; a bank statement import, when it comes with payouts (slice 9),
+   matches those entries rather than booking them again. The other
+   choice books `payout_in_transit:{account}` now and moves it to
+   `bank` on the bank's word, which is more exact but leaves a balance
+   growing until bank import exists. **Answered 20-Nov-2026: the other
+   choice, "on its way"**, because a payout to a merchant must never
+   spend money that is not in our bank yet. The statement import is
+   brought forward from the payout slice to 5c-2, so the in-transit
+   balance does not grow unchecked; the payout run (slice 9) pays only
+   from `bank`.
+10. **Resolving an exception.** Recommended: a note only (who, when,
+    what was found), by CLI; any correcting entry is made by hand
+    through a later staff tool. Writing typed corrections now (write
+    off, attribute to the merchant) guesses at cases we have not seen
+    from a real PSP. **Answered 20-Nov-2026: a note only, but on a staff
+    web page, not the CLI**: staff work happens in the browser, and the
+    dashboard will be web too.
+11. **Settlement currency.** Recommended: a batch settles in the
+    captured currency only (most SEA acquirers pay local currency into
+    a local account). A PSP that converts at settlement is a new
+    capability value, with the PSP's rate as an FX ledger event, added
+    with the first real PSP that needs it. The other choice builds the
+    converting mode into the fake now. **Answered 20-Nov-2026: as
+    recommended.** If a PSP's conversion is ever used, it is built as a
+    separate step after the line is booked, not mixed into the line's
+    entry. The conversion into the merchant's currency (USD, VND, EUR)
+    is ours: the capture already owes the merchant in its currency
+    through `fx_position`, and the real trade, at the rate we get,
+    clears it between settlement and the merchant's payout (slice 9).
+
+### 7.2 5c-1 built (20-Nov-2026)
+
+What was built:
+- Migrations `0020_settlement_values.sql` (enum values) and
+  `0021_settlement.sql` (the account's settlement mode and interval, the
+  reading cursor, batches, lines, exceptions and their resolutions); the
+  fake's `migrations_fake/0008_psp_settlement.sql`.
+- `src/mor/settlement/`: `entries.py` (the line and payout entries and the
+  exact net check, pure), `fetch.py` (`psp_settlement_fetch`, one report
+  or page per look, and `start_settlement_reading`), `store.py` (decoding
+  into rows, `settlement_line_book`, `settlement_payout_book`),
+  `review.py` (what the staff page reads, and resolving).
+- The port's settlement records and both modes in the fake client and the
+  registry; the fake PSP's cut (with faults), report files and batch pages
+  (`src/mor/fakes/psp.py`).
+- `AccountKind.PAYOUT_IN_TRANSIT`; `psp_inbox` takes settlement bytes on
+  the one inbound path.
+- The staff pages at `/staff/settlement` (balances, batches, exceptions,
+  the resolve form); "cut a settlement" on the sandbox page; the seed
+  starts every account's reading (keyed accounts by file, the others by
+  API, one-minute interval on the test setup).
+
+Changed while building:
+- **An attempt's lines are settled together, earliest first.** The first
+  version booked each line on its own delivery; when a PSP settled a paid
+  payment twice, whichever delivery the worker ran first was booked, so the
+  original line could become the `settled_twice` exception. Found by the
+  fuzzer, pinned by
+  `test_a_payment_settled_twice_keeps_its_first_line_whichever_runs_first`.
+  The line's attempt is now found when the line is stored, and every
+  booking step locks the attempt and settles all its pending lines in the
+  order the PSP sent them.
+- **Settlement has a fuzzer of its own** (`tests/flow/test_settlement_flow_fuzz.py`),
+  not actions added to the order fuzzer: added there, they diluted it
+  ("crash in order_create" fell to 0.5% of runs) and reached a waiting
+  line in 0.2%. Its deep start draws which payments our books have caught
+  up with, cuts and reads a first batch, and books it or not as drawn; two
+  preconditioned rules aim crashes and redeliveries at the booking steps
+  (`docs/plan-fuzz-reach.md` §3). The order fuzzer is unchanged but for
+  sharing `meet_again` from `payment_checks.py`.
+- A line in another currency than its batch is left out of the batch's
+  net check (it is `currency_differs` already).
+
+How it was checked:
+- Tests through the edge in both modes (`tests/settlement/`): a cut with
+  three payments (two API pages) clears `psp_clearing` to zero, each fault
+  gives exactly its exception, a line waits for its order and is then
+  booked, a declined payment's line and a wrong-currency line book nothing,
+  redelivered facts book nothing more, failing reads are retried, the
+  pages and the resolve form (a cross-site POST refused, one note only).
+- Properties: the entries balance and clear what they should, the net
+  check is exact, the fake's IDR payout rounding, the decoders on any
+  bytes.
+- The settlement fuzzer at 600 examples: every milestone reached by at
+  least 5.9% of runs. Planted bugs caught: a tolerance in the net check,
+  waiting lines never booked, a payout booked twice.
+- On the sandbox in a headless browser, desktop and phone width: a cut
+  with an `unknown_type` fault booked four lines and the payout, kept the
+  5.00 SGD adjustment in `psp_clearing` under its exception, and the
+  exception was resolved with a note. No console errors but the sandbox
+  page's missing favicon.
+
+Open:
+- Accounts made before `0021` got the column defaults (file, one hour).
+  On `mor_sandbox` the twelve seeded accounts were brought in line by
+  hand (mode by guard, one minute); a fresh test setup gets them from the
+  seed.
+- The fake never cuts IDR (the sandbox market and the fuzzers are SGD):
+  sub-unit fees and the payout's rounding line are checked by properties
+  only.
+- The payment fuzzer failed once in a full `pytest` run (20-Nov-2026) and
+  not again in 16 runs since, nor at 1,500 examples; its output was not
+  kept. 5c-1 gives it new deliveries (`settlement_line_book` on a
+  payment's end, which finds no lines there) and a settlement check that
+  holds trivially. Keep the log if it fails again.
+- 5c-2: the bank statement import that moves `payout_in_transit` to
+  `bank`, with a fake bank; 5c-3: card fields and the Playwright suite.
 
 ## 8. Testing and fuzzing
 
