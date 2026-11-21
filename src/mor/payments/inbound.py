@@ -186,9 +186,9 @@ async def apply_event(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
     cur = await conn.execute(
         """
         INSERT INTO payment_event
-          (attempt_id, vendor_event_id, kind, amount_minor, occurred_at, inbox_id,
-           recorded_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+          (attempt_id, vendor_event_id, kind, amount_minor, currency, occurred_at,
+           inbox_id, recorded_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (attempt_id, vendor_event_id) DO NOTHING
         RETURNING vendor_event_id
         """,
@@ -197,6 +197,7 @@ async def apply_event(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
             event.vendor_event_id,
             event.kind,
             event.amount_minor,
+            event.currency,
             event.occurred_at,
             event.inbox_id,
             now,

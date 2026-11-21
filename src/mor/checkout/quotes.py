@@ -227,25 +227,22 @@ async def store_made(conn: Connection, made: MadeQuote) -> None:
         )
         for part_no, part in enumerate(option.parts):
             await _insert_part(conn, made.id, option_no, part_no, part)
-    note_no = 0
-    for placeholder in made.placeholders:
+    for placeholder_no, placeholder in enumerate(made.placeholders):
         await conn.execute(
             """
-            INSERT INTO quote_note (quote_id, note_no, kind, key, reason)
-            VALUES (%s, %s, 'placeholder', %s, '')
+            INSERT INTO quote_placeholder (quote_id, placeholder_no, key)
+            VALUES (%s, %s, %s)
             """,
-            (made.id, note_no, placeholder),
+            (made.id, placeholder_no, placeholder),
         )
-        note_no += 1
-    for key, reason in made.not_offered:
+    for not_offered_no, (key, reason) in enumerate(made.not_offered):
         await conn.execute(
             """
-            INSERT INTO quote_note (quote_id, note_no, kind, key, reason)
-            VALUES (%s, %s, 'not_offered', %s, %s)
+            INSERT INTO quote_not_offered (quote_id, not_offered_no, key, reason)
+            VALUES (%s, %s, %s, %s)
             """,
-            (made.id, note_no, key, reason),
+            (made.id, not_offered_no, key, reason),
         )
-        note_no += 1
     for lookup_id in made.inputs.duty_lookups:
         await conn.execute(
             "INSERT INTO quote_input (quote_id, duty_lookup_id) VALUES (%s, %s)",
@@ -423,16 +420,22 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
             )
         )
     cur = await conn.execute(
-        "SELECT kind, key, reason FROM quote_note WHERE quote_id = %s ORDER BY note_no",
+        "SELECT key FROM quote_placeholder WHERE quote_id = %s ORDER BY placeholder_no",
         (quote_id,),
     )
     placeholders: list[str] = []
+    for (key,) in await cur.fetchall():
+        placeholders.append(key)
+    cur = await conn.execute(
+        """
+        SELECT key, reason::text FROM quote_not_offered
+        WHERE quote_id = %s ORDER BY not_offered_no
+        """,
+        (quote_id,),
+    )
     not_offered: list[tuple[str, str]] = []
-    for kind, key, reason in await cur.fetchall():
-        if kind == "placeholder":
-            placeholders.append(key)
-        else:
-            not_offered.append((key, reason))
+    for key, reason in await cur.fetchall():
+        not_offered.append((key, reason))
     cur = await conn.execute(
         """
         SELECT duty_lookup_id, shipping_price_lookup_id FROM quote_input

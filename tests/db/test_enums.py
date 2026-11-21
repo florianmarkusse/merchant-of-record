@@ -3,10 +3,12 @@ exactly the labels of its StrEnum: a value added on one side only fails
 here, not on the first row that carries it."""
 
 import asyncio
+from typing import get_args
 
 from mor.db.connect import connect
 from mor.db.enums import DATABASE_ENUMS
 from mor.merchants.records import KybState
+from mor.quote.shipping import NotOfferedReason
 
 
 def test_every_listed_enum_has_the_labels_of_its_strenum(database_url: str) -> None:
@@ -34,6 +36,11 @@ def test_every_listed_enum_has_the_labels_of_its_strenum(database_url: str) -> N
         for member in enum:
             values.append(member.value)
         assert sorted(labels[name]) == sorted(values), name
+    # Read as text into a Literal rather than loaded as a StrEnum.
+    reasons: list[str] = []
+    for reason in get_args(NotOfferedReason.__value__):
+        reasons.append(reason)
+    assert sorted(labels["not_offered_reason"]) == sorted(reasons)
 
 
 def test_an_enum_column_reads_back_as_its_member(database_url: str) -> None:

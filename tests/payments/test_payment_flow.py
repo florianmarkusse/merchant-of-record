@@ -8,6 +8,9 @@ import html
 import uuid
 from datetime import timedelta
 
+import psycopg
+import pytest
+
 from mor.checkout.flow import QUOTE_VALID_FOR
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import connect
@@ -88,6 +91,19 @@ def test_card_payment_completes_the_session_with_one_order_and_its_entry(
                 Currency.SGD,
             )
         assert clearing == attempt.amount
+        # Each PSP event is stored with the currency it named.
+        assert (
+            await count_rows(
+                setup.url,
+                "SELECT count(*) FROM payment_event WHERE currency = 'SGD'",
+            )
+            == await count_rows(setup.url, "SELECT count(*) FROM payment_event")
+            > 0
+        )
+        # The order is a fact: it refuses a change.
+        async with await connect(setup.url) as conn:
+            with pytest.raises(psycopg.errors.RaiseException, match="append-only"):
+                await conn.execute("UPDATE order_ SET buyer_token = 'other'")
         # The merchant is owed exactly its price: 2 × 25.00 SGD.
         assert merchant == Money(-5000, Currency.SGD)
         # The paid checkout link leads to the order page (`our_page`).
