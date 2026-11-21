@@ -23,7 +23,7 @@ from mor.messaging.worker import (
     try_lock_aggregate,
 )
 from mor.probe.flow import ProbeState, probe_state, start_probe
-from tests.helpers import ENV, NO_HTTP, advisory_locks_held, crash
+from tests.helpers import ENV, NO_HTTP, advisory_locks_held, crash, local_consumer
 
 
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -206,7 +206,9 @@ def test_a_crash_before_commit_leaves_nothing_and_frees_the_lock(
         candidate = await _only_candidate(crashing, NOW)
         assert await try_lock_aggregate(crashing, candidate)
         await crashing.execute("BEGIN")
-        assert await handle_delivery(crashing, candidate, ENV, NOW) == Ran(Applied())
+        assert await handle_delivery(
+            crashing, candidate, local_consumer(candidate), ENV, NOW
+        ) == Ran(Applied())
         await crash(crashing)  # dies before COMMIT
 
         assert await _state(database_url, probe_id) == ProbeState.STARTED

@@ -28,10 +28,7 @@ from mor.couriers import registry
 from mor.couriers.port import (
     CarrierPrice,
     NotServed,
-    OutcomeUnknown,
     QuoteRateResult,
-    Unavailable,
-    UndecodableBody,
 )
 from mor.couriers.records import (
     CourierAccount,
@@ -62,6 +59,7 @@ from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
 from mor.quote.shipping import own_card_price
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "shipping_price_ask")
@@ -84,6 +82,14 @@ class PriceCall:
     account: CourierAccount
     lookup_id: uuid.UUID
     question: PriceQuestion
+
+
+@dataclass(frozen=True)
+class PriceAnswer:
+    """The call and what the carrier said to it, from `call` to `complete`."""
+
+    call: PriceCall
+    result: QuoteRateResult
 
 
 # --- rows -----------------------------------------------------------------
@@ -404,21 +410,19 @@ async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | Price
 
 async def call(
     http: httpx2.AsyncClient, environment: Environment, price_call: PriceCall
-) -> QuoteRateResult:
-    return await registry.quote_rate(
+) -> PriceAnswer:
+    result = await registry.quote_rate(
         http, environment, price_call.account, price_call.question
     )
+    return PriceAnswer(price_call, result)
 
 
 async def complete(
-    conn: Connection,
-    fact: Fact,
-    price_call: PriceCall,
-    result: QuoteRateResult,
-    now: datetime,
+    conn: Connection, fact: Fact, answer: PriceAnswer, now: datetime
 ) -> Done | RetryLater:
     lookup = await _lock_lookup(conn, _lookup_id(fact))
-    assert lookup.id == price_call.lookup_id
+    assert lookup.id == answer.call.lookup_id
+    result = answer.result
     if lookup.state != PriceState.REQUESTED:
         return Done(Stale())
     match result:

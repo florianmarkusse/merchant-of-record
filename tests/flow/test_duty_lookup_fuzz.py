@@ -40,7 +40,7 @@ from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.messaging import consumers
 from mor.messaging.facts import AggregateType
-from mor.messaging.routing import ConsumerName, consumer_kind
+from mor.messaging.routing import ConsumerName, Effect, consumer_kind
 from mor.messaging.worker import (
     Candidate,
     Failed,
@@ -56,6 +56,7 @@ from tests.helpers import (
     TEST_URL,
     VENDOR_TIMEOUT,
     crash,
+    effect_consumer,
     empty_tables,
     wire,
 )
@@ -151,7 +152,7 @@ class DutyLookupFlow(RuleBasedStateMachine):
         candidate = self._draw_candidate(data)
         if candidate is None:
             return
-        if consumer_kind(candidate.consumer) != "effect":
+        if not isinstance(consumer_kind(candidate.consumer), Effect):
             return  # a local step has no call to crash around
 
         async def step() -> bool:
@@ -159,7 +160,9 @@ class DutyLookupFlow(RuleBasedStateMachine):
             try:
                 assert await try_lock_aggregate(crashing, candidate)
                 async with crashing.transaction():
-                    prepared = await prepare_delivery(crashing, candidate, self.now)
+                    prepared = await prepare_delivery(
+                        crashing, candidate, effect_consumer(candidate), self.now
+                    )
                 if with_call and isinstance(prepared, Prepared):
                     await consumers.call(self.http, ENV, prepared.call)
                 return isinstance(prepared, Prepared)

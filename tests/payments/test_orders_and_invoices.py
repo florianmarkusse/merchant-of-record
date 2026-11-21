@@ -23,7 +23,7 @@ from mor.messaging.worker import (
 )
 from mor.orders.store import order_by_session
 from mor.web.staff_layout import money_text
-from tests.helpers import ENV, crash
+from tests.helpers import ENV, crash, local_consumer
 from tests.payments.support import (
     ACTOR,
     FAT_SALE_KEYED,
@@ -371,7 +371,13 @@ def test_a_crash_while_issuing_gives_the_invoice_number_back(
             assert await try_lock_aggregate(crashing, candidate)
             try:
                 async with crashing.transaction():
-                    await handle_delivery(crashing, candidate, ENV, setup.clock[0])
+                    await handle_delivery(
+                        crashing,
+                        candidate,
+                        local_consumer(candidate),
+                        ENV,
+                        setup.clock[0],
+                    )
                     raise _CrashBeforeCommit
             except _CrashBeforeCommit:
                 pass

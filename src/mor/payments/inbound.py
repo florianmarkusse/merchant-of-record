@@ -37,8 +37,12 @@ from mor.payments.transitions import Stale as StaleEvent
 from mor.payments.transitions import after_event
 from mor.psp import registry
 from mor.psp.accounts import read_psp_account
-from mor.psp.port import InboundMode, SettlementMode, UndecodableBody
+from mor.psp.port import (
+    InboundMode,
+    SettlementMode,
+)
 from mor.settlement.store import record_document
+from mor.vendor_failures import UndecodableBody
 
 
 RECEIVER = Actor(ActorKind.SYSTEM, "psp_inbox")

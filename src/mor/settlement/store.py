@@ -46,7 +46,11 @@ from mor.orders.posting import capture_key
 from mor.payments.attempts import Attempt, attempt_of_account, lock_attempt
 from mor.payments.transitions import OPEN_STATES, AttemptState
 from mor.psp import registry
-from mor.psp.port import LineType, PspAccount, SettlementMode, UndecodableBody
+from mor.psp.port import (
+    LineType,
+    PspAccount,
+    SettlementMode,
+)
 from mor.settlement.entries import (
     ROUNDING,
     LineAmounts,
@@ -56,6 +60,7 @@ from mor.settlement.entries import (
     payout_entry,
     to_minor,
 )
+from mor.vendor_failures import UndecodableBody
 
 
 DECODER = Actor(ActorKind.SYSTEM, "psp_inbox_decode")

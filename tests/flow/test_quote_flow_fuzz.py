@@ -53,7 +53,7 @@ from mor.db.connect import Connection, connect
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
 from mor.messaging import consumers
-from mor.messaging.routing import consumer_kind
+from mor.messaging.routing import Effect, consumer_kind
 from mor.messaging.worker import (
     Candidate,
     Failed,
@@ -70,6 +70,7 @@ from tests.helpers import (
     TEST_URL,
     VENDOR_TIMEOUT,
     crash,
+    effect_consumer,
     empty_tables,
     wire,
 )
@@ -194,7 +195,9 @@ class QuoteFlow(RuleBasedStateMachine):
     @rule(data=st.data(), with_call=st.booleans())
     def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
         candidate = self._draw_candidate(data)
-        if candidate is None or consumer_kind(candidate.consumer) != "effect":
+        if candidate is None or not isinstance(
+            consumer_kind(candidate.consumer), Effect
+        ):
             return
 
         async def step() -> None:
@@ -202,7 +205,9 @@ class QuoteFlow(RuleBasedStateMachine):
             try:
                 assert await try_lock_aggregate(crashing, candidate)
                 async with crashing.transaction():
-                    prepared = await prepare_delivery(crashing, candidate, self.now)
+                    prepared = await prepare_delivery(
+                        crashing, candidate, effect_consumer(candidate), self.now
+                    )
                 if with_call and isinstance(prepared, Prepared):
                     await consumers.call(self.http, ENV, prepared.call)
             finally:

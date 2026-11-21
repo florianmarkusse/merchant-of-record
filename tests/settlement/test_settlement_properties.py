@@ -18,7 +18,9 @@ from mor.ledger.entry import JournalEntry
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.psp.fake_client import decode_settlement_file, decode_settlement_page
-from mor.psp.port import SettlementDocument, UndecodableBody
+from mor.psp.port import (
+    SettlementDocument,
+)
 from mor.settlement.entries import (
     AddedUp,
     LineAmounts,
@@ -28,6 +30,7 @@ from mor.settlement.entries import (
     payout_entry,
     to_minor,
 )
+from mor.vendor_failures import UndecodableBody
 
 
 ACCOUNT = uuid.UUID("01a1fac0-0000-7000-8000-000000000001")

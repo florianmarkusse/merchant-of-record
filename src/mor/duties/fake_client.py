@@ -19,16 +19,14 @@ import msgspec
 from mor.duties.port import (
     AskResult,
     DutyVendorAccount,
-    OutcomeUnknown,
     RateQuestion,
-    Unavailable,
-    UndecodableBody,
     UnknownCode,
     VendorRate,
     VendorRates,
     percent_formula,
 )
 from mor.markets.records import Charge
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 class _Line(msgspec.Struct, frozen=True):

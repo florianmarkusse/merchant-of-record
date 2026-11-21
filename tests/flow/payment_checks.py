@@ -14,7 +14,7 @@ from psycopg.rows import class_row
 from mor.db.connect import Connection, connect
 from mor.messaging import consumers
 from mor.messaging.facts import AggregateType, MessageType, UndecodableFact, decode
-from mor.messaging.routing import ConsumerName, consumer_kind
+from mor.messaging.routing import ConsumerName, Local, consumer_kind
 from mor.messaging.worker import (
     Candidate,
     Failed,
@@ -25,7 +25,7 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
-from tests.helpers import ENV, TEST_URL, crash
+from tests.helpers import ENV, TEST_URL, crash, effect_consumer, local_consumer
 
 
 # --- after every action -------------------------------------------------------
@@ -339,7 +339,9 @@ async def crash_in_a_local_step(candidate: Candidate, now: datetime) -> None:
         assert await try_lock_aggregate(crashing, candidate)
         try:
             async with crashing.transaction():
-                await handle_delivery(crashing, candidate, ENV, now)
+                await handle_delivery(
+                    crashing, candidate, local_consumer(candidate), ENV, now
+                )
                 raise _CrashBeforeCommit
         except _CrashBeforeCommit:
             pass
@@ -356,7 +358,9 @@ async def crash_around_a_call(
     try:
         assert await try_lock_aggregate(crashing, candidate)
         async with crashing.transaction():
-            prepared = await prepare_delivery(crashing, candidate, now)
+            prepared = await prepare_delivery(
+                crashing, candidate, effect_consumer(candidate), now
+            )
         if with_call and isinstance(prepared, Prepared):
             await consumers.call(http, ENV, prepared.call)
     finally:
@@ -392,7 +396,7 @@ async def handled_locally(worker: Connection) -> list[Handled]:
         rows = await cur.fetchall()
     found: list[Handled] = []
     for row in rows:
-        if consumer_kind(ConsumerName(row.consumer)) == "local":
+        if isinstance(consumer_kind(ConsumerName(row.consumer)), Local):
             found.append(row)
     return found
 
@@ -418,6 +422,6 @@ async def meet_again(chosen: Handled, now: datetime) -> None:
     try:
         assert await try_lock_aggregate(conn, candidate)
         async with conn.transaction():
-            await consumers.handle(conn, candidate.consumer, fact, ENV, now)
+            await consumers.handle(conn, local_consumer(candidate), fact, ENV, now)
     finally:
         await crash(conn)

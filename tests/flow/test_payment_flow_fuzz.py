@@ -49,7 +49,7 @@ from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
 from mor.fakes.psp import QR_LIFETIME
 from mor.messaging.guard import DuplicateGuard
-from mor.messaging.routing import consumer_kind
+from mor.messaging.routing import Effect, Local, consumer_kind
 from mor.messaging.worker import Candidate, Failed, find_candidates, run_one
 from mor.payments.flow import Paying, pay, pay_another_way
 from mor.psp.port import CaptureMode, StatusMode
@@ -319,7 +319,9 @@ class PaymentFlow(RuleBasedStateMachine):
     @rule(data=st.data(), with_call=st.booleans())
     def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
         candidate = self._draw_candidate(data)
-        if candidate is None or consumer_kind(candidate.consumer) != "effect":
+        if candidate is None or not isinstance(
+            consumer_kind(candidate.consumer), Effect
+        ):
             return
         self.run(crash_around_a_call(candidate, with_call, self.http, self.now))
 
@@ -328,7 +330,10 @@ class PaymentFlow(RuleBasedStateMachine):
         """Drawn among local steps only: a local step is one transaction,
         and the window before it runs is short."""
         candidates = self.run(find_candidates(self.worker, self.now, 50))
-        local = [c for c in candidates if consumer_kind(c.consumer) == "local"]
+        local: list[Candidate] = []
+        for found in candidates:
+            if isinstance(consumer_kind(found.consumer), Local):
+                local.append(found)
         if not local:
             return
         self.run(crash_in_a_local_step(data.draw(st.sampled_from(local)), self.now))

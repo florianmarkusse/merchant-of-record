@@ -1,7 +1,12 @@
 """The dispatch tables: each consumer is plain functions, picked by an
-exhaustive `match` on its name. A local consumer has `handle`; an effect
-consumer has `prepare`, `call` and `complete` (plan-architecture.md §5).
-Asking a consumer for a step of the other kind is a bug, so it raises."""
+exhaustive `match`. A local consumer has `handle`; an effect consumer has
+`prepare`, `call` and `complete` (plan-architecture.md §5). The kind is in
+the consumer's type (`mor.messaging.routing`), so neither table can be
+asked for a consumer of the other kind.
+
+`call` returns an answer record holding the call and what the vendor said
+to it, so `complete` is picked by the answer alone, and each module's
+`complete` matches exactly the results its call can get."""
 
 from datetime import datetime
 from typing import assert_never
@@ -10,25 +15,21 @@ import httpx2
 
 from mor.checkout import flow as checkout_flow
 from mor.config import Environment
-from mor.couriers import port as courier_port
 from mor.couriers import prices as courier_prices
 from mor.db.connect import Connection
 from mor.duties import lookups as duty_lookups
-from mor.duties import port as duty_port
 from mor.echo import flow as echo_flow
 from mor.echo import inbound as echo_inbound
 from mor.echo import reports as echo_reports
 from mor.echo import tracking as echo_tracking
-from mor.echo.port import OutcomeUnknown, Page, ReportList, Unavailable
 from mor.invoices import store as invoice_store
 from mor.messaging.facts import Fact
 from mor.messaging.outcome import ConsumerOutcome, NoCall, StepResult
-from mor.messaging.routing import ConsumerName
+from mor.messaging.routing import ConsumerName, EffectConsumer, LocalConsumer
 from mor.orders import flow as order_flow
 from mor.payments import flow as payment_flow
 from mor.payments import inbound as payment_inbound
 from mor.probe import flow as probe_flow
-from mor.psp.port import SettlementList, SettlementPage
 from mor.settlement import fetch as settlement_fetch
 from mor.settlement import store as settlement_store
 
@@ -42,28 +43,20 @@ type EffectCall = (
     | payment_flow.PaymentCall
     | settlement_fetch.SettlementCall
 )
-type EffectResult = (
-    echo_flow.EchoResult
-    | Page
-    | ReportList
-    | duty_port.AskResult
-    | courier_port.QuoteRateResult
-    | payment_flow.PaymentResult
-    | settlement_fetch.SettlementResult
+type EffectAnswer = (
+    echo_flow.EchoAnswer
+    | echo_tracking.FetchEventsAnswer
+    | echo_reports.ReportAnswer
+    | duty_lookups.AskAnswer
+    | courier_prices.PriceAnswer
+    | payment_flow.PaymentAnswer
+    | settlement_fetch.SettlementAnswer
 )
-
-
-class WrongKind(Exception):
-    """A step was asked of a consumer of the other kind."""
-
-
-class WrongCall(Exception):
-    """A consumer's `complete` got a call or result it never asks for."""
 
 
 async def handle(
     conn: Connection,
-    consumer: ConsumerName,
+    consumer: LocalConsumer,
     fact: Fact,
     environment: Environment,
     now: datetime,
@@ -100,26 +93,12 @@ async def handle(
             return await settlement_store.book_lines(conn, fact, now)
         case ConsumerName.SETTLEMENT_PAYOUT_BOOK:
             return await settlement_store.book_payout(conn, fact, now)
-        case (
-            ConsumerName.ECHO_SEND
-            | ConsumerName.ECHO_POLL
-            | ConsumerName.ECHO_REPORT_FETCH
-            | ConsumerName.DUTY_RATE_ASK
-            | ConsumerName.SHIPPING_PRICE_ASK
-            | ConsumerName.PSP_PAYMENT_CREATE
-            | ConsumerName.PSP_PAYMENT_CAPTURE
-            | ConsumerName.PSP_PAYMENT_CANCEL
-            | ConsumerName.PSP_PAYMENT_POLL
-            | ConsumerName.PSP_PAYMENT_FETCH
-            | ConsumerName.PSP_SETTLEMENT_FETCH
-        ):
-            raise WrongKind(f"{consumer} is an effect consumer")
         case _:
             assert_never(consumer)
 
 
 async def prepare(
-    conn: Connection, consumer: ConsumerName, fact: Fact, now: datetime
+    conn: Connection, consumer: EffectConsumer, fact: Fact, now: datetime
 ) -> NoCall | EffectCall:
     """An effect consumer's first step, in its own transaction."""
     match consumer:
@@ -143,31 +122,13 @@ async def prepare(
             return await payment_flow.prepare_poll(conn, fact, now)
         case ConsumerName.PSP_SETTLEMENT_FETCH:
             return await settlement_fetch.prepare_fetch(conn, fact, now)
-        case (
-            ConsumerName.PROBE_ECHO
-            | ConsumerName.PROBE_FINISH
-            | ConsumerName.ECHO_INBOX_DECODE
-            | ConsumerName.ECHO_EVENT_APPLY
-            | ConsumerName.ECHO_TRACKING_START
-            | ConsumerName.QUOTE_WAIT_NOTIFY
-            | ConsumerName.QUOTE_BUILD
-            | ConsumerName.CHECKOUT_SESSION_EXPIRE
-            | ConsumerName.PSP_INBOX_DECODE
-            | ConsumerName.PAYMENT_EVENT_APPLY
-            | ConsumerName.ORDER_CREATE
-            | ConsumerName.INVOICE_ISSUE
-            | ConsumerName.SESSION_PAYMENT_ENDED
-            | ConsumerName.SETTLEMENT_LINE_BOOK
-            | ConsumerName.SETTLEMENT_PAYOUT_BOOK
-        ):
-            raise WrongKind(f"{consumer} is a local consumer")
         case _:
             assert_never(consumer)
 
 
 async def call(
     http: httpx2.AsyncClient, environment: Environment, effect_call: EffectCall
-) -> EffectResult:
+) -> EffectAnswer:
     """The outside call, with no transaction open. The call record says
     which port it is for."""
     match effect_call:
@@ -196,145 +157,30 @@ async def call(
 
 
 async def complete(
-    conn: Connection,
-    consumer: ConsumerName,
-    fact: Fact,
-    effect_call: EffectCall,
-    result: EffectResult,
-    now: datetime,
+    conn: Connection, fact: Fact, answer: EffectAnswer, now: datetime
 ) -> StepResult:
-    """An effect consumer's last step, in its own transaction."""
-    match consumer:
-        case ConsumerName.ECHO_SEND:
-            if (
-                not isinstance(
-                    effect_call,
-                    echo_flow.SendCall | echo_flow.FindCall | echo_flow.CancelCall,
-                )
-                or isinstance(
-                    result,
-                    Page
-                    | ReportList
-                    | SettlementList
-                    | SettlementPage
-                    | duty_port.VendorRates
-                    | duty_port.UnknownCode
-                    | duty_port.Unavailable
-                    | duty_port.OutcomeUnknown
-                    | duty_port.UndecodableBody
-                    | courier_port.CarrierPrice
-                    | courier_port.NotServed
-                    | courier_port.Unavailable
-                    | courier_port.OutcomeUnknown
-                    | courier_port.UndecodableBody,
-                )
-                or payment_flow.is_payment_result(result)
-            ):
-                raise WrongCall(f"echo_send got {effect_call!r}, {result!r}")
-            return await echo_flow.complete(conn, fact, effect_call, result, now)
-        case ConsumerName.ECHO_POLL:
-            if not isinstance(effect_call, echo_tracking.FetchEventsCall):
-                raise WrongCall(f"echo_poll got {effect_call!r}")
-            if not isinstance(result, Page | Unavailable | OutcomeUnknown):
-                raise WrongCall(f"echo_poll got {result!r}")
-            return await echo_tracking.complete_poll(
-                conn, fact, effect_call, result, now
-            )
-        case ConsumerName.ECHO_REPORT_FETCH:
-            if not isinstance(
-                effect_call, echo_reports.ListReportsCall | echo_reports.FetchReportCall
-            ):
-                raise WrongCall(f"echo_report_fetch got {effect_call!r}")
-            if not isinstance(result, ReportList | Page | Unavailable | OutcomeUnknown):
-                raise WrongCall(f"echo_report_fetch got {result!r}")
-            return await echo_reports.complete_reports(
-                conn, fact, effect_call, result, now
-            )
-        case ConsumerName.DUTY_RATE_ASK:
-            if not isinstance(effect_call, duty_lookups.AskCall):
-                raise WrongCall(f"duty_rate_ask got {effect_call!r}")
-            if not isinstance(
-                result,
-                duty_port.VendorRates
-                | duty_port.UnknownCode
-                | duty_port.Unavailable
-                | duty_port.OutcomeUnknown
-                | duty_port.UndecodableBody,
-            ):
-                raise WrongCall(f"duty_rate_ask got {result!r}")
-            return await duty_lookups.complete(conn, fact, effect_call, result, now)
-        case ConsumerName.SHIPPING_PRICE_ASK:
-            if not isinstance(effect_call, courier_prices.PriceCall):
-                raise WrongCall(f"shipping_price_ask got {effect_call!r}")
-            if not isinstance(
-                result,
-                courier_port.CarrierPrice
-                | courier_port.NotServed
-                | courier_port.Unavailable
-                | courier_port.OutcomeUnknown
-                | courier_port.UndecodableBody,
-            ):
-                raise WrongCall(f"shipping_price_ask got {result!r}")
-            return await courier_prices.complete(conn, fact, effect_call, result, now)
+    """An effect consumer's last step, in its own transaction. The answer
+    says which module asked; that module checks the fact is its own."""
+    match answer:
+        case echo_flow.SendAnswer() | echo_flow.FindAnswer() | echo_flow.CancelAnswer():
+            return await echo_flow.complete(conn, fact, answer, now)
+        case echo_tracking.FetchEventsAnswer():
+            return await echo_tracking.complete_poll(conn, fact, answer, now)
+        case echo_reports.ListReportsAnswer() | echo_reports.FetchReportAnswer():
+            return await echo_reports.complete_reports(conn, fact, answer, now)
+        case duty_lookups.AskAnswer():
+            return await duty_lookups.complete(conn, fact, answer, now)
+        case courier_prices.PriceAnswer():
+            return await courier_prices.complete(conn, fact, answer, now)
         case (
-            ConsumerName.PSP_PAYMENT_CREATE
-            | ConsumerName.PSP_PAYMENT_CAPTURE
-            | ConsumerName.PSP_PAYMENT_CANCEL
-            | ConsumerName.PSP_PAYMENT_POLL
-            | ConsumerName.PSP_PAYMENT_FETCH
+            payment_flow.CreateAnswer()
+            | payment_flow.FindAnswer()
+            | payment_flow.CaptureAnswer()
+            | payment_flow.CancelAnswer()
+            | payment_flow.PollAnswer()
         ):
-            if not payment_flow.is_payment_call(effect_call):
-                raise WrongCall(f"{consumer} got {effect_call!r}")
-            if not payment_flow.is_payment_result(result):
-                raise WrongCall(f"{consumer} got {result!r}")
-            match consumer:
-                case ConsumerName.PSP_PAYMENT_CREATE:
-                    return await payment_flow.complete_create(
-                        conn, fact, effect_call, result, now
-                    )
-                case ConsumerName.PSP_PAYMENT_CAPTURE:
-                    return await payment_flow.complete_capture(
-                        conn, fact, effect_call, result, now
-                    )
-                case ConsumerName.PSP_PAYMENT_CANCEL:
-                    return await payment_flow.complete_cancel(
-                        conn, fact, effect_call, result, now
-                    )
-                case ConsumerName.PSP_PAYMENT_POLL | ConsumerName.PSP_PAYMENT_FETCH:
-                    return await payment_flow.complete_poll(
-                        conn, fact, effect_call, result, now
-                    )
-        case ConsumerName.PSP_SETTLEMENT_FETCH:
-            if not isinstance(
-                effect_call, settlement_fetch.ListCall | settlement_fetch.FetchCall
-            ):
-                raise WrongCall(f"psp_settlement_fetch got {effect_call!r}")
-            if not settlement_fetch.is_settlement_result(result):
-                raise WrongCall(f"psp_settlement_fetch got {result!r}")
-            return await settlement_fetch.complete_fetch(
-                conn,
-                fact,
-                effect_call,
-                result,
-                now,
-            )
-        case (
-            ConsumerName.PROBE_ECHO
-            | ConsumerName.PROBE_FINISH
-            | ConsumerName.ECHO_INBOX_DECODE
-            | ConsumerName.ECHO_EVENT_APPLY
-            | ConsumerName.ECHO_TRACKING_START
-            | ConsumerName.QUOTE_WAIT_NOTIFY
-            | ConsumerName.QUOTE_BUILD
-            | ConsumerName.CHECKOUT_SESSION_EXPIRE
-            | ConsumerName.PSP_INBOX_DECODE
-            | ConsumerName.PAYMENT_EVENT_APPLY
-            | ConsumerName.ORDER_CREATE
-            | ConsumerName.INVOICE_ISSUE
-            | ConsumerName.SESSION_PAYMENT_ENDED
-            | ConsumerName.SETTLEMENT_LINE_BOOK
-            | ConsumerName.SETTLEMENT_PAYOUT_BOOK
-        ):
-            raise WrongKind(f"{consumer} is a local consumer")
+            return await payment_flow.complete(conn, fact, answer, now)
+        case settlement_fetch.ListAnswer() | settlement_fetch.FetchAnswer():
+            return await settlement_fetch.complete_fetch(conn, fact, answer, now)
         case _:
-            assert_never(consumer)
+            assert_never(answer)

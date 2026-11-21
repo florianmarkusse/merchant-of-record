@@ -28,8 +28,11 @@ from mor.psp.fake_client import (
     from_provider_amount,
     to_provider_amount,
 )
-from mor.psp.port import EventKind, UndecodableBody
+from mor.psp.port import (
+    EventKind,
+)
 from mor.quote.groups import PartKind
+from mor.vendor_failures import UndecodableBody
 
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)

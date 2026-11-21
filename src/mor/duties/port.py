@@ -16,6 +16,7 @@ from enum import StrEnum
 from fractions import Fraction
 
 from mor.markets.records import Charge
+from mor.vendor_failures import CallFailure
 
 
 class DutyProvider(StrEnum):
@@ -60,31 +61,7 @@ class UnknownCode:
     """The vendor does not know the HS code: a documented refusal."""
 
 
-@dataclass(frozen=True)
-class Unavailable:
-    """The request provably never reached the vendor (connection refused)."""
-
-    detail: str
-
-
-@dataclass(frozen=True)
-class OutcomeUnknown:
-    """No answer (timeout, dropped connection, a 5xx). A lookup is a read,
-    so asking again is safe; it costs one more call."""
-
-    detail: str
-
-
-@dataclass(frozen=True)
-class UndecodableBody:
-    """An answer that is not what the vendor's API documents."""
-
-    detail: str
-
-
-type AskResult = (
-    VendorRates | UnknownCode | Unavailable | OutcomeUnknown | UndecodableBody
-)
+type AskResult = VendorRates | UnknownCode | CallFailure
 
 
 _PERCENT = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*%")

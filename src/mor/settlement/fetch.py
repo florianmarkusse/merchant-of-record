@@ -18,7 +18,6 @@ once by the PSP's own id.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TypeIs
 
 import httpx2
 
@@ -33,14 +32,14 @@ from mor.psp import registry
 from mor.psp.accounts import read_psp_account
 from mor.psp.port import (
     InboundMode,
-    OutcomeUnknown,
     PspAccount,
     SettlementList,
+    SettlementListResult,
     SettlementMode,
     SettlementPage,
-    Unavailable,
-    UndecodableBody,
+    SettlementPageResult,
 )
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 SCHEDULER = Actor(ActorKind.SYSTEM, "psp_settlement_fetch")
@@ -64,20 +63,25 @@ class FetchCall:
 
 
 type SettlementCall = ListCall | FetchCall
-type SettlementResult = (
-    SettlementList | SettlementPage | Unavailable | OutcomeUnknown | UndecodableBody
-)
 
 
-def is_settlement_result(result: object) -> TypeIs[SettlementResult]:
-    return isinstance(
-        result,
-        SettlementList
-        | SettlementPage
-        | Unavailable
-        | OutcomeUnknown
-        | UndecodableBody,
-    )
+@dataclass(frozen=True)
+class ListAnswer:
+    """A list call and what the PSP said to it, from `call` to `complete`."""
+
+    call: ListCall
+    result: SettlementListResult | UndecodableBody
+
+
+@dataclass(frozen=True)
+class FetchAnswer:
+    """A fetch call and what the PSP said to it, from `call` to `complete`."""
+
+    call: FetchCall
+    result: SettlementPageResult | UndecodableBody
+
+
+type SettlementAnswer = ListAnswer | FetchAnswer
 
 
 @dataclass(frozen=True)
@@ -139,14 +143,16 @@ async def prepare_fetch(
 
 async def call_fetch(
     http: httpx2.AsyncClient, environment: Environment, settlement_call: SettlementCall
-) -> SettlementResult:
+) -> SettlementAnswer:
     match settlement_call:
         case ListCall(account=account, after=after):
-            return await registry.list_settlements(http, environment, account, after)
+            listed = await registry.list_settlements(http, environment, account, after)
+            return ListAnswer(settlement_call, listed)
         case FetchCall(account=account, name=name, page=page):
-            return await registry.fetch_settlement(
+            fetched = await registry.fetch_settlement(
                 http, environment, account, name, page
             )
+            return FetchAnswer(settlement_call, fetched)
 
 
 def _inbound_mode(account: PspAccount) -> InboundMode:
@@ -158,16 +164,19 @@ def _inbound_mode(account: PspAccount) -> InboundMode:
 
 
 async def complete_fetch(
-    conn: Connection,
-    fact: Fact,
-    settlement_call: SettlementCall,
-    result: SettlementResult,
-    now: datetime,
+    conn: Connection, fact: Fact, answer: SettlementAnswer, now: datetime
 ) -> Done | RetryLater | Again:
     account_id = _account_id(fact)
     await _lock_cursor(conn, account_id)
-    account = settlement_call.account
-    match result:
+    match answer:
+        case ListAnswer():
+            return await _listed(conn, account_id, answer.call, answer.result, now)
+        case FetchAnswer():
+            return await _fetched(conn, account_id, answer.call, answer.result, now)
+
+
+def _retry(failure: Unavailable | OutcomeUnknown | UndecodableBody) -> RetryLater:
+    match failure:
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             # Reads only: trying again later is always safe.
             return RetryLater(f"settlement: {detail}")
@@ -175,6 +184,16 @@ async def complete_fetch(
             # An answer the PSP does not document: retried, and visible as
             # a failing delivery until a person or a fixed client reads it.
             return RetryLater(f"settlement answer: {detail}")
+
+
+async def _listed(
+    conn: Connection,
+    account_id: uuid.UUID,
+    list_call: ListCall,
+    result: SettlementListResult | UndecodableBody,
+    now: datetime,
+) -> Done | RetryLater | Again:
+    match result:
         case SettlementList(names=names):
             if names:
                 await conn.execute(
@@ -188,12 +207,25 @@ async def complete_fetch(
                 PspSettlementDueV1(psp_account_id=account_id),
                 SCHEDULER,
                 now,
-                deliver_at=now + account.settlement_interval,
+                deliver_at=now + list_call.account.settlement_interval,
             )
             return Done(Applied())
+        case Unavailable() | OutcomeUnknown() | UndecodableBody():
+            return _retry(result)
+
+
+async def _fetched(
+    conn: Connection,
+    account_id: uuid.UUID,
+    fetch_call: FetchCall,
+    result: SettlementPageResult | UndecodableBody,
+    now: datetime,
+) -> Done | RetryLater:
+    match result:
         case SettlementPage(body=body, next_page=next_page):
-            assert isinstance(settlement_call, FetchCall)
-            await store_inbox(conn, account_id, _inbound_mode(account), body, now)
+            await store_inbox(
+                conn, account_id, _inbound_mode(fetch_call.account), body, now
+            )
             if next_page is not None:
                 await conn.execute(
                     "UPDATE psp_settlement_cursor SET pending_page = %s"
@@ -207,10 +239,12 @@ async def complete_fetch(
                     SET last_read = %s, pending = NULL, pending_page = NULL
                     WHERE account_id = %s
                     """,
-                    (settlement_call.name, account_id),
+                    (fetch_call.name, account_id),
                 )
             # More may wait: look again at once, in a delivery of its own.
             await append_fact(
                 conn, PspSettlementDueV1(psp_account_id=account_id), SCHEDULER, now
             )
             return Done(Applied())
+        case Unavailable() | OutcomeUnknown() | UndecodableBody():
+            return _retry(result)

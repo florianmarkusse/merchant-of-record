@@ -30,10 +30,7 @@ from mor.duties.port import (
     AskResult,
     DutyProvider,
     DutyVendorAccount,
-    OutcomeUnknown,
     RateQuestion,
-    Unavailable,
-    UndecodableBody,
     UnknownCode,
     VendorRates,
 )
@@ -51,6 +48,7 @@ from mor.messaging.facts import (
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
 from mor.messaging.store import append_fact
 from mor.tax.line_rates import Line, own_standard_row
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "duty_rate_ask")
@@ -73,6 +71,14 @@ class AskCall:
     account: DutyVendorAccount
     lookup_id: uuid.UUID
     question: RateQuestion
+
+
+@dataclass(frozen=True)
+class AskAnswer:
+    """The call and what the vendor said to it, from `call` to `complete`."""
+
+    call: AskCall
+    result: AskResult
 
 
 # --- rows -----------------------------------------------------------------
@@ -312,15 +318,17 @@ async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | AskCa
 
 async def call(
     http: httpx2.AsyncClient, environment: Environment, ask: AskCall
-) -> AskResult:
-    return await registry.ask_rates(http, environment, ask.account, ask.question)
+) -> AskAnswer:
+    result = await registry.ask_rates(http, environment, ask.account, ask.question)
+    return AskAnswer(ask, result)
 
 
 async def complete(
-    conn: Connection, fact: Fact, ask: AskCall, result: AskResult, now: datetime
+    conn: Connection, fact: Fact, answer: AskAnswer, now: datetime
 ) -> Done | RetryLater:
     lookup = await _lock_lookup(conn, _lookup_id(fact))
-    assert lookup.id == ask.lookup_id
+    assert lookup.id == answer.call.lookup_id
+    result = answer.result
     if lookup.state != LookupState.REQUESTED:
         return Done(Stale())
     match result:

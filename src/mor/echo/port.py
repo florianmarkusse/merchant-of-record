@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Literal
 
+from mor.vendor_failures import OutcomeUnknown, Unavailable
+
 
 class EchoProvider(StrEnum):
     """Matches the `echo_provider` enum type. One fake flavour per duplicate
@@ -65,22 +67,6 @@ class Refused:
     reason: str
 
 
-@dataclass(frozen=True)
-class Unavailable:
-    """The request provably never reached the vendor (connection refused):
-    safe to send again whatever the guard."""
-
-    detail: str
-
-
-@dataclass(frozen=True)
-class OutcomeUnknown:
-    """No answer (timeout, dropped connection, a 5xx): the vendor may have
-    done the work. The duplicate guard decides what happens next."""
-
-    detail: str
-
-
 class EventMode(StrEnum):
     """How an account's events reach us; matches `echo_event_mode`."""
 
@@ -106,13 +92,6 @@ class VendorEvent:
     reference: str  # our echo_job id, as we sent it
     kind: EventKind
     occurred_at: datetime
-
-
-@dataclass(frozen=True)
-class UndecodableBody:
-    """Bytes from the vendor that are not what its API documents."""
-
-    detail: str
 
 
 @dataclass(frozen=True)

@@ -28,18 +28,16 @@ from mor.echo.port import (
     EventKind,
     FindResult,
     Found,
-    OutcomeUnknown,
     Page,
     Refused,
     ReportList,
     SendRequest,
     SendResult,
     Sent,
-    Unavailable,
-    UndecodableBody,
     VendorEcho,
     VendorEvent,
 )
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 class _Echo(msgspec.Struct, frozen=True):

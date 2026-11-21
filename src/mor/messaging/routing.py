@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, assert_never
 
@@ -36,7 +37,53 @@ class ConsumerName(StrEnum):
     SETTLEMENT_PAYOUT_BOOK = "settlement_payout_book"
 
 
-type ConsumerKind = Literal["local", "effect"]
+# The two kinds, as types: the worker hands `handle` only a local consumer
+# and `prepare` only an effect one (plan-architecture §5). A new consumer
+# joins one of them and `consumer_kind`.
+type LocalConsumer = Literal[
+    ConsumerName.PROBE_ECHO,
+    ConsumerName.PROBE_FINISH,
+    ConsumerName.ECHO_INBOX_DECODE,
+    ConsumerName.ECHO_EVENT_APPLY,
+    ConsumerName.ECHO_TRACKING_START,
+    ConsumerName.QUOTE_WAIT_NOTIFY,
+    ConsumerName.QUOTE_BUILD,
+    ConsumerName.CHECKOUT_SESSION_EXPIRE,
+    ConsumerName.PSP_INBOX_DECODE,
+    ConsumerName.PAYMENT_EVENT_APPLY,
+    ConsumerName.ORDER_CREATE,
+    ConsumerName.INVOICE_ISSUE,
+    ConsumerName.SESSION_PAYMENT_ENDED,
+    ConsumerName.SETTLEMENT_LINE_BOOK,
+    ConsumerName.SETTLEMENT_PAYOUT_BOOK,
+]
+type EffectConsumer = Literal[
+    ConsumerName.ECHO_SEND,
+    ConsumerName.ECHO_POLL,
+    ConsumerName.ECHO_REPORT_FETCH,
+    ConsumerName.DUTY_RATE_ASK,
+    ConsumerName.SHIPPING_PRICE_ASK,
+    ConsumerName.PSP_PAYMENT_CREATE,
+    ConsumerName.PSP_PAYMENT_CAPTURE,
+    ConsumerName.PSP_PAYMENT_CANCEL,
+    ConsumerName.PSP_PAYMENT_POLL,
+    ConsumerName.PSP_PAYMENT_FETCH,
+    ConsumerName.PSP_SETTLEMENT_FETCH,
+]
+
+
+@dataclass(frozen=True)
+class Local:
+    """One transaction, no outside call."""
+
+    consumer: LocalConsumer
+
+
+@dataclass(frozen=True)
+class Effect:
+    """Prepare, call the outside, complete: each step its own commit."""
+
+    consumer: EffectConsumer
 
 
 def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
@@ -144,9 +191,8 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             assert_never(message_type)
 
 
-def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
-    """`local`: one transaction, no outside call. `effect`: prepare, call
-    the outside, complete, each step its own commit (plan-architecture §5)."""
+def consumer_kind(consumer: ConsumerName) -> Local | Effect:
+    """The consumer, narrowed to its kind."""
     match consumer:
         case (
             ConsumerName.PROBE_ECHO
@@ -165,7 +211,7 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.SETTLEMENT_LINE_BOOK
             | ConsumerName.SETTLEMENT_PAYOUT_BOOK
         ):
-            return "local"
+            return Local(consumer)
         case (
             ConsumerName.ECHO_SEND
             | ConsumerName.ECHO_POLL
@@ -179,6 +225,6 @@ def consumer_kind(consumer: ConsumerName) -> ConsumerKind:
             | ConsumerName.PSP_PAYMENT_FETCH
             | ConsumerName.PSP_SETTLEMENT_FETCH
         ):
-            return "effect"
+            return Effect(consumer)
         case _:
             assert_never(consumer)

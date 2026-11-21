@@ -30,9 +30,7 @@ from mor.echo.port import (
     EchoAccount,
     EventMode,
     FetchResult,
-    OutcomeUnknown,
     Page,
-    Unavailable,
 )
 from mor.messaging.facts import (
     EchoEventsWantedV1,
@@ -49,6 +47,7 @@ from mor.messaging.outcome import (
     Stale,
 )
 from mor.messaging.store import append_fact
+from mor.vendor_failures import OutcomeUnknown, Unavailable
 
 
 SCHEDULER = Actor(ActorKind.SYSTEM, "echo_poll")
@@ -66,6 +65,14 @@ class FetchEventsCall:
     account: EchoAccount
     account_id: uuid.UUID
     reference: str
+
+
+@dataclass(frozen=True)
+class FetchEventsAnswer:
+    """The fetch and what the vendor said to it, from `call` to `complete`."""
+
+    call: FetchEventsCall
+    result: FetchResult
 
 
 @dataclass(frozen=True)
@@ -128,24 +135,21 @@ async def prepare_poll(
 
 async def call_poll(
     http: httpx2.AsyncClient, environment: Environment, fetch: FetchEventsCall
-) -> FetchResult:
-    return await registry.fetch_events(
+) -> FetchEventsAnswer:
+    result = await registry.fetch_events(
         http, environment, fetch.account, fetch.reference
     )
+    return FetchEventsAnswer(fetch, result)
 
 
 async def complete_poll(
-    conn: Connection,
-    fact: Fact,
-    fetch: FetchEventsCall,
-    result: FetchResult,
-    now: datetime,
+    conn: Connection, fact: Fact, answer: FetchEventsAnswer, now: datetime
 ) -> Done | RetryLater:
     job_id = _job_id(fact)
     job = await _lock_job(conn, job_id)
-    match result:
+    match answer.result:
         case Page(body=body):
-            await store_inbox(conn, fetch.account_id, EventMode.POLL, body, now)
+            await store_inbox(conn, answer.call.account_id, EventMode.POLL, body, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             # A read: trying again later is always safe.
             return RetryLater(f"poll: {detail}")

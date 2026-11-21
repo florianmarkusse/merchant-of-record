@@ -14,6 +14,7 @@ from datetime import datetime
 
 from mor.couriers.records import PricePart
 from mor.money.currency import Currency
+from mor.vendor_failures import CallFailure, UndecodableBody
 
 
 @dataclass(frozen=True)
@@ -32,32 +33,7 @@ class NotServed:
     detail: str
 
 
-@dataclass(frozen=True)
-class Unavailable:
-    """The request provably never reached the carrier (connection refused)."""
-
-    detail: str
-
-
-@dataclass(frozen=True)
-class OutcomeUnknown:
-    """No answer (timeout, dropped connection, a 5xx). A rate call is a
-    read, so asking again is safe; it costs one more call."""
-
-    detail: str
-
-
-@dataclass(frozen=True)
-class UndecodableBody:
-    """An answer that is not what the carrier's API documents, including
-    parts that do not add up to the total."""
-
-    detail: str
-
-
-type QuoteRateResult = (
-    CarrierPrice | NotServed | Unavailable | OutcomeUnknown | UndecodableBody
-)
+type QuoteRateResult = CarrierPrice | NotServed | CallFailure
 
 
 def carrier_price(

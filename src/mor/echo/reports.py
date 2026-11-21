@@ -33,14 +33,13 @@ from mor.echo.port import (
     EventMode,
     FetchResult,
     ListResult,
-    OutcomeUnknown,
     Page,
     ReportList,
-    Unavailable,
 )
 from mor.messaging.facts import EchoReportDueV1, Fact
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater, Stale
 from mor.messaging.store import append_fact
+from mor.vendor_failures import OutcomeUnknown, Unavailable
 
 
 SCHEDULER = Actor(ActorKind.SYSTEM, "echo_report_fetch")
@@ -65,7 +64,25 @@ class FetchReportCall:
 
 
 type ReportCall = ListReportsCall | FetchReportCall
-type ReportResult = ListResult | FetchResult
+
+
+@dataclass(frozen=True)
+class ListReportsAnswer:
+    """The list call and what the vendor said to it, from `call` to `complete`."""
+
+    call: ListReportsCall
+    result: ListResult
+
+
+@dataclass(frozen=True)
+class FetchReportAnswer:
+    """The fetch and what the vendor said to it, from `call` to `complete`."""
+
+    call: FetchReportCall
+    result: FetchResult
+
+
+type ReportAnswer = ListReportsAnswer | FetchReportAnswer
 
 
 @dataclass(frozen=True)
@@ -122,27 +139,32 @@ async def prepare_reports(
 
 async def call_reports(
     http: httpx2.AsyncClient, environment: Environment, report_call: ReportCall
-) -> ReportResult:
+) -> ReportAnswer:
     match report_call:
         case ListReportsCall(account=account, after=after):
-            return await registry.list_reports(http, environment, account, after)
+            listed = await registry.list_reports(http, environment, account, after)
+            return ListReportsAnswer(report_call, listed)
         case FetchReportCall(account=account, name=name):
-            return await registry.fetch_report(http, environment, account, name)
+            fetched = await registry.fetch_report(http, environment, account, name)
+            return FetchReportAnswer(report_call, fetched)
 
 
 async def complete_reports(
-    conn: Connection,
-    fact: Fact,
-    report_call: ReportCall,
-    result: ReportResult,
-    now: datetime,
+    conn: Connection, fact: Fact, answer: ReportAnswer, now: datetime
 ) -> Done | RetryLater | Again:
     account_id = _account_id(fact)
     await _lock_cursor(conn, account_id)
+    match answer:
+        case ListReportsAnswer():
+            return await _listed(conn, account_id, answer.result, now)
+        case FetchReportAnswer():
+            return await _fetched(conn, account_id, answer.call, answer.result, now)
+
+
+async def _listed(
+    conn: Connection, account_id: uuid.UUID, result: ListResult, now: datetime
+) -> Done | RetryLater | Again:
     match result:
-        case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
-            # Reads only: trying again later is always safe.
-            return RetryLater(f"reports: {detail}")
         case ReportList(names=names):
             if names:
                 await conn.execute(
@@ -161,16 +183,31 @@ async def complete_reports(
                 deliver_at=now + inbound.poll_interval,
             )
             return Done(Applied())
+        case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
+            # Reads only: trying again later is always safe.
+            return RetryLater(f"reports: {detail}")
+
+
+async def _fetched(
+    conn: Connection,
+    account_id: uuid.UUID,
+    fetch: FetchReportCall,
+    result: FetchResult,
+    now: datetime,
+) -> Done | RetryLater:
+    match result:
         case Page(body=body):
-            assert isinstance(report_call, FetchReportCall)
             await store_inbox(conn, account_id, EventMode.FILE, body, now)
             await conn.execute(
                 "UPDATE echo_report_cursor"
                 " SET last_report = %s, pending_report = NULL WHERE account_id = %s",
-                (report_call.name, account_id),
+                (fetch.name, account_id),
             )
             # More may wait: look again at once, in a delivery of its own.
             await append_fact(
                 conn, EchoReportDueV1(account_id=account_id), SCHEDULER, now
             )
             return Done(Applied())
+        case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
+            # Reads only: trying again later is always safe.
+            return RetryLater(f"reports: {detail}")

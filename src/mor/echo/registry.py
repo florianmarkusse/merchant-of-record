@@ -19,9 +19,9 @@ from mor.echo.port import (
     ListResult,
     SendRequest,
     SendResult,
-    UndecodableBody,
     VendorEvent,
 )
+from mor.vendor_failures import UndecodableBody
 
 
 class FakeInProd(Exception):

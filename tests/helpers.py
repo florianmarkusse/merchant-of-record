@@ -13,6 +13,14 @@ from starlette.types import Receive, Scope, Send
 import mor.fakes.app
 import mor.web.main
 from mor.config import Environment, Settings
+from mor.messaging.routing import (
+    Effect,
+    EffectConsumer,
+    Local,
+    LocalConsumer,
+    consumer_kind,
+)
+from mor.messaging.worker import Candidate
 
 
 # The suite's own databases on the local cluster, reached over peer auth as
@@ -180,3 +188,17 @@ async def crash(conn: psycopg.AsyncConnection[tuple[object, ...]]) -> None:
                 return
             await asyncio.sleep(0.01)
     raise AssertionError(f"backend {pid} still alive 5 s after close")
+
+
+def local_consumer(candidate: Candidate) -> LocalConsumer:
+    """The candidate's consumer, which the test knows is a local one."""
+    kind = consumer_kind(candidate.consumer)
+    assert isinstance(kind, Local), candidate
+    return kind.consumer
+
+
+def effect_consumer(candidate: Candidate) -> EffectConsumer:
+    """The candidate's consumer, which the test knows is an effect one."""
+    kind = consumer_kind(candidate.consumer)
+    assert isinstance(kind, Effect), candidate
+    return kind.consumer

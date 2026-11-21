@@ -49,7 +49,7 @@ from mor.echo.port import EchoProvider, EventKind, EventMode
 from mor.echo.reports import start_report_schedule
 from mor.messaging import consumers
 from mor.messaging.facts import AggregateType
-from mor.messaging.routing import ConsumerName, consumer_kind
+from mor.messaging.routing import ConsumerName, Effect, Local, consumer_kind
 from mor.messaging.worker import (
     Candidate,
     Failed,
@@ -236,14 +236,14 @@ class EchoFlow(RuleBasedStateMachine):
             try:
                 assert await try_lock_aggregate(crashing, candidate)
                 match consumer_kind(candidate.consumer):
-                    case "local":
+                    case Local(consumer=local):
                         # One transaction: run it, die before COMMIT.
                         await crashing.execute("BEGIN")
-                        await handle_delivery(crashing, candidate, ENV, self.now)
-                    case "effect":
+                        await handle_delivery(crashing, candidate, local, ENV, self.now)
+                    case Effect(consumer=effect):
                         async with crashing.transaction():
                             prepared = await prepare_delivery(
-                                crashing, candidate, self.now
+                                crashing, candidate, effect, self.now
                             )
                         if with_call and isinstance(prepared, Prepared):
                             await consumers.call(self.http, ENV, prepared.call)

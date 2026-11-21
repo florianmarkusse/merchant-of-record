@@ -3,7 +3,10 @@ from hypothesis import strategies as st
 
 from mor.echo.events import VendorStatus, derive_status
 from mor.echo.fake_client import decode_full_webhook, decode_report, decode_thin_webhook
-from mor.echo.port import EventKind, UndecodableBody
+from mor.echo.port import (
+    EventKind,
+)
+from mor.vendor_failures import UndecodableBody
 
 
 @given(

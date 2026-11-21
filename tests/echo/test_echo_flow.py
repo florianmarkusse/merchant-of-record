@@ -33,7 +33,7 @@ from mor.messaging.worker import (
     prepare_delivery,
     try_lock_aggregate,
 )
-from tests.helpers import ENV, NO_HTTP, RefusingTransport, crash
+from tests.helpers import ENV, NO_HTTP, RefusingTransport, crash, effect_consumer
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -131,7 +131,9 @@ async def _crash_after_prepare(setup: Setup) -> None:
     assert len(candidates) == 1
     assert await try_lock_aggregate(crashing, candidates[0])
     async with crashing.transaction():
-        prepared = await prepare_delivery(crashing, candidates[0], NOW)
+        prepared = await prepare_delivery(
+            crashing, candidates[0], effect_consumer(candidates[0]), NOW
+        )
     assert isinstance(prepared, Prepared)
     await crash(crashing)
 

@@ -25,8 +25,8 @@ from mor.psp.port import (
     SettlementMode,
     SettlementPageResult,
     ThinNotice,
-    UndecodableBody,
 )
+from mor.vendor_failures import UndecodableBody
 
 
 def _check(environment: Environment, account: PspAccount) -> None:

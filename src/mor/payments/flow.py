@@ -21,7 +21,7 @@ attempt's row lock and never commit; `call` runs with no transaction open.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, TypeIs, assert_never
+from typing import Literal, assert_never
 
 import httpx2
 from psycopg.rows import class_row
@@ -71,7 +71,6 @@ from mor.psp.port import (
     Found,
     InboundMode,
     NotCapturable,
-    OutcomeUnknown,
     Page,
     PaymentMethod,
     PaymentRequest,
@@ -79,9 +78,8 @@ from mor.psp.port import (
     ProviderPayment,
     PspAccount,
     StatusMode,
-    Unavailable,
-    UndecodableBody,
 )
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 class WrongFact(Exception):
@@ -255,50 +253,97 @@ class PollCall:
 
 
 type PaymentCall = CreateCall | FindCall | CaptureCall | CancelCall | PollCall
-type PaymentResult = (
-    CreateResult | FindResult | CaptureResult | CancelResult | FetchResult
+
+
+# --- answers: a call and what the PSP said, from call to complete ---------
+
+
+@dataclass(frozen=True)
+class CreateAnswer:
+    call: CreateCall
+    result: CreateResult
+
+
+@dataclass(frozen=True)
+class FindAnswer:
+    call: FindCall
+    result: FindResult
+
+
+@dataclass(frozen=True)
+class CaptureAnswer:
+    call: CaptureCall
+    result: CaptureResult
+
+
+@dataclass(frozen=True)
+class CancelAnswer:
+    call: CancelCall
+    result: CancelResult
+
+
+@dataclass(frozen=True)
+class PollAnswer:
+    call: PollCall
+    result: FetchResult
+
+
+type PaymentAnswer = (
+    CreateAnswer | FindAnswer | CaptureAnswer | CancelAnswer | PollAnswer
 )
-
-
-def is_payment_call(call: object) -> TypeIs[PaymentCall]:
-    return isinstance(call, CreateCall | FindCall | CaptureCall | CancelCall | PollCall)
-
-
-def is_payment_result(result: object) -> TypeIs[PaymentResult]:
-    return isinstance(
-        result,
-        ProviderPayment
-        | Declined
-        | Found
-        | NotCapturable
-        | AlreadyFinal
-        | Page
-        | Unavailable
-        | OutcomeUnknown
-        | UndecodableBody,
-    )
 
 
 async def call(
     http: httpx2.AsyncClient, environment: Environment, payment_call: PaymentCall
-) -> PaymentResult:
+) -> PaymentAnswer:
     match payment_call:
         case CreateCall(account=account, request=request):
-            return await registry.create_payment(http, environment, account, request)
+            created = await registry.create_payment(http, environment, account, request)
+            return CreateAnswer(payment_call, created)
         case FindCall(account=account, reference=reference):
-            return await registry.find_payments(http, environment, account, reference)
+            found = await registry.find_payments(http, environment, account, reference)
+            return FindAnswer(payment_call, found)
         case CaptureCall(
             account=account, provider_payment_id=payment_id, amount=amount, key=key
         ):
-            return await registry.capture(
+            captured = await registry.capture(
                 http, environment, account, payment_id, amount, key
             )
+            return CaptureAnswer(payment_call, captured)
         case CancelCall(account=account, provider_payment_id=payment_id):
-            return await registry.cancel(http, environment, account, payment_id)
+            cancelled = await registry.cancel(http, environment, account, payment_id)
+            return CancelAnswer(payment_call, cancelled)
         case PollCall(account=account, provider_payment_id=payment_id):
-            return await registry.fetch_events(http, environment, account, payment_id)
+            page = await registry.fetch_events(http, environment, account, payment_id)
+            return PollAnswer(payment_call, page)
         case _:
             assert_never(payment_call)
+
+
+async def complete(
+    conn: Connection, fact: Fact, answer: PaymentAnswer, now: datetime
+) -> Done | RetryLater:
+    """Every payment consumer's last step: the answer says which call it
+    was, and each step checks the fact is the one its consumer gets."""
+    match answer:
+        case CreateAnswer():
+            return await _complete_create(conn, fact, answer.call, answer.result, now)
+        case FindAnswer():
+            match answer.call.operation:
+                case "create":
+                    return await _complete_create_lookup(conn, fact, answer.result, now)
+                case "capture":
+                    return await _complete_capture_lookup(
+                        conn, fact, answer.result, now
+                    )
+        case CaptureAnswer():
+            return await _complete_capture(conn, fact, answer.call, answer.result, now)
+        case CancelAnswer():
+            return await _complete_cancel(conn, fact, answer.call, answer.result, now)
+        case PollAnswer():
+            return await _complete_poll(conn, fact, answer.call, answer.result, now)
+        case _:
+            assert_never(answer)
 
 
 # --- requests -------------------------------------------------------------
@@ -487,68 +532,68 @@ async def prepare_create(
     )
 
 
-async def complete_create(
+async def _complete_create(
     conn: Connection,
     fact: Fact,
-    payment_call: PaymentCall,
-    result: PaymentResult,
+    create: CreateCall,
+    result: CreateResult,
     now: datetime,
 ) -> Done | RetryLater:
     attempt = await lock_attempt(conn, _created_id(fact))
     account = await _account(conn, attempt)
-    match payment_call:
-        case CreateCall(request_id=request_id):
-            match result:
-                case ProviderPayment() as payment:
-                    await _finish_request(conn, request_id, "succeeded", now)
-                    return await apply_payment(conn, attempt, account, payment, now)
-                case Declined(payment=payment, reason=reason):
-                    await _finish_request(conn, request_id, "refused", now, reason)
-                    return await apply_payment(
-                        conn, attempt, account, payment, now, reason
-                    )
-                case Unavailable(detail=detail):
-                    await _finish_request(conn, request_id, "not_sent", now)
-                    return RetryLater(f"create unavailable: {detail}")
-                case OutcomeUnknown(detail=detail):
-                    return RetryLater(f"create outcome unknown: {detail}")
-                case UndecodableBody(detail=detail):
-                    return await _needs_person(
-                        conn, attempt, account, f"create answer: {detail}", now
-                    )
-                case _:
-                    raise AssertionError(f"create answered with {result!r}")
-        case FindCall():
-            match result:
-                case Found(payments=payments):
-                    if len(payments) == 0:
-                        # Not found proves nothing: it may still be on its
-                        # way. A person decides; the request stays `sent`.
-                        return await _needs_person(
-                            conn,
-                            attempt,
-                            account,
-                            "create answer lost; the PSP does not show it",
-                            now,
-                        )
-                    if len(payments) > 1:
-                        return await _needs_person(
-                            conn, attempt, account, "several payments at the PSP", now
-                        )
-                    request = await _latest_request(conn, attempt.id, "create")
-                    assert request is not None
-                    await _finish_request(conn, request.id, "succeeded", now)
-                    return await apply_payment(conn, attempt, account, payments[0], now)
-                case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
-                    return RetryLater(f"create lookup: {detail}")
-                case UndecodableBody(detail=detail):
-                    return await _needs_person(
-                        conn, attempt, account, f"lookup answer: {detail}", now
-                    )
-                case _:
-                    raise AssertionError(f"lookup answered with {result!r}")
+    match result:
+        case ProviderPayment() as payment:
+            await _finish_request(conn, create.request_id, "succeeded", now)
+            return await apply_payment(conn, attempt, account, payment, now)
+        case Declined(payment=payment, reason=reason):
+            await _finish_request(conn, create.request_id, "refused", now, reason)
+            return await apply_payment(conn, attempt, account, payment, now, reason)
+        case Unavailable(detail=detail):
+            await _finish_request(conn, create.request_id, "not_sent", now)
+            return RetryLater(f"create unavailable: {detail}")
+        case OutcomeUnknown(detail=detail):
+            return RetryLater(f"create outcome unknown: {detail}")
+        case UndecodableBody(detail=detail):
+            return await _needs_person(
+                conn, attempt, account, f"create answer: {detail}", now
+            )
         case _:
-            raise AssertionError(f"psp_payment_create got {payment_call!r}")
+            assert_never(result)
+
+
+async def _complete_create_lookup(
+    conn: Connection, fact: Fact, result: FindResult, now: datetime
+) -> Done | RetryLater:
+    attempt = await lock_attempt(conn, _created_id(fact))
+    account = await _account(conn, attempt)
+    match result:
+        case Found(payments=payments):
+            if len(payments) == 0:
+                # Not found proves nothing: it may still be on its way. A
+                # person decides; the request stays `sent`.
+                return await _needs_person(
+                    conn,
+                    attempt,
+                    account,
+                    "create answer lost; the PSP does not show it",
+                    now,
+                )
+            if len(payments) > 1:
+                return await _needs_person(
+                    conn, attempt, account, "several payments at the PSP", now
+                )
+            request = await _latest_request(conn, attempt.id, "create")
+            assert request is not None
+            await _finish_request(conn, request.id, "succeeded", now)
+            return await apply_payment(conn, attempt, account, payments[0], now)
+        case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
+            return RetryLater(f"create lookup: {detail}")
+        case UndecodableBody(detail=detail):
+            return await _needs_person(
+                conn, attempt, account, f"lookup answer: {detail}", now
+            )
+        case _:
+            assert_never(result)
 
 
 # --- psp_payment_capture --------------------------------------------------
@@ -599,72 +644,74 @@ async def prepare_capture(
     )
 
 
-async def complete_capture(
+async def _complete_capture(
     conn: Connection,
     fact: Fact,
-    payment_call: PaymentCall,
-    result: PaymentResult,
+    capture: CaptureCall,
+    result: CaptureResult,
     now: datetime,
 ) -> Done | RetryLater:
     attempt = await lock_attempt(conn, _authorised_id(fact))
     account = await _account(conn, attempt)
-    match payment_call:
-        case CaptureCall(request_id=request_id):
-            match result:
-                case ProviderPayment() as payment:
-                    await _finish_request(conn, request_id, "succeeded", now)
-                    return await apply_payment(conn, attempt, account, payment, now)
-                case NotCapturable(payment=payment):
-                    await _finish_request(conn, request_id, "refused", now)
-                    if payment.status == PaymentStatus.AUTHORISED:
-                        return await _needs_person(
-                            conn, attempt, account, "capture refused", now
-                        )
-                    return await apply_payment(conn, attempt, account, payment, now)
-                case Unavailable(detail=detail):
-                    await _finish_request(conn, request_id, "not_sent", now)
-                    return RetryLater(f"capture unavailable: {detail}")
-                case OutcomeUnknown(detail=detail):
-                    return RetryLater(f"capture outcome unknown: {detail}")
-                case UndecodableBody(detail=detail):
-                    return await _needs_person(
-                        conn, attempt, account, f"capture answer: {detail}", now
-                    )
-                case _:
-                    raise AssertionError(f"capture answered with {result!r}")
-        case FindCall():
-            match result:
-                case Found(payments=payments):
-                    for payment in payments:
-                        if payment.provider_payment_id != attempt.provider_payment_id:
-                            continue
-                        if payment.status == PaymentStatus.AUTHORISED:
-                            # Still authorised proves nothing: the capture
-                            # may be on its way. A person decides.
-                            return await _needs_person(
-                                conn,
-                                attempt,
-                                account,
-                                "capture answer lost; the PSP shows it authorised",
-                                now,
-                            )
-                        request = await _latest_request(conn, attempt.id, "capture")
-                        assert request is not None
-                        await _finish_request(conn, request.id, "succeeded", now)
-                        return await apply_payment(conn, attempt, account, payment, now)
-                    return await _needs_person(
-                        conn, attempt, account, "the PSP does not show the payment", now
-                    )
-                case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
-                    return RetryLater(f"capture lookup: {detail}")
-                case UndecodableBody(detail=detail):
-                    return await _needs_person(
-                        conn, attempt, account, f"lookup answer: {detail}", now
-                    )
-                case _:
-                    raise AssertionError(f"lookup answered with {result!r}")
+    match result:
+        case ProviderPayment() as payment:
+            await _finish_request(conn, capture.request_id, "succeeded", now)
+            return await apply_payment(conn, attempt, account, payment, now)
+        case NotCapturable(payment=payment):
+            await _finish_request(conn, capture.request_id, "refused", now)
+            if payment.status == PaymentStatus.AUTHORISED:
+                return await _needs_person(
+                    conn, attempt, account, "capture refused", now
+                )
+            return await apply_payment(conn, attempt, account, payment, now)
+        case Unavailable(detail=detail):
+            await _finish_request(conn, capture.request_id, "not_sent", now)
+            return RetryLater(f"capture unavailable: {detail}")
+        case OutcomeUnknown(detail=detail):
+            return RetryLater(f"capture outcome unknown: {detail}")
+        case UndecodableBody(detail=detail):
+            return await _needs_person(
+                conn, attempt, account, f"capture answer: {detail}", now
+            )
         case _:
-            raise AssertionError(f"psp_payment_capture got {payment_call!r}")
+            assert_never(result)
+
+
+async def _complete_capture_lookup(
+    conn: Connection, fact: Fact, result: FindResult, now: datetime
+) -> Done | RetryLater:
+    attempt = await lock_attempt(conn, _authorised_id(fact))
+    account = await _account(conn, attempt)
+    match result:
+        case Found(payments=payments):
+            for payment in payments:
+                if payment.provider_payment_id != attempt.provider_payment_id:
+                    continue
+                if payment.status == PaymentStatus.AUTHORISED:
+                    # Still authorised proves nothing: the capture may be on
+                    # its way. A person decides.
+                    return await _needs_person(
+                        conn,
+                        attempt,
+                        account,
+                        "capture answer lost; the PSP shows it authorised",
+                        now,
+                    )
+                request = await _latest_request(conn, attempt.id, "capture")
+                assert request is not None
+                await _finish_request(conn, request.id, "succeeded", now)
+                return await apply_payment(conn, attempt, account, payment, now)
+            return await _needs_person(
+                conn, attempt, account, "the PSP does not show the payment", now
+            )
+        case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
+            return RetryLater(f"capture lookup: {detail}")
+        case UndecodableBody(detail=detail):
+            return await _needs_person(
+                conn, attempt, account, f"lookup answer: {detail}", now
+            )
+        case _:
+            assert_never(result)
 
 
 # --- psp_payment_cancel ---------------------------------------------------
@@ -696,28 +743,26 @@ async def prepare_cancel(
     return CancelCall(account, request.id, attempt.provider_payment_id)
 
 
-async def complete_cancel(
+async def _complete_cancel(
     conn: Connection,
     fact: Fact,
-    payment_call: PaymentCall,
-    result: PaymentResult,
+    cancel: CancelCall,
+    result: CancelResult,
     now: datetime,
 ) -> Done | RetryLater:
     attempt = await lock_attempt(conn, _cancel_id(fact))
     account = await _account(conn, attempt)
-    if not isinstance(payment_call, CancelCall):
-        raise AssertionError(f"psp_payment_cancel got {payment_call!r}")
     match result:
         case ProviderPayment() as payment:
-            await _finish_request(conn, payment_call.request_id, "succeeded", now)
+            await _finish_request(conn, cancel.request_id, "succeeded", now)
             return await apply_payment(conn, attempt, account, payment, now)
         case AlreadyFinal(payment=payment):
             # Too late: the payment ended another way, perhaps captured,
             # which is honoured.
-            await _finish_request(conn, payment_call.request_id, "refused", now)
+            await _finish_request(conn, cancel.request_id, "refused", now)
             return await apply_payment(conn, attempt, account, payment, now)
         case Unavailable(detail=detail):
-            await _finish_request(conn, payment_call.request_id, "not_sent", now)
+            await _finish_request(conn, cancel.request_id, "not_sent", now)
             return RetryLater(f"cancel unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"cancel outcome unknown: {detail}")
@@ -726,7 +771,7 @@ async def complete_cancel(
                 conn, attempt, account, f"cancel answer: {detail}", now
             )
         case _:
-            raise AssertionError(f"cancel answered with {result!r}")
+            assert_never(result)
 
 
 # --- psp_payment_poll -----------------------------------------------------
@@ -755,25 +800,21 @@ async def prepare_poll(
     return PollCall(account, attempt.provider_payment_id)
 
 
-async def complete_poll(
+async def _complete_poll(
     conn: Connection,
     fact: Fact,
-    payment_call: PaymentCall,
-    result: PaymentResult,
+    poll: PollCall,
+    result: FetchResult,
     now: datetime,
 ) -> Done | RetryLater:
     attempt = await lock_attempt(conn, _poll_id(fact))
-    if not isinstance(payment_call, PollCall):
-        raise AssertionError(f"psp_payment_poll got {payment_call!r}")
-    account = payment_call.account
+    account = poll.account
     match result:
         case Page(body=body):
             # Stored raw and decoded on the webhook's path.
             await store_inbox(conn, account.id, InboundMode.POLL, body, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"poll: {detail}")
-        case _:
-            raise AssertionError(f"poll answered with {result!r}")
     match fact:
         case PaymentPollDueV1() if (
             account.status_mode == StatusMode.POLL and attempt.state in OPEN_STATES

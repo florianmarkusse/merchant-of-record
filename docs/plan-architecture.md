@@ -212,14 +212,24 @@ prepare(conn, delivery, now) -> Nothing | Call(request)
     If the row was already `sent` with no result, an earlier run died
     mid-call: what to do next follows the operation's duplicate guard
     (below).
-call(account, request) -> result union
+call(account, request) -> answer
     No transaction open. Goes through the registry to one provider module.
-complete(conn, delivery, result, now)
+    The answer is a record per call holding the call and its result union,
+    so `complete` is picked by the answer and matches exactly the results
+    that call can get (decided 21-Nov-2026: one global result union lost
+    that pairing, and completions checked it at run time).
+complete(conn, delivery, answer, now)
     One transaction. Lock the row. Store the result on the request row,
     apply the transition for the state as it is now, write ledger entries
     and facts, mark the delivery handled (or set `not_before` for a
     retry). Commit.
 ```
+
+The failures every call can end in (`Unavailable`, `OutcomeUnknown`,
+`UndecodableBody`) are one set of records for all ports,
+`mor/vendor_failures.py`; what to do about one is the operation's guard.
+Whether a consumer is local or effect is in its type
+(`LocalConsumer`, `EffectConsumer` in `mor/messaging/routing.py`).
 
 Why three functions and not one: a commit must separate "we are about to
 ask the vendor" from "the vendor answered", or a crash cannot be told from

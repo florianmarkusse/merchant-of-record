@@ -19,6 +19,11 @@ from mor.messaging.guard import DuplicateGuard
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
+from mor.vendor_failures import (
+    CallFailure,
+    OutcomeUnknown,
+    Unavailable,
+)
 
 
 class PspProvider(StrEnum):
@@ -160,34 +165,10 @@ class Page:
     body: bytes
 
 
-@dataclass(frozen=True)
-class Unavailable:
-    """The request provably never reached the PSP (connection refused)."""
-
-    detail: str
-
-
-@dataclass(frozen=True)
-class OutcomeUnknown:
-    """No answer (timeout, dropped connection, a 5xx): it may have done the
-    work. The operation's duplicate guard decides what follows."""
-
-    detail: str
-
-
-@dataclass(frozen=True)
-class UndecodableBody:
-    """An answer the PSP's API does not document, or an amount that is not
-    a whole number in our units."""
-
-    detail: str
-
-
-type Failure = Unavailable | OutcomeUnknown | UndecodableBody
-type CreateResult = ProviderPayment | Declined | Failure
-type FindResult = Found | Failure
-type CaptureResult = ProviderPayment | NotCapturable | Failure
-type CancelResult = ProviderPayment | AlreadyFinal | Failure
+type CreateResult = ProviderPayment | Declined | CallFailure
+type FindResult = Found | CallFailure
+type CaptureResult = ProviderPayment | NotCapturable | CallFailure
+type CancelResult = ProviderPayment | AlreadyFinal | CallFailure
 type FetchResult = Page | Unavailable | OutcomeUnknown
 
 

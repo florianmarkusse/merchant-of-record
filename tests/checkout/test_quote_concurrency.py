@@ -37,7 +37,7 @@ from mor.messaging.worker import (
 )
 from mor.money.amount import Money
 from mor.money.currency import Currency
-from tests.helpers import ENV, wire
+from tests.helpers import ENV, effect_consumer, wire
 from tests.quote.fixtures import live_market
 
 
@@ -116,10 +116,12 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
             ]
             assert await try_lock_aggregate(worker, candidate)
             async with worker.transaction():
-                prepared = await prepare_delivery(worker, candidate, NOW)
+                prepared = await prepare_delivery(
+                    worker, candidate, effect_consumer(candidate), NOW
+                )
             assert isinstance(prepared, Prepared)
-            result = await consumers.call(wired.http, ENV, prepared.call)
-            await complete_delivery(completer, candidate, prepared, result, NOW)
+            answer = await consumers.call(wired.http, ENV, prepared.call)
+            await complete_delivery(completer, candidate, prepared.fact, answer, NOW)
 
             # The second buyer's step builds while the price still reads as
             # open, then commits only after the price's completion has been

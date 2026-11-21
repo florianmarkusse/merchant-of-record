@@ -42,7 +42,6 @@ from mor.psp.port import (
     Found,
     LineType,
     NotCapturable,
-    OutcomeUnknown,
     Page,
     PaymentRequest,
     PaymentStatus,
@@ -58,9 +57,8 @@ from mor.psp.port import (
     SettlementPage,
     SettlementPageResult,
     ThinNotice,
-    Unavailable,
-    UndecodableBody,
 )
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 SIGNATURE_HEADER = "Psp-Signature"

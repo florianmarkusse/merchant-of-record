@@ -26,7 +26,7 @@ from mor.config import Environment, Settings, load_settings
 from mor.dates import format_moment
 from mor.db.connect import Connection, connect
 from mor.messaging import consumers
-from mor.messaging.consumers import EffectCall, EffectResult
+from mor.messaging.consumers import EffectAnswer, EffectCall
 from mor.messaging.facts import (
     AggregateType,
     Fact,
@@ -35,7 +35,14 @@ from mor.messaging.facts import (
     decode,
 )
 from mor.messaging.outcome import Again, ConsumerOutcome, Done, NoCall, RetryLater
-from mor.messaging.routing import ConsumerName, consumer_kind
+from mor.messaging.routing import (
+    ConsumerName,
+    Effect,
+    EffectConsumer,
+    Local,
+    LocalConsumer,
+    consumer_kind,
+)
 from mor.messaging.store import AlreadyHandled, mark_handled
 
 
@@ -264,14 +271,18 @@ async def _defer(
 
 
 async def handle_delivery(
-    conn: Connection, candidate: Candidate, environment: Environment, now: datetime
+    conn: Connection,
+    candidate: Candidate,
+    consumer: LocalConsumer,
+    environment: Environment,
+    now: datetime,
 ) -> Ran | Skipped:
     """A local consumer's delivery, in the caller's transaction, under the
     aggregate's advisory lock. Never commits."""
     fact = await _open_delivery(conn, candidate, now)
     if isinstance(fact, Skipped):
         return fact
-    outcome = await consumers.handle(conn, candidate.consumer, fact, environment, now)
+    outcome = await consumers.handle(conn, consumer, fact, environment, now)
     await _finish_delivery(conn, candidate, now)
     return Ran(outcome)
 
@@ -285,13 +296,13 @@ class Prepared:
 
 
 async def prepare_delivery(
-    conn: Connection, candidate: Candidate, now: datetime
+    conn: Connection, candidate: Candidate, consumer: EffectConsumer, now: datetime
 ) -> Prepared | Ran | Skipped:
     """An effect consumer's first transaction. Never commits."""
     fact = await _open_delivery(conn, candidate, now)
     if isinstance(fact, Skipped):
         return fact
-    prepared = await consumers.prepare(conn, candidate.consumer, fact, now)
+    prepared = await consumers.prepare(conn, consumer, fact, now)
     if isinstance(prepared, NoCall):
         await _finish_delivery(conn, candidate, now)
         return Ran(prepared.outcome)
@@ -301,14 +312,12 @@ async def prepare_delivery(
 async def complete_delivery(
     conn: Connection,
     candidate: Candidate,
-    prepared: Prepared,
-    result: EffectResult,
+    fact: Fact,
+    answer: EffectAnswer,
     now: datetime,
 ) -> Ran | Deferred | Again:
     """An effect consumer's last transaction. Never commits."""
-    step = await consumers.complete(
-        conn, candidate.consumer, prepared.fact, prepared.call, result, now
-    )
+    step = await consumers.complete(conn, fact, answer, now)
     match step:
         case Done(outcome=outcome):
             await _finish_delivery(conn, candidate, now)
@@ -327,6 +336,7 @@ async def run_effect(
     http: httpx2.AsyncClient,
     environment: Environment,
     candidate: Candidate,
+    consumer: EffectConsumer,
     now: datetime,
 ) -> Ran | Skipped | Deferred:
     """prepare (commit), call with no transaction open, complete (commit),
@@ -334,12 +344,14 @@ async def run_effect(
     committed state for the next run's `prepare` to find."""
     for _ in range(MAX_EFFECT_STEPS):
         async with conn.transaction():
-            prepared = await prepare_delivery(conn, candidate, now)
+            prepared = await prepare_delivery(conn, candidate, consumer, now)
         if not isinstance(prepared, Prepared):
             return prepared
-        result = await consumers.call(http, environment, prepared.call)
+        answer = await consumers.call(http, environment, prepared.call)
         async with conn.transaction():
-            completed = await complete_delivery(conn, candidate, prepared, result, now)
+            completed = await complete_delivery(
+                conn, candidate, prepared.fact, answer, now
+            )
         if not isinstance(completed, Again):
             return completed
     raise AssertionError(f"{candidate} did not finish in {MAX_EFFECT_STEPS} steps")
@@ -365,11 +377,15 @@ async def run_one(
     try:
         try:
             match consumer_kind(candidate.consumer):
-                case "local":
+                case Local(consumer=local):
                     async with conn.transaction():
-                        return await handle_delivery(conn, candidate, environment, now)
-                case "effect":
-                    return await run_effect(conn, http, environment, candidate, now)
+                        return await handle_delivery(
+                            conn, candidate, local, environment, now
+                        )
+                case Effect(consumer=effect):
+                    return await run_effect(
+                        conn, http, environment, candidate, effect, now
+                    )
         except Exception as error:
             return await _record_failure(conn, candidate, repr(error), now)
     finally:

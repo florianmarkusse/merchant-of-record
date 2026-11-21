@@ -39,7 +39,7 @@ from hypothesis.stateful import (
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
 from mor.messaging.guard import DuplicateGuard
-from mor.messaging.routing import ConsumerName, consumer_kind
+from mor.messaging.routing import ConsumerName, Effect, Local, consumer_kind
 from mor.messaging.worker import (
     Candidate,
     Failed,
@@ -189,7 +189,7 @@ class OrderFlow(RuleBasedStateMachine):
 
     @rule(data=st.data())
     def crash_inside_a_local_step(self, data: st.DataObject) -> None:
-        candidate = self._draw(data, "local")
+        candidate = self._draw(data, Local)
         if candidate is None:
             return
         self.met.add(f"crash in {candidate.consumer.value}")
@@ -199,7 +199,7 @@ class OrderFlow(RuleBasedStateMachine):
     def crash_around_an_effects_call(
         self, data: st.DataObject, with_call: bool
     ) -> None:
-        candidate = self._draw(data, "effect")
+        candidate = self._draw(data, Effect)
         if candidate is None:
             return
         if candidate.consumer == ConsumerName.PSP_PAYMENT_CAPTURE:
@@ -254,10 +254,12 @@ class OrderFlow(RuleBasedStateMachine):
 
     # --- helpers ---------------------------------------------------------
 
-    def _draw(self, data: st.DataObject, kind: str | None) -> Candidate | None:
+    def _draw(
+        self, data: st.DataObject, kind: type[Local] | type[Effect] | None
+    ) -> Candidate | None:
         found = self.run(find_candidates(self.worker, self.now, 50))
         if kind is not None:
-            found = [c for c in found if consumer_kind(c.consumer) == kind]
+            found = [c for c in found if isinstance(consumer_kind(c.consumer), kind)]
         if not found:
             return None
         return data.draw(st.sampled_from(found))

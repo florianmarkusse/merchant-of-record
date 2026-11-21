@@ -18,10 +18,7 @@ import msgspec
 
 from mor.couriers.port import (
     NotServed,
-    OutcomeUnknown,
     QuoteRateResult,
-    Unavailable,
-    UndecodableBody,
     carrier_price,
 )
 from mor.couriers.records import (
@@ -32,6 +29,7 @@ from mor.couriers.records import (
 )
 from mor.dates import AwareDatetime, to_utc
 from mor.money.currency import Currency
+from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 class _Part(msgspec.Struct, frozen=True):

@@ -37,12 +37,10 @@ from mor.echo.port import (
     EventMode,
     FindResult,
     Found,
-    OutcomeUnknown,
     Refused,
     SendRequest,
     SendResult,
     Sent,
-    Unavailable,
 )
 from mor.messaging.facts import (
     EchoJobEchoedV1,
@@ -54,6 +52,7 @@ from mor.messaging.facts import (
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater, Stale
 from mor.messaging.store import append_fact
+from mor.vendor_failures import OutcomeUnknown, Unavailable
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "echo_send")
@@ -97,7 +96,30 @@ class CancelCall:
 
 
 type EchoCall = SendCall | FindCall | CancelCall
-type EchoResult = SendResult | FindResult | CancelResult
+
+
+# --- answers: a call and what the vendor said, from call to complete ------
+
+
+@dataclass(frozen=True)
+class SendAnswer:
+    call: SendCall
+    result: SendResult
+
+
+@dataclass(frozen=True)
+class FindAnswer:
+    call: FindCall
+    result: FindResult
+
+
+@dataclass(frozen=True)
+class CancelAnswer:
+    call: CancelCall
+    result: CancelResult
+
+
+type EchoAnswer = SendAnswer | FindAnswer | CancelAnswer
 
 
 # --- rows -----------------------------------------------------------------
@@ -367,16 +389,19 @@ async def _prepare_send(
 
 async def call(
     http: httpx2.AsyncClient, environment: Environment, echo_call: EchoCall
-) -> EchoResult:
+) -> EchoAnswer:
     match echo_call:
         case SendCall(account=account, request=request):
-            return await registry.send(http, environment, account, request)
+            sent = await registry.send(http, environment, account, request)
+            return SendAnswer(echo_call, sent)
         case FindCall(account=account, reference=reference):
-            return await registry.find_by_reference(
+            found = await registry.find_by_reference(
                 http, environment, account, reference
             )
+            return FindAnswer(echo_call, found)
         case CancelCall(account=account, echo_id=echo_id):
-            return await registry.cancel(http, environment, account, echo_id)
+            cancelled = await registry.cancel(http, environment, account, echo_id)
+            return CancelAnswer(echo_call, cancelled)
         case _:
             assert_never(echo_call)
 
@@ -385,27 +410,27 @@ async def call(
 
 
 async def complete(
-    conn: Connection, fact: Fact, echo_call: EchoCall, result: EchoResult, now: datetime
+    conn: Connection, fact: Fact, answer: EchoAnswer, now: datetime
 ) -> Done | RetryLater | Again:
     job = await _lock_job(conn, _job_id(fact))
     state = EchoJobState(job.state)
-    match echo_call:
-        case SendCall():
+    match answer:
+        case SendAnswer():
             assert state == EchoJobState.REQUESTED, state
-            return await _complete_send(conn, job, echo_call, result, now)
-        case FindCall():
+            return await _complete_send(conn, job, answer.call, answer.result, now)
+        case FindAnswer():
             match state:
                 case EchoJobState.REQUESTED:
-                    return await _complete_lookup(conn, job, result, now)
+                    return await _complete_lookup(conn, job, answer.result, now)
                 case EchoJobState.DEDUPLICATING:
-                    return await _complete_dedupe_find(conn, job, result, now)
+                    return await _complete_dedupe_find(conn, job, answer.result, now)
                 case _:
                     raise AssertionError(f"find completed for a job {state}")
-        case CancelCall():
+        case CancelAnswer():
             assert state == EchoJobState.DEDUPLICATING, state
-            return await _complete_cancel(conn, echo_call, result, now)
+            return await _complete_cancel(conn, answer.call, answer.result, now)
         case _:
-            assert_never(echo_call)
+            assert_never(answer)
 
 
 async def _echoed(
@@ -429,7 +454,7 @@ async def _refused(
 
 
 async def _complete_send(
-    conn: Connection, job: _JobRow, send: SendCall, result: EchoResult, now: datetime
+    conn: Connection, job: _JobRow, send: SendCall, result: SendResult, now: datetime
 ) -> Done | RetryLater | Again:
     request = await _latest_request(conn, job.id, "send")
     assert request is not None and request.id == send.request_id
@@ -468,14 +493,12 @@ async def _complete_send(
             return RetryLater(f"unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"outcome unknown: {detail}")
-        case Found() | Cancelled():
-            raise AssertionError(f"send answered with {result!r}")
         case _:
             assert_never(result)
 
 
 async def _complete_lookup(
-    conn: Connection, job: _JobRow, result: EchoResult, now: datetime
+    conn: Connection, job: _JobRow, result: FindResult, now: datetime
 ) -> Done | RetryLater:
     """Guard `none`: never resent, so the vendor holds at most one echo."""
     match result:
@@ -498,14 +521,12 @@ async def _complete_lookup(
             return await _echoed(conn, job.id, echo_id, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"lookup: {detail}")
-        case Sent() | Refused() | Cancelled():
-            raise AssertionError(f"lookup answered with {result!r}")
         case _:
             assert_never(result)
 
 
 async def _complete_dedupe_find(
-    conn: Connection, job: _JobRow, result: EchoResult, now: datetime
+    conn: Connection, job: _JobRow, result: FindResult, now: datetime
 ) -> Done | RetryLater | Again:
     match result:
         case Found(echoes=echoes):
@@ -531,14 +552,12 @@ async def _complete_dedupe_find(
             return await _refused(conn, job.id, job.refusal, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"dedupe lookup: {detail}")
-        case Sent() | Refused() | Cancelled():
-            raise AssertionError(f"dedupe lookup answered with {result!r}")
         case _:
             assert_never(result)
 
 
 async def _complete_cancel(
-    conn: Connection, cancel: CancelCall, result: EchoResult, now: datetime
+    conn: Connection, cancel: CancelCall, result: CancelResult, now: datetime
 ) -> Done | RetryLater | Again:
     match result:
         case Cancelled():
@@ -551,7 +570,5 @@ async def _complete_cancel(
             return RetryLater(f"cancel outcome unknown: {detail}")
         case Refused(reason=reason):
             raise AssertionError(f"cancel of {cancel.echo_id} refused: {reason}")
-        case Sent() | Found():
-            raise AssertionError(f"cancel answered with {result!r}")
         case _:
             assert_never(result)

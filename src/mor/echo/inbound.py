@@ -27,7 +27,6 @@ from mor.echo.port import (
     EchoProvider,
     EventKind,
     EventMode,
-    UndecodableBody,
 )
 from mor.messaging.facts import (
     EchoEventsWantedV1,
@@ -39,6 +38,7 @@ from mor.messaging.facts import (
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
 from mor.messaging.store import append_fact
+from mor.vendor_failures import UndecodableBody
 
 
 DECODER = Actor(ActorKind.SYSTEM, "echo_inbox_decode")
