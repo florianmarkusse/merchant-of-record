@@ -96,20 +96,12 @@ type RunResult = Ran | Skipped | Deferred | Failed
 
 
 @dataclass(frozen=True)
-class _CandidateRow:
-    message_id: uuid.UUID
-    consumer: str
-    aggregate_type: str
-    aggregate_id: uuid.UUID
-
-
-@dataclass(frozen=True)
 class _DeliveryRow:
     seq: int
     not_before: datetime
     attempts: int
     handled_at: datetime | None
-    message_type: str
+    message_type: MessageType
     schema_version: int
     payload: str
 
@@ -119,10 +111,10 @@ async def find_candidates(
 ) -> list[Candidate]:
     """Per (consumer, aggregate), the oldest unhandled delivery, if due.
     Oldest first. Reading only: the advisory lock decides who runs it."""
-    async with conn.cursor(row_factory=class_row(_CandidateRow)) as cur:
+    async with conn.cursor(row_factory=class_row(Candidate)) as cur:
         await cur.execute(
             """
-            SELECT message_id, consumer::text, aggregate_type::text, aggregate_id
+            SELECT message_id, consumer, aggregate_type, aggregate_id
             FROM (
               SELECT DISTINCT ON (consumer, aggregate_type, aggregate_id)
                 message_id, consumer, aggregate_type, aggregate_id, seq, not_before
@@ -136,18 +128,7 @@ async def find_candidates(
             """,
             {"now": now, "limit": limit},
         )
-        rows = await cur.fetchall()
-    candidates: list[Candidate] = []
-    for row in rows:
-        candidates.append(
-            Candidate(
-                row.message_id,
-                ConsumerName(row.consumer),
-                AggregateType(row.aggregate_type),
-                row.aggregate_id,
-            )
-        )
-    return candidates
+        return await cur.fetchall()
 
 
 def _lock_name(candidate: Candidate) -> str:
@@ -184,7 +165,7 @@ async def _open_delivery(
         await cur.execute(
             """
             SELECT d.seq, d.not_before, d.attempts, d.handled_at,
-                   o.message_type::text, o.schema_version, o.payload::text
+                   o.message_type, o.schema_version, o.payload::text
             FROM outbox_delivery d JOIN outbox o ON o.id = d.message_id
             WHERE d.message_id = %(message_id)s AND d.consumer = %(consumer)s
             FOR UPDATE OF d
@@ -215,7 +196,7 @@ async def _open_delivery(
     if await cur.fetchone() is not None:
         return Skipped("not_next")
     fact = decode(
-        MessageType(delivery.message_type),
+        delivery.message_type,
         delivery.schema_version,
         delivery.payload.encode("utf-8"),
     )

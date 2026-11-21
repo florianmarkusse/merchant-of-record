@@ -35,16 +35,16 @@ class _EntryRow:
     id: uuid.UUID
     description: str
     effective_at: datetime
-    actor_kind: str
+    actor_kind: ActorKind
     actor_id: str
 
 
 @dataclass(frozen=True)
 class _LineRow:
-    account_kind: str
+    account_kind: AccountKind
     account_scope: str
     amount_minor: int
-    currency: str
+    currency: Currency
 
 
 async def record_entry(
@@ -110,7 +110,7 @@ async def _compare_with_recorded(
     async with conn.cursor(row_factory=class_row(_EntryRow)) as cur:
         await cur.execute(
             """
-            SELECT id, description, effective_at, actor_kind::text, actor_id
+            SELECT id, description, effective_at, actor_kind, actor_id
             FROM journal_entry WHERE idempotency_key = %(key)s
             """,
             {"key": entry.idempotency_key},
@@ -121,7 +121,7 @@ async def _compare_with_recorded(
     async with conn.cursor(row_factory=class_row(_LineRow)) as cur:
         await cur.execute(
             """
-            SELECT account_kind::text, account_scope, amount_minor, currency::text
+            SELECT account_kind, account_scope, amount_minor, currency
             FROM journal_line WHERE entry_id = %(entry_id)s ORDER BY line_no
             """,
             {"entry_id": recorded.id},
@@ -131,15 +131,15 @@ async def _compare_with_recorded(
     for row in line_rows:
         recorded_lines.append(
             Line(
-                Account(AccountKind(row.account_kind), row.account_scope),
-                Money(row.amount_minor, Currency(row.currency)),
+                Account(row.account_kind, row.account_scope),
+                Money(row.amount_minor, row.currency),
             )
         )
 
     same = (
         recorded.description == entry.description
         and recorded.effective_at == entry.effective_at
-        and Actor(ActorKind(recorded.actor_kind), recorded.actor_id) == entry.actor
+        and Actor(recorded.actor_kind, recorded.actor_id) == entry.actor
         and tuple(recorded_lines) == entry.lines
     )
     if not same:

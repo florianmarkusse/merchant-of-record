@@ -48,31 +48,6 @@ def _sha256(text: str) -> bytes:
     return hashlib.sha256(text.encode()).digest()
 
 
-@dataclass(frozen=True)
-class _MerchantRow:
-    id: uuid.UUID
-    legal_name: str
-    display_name: str
-    country: str
-    daily_vendor_asks: int
-    created_at: datetime
-    kyb_state: str
-    support_email: str | None
-
-
-def _merchant(row: _MerchantRow) -> Merchant:
-    return Merchant(
-        row.id,
-        row.legal_name,
-        row.display_name,
-        row.country,
-        row.daily_vendor_asks,
-        row.created_at,
-        KybState(row.kyb_state),
-        row.support_email,
-    )
-
-
 async def create_merchant(
     conn: Connection,
     legal_name: str,
@@ -114,35 +89,28 @@ async def create_merchant(
 
 
 async def read_merchant(conn: Connection, merchant_id: uuid.UUID) -> Merchant | None:
-    async with conn.cursor(row_factory=class_row(_MerchantRow)) as cur:
+    async with conn.cursor(row_factory=class_row(Merchant)) as cur:
         await cur.execute(
             """
             SELECT id, legal_name, display_name, country, daily_vendor_asks,
-                   created_at, kyb_state::text, support_email
+                   created_at, kyb_state, support_email
             FROM merchant WHERE id = %s
             """,
             (merchant_id,),
         )
-        row = await cur.fetchone()
-    if row is None:
-        return None
-    return _merchant(row)
+        return await cur.fetchone()
 
 
 async def merchants(conn: Connection) -> list[Merchant]:
-    async with conn.cursor(row_factory=class_row(_MerchantRow)) as cur:
+    async with conn.cursor(row_factory=class_row(Merchant)) as cur:
         await cur.execute(
             """
             SELECT id, legal_name, display_name, country, daily_vendor_asks,
-                   created_at, kyb_state::text, support_email
+                   created_at, kyb_state, support_email
             FROM merchant ORDER BY id
             """
         )
-        rows = await cur.fetchall()
-    found: list[Merchant] = []
-    for row in rows:
-        found.append(_merchant(row))
-    return found
+        return await cur.fetchall()
 
 
 async def set_kyb_state(
@@ -179,7 +147,7 @@ async def kyb_state_for_pay(conn: Connection, merchant_id: uuid.UUID) -> KybStat
     """The state a pay step decides on, held `FOR SHARE` until it commits:
     a KYB change waits for it, and it waits for a KYB change."""
     cur = await conn.execute(
-        "SELECT kyb_state::text FROM merchant WHERE id = %s FOR SHARE",
+        "SELECT kyb_state FROM merchant WHERE id = %s FOR SHARE",
         (merchant_id,),
     )
     row = await cur.fetchone()
@@ -247,9 +215,9 @@ async def merchant_has_key(conn: Connection, merchant_id: uuid.UUID) -> bool:
 @dataclass(frozen=True)
 class _KeyRow:
     merchant_id: uuid.UUID
-    env: str
+    env: KeyEnv
     secret_sha256: bytes
-    state: str
+    state: KeyState
 
 
 async def authenticate(
@@ -268,7 +236,7 @@ async def authenticate(
     async with conn.cursor(row_factory=class_row(_KeyRow)) as cur:
         await cur.execute(
             """
-            SELECT merchant_id, env::text, secret_sha256, state::text
+            SELECT merchant_id, env, secret_sha256, state
             FROM api_key WHERE id = %s
             """,
             (key_id,),
@@ -277,7 +245,7 @@ async def authenticate(
     if row is None:
         return None
     matches = hmac.compare_digest(_sha256(secret), row.secret_sha256)
-    if not matches or row.env != env.value or row.state != KeyState.ACTIVE.value:
+    if not matches or row.env != env or row.state != KeyState.ACTIVE:
         return None
     merchant = await read_merchant(conn, row.merchant_id)
     assert merchant is not None, "a key's merchant exists: a foreign key says so"

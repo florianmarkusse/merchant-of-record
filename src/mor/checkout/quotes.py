@@ -17,7 +17,8 @@ from mor.db.connect import Connection
 from mor.markets.records import Collector, ServiceTier, Standing
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode
-from mor.quote.build import Part, PartKind, Quote
+from mor.quote.build import Part, Quote
+from mor.quote.groups import PartKind
 from mor.quote.refusals import RefusalCode
 
 
@@ -287,7 +288,7 @@ class _QuoteRow:
     market_load_id: uuid.UUID
     state: str
     made_at: datetime
-    currency: str | None
+    currency: Currency | None
     valid_until: datetime | None
     refusal_code: str | None
     refusal_message: str | None
@@ -296,14 +297,14 @@ class _QuoteRow:
 @dataclass(frozen=True)
 class _PartRow:
     option_no: int | None
-    kind: str
+    kind: PartKind
     label: str
     line: int | None
     exact_numerator: Decimal
     exact_denominator: Decimal
     amount_minor: int
-    rounding: str
-    collector: str | None
+    rounding: RoundingMode
+    collector: Collector | None
     source: str
 
 
@@ -313,11 +314,11 @@ class _OptionRow:
     key: str
     service: str
     service_name: str
-    tier: str
+    tier: ServiceTier
     transit_min: int | None
     transit_max: int | None
     total_minor: int
-    standing: str
+    standing: Standing
 
 
 REFUSAL_CODES: tuple[RefusalCode, ...] = (
@@ -338,15 +339,14 @@ def _refusal_code(text: str) -> RefusalCode:
 
 
 def _part(row: _PartRow) -> StoredPart:
-    collector = None if row.collector is None else Collector(row.collector)
     return StoredPart(
-        PartKind(row.kind),
+        row.kind,
         row.label,
         row.line,
         Fraction(int(row.exact_numerator), int(row.exact_denominator)),
         row.amount_minor,
-        RoundingMode(row.rounding),
-        collector,
+        row.rounding,
+        row.collector,
         row.source,
     )
 
@@ -356,7 +356,7 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
         await cur.execute(
             """
             SELECT id, session_id, address_id, market_load_id, state::text,
-                   made_at, currency::text, valid_until, refusal_code,
+                   made_at, currency, valid_until, refusal_code,
                    refusal_message
             FROM quote WHERE id = %s
             """,
@@ -380,9 +380,9 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
     async with conn.cursor(row_factory=class_row(_PartRow)) as cur:
         await cur.execute(
             """
-            SELECT option_no, kind::text, label, line, exact_numerator,
-                   exact_denominator, amount_minor, rounding::text,
-                   collector::text, source
+            SELECT option_no, kind, label, line, exact_numerator,
+                   exact_denominator, amount_minor, rounding,
+                   collector, source
             FROM quote_part WHERE quote_id = %s ORDER BY option_no NULLS FIRST, part_no
             """,
             (quote_id,),
@@ -391,8 +391,8 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
     async with conn.cursor(row_factory=class_row(_OptionRow)) as cur:
         await cur.execute(
             """
-            SELECT option_no, key, service, service_name, tier::text,
-                   transit_min, transit_max, total_minor, standing::text
+            SELECT option_no, key, service, service_name, tier,
+                   transit_min, transit_max, total_minor, standing
             FROM quote_option WHERE quote_id = %s ORDER BY option_no
             """,
             (quote_id,),
@@ -415,10 +415,10 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
                 option_row.key,
                 option_row.service,
                 option_row.service_name,
-                ServiceTier(option_row.tier),
+                option_row.tier,
                 transit,
                 option_row.total_minor,
-                Standing(option_row.standing),
+                option_row.standing,
                 tuple(by_option.get(option_row.option_no, [])),
             )
         )
@@ -454,7 +454,7 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
         row.market_load_id,
         row.made_at,
         row.valid_until,
-        Currency(row.currency),
+        row.currency,
         tuple(goods),
         tuple(options),
         tuple(placeholders),

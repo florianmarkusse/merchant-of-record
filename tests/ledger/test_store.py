@@ -6,6 +6,7 @@ import psycopg
 import pytest
 
 from mor.audit import Actor, ActorKind
+from mor.db.connect import connect
 from mor.ledger.account import Account, AccountKind
 from mor.ledger.entry import JournalEntry, build_entry, credit, debit
 from mor.ledger.store import (
@@ -56,19 +57,19 @@ def _capture(key: str, merchant: Account = MERCHANT_1) -> JournalEntry:
 
 
 async def _record_and_commit(url: str, entry: JournalEntry) -> object:
-    async with await psycopg.AsyncConnection.connect(url) as conn:
+    async with await connect(url) as conn:
         result = await record_entry(conn, entry)
         await conn.commit()
     return result
 
 
 async def _balance(url: str, account: Account) -> Money:
-    async with await psycopg.AsyncConnection.connect(url) as conn:
+    async with await connect(url) as conn:
         return await balance(conn, account, Currency.SGD)
 
 
 async def _execute_and_commit(url: str, *statements: bytes) -> None:
-    async with await psycopg.AsyncConnection.connect(url) as conn:
+    async with await connect(url) as conn:
         for statement in statements:
             await conn.execute(statement)
         await conn.commit()

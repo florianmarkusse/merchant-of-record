@@ -8,6 +8,7 @@ from fractions import Fraction
 from mor.couriers.records import Parcel
 from mor.markets.records import MarketSet
 from mor.money.currency import Currency
+from mor.quote.groups import PartKind
 from mor.quote.shipping import NotOffered, Offer, PriceMissing, ShipPartKind, offers
 from tests.quote.fixtures import SHIPPING, quote_market
 
@@ -55,14 +56,14 @@ def test_a_bulky_box_is_billed_by_volume_at_the_next_weight_break() -> None:
     # 400 g in 30 x 25 x 10 cm: 7,500 cm³ / 5,000 = 1.5 kg, billed as 2 kg.
     offer = _express(quote_market(), Parcel(400, 300, 250, 100))
     assert offer.chargeable_kg == Fraction(3, 2) and offer.billed_kg == 2
-    assert _part(offer, ShipPartKind.FREIGHT) == 4500
+    assert _part(offer, PartKind.FREIGHT) == 4500
 
 
 def test_fuel_is_charged_on_the_freight_and_the_surcharges_it_applies_to() -> None:
     offer = _express(quote_market(), Parcel(1000, 100, 100, 100))
-    assert _part(offer, ShipPartKind.FREIGHT) == 3000
-    assert _part(offer, ShipPartKind.SURCHARGE) == 100  # demand, SGD 1.00 per kg
-    assert _part(offer, ShipPartKind.FUEL) == Fraction(3100, 2)
+    assert _part(offer, PartKind.FREIGHT) == 3000
+    assert _part(offer, PartKind.SURCHARGE) == 100  # demand, SGD 1.00 per kg
+    assert _part(offer, PartKind.FUEL) == Fraction(3100, 2)
     names: list[str] = []
     for part in offer.parts:
         names.append(part.name)

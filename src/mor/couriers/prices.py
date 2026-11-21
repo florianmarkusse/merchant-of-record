@@ -42,7 +42,6 @@ from mor.couriers.records import (
     PriceExpiry,
     PriceHeld,
     PricePart,
-    PricePartKind,
     PriceQuestion,
     PriceState,
     StoredPrice,
@@ -94,11 +93,11 @@ class PriceCall:
 class _AccountRow:
     id: uuid.UUID
     carrier: str
-    provider: str
+    provider: CourierProvider
     base_url: str
     timeout_ms: int
     price_valid_for_s: int
-    price_expiry: str
+    price_expiry: PriceExpiry
 
 
 @dataclass(frozen=True)
@@ -112,24 +111,17 @@ class _LookupRow:
     length_mm: int
     width_mm: int
     height_mm: int
-    state: str
+    state: PriceState
     calls: int
     detail: str | None
     total_minor: int | None
-    currency: str | None
+    currency: Currency | None
     finished_at: datetime | None
     carrier_valid_until: datetime | None
     own_load_id: uuid.UUID | None
     own_rate_card: str | None
     own_total_minor: int | None
-    own_currency: str | None
-
-
-@dataclass(frozen=True)
-class _PartRow:
-    kind: str
-    name: str
-    amount_minor: int
+    own_currency: Currency | None
 
 
 # --- accounts ---------------------------------------------------------------
@@ -169,8 +161,8 @@ async def courier_account(conn: Connection, carrier: str) -> CourierAccount | No
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
             """
-            SELECT id, carrier, provider::text, base_url, timeout_ms,
-                   price_valid_for_s, price_expiry::text
+            SELECT id, carrier, provider, base_url, timeout_ms,
+                   price_valid_for_s, price_expiry
             FROM courier_account WHERE carrier = %s
             """,
             (carrier,),
@@ -181,11 +173,11 @@ async def courier_account(conn: Connection, carrier: str) -> CourierAccount | No
     return CourierAccount(
         row.id,
         row.carrier,
-        CourierProvider(row.provider),
+        row.provider,
         row.base_url,
         timedelta(milliseconds=row.timeout_ms),
         timedelta(seconds=row.price_valid_for_s),
-        PriceExpiry(row.price_expiry),
+        row.price_expiry,
     )
 
 
@@ -269,9 +261,9 @@ async def read_price(conn: Connection, question: PriceQuestion) -> PriceHeld:
         await cur.execute(
             """
             SELECT id, carrier, service, origin, destination, weight_g, length_mm,
-                   width_mm, height_mm, state::text, calls, detail, total_minor,
-                   currency::text, finished_at, carrier_valid_until, own_load_id,
-                   own_rate_card, own_total_minor, own_currency::text
+                   width_mm, height_mm, state, calls, detail, total_minor,
+                   currency, finished_at, carrier_valid_until, own_load_id,
+                   own_rate_card, own_total_minor, own_currency
             FROM shipping_price_lookup
             WHERE carrier = %s AND service = %s AND origin = %s
               AND destination = %s AND weight_g = %s AND length_mm = %s
@@ -293,7 +285,7 @@ async def read_price(conn: Connection, question: PriceQuestion) -> PriceHeld:
     open_id: uuid.UUID | None = None
     newest: _LookupRow | None = None
     for row in rows:
-        if PriceState(row.state) == PriceState.REQUESTED:
+        if row.state == PriceState.REQUESTED:
             open_id = row.id
         elif newest is None:
             newest = row
@@ -310,20 +302,15 @@ async def _finished(
     assert row.finished_at is not None, "a finished lookup has its moment"
     price: StoredPrice | None = None
     if row.total_minor is not None and row.currency is not None:
-        currency = Currency(row.currency)
-        parts: list[PricePart] = []
-        async with conn.cursor(row_factory=class_row(_PartRow)) as cur:
+        async with conn.cursor(row_factory=class_row(PricePart)) as cur:
             await cur.execute(
                 """
-                SELECT kind::text, name, amount_minor FROM shipping_price_part
+                SELECT kind, name, amount_minor FROM shipping_price_part
                 WHERE lookup_id = %s ORDER BY line_no
                 """,
                 (row.id,),
             )
-            for part in await cur.fetchall():
-                parts.append(
-                    PricePart(PricePartKind(part.kind), part.name, part.amount_minor)
-                )
+            parts = await cur.fetchall()
         own: OwnPrice | None = None
         if (
             row.own_load_id is not None
@@ -334,17 +321,17 @@ async def _finished(
             own = OwnPrice(
                 row.own_load_id,
                 row.own_rate_card,
-                Money(row.own_total_minor, Currency(row.own_currency)),
+                Money(row.own_total_minor, row.own_currency),
             )
         price = StoredPrice(
-            Money(row.total_minor, currency),
+            Money(row.total_minor, row.currency),
             tuple(parts),
             row.carrier_valid_until,
             own,
         )
     return FinishedLookup(
         row.id,
-        PriceState(row.state),
+        row.state,
         row.calls,
         row.detail,
         row.finished_at,
@@ -363,9 +350,9 @@ async def _lock_lookup(conn: Connection, lookup_id: uuid.UUID) -> _LookupRow:
         await cur.execute(
             """
             SELECT id, carrier, service, origin, destination, weight_g, length_mm,
-                   width_mm, height_mm, state::text, calls, detail, total_minor,
-                   currency::text, finished_at, carrier_valid_until, own_load_id,
-                   own_rate_card, own_total_minor, own_currency::text
+                   width_mm, height_mm, state, calls, detail, total_minor,
+                   currency, finished_at, carrier_valid_until, own_load_id,
+                   own_rate_card, own_total_minor, own_currency
             FROM shipping_price_lookup WHERE id = %s FOR UPDATE
             """,
             (lookup_id,),
@@ -399,7 +386,7 @@ def _question(row: _LookupRow) -> PriceQuestion:
 
 async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | PriceCall:
     lookup = await _lock_lookup(conn, _lookup_id(fact))
-    if PriceState(lookup.state) != PriceState.REQUESTED:
+    if lookup.state != PriceState.REQUESTED:
         return NoCall(Stale())
     account = await courier_account(conn, lookup.carrier)
     assert account is not None, f"no account for {lookup.carrier}"
@@ -432,7 +419,7 @@ async def complete(
 ) -> Done | RetryLater:
     lookup = await _lock_lookup(conn, _lookup_id(fact))
     assert lookup.id == price_call.lookup_id
-    if PriceState(lookup.state) != PriceState.REQUESTED:
+    if lookup.state != PriceState.REQUESTED:
         return Done(Stale())
     match result:
         case CarrierPrice():
@@ -574,9 +561,9 @@ async def live_prices(conn: Connection, limit: int) -> list[LivePriceRow]:
         await cur.execute(
             """
             SELECT id, carrier, service, origin, destination, weight_g, length_mm,
-                   width_mm, height_mm, state::text, calls, detail, total_minor,
-                   currency::text, finished_at, carrier_valid_until, own_load_id,
-                   own_rate_card, own_total_minor, own_currency::text
+                   width_mm, height_mm, state, calls, detail, total_minor,
+                   currency, finished_at, carrier_valid_until, own_load_id,
+                   own_rate_card, own_total_minor, own_currency
             FROM shipping_price_lookup ORDER BY id DESC LIMIT %s
             """,
             (limit,),
@@ -601,7 +588,7 @@ async def live_prices(conn: Connection, limit: int) -> list[LivePriceRow]:
             LivePriceRow(
                 row.id,
                 _question(row),
-                PriceState(row.state),
+                row.state,
                 row.calls,
                 row.detail,
                 row.finished_at,

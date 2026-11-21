@@ -1,6 +1,8 @@
 import psycopg
 from psycopg.rows import TupleRow
 
+from mor.db.enums import register_enums
+
 
 type Connection = psycopg.AsyncConnection[TupleRow]
 
@@ -17,6 +19,12 @@ async def connect(database_url: str, autocommit: bool = False) -> Connection:
     The session's time zone is UTC, whatever the server's: a `timestamptz`
     is stored as an absolute moment, but read back in the session's zone,
     and every moment inside the process is UTC (`mor.dates`)."""
-    return await psycopg.AsyncConnection.connect(
+    conn = await psycopg.AsyncConnection.connect(
         database_url, autocommit=autocommit, options=SESSION_OPTIONS
     )
+    await register_enums(conn)
+    if not autocommit:
+        # The catalog read opened a transaction; the caller's work starts
+        # its own, as it would on a fresh connection.
+        await conn.rollback()
+    return conn

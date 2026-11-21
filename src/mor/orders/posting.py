@@ -33,7 +33,7 @@ from mor.ledger.entry import JournalEntry, Line, build_entry
 from mor.markets.records import Collector
 from mor.money.amount import Money
 from mor.money.currency import Currency
-from mor.quote.build import PartKind
+from mor.quote.groups import PartKind
 
 
 def capture_key(attempt_id: uuid.UUID) -> str:

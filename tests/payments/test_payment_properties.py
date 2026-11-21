@@ -29,7 +29,7 @@ from mor.psp.fake_client import (
     to_provider_amount,
 )
 from mor.psp.port import EventKind, UndecodableBody
-from mor.quote.build import PartKind
+from mor.quote.groups import PartKind
 
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)

@@ -82,6 +82,11 @@ this project.
     hidden global state. HTML: htpy (typed functions, escaped by default).
   - Database: psycopg 3 (async) with hand-written SQL, rows read into
     frozen dataclasses. Migrations are run by a small runner of our own.
+    Database enums load as our StrEnums (decided 21-Nov-2026): `connect`
+    registers each pair in `mor.db.enums`, so a flat row reads straight
+    into its domain record with `class_row`, with no `::text` cast and no
+    mirror row class. A new enum type with a StrEnum joins that table;
+    `tests/db/test_enums.py` fails when the two sides' values differ.
   - Parsing at the edges: msgspec. Every input (API body, webhook, form,
     settlement file) is decoded into a typed, frozen record at the edge
     before anything else sees it, because Python does not check types at

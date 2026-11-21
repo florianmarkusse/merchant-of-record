@@ -201,24 +201,24 @@ class _Line:
     batch_id: uuid.UUID
     account_id: uuid.UUID
     vendor_line_id: str
-    type: str
+    type: LineType
     vendor_type: str
     provider_payment_id: str
     our_reference: str
-    currency: str
+    currency: Currency
     gross_numerator: int
     gross_denominator: int
     fee_minor: int
     state: str
-    batch_currency: str
+    batch_currency: Currency
     paid_out_at: datetime
 
 
 _LINE_SELECT = """
-    SELECT l.id, l.batch_id, l.account_id, l.vendor_line_id, l.type::text,
+    SELECT l.id, l.batch_id, l.account_id, l.vendor_line_id, l.type,
            l.vendor_type, l.provider_payment_id, l.our_reference,
-           l.currency::text, l.gross_numerator, l.gross_denominator, l.fee_minor,
-           l.state::text, b.currency::text AS batch_currency, b.paid_out_at
+           l.currency, l.gross_numerator, l.gross_denominator, l.fee_minor,
+           l.state::text, b.currency AS batch_currency, b.paid_out_at
     FROM settlement_line l JOIN settlement_batch b ON b.id = l.batch_id
 """
 
@@ -300,7 +300,7 @@ async def _settle(
         )
         return
     currency = attempt.amount.currency
-    if line.currency != currency.value or line.batch_currency != currency.value:
+    if line.currency != currency or line.batch_currency != currency:
         await _exception(
             conn,
             line,
@@ -402,7 +402,7 @@ async def _book_received(
     line = await _lock_line(conn, line_id)
     if line.state != "received":
         return Stale()
-    if line.type == LineType.UNKNOWN.value:
+    if line.type == LineType.UNKNOWN:
         await _exception(
             conn,
             line,

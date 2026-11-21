@@ -29,7 +29,6 @@ difference is the rounding remainder, booked when the order is paid
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
-from enum import StrEnum
 from fractions import Fraction
 
 from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
@@ -55,6 +54,7 @@ from mor.money.amount import Money, format_major
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
 from mor.quote.fees import fee_rule_for
+from mor.quote.groups import PartKind
 from mor.quote.shipping import (
     FromCard,
     FromCarrier,
@@ -62,7 +62,6 @@ from mor.quote.shipping import (
     Offer,
     PriceMissing,
     ShipPart,
-    ShipPartKind,
     carries_duties_paid,
     duty_paid_parts,
     offers,
@@ -115,22 +114,6 @@ class QuoteRequest:
     parcel: Parcel
     on: date  # which rules and cards are in force
     now: datetime  # a carrier's price is used only before its usable_until
-
-
-class PartKind(StrEnum):
-    GOODS = "goods"
-    PSP_FEE = "psp_fee"
-    FX = "fx"
-    MOR_MARGIN = "mor_margin"
-    FREIGHT = "freight"
-    SURCHARGE = "surcharge"
-    FUEL = "fuel"
-    DUTY_PAID_FEE = "duty_paid_fee"
-    DUTY = "duty"
-    ADDITIONAL_DUTY = "additional_duty"
-    CUSTOMS_FEE = "customs_fee"
-    IMPORT_TAX = "import_tax"
-    OTHER_TAX = "other_tax"
 
 
 @dataclass(frozen=True)
@@ -652,27 +635,18 @@ def _line_goods(goods_parts: list[Part], lines: int, fee_total: int) -> list[Fra
     return result
 
 
-_SHIP_KINDS = {
-    ShipPartKind.FREIGHT: PartKind.FREIGHT,
-    ShipPartKind.SURCHARGE: PartKind.SURCHARGE,
-    ShipPartKind.FUEL: PartKind.FUEL,
-    ShipPartKind.DUTY_PAID_FEE: PartKind.DUTY_PAID_FEE,
-}
-
-
 def _add_once[T](items: list[T], item: T) -> None:
     if item not in items:
         items.append(item)
 
 
 def _ship_part(ship: ShipPart, ship_source: str, currency: Currency) -> Part:
-    kind = _SHIP_KINDS[ship.kind]
     source = ship_source
     if ship.line_no is not None:
         source = f"surcharges.csv line {ship.line_no}"
     return _part(
-        kind,
-        ship.how if ship.kind == ShipPartKind.FREIGHT else f"{ship.name}: {ship.how}",
+        ship.kind,
+        ship.how if ship.kind == PartKind.FREIGHT else f"{ship.name}: {ship.how}",
         None,
         ship.exact,
         currency,

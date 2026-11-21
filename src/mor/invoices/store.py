@@ -28,7 +28,6 @@ from mor.invoices.records import (
     BuyerAddress,
     Invoice,
     InvoiceLine,
-    InvoiceSection,
     Series,
 )
 from mor.merchants.store import read_merchant
@@ -170,7 +169,7 @@ class _InvoiceRow:
     number_text: str
     issued_at: datetime
     paid_at: datetime
-    currency: str
+    currency: Currency
     total_minor: int
     seller_name: str
     seller_address: str
@@ -186,23 +185,13 @@ class _InvoiceRow:
     buyer_country: str
 
 
-@dataclass(frozen=True)
-class _LineRow:
-    section: str
-    description: str
-    quantity: int | None
-    amount_minor: int
-    rule_text: str | None
-    source: str | None
-
-
 async def invoice_for_order(conn: Connection, order_id: uuid.UUID) -> Invoice | None:
     """The order's invoice, once issued."""
     async with conn.cursor(row_factory=class_row(_InvoiceRow)) as cur:
         await cur.execute(
             """
             SELECT id, order_id, series, number, number_text, issued_at, paid_at,
-                   currency::text, total_minor, seller_name, seller_address,
+                   currency, total_minor, seller_name, seller_address,
                    seller_tax_label, seller_tax_id, merchant_legal_name,
                    buyer_name, buyer_line1, buyer_line2, buyer_city, buyer_region,
                    buyer_postcode, buyer_country
@@ -213,28 +202,16 @@ async def invoice_for_order(conn: Connection, order_id: uuid.UUID) -> Invoice | 
         row = await cur.fetchone()
     if row is None:
         return None
-    async with conn.cursor(row_factory=class_row(_LineRow)) as cur:
+    async with conn.cursor(row_factory=class_row(InvoiceLine)) as cur:
         await cur.execute(
             """
-            SELECT section::text, description, quantity, amount_minor, rule_text,
+            SELECT section, description, quantity, amount_minor, rule_text,
                    source
             FROM invoice_line WHERE invoice_id = %s ORDER BY line_no
             """,
             (row.id,),
         )
-        line_rows = await cur.fetchall()
-    lines: list[InvoiceLine] = []
-    for line in line_rows:
-        lines.append(
-            InvoiceLine(
-                InvoiceSection(line.section),
-                line.description,
-                line.quantity,
-                line.amount_minor,
-                line.rule_text,
-                line.source,
-            )
-        )
+        lines = await cur.fetchall()
     return Invoice(
         row.id,
         row.order_id,
@@ -243,7 +220,7 @@ async def invoice_for_order(conn: Connection, order_id: uuid.UUID) -> Invoice | 
         row.number_text,
         row.issued_at,
         row.paid_at,
-        Currency(row.currency),
+        row.currency,
         row.total_minor,
         row.seller_name,
         row.seller_address,

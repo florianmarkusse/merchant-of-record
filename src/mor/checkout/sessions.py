@@ -123,11 +123,11 @@ async def create_session(
 class _SessionRow:
     id: uuid.UUID
     merchant_id: uuid.UUID
-    state: str
+    state: SessionState
     merchant_reference: str | None
     return_url: str
     cancel_url: str
-    after_payment: str
+    after_payment: AfterPayment
     weight_g: int
     length_mm: int
     width_mm: int
@@ -143,7 +143,7 @@ class _LineRow:
     name: str
     quantity: int
     unit_price_minor: int
-    currency: str
+    currency: Currency
     category: str
     merchant_sku: str | None
     customs_description: str
@@ -158,7 +158,7 @@ async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession
     async with conn.cursor(row_factory=class_row(_LineRow)) as cur:
         await cur.execute(
             """
-            SELECT name, quantity, unit_price_minor, currency::text, category,
+            SELECT name, quantity, unit_price_minor, currency, category,
                    merchant_sku, customs_description, origin_country, weight_g,
                    hs_code
             FROM checkout_session_line WHERE session_id = %s ORDER BY line_no
@@ -172,7 +172,7 @@ async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession
             SoldLine(
                 line.name,
                 line.quantity,
-                Money(line.unit_price_minor, Currency(line.currency)),
+                Money(line.unit_price_minor, line.currency),
                 line.category,
                 line.merchant_sku,
                 Customs(
@@ -186,13 +186,13 @@ async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession
     return CheckoutSession(
         row.id,
         row.merchant_id,
-        SessionState(row.state),
+        row.state,
         tuple(lines),
         Parcel(row.weight_g, row.length_mm, row.width_mm, row.height_mm),
         row.merchant_reference,
         row.return_url,
         row.cancel_url,
-        AfterPayment(row.after_payment),
+        row.after_payment,
         row.created_at,
         row.expires_at,
         row.address_id,
@@ -207,8 +207,8 @@ async def read_session(
     async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
         await cur.execute(
             """
-            SELECT id, merchant_id, state::text, merchant_reference, return_url,
-                   cancel_url, after_payment::text, weight_g, length_mm,
+            SELECT id, merchant_id, state, merchant_reference, return_url,
+                   cancel_url, after_payment, weight_g, length_mm,
                    width_mm, height_mm, created_at, expires_at, address_id,
                    quote_id
             FROM checkout_session WHERE id = %s AND merchant_id = %s
@@ -226,8 +226,8 @@ async def session_by_id(
     async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
         await cur.execute(
             """
-            SELECT id, merchant_id, state::text, merchant_reference, return_url,
-                   cancel_url, after_payment::text, weight_g, length_mm,
+            SELECT id, merchant_id, state, merchant_reference, return_url,
+                   cancel_url, after_payment, weight_g, length_mm,
                    width_mm, height_mm, created_at, expires_at, address_id,
                    quote_id
             FROM checkout_session WHERE id = %s
@@ -245,8 +245,8 @@ async def lock_session(
     async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
         await cur.execute(
             """
-            SELECT id, merchant_id, state::text, merchant_reference, return_url,
-                   cancel_url, after_payment::text, weight_g, length_mm,
+            SELECT id, merchant_id, state, merchant_reference, return_url,
+                   cancel_url, after_payment, weight_g, length_mm,
                    width_mm, height_mm, created_at, expires_at, address_id,
                    quote_id
             FROM checkout_session WHERE id = %s FOR UPDATE
@@ -315,22 +315,8 @@ async def address_count(conn: Connection, session_id: uuid.UUID) -> int:
     return row[0]
 
 
-@dataclass(frozen=True)
-class _AddressRow:
-    name: str
-    email: str
-    phone_dial_code: str
-    phone_number: str
-    line1: str
-    line2: str | None
-    city: str
-    region: str | None
-    postcode: str | None
-    country: str
-
-
 async def read_address(conn: Connection, address_id: uuid.UUID) -> Address | None:
-    async with conn.cursor(row_factory=class_row(_AddressRow)) as cur:
+    async with conn.cursor(row_factory=class_row(Address)) as cur:
         await cur.execute(
             """
             SELECT name, email, phone_dial_code, phone_number, line1, line2, city,
@@ -339,21 +325,7 @@ async def read_address(conn: Connection, address_id: uuid.UUID) -> Address | Non
             """,
             (address_id,),
         )
-        row = await cur.fetchone()
-    if row is None:
-        return None
-    return Address(
-        row.name,
-        row.email,
-        row.phone_dial_code,
-        row.phone_number,
-        row.line1,
-        row.line2,
-        row.city,
-        row.region,
-        row.postcode,
-        row.country,
-    )
+        return await cur.fetchone()
 
 
 @dataclass(frozen=True)

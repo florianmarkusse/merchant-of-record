@@ -40,7 +40,8 @@ from mor.markets.source import parse, read_texts
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
-from mor.quote.build import PartKind, Quote, QuoteLine, QuoteRequest, build_quote
+from mor.quote.build import Quote, QuoteLine, QuoteRequest, build_quote
+from mor.quote.groups import PartKind
 from tests.quote.fixtures import live_market, quote_market
 
 

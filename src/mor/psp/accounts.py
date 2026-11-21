@@ -26,40 +26,37 @@ from mor.psp.port import (
 class _AccountRow:
     id: uuid.UUID
     name: str
-    provider: str
-    kind: str
+    provider: PspProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout_ms: int
-    status_mode: str
-    capture_mode: str
-    create_guard: str
-    capture_guard: str
-    methods: list[str]
+    status_mode: StatusMode
+    capture_mode: CaptureMode
+    create_guard: DuplicateGuard
+    capture_guard: DuplicateGuard
+    methods: list[PaymentMethod]
     poll_interval_s: int
     webhook_secret: str
-    settlement_mode: str
+    settlement_mode: SettlementMode
     settlement_interval_s: int
 
 
 def _account(row: _AccountRow) -> PspAccount:
-    methods: list[PaymentMethod] = []
-    for method in row.methods:
-        methods.append(PaymentMethod(method))
     return PspAccount(
         row.id,
         row.name,
-        PspProvider(row.provider),
-        ProviderAccountKind(row.kind),
+        row.provider,
+        row.kind,
         row.base_url,
         timedelta(milliseconds=row.timeout_ms),
-        StatusMode(row.status_mode),
-        CaptureMode(row.capture_mode),
-        DuplicateGuard(row.create_guard),
-        DuplicateGuard(row.capture_guard),
-        tuple(methods),
+        row.status_mode,
+        row.capture_mode,
+        row.create_guard,
+        row.capture_guard,
+        tuple(row.methods),
         timedelta(seconds=row.poll_interval_s),
         row.webhook_secret,
-        SettlementMode(row.settlement_mode),
+        row.settlement_mode,
         timedelta(seconds=row.settlement_interval_s),
     )
 
@@ -142,10 +139,10 @@ async def read_psp_account(
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
             """
-            SELECT id, name, provider::text, kind::text, base_url, timeout_ms,
-                   status_mode::text, capture_mode::text, create_guard::text,
-                   capture_guard::text, methods::text[], poll_interval_s,
-                   webhook_secret, settlement_mode::text, settlement_interval_s
+            SELECT id, name, provider, kind, base_url, timeout_ms,
+                   status_mode, capture_mode, create_guard,
+                   capture_guard, methods, poll_interval_s,
+                   webhook_secret, settlement_mode, settlement_interval_s
             FROM psp_account WHERE id = %s
             """,
             (account_id,),
@@ -158,10 +155,10 @@ async def psp_account_by_name(conn: Connection, name: str) -> PspAccount | None:
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
             """
-            SELECT id, name, provider::text, kind::text, base_url, timeout_ms,
-                   status_mode::text, capture_mode::text, create_guard::text,
-                   capture_guard::text, methods::text[], poll_interval_s,
-                   webhook_secret, settlement_mode::text, settlement_interval_s
+            SELECT id, name, provider, kind, base_url, timeout_ms,
+                   status_mode, capture_mode, create_guard,
+                   capture_guard, methods, poll_interval_s,
+                   webhook_secret, settlement_mode, settlement_interval_s
             FROM psp_account WHERE name = %s
             """,
             (name,),

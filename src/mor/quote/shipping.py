@@ -27,7 +27,6 @@ rounds each part with a named mode.
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
-from enum import StrEnum
 from fractions import Fraction
 from typing import Literal
 
@@ -65,6 +64,7 @@ from mor.markets.records import (
 )
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.quote.groups import PartKind
 
 
 FUEL = "fuel"  # the surcharges.csv name of a card's fuel row
@@ -72,11 +72,10 @@ GRAMS_PER_KG = 1000
 MM3_PER_CM3 = 1000
 
 
-class ShipPartKind(StrEnum):
-    FREIGHT = "freight"
-    SURCHARGE = "surcharge"
-    FUEL = "fuel"
-    DUTY_PAID_FEE = "duty_paid_fee"
+# The kinds of quote part a shipping offer is made of.
+type ShipPartKind = Literal[
+    PartKind.FREIGHT, PartKind.SURCHARGE, PartKind.FUEL, PartKind.DUTY_PAID_FEE
+]
 
 
 @dataclass(frozen=True)
@@ -350,9 +349,7 @@ def _offer(
     how = f"zone {zone.zone}, {_kg(rate.weight_kg)} kg"
     if chargeable > Fraction(parcel.weight_g, GRAMS_PER_KG):
         how += f" (volumetric {_kg(chargeable)} kg)"
-    parts: list[ShipPart] = [
-        ShipPart(ShipPartKind.FREIGHT, "freight", freight, how, None)
-    ]
+    parts: list[ShipPart] = [ShipPart(PartKind.FREIGHT, "freight", freight, how, None)]
     fuel_base = freight
     fuel_names: list[str] = []
     fuel_row: Surcharge | None = None
@@ -395,9 +392,7 @@ def _offer(
             detail = f"{row.name} has no amount (surcharges.csv line {row.line_no})"
             return NotOffered(code, "surcharge_not_confirmed", detail)
         exact, taken = priced
-        parts.append(
-            ShipPart(ShipPartKind.SURCHARGE, row.name, exact, taken, row.line_no)
-        )
+        parts.append(ShipPart(PartKind.SURCHARGE, row.name, exact, taken, row.line_no))
         if row.fuel_applies == FuelApplies.YES:
             fuel_base += exact
             fuel_names.append(row.name)
@@ -413,7 +408,7 @@ def _offer(
         on_what = " + ".join(["freight", *fuel_names])
         parts.append(
             ShipPart(
-                ShipPartKind.FUEL,
+                PartKind.FUEL,
                 FUEL,
                 fuel_base * fuel,
                 f"{percent_text(fuel_row.rate)} of {on_what}",
@@ -502,11 +497,11 @@ def _from_carrier(
             )
         match part.kind:
             case PricePartKind.FREIGHT:
-                kind = ShipPartKind.FREIGHT
+                kind = PartKind.FREIGHT
             case PricePartKind.FUEL:
-                kind = ShipPartKind.FUEL
+                kind = PartKind.FUEL
             case PricePartKind.SURCHARGE:
-                kind = ShipPartKind.SURCHARGE
+                kind = PartKind.SURCHARGE
         parts.append(ShipPart(kind, part.name, exact, asked, None))
     duty_paid_rows: list[Surcharge] = []
     fuel_row: Surcharge | None = None
@@ -561,7 +556,7 @@ def duty_paid_parts(
     code = offer.route.key
     freight = Fraction(0)
     for part in offer.parts:
-        if part.kind == ShipPartKind.FREIGHT:
+        if part.kind == PartKind.FREIGHT:
             freight += part.exact
     for row in offer.duty_paid_rows:
         unusable = _unusable(row)
@@ -586,7 +581,7 @@ def duty_paid_parts(
             return NotOffered(code, "surcharge_not_confirmed", detail)
         exact, taken = priced
         parts.append(
-            ShipPart(ShipPartKind.DUTY_PAID_FEE, row.name, exact, taken, row.line_no)
+            ShipPart(PartKind.DUTY_PAID_FEE, row.name, exact, taken, row.line_no)
         )
         if row.fuel_applies == FuelApplies.YES and offer.fuel_rate is None:
             detail = f"no usable fuel row for {offer.service.code}"
@@ -594,7 +589,7 @@ def duty_paid_parts(
         if row.fuel_applies == FuelApplies.YES and offer.fuel_rate:
             parts.append(
                 ShipPart(
-                    ShipPartKind.FUEL,
+                    PartKind.FUEL,
                     f"{FUEL} on {row.name}",
                     exact * offer.fuel_rate,
                     f"{percent_text(offer.fuel_rate)} of {row.name}",

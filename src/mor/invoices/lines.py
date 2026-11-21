@@ -19,8 +19,7 @@ from mor.invoices.records import InvoiceLine, InvoiceSection
 from mor.markets.records import Collector
 from mor.money.amount import Money
 from mor.money.rounding import allocate
-from mor.quote.build import PartKind
-from mor.quote.groups import group_of
+from mor.quote.groups import PartKind, group_of
 
 
 CHARGE_WORDS: dict[PartKind, str] = {

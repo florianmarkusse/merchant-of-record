@@ -61,11 +61,11 @@ class _Row:
     option_no: int
     psp_account_id: uuid.UUID
     route_id: uuid.UUID
-    method: str
+    method: PaymentMethod
     amount_minor: int
-    currency: str
+    currency: Currency
     return_url: str
-    state: str
+    state: AttemptState
     provider_payment_id: str | None
     action_kind: str | None
     action_url: str | None
@@ -86,10 +86,10 @@ def _attempt(row: _Row) -> Attempt:
         row.option_no,
         row.psp_account_id,
         row.route_id,
-        PaymentMethod(row.method),
-        Money(row.amount_minor, Currency(row.currency)),
+        row.method,
+        Money(row.amount_minor, row.currency),
         row.return_url,
-        AttemptState(row.state),
+        row.state,
         row.provider_payment_id,
         action,
         row.ended_reason,
@@ -156,8 +156,8 @@ async def lock_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt:
         await cur.execute(
             """
             SELECT id, session_id, quote_id, option_no, psp_account_id, route_id,
-                   method::text, amount_minor, currency::text, return_url,
-                   state::text,
+                   method, amount_minor, currency, return_url,
+                   state,
                    provider_payment_id, action_kind::text, action_url,
                    action_expires_at, ended_reason, created_at
             FROM payment_attempt WHERE id = %s FOR UPDATE
@@ -176,8 +176,8 @@ async def read_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt | Non
         await cur.execute(
             """
             SELECT id, session_id, quote_id, option_no, psp_account_id, route_id,
-                   method::text, amount_minor, currency::text, return_url,
-                   state::text, provider_payment_id, action_kind::text, action_url,
+                   method, amount_minor, currency, return_url,
+                   state, provider_payment_id, action_kind::text, action_url,
                    action_expires_at, ended_reason, created_at
             FROM payment_attempt WHERE id = %s
             """,
@@ -193,8 +193,8 @@ async def session_attempts(conn: Connection, session_id: uuid.UUID) -> list[Atte
         await cur.execute(
             """
             SELECT id, session_id, quote_id, option_no, psp_account_id, route_id,
-                   method::text, amount_minor, currency::text, return_url,
-                   state::text,
+                   method, amount_minor, currency, return_url,
+                   state,
                    provider_payment_id, action_kind::text, action_url,
                    action_expires_at, ended_reason, created_at
             FROM payment_attempt WHERE session_id = %s ORDER BY id

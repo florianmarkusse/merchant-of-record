@@ -1,11 +1,26 @@
 """The four groups a buyer sees a price in (plan-architecture §8): items
 (the merchant's price and our fees), shipping, and duties and taxes. The
 buyer page, the estimate API, the staff pages and the invoice all group
-quote parts by this one table."""
+quote parts by this one table, so the kinds of part live here too."""
 
+from enum import StrEnum
 from typing import Literal, assert_never
 
-from mor.quote.build import PartKind
+
+class PartKind(StrEnum):
+    GOODS = "goods"
+    PSP_FEE = "psp_fee"
+    FX = "fx"
+    MOR_MARGIN = "mor_margin"
+    FREIGHT = "freight"
+    SURCHARGE = "surcharge"
+    FUEL = "fuel"
+    DUTY_PAID_FEE = "duty_paid_fee"
+    DUTY = "duty"
+    ADDITIONAL_DUTY = "additional_duty"
+    CUSTOMS_FEE = "customs_fee"
+    IMPORT_TAX = "import_tax"
+    OTHER_TAX = "other_tax"
 
 
 type PartGroup = Literal["goods", "fees", "shipping", "duties_and_taxes"]

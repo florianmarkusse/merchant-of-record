@@ -85,7 +85,7 @@ class _LookupRow:
     destination: str
     origin: str
     hs_code: str
-    state: str
+    state: LookupState
     calls: int
     detail: str | None
 
@@ -94,14 +94,14 @@ class _LookupRow:
 class _AccountRow:
     id: uuid.UUID
     vendor_name: str
-    provider: str
+    provider: DutyProvider
     base_url: str
     timeout_ms: int
 
 
 @dataclass(frozen=True)
 class _AnswerRow:
-    charge: str
+    charge: Charge
     formula: str
     rate_numerator: int | None
     rate_denominator: int | None
@@ -142,7 +142,7 @@ async def vendor_account(
 ) -> DutyVendorAccount | None:
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
-            "SELECT id, vendor_name, provider::text, base_url, timeout_ms"
+            "SELECT id, vendor_name, provider, base_url, timeout_ms"
             " FROM duty_vendor_account WHERE vendor_name = %s",
             (vendor_name,),
         )
@@ -152,7 +152,7 @@ async def vendor_account(
     return DutyVendorAccount(
         row.id,
         row.vendor_name,
-        DutyProvider(row.provider),
+        row.provider,
         row.base_url,
         timedelta(milliseconds=row.timeout_ms),
     )
@@ -213,7 +213,7 @@ async def read_lookup(
     async with conn.cursor(row_factory=class_row(_LookupRow)) as cur:
         await cur.execute(
             """
-            SELECT id, vendor_name, destination, origin, hs_code, state::text,
+            SELECT id, vendor_name, destination, origin, hs_code, state,
                    calls, detail
             FROM duty_lookup
             WHERE vendor_name = %s AND destination = %s AND origin = %s
@@ -232,7 +232,7 @@ async def _with_answers(conn: Connection, row: _LookupRow) -> VendorLookup:
     async with conn.cursor(row_factory=class_row(_AnswerRow)) as cur:
         await cur.execute(
             """
-            SELECT charge::text, formula, rate_numerator, rate_denominator, note,
+            SELECT charge, formula, rate_numerator, rate_denominator, note,
                    hs_code_used, own_rate_numerator, own_rate_denominator,
                    own_line_no
             FROM duty_answer WHERE lookup_id = %s ORDER BY charge
@@ -242,7 +242,7 @@ async def _with_answers(conn: Connection, row: _LookupRow) -> VendorLookup:
         for answer in await cur.fetchall():
             answers.append(
                 StoredAnswer(
-                    Charge(answer.charge),
+                    answer.charge,
                     answer.formula,
                     _fraction(answer.rate_numerator, answer.rate_denominator),
                     answer.note,
@@ -254,7 +254,7 @@ async def _with_answers(conn: Connection, row: _LookupRow) -> VendorLookup:
     return VendorLookup(
         row.id,
         row.vendor_name,
-        LookupState(row.state),
+        row.state,
         row.calls,
         row.detail,
         tuple(answers),
@@ -271,7 +271,7 @@ async def _lock_lookup(conn: Connection, lookup_id: uuid.UUID) -> _LookupRow:
     async with conn.cursor(row_factory=class_row(_LookupRow)) as cur:
         await cur.execute(
             """
-            SELECT id, vendor_name, destination, origin, hs_code, state::text,
+            SELECT id, vendor_name, destination, origin, hs_code, state,
                    calls, detail
             FROM duty_lookup WHERE id = %s FOR UPDATE
             """,
@@ -296,7 +296,7 @@ def _lookup_id(fact: Fact) -> uuid.UUID:
 
 async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | AskCall:
     lookup = await _lock_lookup(conn, _lookup_id(fact))
-    if LookupState(lookup.state) != LookupState.REQUESTED:
+    if lookup.state != LookupState.REQUESTED:
         return NoCall(Stale())
     account = await vendor_account(conn, lookup.vendor_name)
     assert account is not None, f"no account for {lookup.vendor_name}"
@@ -321,7 +321,7 @@ async def complete(
 ) -> Done | RetryLater:
     lookup = await _lock_lookup(conn, _lookup_id(fact))
     assert lookup.id == ask.lookup_id
-    if LookupState(lookup.state) != LookupState.REQUESTED:
+    if lookup.state != LookupState.REQUESTED:
         return Done(Stale())
     match result:
         case VendorRates():
