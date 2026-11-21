@@ -21,46 +21,12 @@ and wins where the two differ.
   C was ruled out because an internet-facing payment service parses
   untrusted input all day and would need its HTTP, JSON, JWT and HTML
   layers built or vetted by hand. Rust stays the alternative if Python's
-  lack of runtime type checks ever becomes the bottleneck). See Chosen
-  Stack.
+  lack of runtime type checks ever becomes the bottleneck).
 
-- Where to start (15-Nov-2026): `docs/plan-architecture.md` is the confirmed
-  design for the whole flow and wins over the earlier plans where they
-  differ. Its §16 says what state the project is in and what comes next.
-  Slice 1 (tooling, `money`, `db` and migrations, `ledger`) is built
-  (16-Nov-2026); slice 2 is planned in `docs/plan-messaging.md`, and its
-  steps 2a (outbox, deliveries, inbox, worker, probe, fuzzer), 2b
-  (effect consumers, duplicate guards, the fake echo vendor) and 2c
-  (inbound by push, thin push, poll, file, none, and by hand; the first
-  web handler) are built. The fuzzer failure seen in 2c was a real
-  thin-webhook bug, now fixed (`docs/plan-messaging.md` §13). Slice 3,
-  the test setup, is planned in `docs/plan-test-setup.md` (on this laptop
-  until a VPS exists); its steps 1 (serve, `SELF_URL`, seed), 2 (the page at `/_fake/`)
-  and 3 (the nightly soak, `deploy/soak.sh`) are built. Slice 4 (markets, tax path,
-  prices, the quote) is planned in `docs/plan-quote.md` in four steps; 4a
-  (markets in the database, versioned loads), 4b-1 (the tax-path rule,
-  rates per HS code with trade agreements, exact FX chains) and 4b-2
-  (duty and VAT rates from vendors: a mode per country, asked once per
-  combination, compared with our rows), 4c-1 (shipping from our own
-  rate tables, fee rules, `build_quote` with one option per service) and
-  4c-2 (live carrier prices through a fake courier, held while usable by a
-  rule per courier account) and 4d-1 (merchants, API keys, the
-  merchant API with idempotency, estimates with a daily cap on new vendor
-  lookups) and 4d-2 (the stored quote and its waiting flow, the buyer
-  pages at `/c/{session}`, sessions on the staff page) are built: slice 4
-  is done. Slice 5 (payments: the fake PSP, the payment attempt against a
-  quote, capture, the order and the invoice) is next, proposed in
-  `docs/plan-payments.md` in three steps (5a pay, 5b invoice and order,
-  5c settlement); its questions are answered (19-Nov-2026) and 5a (the
-  fake PSP in every wiring, the payment attempt, the order and its capture
-  entry, the buyer's pay pages) is built. 5b (the invoice with its gapless
-  number, the order page and PDF at `/o/{token}`, the orders and merchant
-  settings API, the KYB gate, `after_payment` per session) is built
-  (20-Nov-2026, `docs/plan-payments.md` §6.1, §6.2). 5c is split in three
-  (`docs/plan-payments.md` §7.1, agreed 20-Nov-2026): 5c-1 settlement into
-  `payout_in_transit` (built 20-Nov-2026, §7.2), 5c-2 the bank statement
-  import that moves it to `bank` (next, to be designed), 5c-3 card fields
-  and the Playwright suite; the echo stays until the shipment slice.
+- Where to start: `docs/plan-architecture.md` is the confirmed design for
+  the whole flow and wins over the earlier plans where they differ. Its
+  §16 says what is built, what comes next and what to read. Each slice
+  plan's Status line says how far that slice is.
 - Decided 19-Nov-2026: the test setup may route chosen merchants to a
   real vendor's sandbox next to the fakes, once that vendor's module
   exists; every provider account is `fake`, `sandbox` or `live`, and the
@@ -70,25 +36,18 @@ and wins where the two differ.
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
   already" (`docs/plan-messaging.md` §12.2).
-- Decided 16-Nov-2026, starting slice 1:
-  - Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
-    reached over peer auth as the developer's own role
-    (`postgresql:///mor_dev`); no dedicated role locally.
-  - Ids are uuid7, made in code (`uuid.uuid7()`), so they sort by time
-    and code knows an id before inserting.
-  - The outbox moved from slice 1 to slice 2, where it is designed once
-    with `outbox_delivery`, the worker and the `message_type` enum
-    (plan-architecture.md §5, §12).
-- Decided 15-Nov-2026, with the reasons in `docs/plan-architecture.md`:
-  - A lock or a unique constraint guards; time only triggers. No leases,
-    no expiring idempotency keys of our own, no "old enough, so take it
-    over". Time starts work (retry, poll, deadline due) or is a promise
-    compared under the row lock (§4).
+- Decided 16-Nov-2026: local databases `mor_dev` and `mor_test` on the
+  PostgreSQL 18 cluster, reached over peer auth as the developer's own
+  role (`postgresql:///mor_dev`), no dedicated role locally. Ids are
+  uuid7, made in code (`uuid.uuid7()`), so they sort by time and code
+  knows an id before inserting.
+- Decided 15-Nov-2026, with the reasons in `docs/plan-architecture.md` §15
+  (locks and constraints guard, time only triggers, as in the shared
+  conventions):
   - After a vendor call with no answer, the operation's duplicate guard
     decides (`vendor_constraint`, `compensable`, `none`), never a lookup
     alone and never a clock (§5).
-  - Messages are facts only, no commands. Inbound is push, poll or file
-    as capability data, on one path (§5).
+  - Inbound is push, poll or file as capability data, on one path (§5).
   - Providers are picked by a registry with an exhaustive `match`. The
     fakes are fake vendors over HTTP, inside the dev web server under
     `/_fake/`, and offer every integration mode (§6).
@@ -106,13 +65,9 @@ and wins where the two differ.
 
 ### Chosen Stack
 
-- Storage: PostgreSQL. Schema changes are numbered SQL files in
-  `migrations/`, applied in order and never edited once applied. No
-  `SELECT *`. Persistence functions take the connection or transaction as
-  their first argument and never commit: the caller commits, so a state
-  change and its outbox message commit together.
-- Fixed value sets are PostgreSQL enum types with a matching closed type in
-  code, not text columns with a CHECK.
+The shared Storage rules apply as written; what follows is particular to
+this project.
+
 - Web: server-rendered HTML built by typed functions, with no template
   language and no string formatting for markup. Avoid JavaScript where
   possible: our own pages work without it, and a script only improves a
@@ -122,13 +77,11 @@ and wins where the two differ.
   provider, never from the browser (decided 04-Nov-2026: a strict no-JS rule
   is not possible with PSP card fields). Merchant-facing JSON APIs and
   webhooks come next to this, not instead of it.
-- Language: Python 3.14, packages and lock file managed with `uv`
-  (decided 05-Nov-2026, see Project Rules).
 - Libraries (decided 05-Nov-2026):
   - Web: Starlette with plain handlers; the request is an argument, never
     hidden global state. HTML: htpy (typed functions, escaped by default).
-  - Database: psycopg 3 with hand-written SQL, rows read into frozen
-    dataclasses. Migrations are run by a small runner of our own.
+  - Database: psycopg 3 (async) with hand-written SQL, rows read into
+    frozen dataclasses. Migrations are run by a small runner of our own.
   - Parsing at the edges: msgspec. Every input (API body, webhook, form,
     settlement file) is decoded into a typed, frozen record at the edge
     before anything else sees it, because Python does not check types at
@@ -141,16 +94,12 @@ and wins where the two differ.
     JWT/JWE). Invoices as PDF: WeasyPrint, from the same HTML functions.
   - Money: `int` minor units with a currency enum; exact rates as
     `fractions.Fraction`. Never `float` or `Decimal` for amounts.
-- Records are frozen dataclasses or msgspec structs, closed sets are
-  `StrEnum` or `Literal`, results are unions of records matched with
-  `match` and `assert_never` for exhaustiveness.
 - Frontend (decided 18-Nov-2026): the staff pages' stylesheet is
   `static/css/staff.css`; scripts are strict TypeScript in `ts/`, compiled
   by `tsc` into git-ignored `static/js/` (no bundler, no framework, as in
   the other projects). Run `npm install` once, then `npx tsc` after
   changing a `.ts` file. Every page works without them: a script only
-  improves a form or table the server already handles (the quote page
-  re-quotes as you type; the data and answers tables get a filter).
+  improves a form or table the server already handles.
 - Checks: the shared order plus `npx tsc`; pyright in strict mode.
   `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
   the invoice PDF; it also needs Pango from the system). `scripts/` holds
@@ -200,9 +149,10 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 
 ## Code Style
 
-- Records are frozen dataclasses or msgspec structs (see Chosen Stack),
-  not `TypedDict`. A payment that can be `captured` or `refunded` is a
-  closed set of states, not booleans.
+- Records are frozen dataclasses or msgspec structs, not `TypedDict`;
+  closed sets are `StrEnum` or `Literal`; results are unions of records
+  matched with `match` and `assert_never`. A payment that can be
+  `captured` or `refunded` is a closed set of states, not booleans.
 - Errors as values covers declined card, tax rule missing, PSP timeout.
 - Never shadow domain names (`payment`, `merchant`, `invoice`, `ledger`)
   with local variables.
@@ -244,10 +194,10 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 
 ## Messaging
 
-Message-oriented from the start, as the shared Messaging section describes.
-Here it applies to every money flow: checkout → capture → settle → payout
-is a state machine driven by messages, and a state change and its outbox
-message always commit together.
+The shared `messaging.md` applies from the start, not as a later
+conversion, and to every money flow: checkout → capture → settle → payout
+is a state machine driven by messages, and messages are facts only, never
+commands.
 
 ## Merchant of Record Domain Rules
 
@@ -257,26 +207,23 @@ message always commit together.
   feature code. The rule applied, its version and the buyer-location
   evidence are stored with each transaction, so an invoice can be
   re-explained years later.
-- PII and card data: never commit, log or put into a test fixture real
-  buyer or merchant data. Use synthetic fixtures. We never see or store raw
-  card numbers: the PSP tokenizes them, which keeps us out of full PCI DSS
-  scope. Do not add code that would bring a PAN into our systems.
+- PII and card data: we never see or store raw card numbers: the PSP
+  tokenizes them, which keeps us out of full PCI DSS scope. Do not add
+  code that would bring a PAN into our systems.
 - Idempotency and audit: every money-moving request, inbound or outbound,
   carries an idempotency key that is stored and enforced by a unique
-  constraint. Financial records are appended, never updated in place or
-  deleted. Every state change records who or what made it and when.
-- PSPs behind one module each: every payment provider (Stripe, Xendit, 2C2P,
-  Adyen, …) gets its own module that translates our own types to and from
-  its API. Exactly one place chooses a provider by name. In dev an offline
-  mock provider is the default, so tests and local runs never call out.
-  Real providers need `ENVIRONMENT=prod` and their keys in `.env`.
+  constraint, and never expires. Financial records are appended, never
+  updated in place or deleted. Every state change records who or what
+  made it and when.
+- Payment providers (Stripe, Xendit, 2C2P, Adyen, …) follow the shared
+  External Services rules: one module each, one registry, the fake PSP
+  outside prod.
 - Compliance and licensing (KYC/KYB of merchants, payment licences per
   country, data residency) shape the design. When a feature touches them,
   say so in its design and do not assume an answer.
 
 ## Agent Workflow
 
-- Design first also covers changed message schemas.
 - Verify against realistic synthetic data, especially for rounding,
   tax and FX.
 

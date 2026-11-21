@@ -1,7 +1,7 @@
 # Slice 4: markets, the tax path, prices and the quote
 
-Status: confirmed 17-Nov-2026 (answers in §6). Step 4a built 17-Nov-2026
-(`mor.markets`, `0008_markets.sql`); see §2 "Built". Implements
+Status: built (4a 17-Nov-2026, 4b and 4c-1 18-Nov-2026, 4c-2 and 4d
+19-Nov-2026); confirmed 17-Nov-2026, answers in §6. Implements
 plan-architecture.md §8 and §14 step 4, with the tax path rule of
 plan-logistics.md §4 and the checkout records of plan-merchant-surfaces.md
 §3–5. Where those differ, plan-architecture wins. Payment is slice 5: this
@@ -815,17 +815,6 @@ not exist.
 
 **4d-1 built 19-Nov-2026.**
 
-What was built:
-- Migration `0013_merchants_api.sql`.
-- `src/mor/merchants/`: records, store and keys, idempotency, the daily
-  count of vendor asks, and the command line (`python -m mor.merchants`).
-- `src/mor/checkout/`: session records and store.
-- `src/mor/quote/inputs.py`: the held inputs and asks, now shared with
-  the staff page.
-- `src/mor/public_ids.py`.
-- In `src/mor/web/`: `api.py`, `api_wire.py` and `api_estimates.py`.
-- The seed adds a "Sandbox Shop" merchant and prints its key once.
-
 Changed while building:
 - **Errors on our side get their own type.** A refusal that is ours to
   fix (no market data, no fee rule, no exchange rate, no account for a
@@ -1077,20 +1066,6 @@ checked strictly where its format is fixed. What changes here:
 
 **4d-2 built 19-Nov-2026.**
 
-What was built:
-- Migrations `0014_quote_flow_values.sql` (the new enum values, in a file
-  of their own because a value cannot be used in the transaction that
-  adds it) and `0015_quote_flow.sql`.
-- `src/mor/checkout/`: `addresses.py`, the parser with its rules per
-  country, `quotes.py`, the stored quote, and `flow.py`, the steps and
-  consumers.
-- `src/mor/quote/refusals.py`: refusals and the prod rule, shared with
-  estimates.
-- `src/mor/web/`: `buyer.py` and `buyer_html.py`, plus
-  `static/css/buyer.css`, and `staff_sessions_html.py`.
-- Local consumers now get the environment (prod refuses quotes on a
-  placeholder).
-
 Changed while building:
 - **A share lock on each lookup waited on.** `still_open` reads a
   lookup's state with `FOR SHARE`. A completion that commits between the
@@ -1132,17 +1107,9 @@ Open:
   a code one.
 - The "Sold and invoiced by" line names `[our company]` until the
   company and the legal wording exist.
-- **For slice 5: wait without full reloads.** The waiting page reloads
-  itself every 2 s with a meta refresh. That works without JavaScript but
-  flickers and can make a screen reader read the page again. Plan agreed
-  19-Nov-2026:
-  - the refresh tag moves into `<noscript>` (allowed in the head);
-  - a small script in `ts/` polls a status route and swaps the price in
-    without reloading, with a spinner meanwhile;
-  - the server side stays as it is.
-
-  Slice 5's QR payments wait the same way, for the payment provider's
-  webhook, so build it once there for both.
+- Waiting without full reloads (a meta refresh inside `<noscript>`, a
+  script in `ts/` polling a status route) was built in slice 5a, for
+  quotes and QR payments alike.
 
 ## 5b. The staff page
 

@@ -1,12 +1,13 @@
 # Plan: payment provider integration, merchant API and Shopify
 
-Status: design proposal (04-Nov-2026), awaiting confirmation. No code yet.
-The language is still undecided, so the types below are written in neutral
-pseudo-notation (records, closed unions, functions), not in any language.
-
-Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
-overall design, and its §12 lists what it changes in this plan. Where the
-two differ, that plan wins.
+Status: written 04-Nov-2026, before the language was chosen, so the types
+are in neutral pseudo-notation. `docs/plan-architecture.md` (§12 lists
+what it changes here) and `docs/plan-payments.md` (slice 5: the PSP port,
+the attempt, capture and settlement, against the fake PSP) win where
+they differ; §3, §4, §5.1 to §5.5, §5.7 and §10 are history now. Still the design
+input for what is not built: provider choice (§2, §11), stored payment
+methods (§5.6), merchant webhooks and payouts (§6.3, §6.4), Shopify (§7)
+and licensing (§8).
 
 ## 0. Decisions and context so far
 

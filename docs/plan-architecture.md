@@ -1,14 +1,12 @@
 # Plan: overall architecture, with logistics in detail
 
 Status: design confirmed 15-Nov-2026 after review; the decisions are in §15.
-No code is written yet, and building waits for a go-ahead. A new session
-starts at §16.
+Slices are built in the order of §14; a new session starts at §16.
 
 This is the one design for the whole flow: checkout, tax and duty, payment,
 shipment, courier invoice, returns and payout. It sits above the earlier
 plans and does not repeat them:
 
-- `plan-skeleton.md`: money, db, ledger, outbox (the foundation).
 - `plan-psp-integration.md`: payment providers, merchant API, payouts.
 - `plan-merchant-surfaces.md`: API resources, hosted checkout, dashboard.
 - `plan-logistics.md`: countries, the tax path rule, carriers, returns
@@ -90,7 +88,7 @@ file:
 
 ```
 src/mor/
-  money/ db/ ledger/ outbox/   as in plan-skeleton.md
+  money/ db/ ledger/           the foundation (slice 1)
   messaging/    fact records with versions, the consumer table, the worker
   merchants/    merchant, users, API keys, KYB state
   checkout/     session, sold lines, quote (pure builder + store)
@@ -173,9 +171,9 @@ version in `messaging/`. There are no command messages. "Book the label"
 is the courier consumer reacting to `shipment_created` (changed from the
 PSP plan, §12).
 
-Tables (extending `plan-skeleton.md` §7):
+Tables (detailed in `plan-messaging.md` §2):
 
-- `outbox`: as in the skeleton, with `message_type` as an enum type.
+- `outbox`: one row per fact, with `message_type` as an enum type.
 - `outbox_delivery (message_id, consumer, aggregate_key, not_before,
   handled_at)`: one row per consumer of a fact, written in the same
   transaction as the fact. Which consumers get which fact is one table in
@@ -870,9 +868,7 @@ Two notes on the rules:
 | Logistics §2.3: duty source per order | stored rates per (HS, origin, destination), filled from our tables or a vendor, refreshed on a schedule (§8) | cost per call; switchable |
 | Surfaces §3, logistics §1 step 11: a duty difference goes to the merchant's balance, both ways | every difference is ours until a person attributes it by cause (§9) | decided 15-Nov-2026: we bear what we could have foreseen, the merchant what its data caused |
 | PSP §5.5: `merchant_payable` is the price net of our fee | the merchant gets its price in full; our fee is added on top (§8) | decided 15-Nov-2026 |
-| Skeleton §3: ruff rule sets and check order | the shared baseline and order in the conventions file | that file is newer (11-Nov-2026) |
-| Skeleton: sync `psycopg.Connection` | async psycopg throughout | Starlette is async; I/O functions stay `async` |
-| Skeleton §7: `claim_batch` with `SKIP LOCKED` on outbox rows | `outbox_delivery` plus the advisory lock per aggregate | the lock must survive the commits inside an effect step |
+| The first skeleton plan: sync psycopg, `claim_batch` with `SKIP LOCKED` on outbox rows | async psycopg throughout; `outbox_delivery` plus the advisory lock per aggregate | Starlette is async; the lock must survive the commits inside an effect step |
 
 ## 13. Rules this design applies
 
@@ -892,7 +888,7 @@ personal data in fixtures (§11); verify on realistic synthetic data (§10).
 
 Each slice ends with the checks clean and its part of the flow fuzzed.
 
-1. Skeleton as planned, with the changes in §12.
+1. Skeleton: `money`, `db` and migrations, `ledger`.
 2. Messaging: `outbox_delivery`, the worker, both consumer kinds, the
    duplicate guards, the three inbound modes, the fake-vendor frame, and
    the layer 2 harness on a two-step toy flow. This is where the lock
@@ -974,45 +970,40 @@ Nothing is open in this plan. Open items that belong to other plans
 
 ## 16. Picking this up in a new session
 
-Where things stand (16-Nov-2026): slice 1 is built: `pyproject.toml`,
-`src/mor/` with `config`, `audit`, `money/`, `db/` (async connection and
-the migration runner) and `ledger/`, `migrations/0001_ledger.sql`, and
-tests including Hypothesis properties. The outbox moved to slice 2. The
-step after it is slice 2, planned in `plan-messaging.md`: step 2a (facts,
-deliveries, inbox, worker, the probe flow, layer 2 and 3 tests) and 2b
-(effect consumers, duplicate guards, the fake echo vendor) and 2c
-(inbound in every mode, the first web handler) are built. Slice 3, the
-test setup, is planned in `plan-test-setup.md` (17-Nov-2026: on the
-developer's laptop until a VPS exists; the deploy waits for it). Hypothesis was checked when added
-(6.170.15, MPL-2.0, supports Python 3.14).
+Where things stand (21-Nov-2026): slices 1 to 4 of §14 are built, and
+slice 5 up to 5c-1. Each slice has its plan, whose Status line says how
+far it is:
 
-What follows is the hand-over as written before slice 1, kept for its
-reading order.
+| Slice | Plan |
+|---|---|
+| 1. Skeleton: `money`, `db` and migrations, `ledger` | built 16-Nov-2026 (its plan is in git history) |
+| 2. Messaging | `plan-messaging.md` |
+| 3. The test setup | `plan-test-setup.md` |
+| 4. Markets, tax path, prices, the quote | `plan-quote.md` |
+| 5. Payments, order, invoice, settlement | `plan-payments.md` |
+| Fuzzing depth (amends §10) | `plan-fuzz-reach.md` |
+
+Next: 5c-2, the bank statement import that moves a PSP payout from
+`payout_in_transit` to `bank`, to be designed (`plan-payments.md` §7.1);
+then 5c-3, card fields and the Playwright suite. The echo vendor stays
+until the shipment slice.
 
 Read, in this order:
 
 1. `AGENTS.md` and the shared conventions it points to.
-2. This plan, whole. It wins over the four earlier plans (§12).
-3. `plan-skeleton.md` for slice 1, then the earlier plan that covers the
-   slice in hand: `plan-psp-integration.md` (payments, payouts),
-   `plan-merchant-surfaces.md` (API, checkout pages, dashboard),
-   `plan-logistics.md` (countries, tax path rule, carriers, returns).
+2. This plan, whole. It wins over the earlier plans (§12).
+3. The plan of the slice in hand, and for a slice not planned yet the
+   earlier plan that covers it: `plan-psp-integration.md` (payouts,
+   Shopify), `plan-merchant-surfaces.md` (API, checkout pages,
+   dashboard), `plan-logistics.md` (countries, tax path rule, carriers,
+   returns).
 
-When told to start, the next step is slice 1 of §14: the skeleton as in
-`plan-skeleton.md`, with the changes in §12 (the shared ruff baseline and
-check order, async psycopg, `outbox_delivery` in place of `claim_batch`).
-Before writing it:
-
-- Ask the two open questions in `plan-skeleton.md` §9: creating the `mor`
-  database role and the `mor_dev` and `mor_test` databases, and uuid7
-  ids.
-- Each slice is still designed first where it adds tables or message
-  shapes: a short design for that slice, a reply, then the code.
+Each slice is designed first where it adds tables or message shapes: a
+short design, a reply, then the code.
 
 To check in current docs when the slice that needs it starts, never from
 memory:
 
-- Hypothesis: version, licence and Python 3.14 support (slice 2).
 - The duplicate guard each real provider offers for booking, charging
   and paying out (§5), when its module is built.
 - Whether a carrier's API takes several boxes on one waybill, if a

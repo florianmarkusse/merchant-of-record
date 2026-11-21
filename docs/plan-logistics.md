@@ -1,16 +1,12 @@
 # Plan: first logistics integration
 
-Status: design proposal, second draft (06-Nov-2026), waiting for
-confirmation. It replaces the first draft from the same day, which capped
-order values to stay under every country's duty-free limit. That draft
-did not fit the candidate merchants: they sell at US$80–2,000 and ship
-worldwide, and most of them already use DHL. No code is written until
-this is confirmed. Revised 08-Nov-2026: §4 now decides indirect tax and
-duty separately (see there), also waiting for confirmation.
-
-Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
-overall design, and its §12 lists what it changes in this plan. Where the
-two differ, that plan wins.
+Status: second draft (06-Nov-2026, §4 revised 08-Nov-2026). The first
+draft capped order values under every duty-free limit, which did not fit
+merchants selling at US$80–2,000 worldwide. `docs/plan-architecture.md`
+(§7 to §9; §12 lists what it changes here) wins where they differ, and
+`docs/plan-quote.md` built the tax path rule of §4 and the country rows
+of §3. Still the design input for shipments, returns (§5), registrations
+(§8) and launch (§8b, §9).
 
 Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
 (including the new `07-keycaps-ceramics-lacquer.md`),

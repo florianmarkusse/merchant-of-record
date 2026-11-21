@@ -1,13 +1,9 @@
 # Plan: slice 2, messaging
 
-Status: 2a built 16-Nov-2026 (probe kept, inbox kept, msgspec added);
-LISTEN/NOTIFY added 17-Nov-2026. What building 2a showed is in §9. 2b is
-designed in §10, confirmed and built 17-Nov-2026; what building it showed
-is in §11. 2c is designed in §12, confirmed 17-Nov-2026 with the
-`none` mode and manual events added, and built the same day; what building
-it showed is in §13. It details slice 2
-of `plan-architecture.md` §14 and follows its §4 and §5; where this plan
-says more, it does not change them unless §6 below names the change.
+Status: built. 2a 16-Nov-2026 (§1 to §8, what building showed in §9);
+2b 17-Nov-2026 (§10, §11); 2c 17-Nov-2026 (§12, §13). Details slice 2 of
+`plan-architecture.md` §14 and follows its §4 and §5, changing them only
+where §6 says.
 
 ## 1. Scope, in three steps
 

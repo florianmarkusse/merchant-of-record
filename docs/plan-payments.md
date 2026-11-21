@@ -221,28 +221,7 @@ merchant's currency (say USD), per currency its lines use:
 
 ## 6. The invoice and the order page (5b)
 
-- `invoice (id, order_id unique, series, number, issued_at, currency,
-  seller lines, buyer name and address, merchant named)` and
-  `invoice_line` (goods with our fee inside, shipping, duties and taxes,
-  each tax with its rule and rate): a snapshot, append-only by trigger,
-  never re-derived. Issued by `invoice_issue` on `order_paid`.
-- Numbers are gapless per series (question 4): `invoice_series (series,
-  next_number)` is locked `FOR UPDATE` in the same transaction that
-  inserts the invoice, so a rollback gives the number back. This locks a
-  second row besides the order, always order then series: the second
-  planned exception to "one step locks one aggregate", next to the
-  merchant lock (plan-architecture §4).
-- Rendered by one htpy function, as a page and through WeasyPrint as a
-  PDF, on request, from the rows. What a tax invoice must show per
-  country (SG's tax invoice, TH's full and abbreviated ones) is a
-  compliance touchpoint: the fields exist, the wording waits for an
-  adviser.
-- `/o/{buyer_token}`: what was bought, the total, the invoice (page and
-  PDF), "what happens next", the merchant's support contact and ours by
-  topic (plan-merchant-surfaces §5), and a link back to `return_url`.
-- API: `GET /v1/checkout_sessions/{id}` gains `order_id`;
-  `GET /v1/orders/{id}` returns lines, totals, the option, the full
-  address (for fulfilment, as 4d-2 promised) and the invoice number.
+The sketch agreed with §1 was refined in §6.1; what was built is in §6.2.
 
 ### 6.1 5b in detail (agreed 20-Nov-2026)
 
@@ -413,25 +392,6 @@ offer "send me my link again" (Stripe's hosted invoice links expire after
 
 ### 6.2 5b built (20-Nov-2026)
 
-What was built:
-- Migrations `0018_invoice_values.sql` (enum values) and
-  `0019_invoices.sql` (KYB state and its history, the merchant's
-  settings, `after_payment` on the session, the series counter, the
-  invoice and its lines, append-only).
-- `src/mor/entity.py` (the selling entity, placeholders);
-  `src/mor/invoices/` (records, `numbering`, `lines`, `store` with the
-  `invoice_issue` step); `src/mor/orders/store.py`; `src/mor/quote/groups.py`
-  (`group_of`, moved out of the web layer so the invoice can use it).
-- The order page and invoice at `/o/{token}` (`web/order_pages.py`,
-  `order_html.py`, `invoice_html.py`, `invoice_pdf.py`,
-  `static/css/invoice.css`); the redirect of a paid `/c/{session}`; the
-  KYB notice and gate; `GET /v1/orders/{id}`, `GET /v1/merchant`,
-  `POST /v1/merchant/settings`, `order_id` and `after_payment` on the
-  session; the order and invoice on the staff session page; `kyb` in the
-  merchants CLI; the seed approves the Sandbox Shop on every run.
-- WeasyPrint 70.0, with a stub of the part we call in `typings/weasyprint/`
-  (it ships no types and pyright is strict).
-
 Changed while building:
 - **The series is data in code, the table only a counter.** The first
   version kept the format in a row the migration inserted; the test setup
@@ -468,24 +428,10 @@ Open:
 
 ## 7. Settlement (5c)
 
-`import_settlement` per account, by `file` (a CSV the fake cuts on
-request, fetched on a schedule or uploaded) and by API page. Each line is
-stored raw under a unique key on the vendor's line id, then matched to
-an attempt by our reference under that attempt's lock:
+The sketch agreed with §1 was replaced by §7.1; what 5c-1 built is in
+§7.2.
 
-```
-Dr psp_fee_collected       the estimate (from the capture entry)
-Dr/Cr psp_fee_variance     the gap, ours
-Cr psp_clearing            the fee the PSP kept
-Dr bank:{entity}           settled   (new account kind)
-Cr psp_clearing            settled
-```
-
-A line that matches nothing, or an amount that differs from the capture,
-is a `settlement_exception` row on a staff page. `psp_clearing` per
-account reaching zero after each batch is the health figure.
-
-### 7.1 5c in detail (agreed 20-Nov-2026; wins over the sketch above)
+### 7.1 5c in detail (agreed 20-Nov-2026)
 
 **Split.** §1 put four things in 5c. Settlement is the slice's money
 work; the other three are not about settlement. Proposed (question 8):
@@ -734,26 +680,6 @@ settlement" per account, with a fault to pick.
 
 ### 7.2 5c-1 built (20-Nov-2026)
 
-What was built:
-- Migrations `0020_settlement_values.sql` (enum values) and
-  `0021_settlement.sql` (the account's settlement mode and interval, the
-  reading cursor, batches, lines, exceptions and their resolutions); the
-  fake's `migrations_fake/0008_psp_settlement.sql`.
-- `src/mor/settlement/`: `entries.py` (the line and payout entries and the
-  exact net check, pure), `fetch.py` (`psp_settlement_fetch`, one report
-  or page per look, and `start_settlement_reading`), `store.py` (decoding
-  into rows, `settlement_line_book`, `settlement_payout_book`),
-  `review.py` (what the staff page reads, and resolving).
-- The port's settlement records and both modes in the fake client and the
-  registry; the fake PSP's cut (with faults), report files and batch pages
-  (`src/mor/fakes/psp.py`).
-- `AccountKind.PAYOUT_IN_TRANSIT`; `psp_inbox` takes settlement bytes on
-  the one inbound path.
-- The staff pages at `/staff/settlement` (balances, batches, exceptions,
-  the resolve form); "cut a settlement" on the sandbox page; the seed
-  starts every account's reading (keyed accounts by file, the others by
-  API, one-minute interval on the test setup).
-
 Changed while building:
 - **An attempt's lines are settled together, earliest first.** The first
   version booked each line on its own delivery; when a PSP settled a paid
@@ -917,23 +843,6 @@ registry checks against the environment.
 
 **5a built 19-Nov-2026.**
 
-What was built:
-- Migrations `0016_payment_values.sql` (enum values, in a file of their
-  own) and `0017_payments.sql`; the fake's `migrations_fake/0007_psp.sql`.
-- `src/mor/fakes/psp.py`, the fake PSP; `src/mor/psp/` (port, registry,
-  fake client, accounts and routing); `src/mor/provider_accounts.py`, the
-  `fake` / `sandbox` / `live` check every registry call makes.
-- `src/mor/payments/`: the transition table, the attempt store with
-  `move` (the one place an attempt changes state and writes its fact),
-  the pay and pay-another-way steps, the effect consumers, and inbound.
-- `src/mor/orders/`: the order and the capture entry with `fx_position`.
-- The buyer page's pay form, waiting, QR (`src/mor/web/qr.py`, inline SVG
-  from segno's matrix) and paid states; `ts/waiting.ts` and the
-  `/c/{session}/status` route; the PSP webhook; attempts on the staff
-  session page; the seed's twelve PSP accounts and default route.
-- The API shows the new session states `paying` and `completed` (a
-  v1-additive change; `order_id` comes with 5b).
-
 Changed while building:
 - **A decline at once is a scripted fault**, not "an amount ending in
   51": a real SG quote total was 61.51 and was declined by chance.
@@ -973,5 +882,3 @@ Open:
 - The QR was not scanned with a phone here (no decoder installed).
 - Another wiring on the sandbox needs a `psp_route` row written by hand;
   a staff form can come with staff sign-in.
-- KYB gate, invoice, order page, `after_payment`: 5b. Echo retirement,
-  card-fields component, Playwright smoke suite: 5c.

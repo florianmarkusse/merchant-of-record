@@ -1,12 +1,12 @@
 # Plan: merchant and buyer surfaces
 
-Status: design proposal (04-Nov-2026), awaiting confirmation. No code yet.
-This builds on `docs/plan-psp-integration.md` (core, PSP port, ledger,
-couriers, payouts) and only covers what merchants and buyers touch.
-
-Read `docs/plan-architecture.md` first (confirmed 15-Nov-2026): it is the
-overall design, and its §12 lists what it changes in this plan. Where the
-two differ, that plan wins.
+Status: written 04-Nov-2026; covers only what merchants and buyers
+touch. `docs/plan-architecture.md` (§12 lists what it changes here),
+`docs/plan-quote.md` (sessions, the API, the buyer pages) and
+`docs/plan-payments.md` (pay steps, the order page) win where they
+differ. Still the design input for what is not built: payment links,
+returns on the order page, Shopify and other channels (§6), the
+dashboard (§7).
 
 ## 1. The surfaces
 

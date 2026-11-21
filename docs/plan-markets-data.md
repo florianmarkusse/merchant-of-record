@@ -144,205 +144,81 @@ uv run scripts/markets.py build   # check, then write the views
 `build` writes `docs/markets.html` and `docs/markets/out/markets.xlsx`
 (not committed; upload it to Drive).
 
-## Next: quote terms and the landed-cost breakdown
+## Quote terms and the landed-cost breakdown
 
-Status: designed and agreed 14-Nov-2026; all three phases built the same day. Three phases, each
-built and checked before the next.
+Designed, agreed and built 14-Nov-2026, in three phases. Loading J&T's
+quote (q06) showed that surcharges hung off a service (so a quote with
+its own terms needed fake services and a made-up 0% fuel row), that what
+a price includes was free text the comparison never read, that nothing
+said which offer was current, and that assumed zone mappings showed as
+verified. Duties and import taxes were also left out of the all-in
+total, which is only roughly fair across carriers: the duty-handling fee
+is a share of the duties, some countries tax goods plus freight (MY, KR,
+CH), and on a duties-unpaid service the buyer pays at the door, which a
+merchant of record must avoid. What was built:
 
-### Why
+**Terms per rate card.**
+- `surcharges.csv` has a `rate_card` column: blank means every card of
+  the service; a card's own rows for a surcharge name replace the
+  service's rows of that name. J&T's quote is a card of `jt_intl`
+  (`ddp=no`); its faster Singapore column is a service of its own,
+  `jt_intl_sg_fast`, with its fees and goods rules copied (cheap
+  duplication of a different product).
+- `rate_cards.csv` says what a price includes as fixed values instead of
+  free text: `fuel` (`included`, `extra`, `unknown`) and `vat`
+  (`included`, `excluded`, `unknown`; the total keeps the price as quoted
+  with an "incl. VAT" mark). Whether VN VAT on export freight is 0% or
+  10%, and whether we can reclaim it, is adviser question q15.
+- `zones.csv` has a `status`; assumed mappings (J&T AU → `au_1`, FICP
+  zones from the IP column) are `estimate`. A total takes the worst
+  status of its parts, its zone included.
 
-Loading J&T's quote (q06, 14-Nov-2026) showed five weak spots:
-
-- Surcharges hang off a service, so a quote with its own terms needed
-  fake services (`jt_intl_quote`, `jt_intl_quote_sg_fast`), a made-up 0%
-  fuel row and duplicated fees.
-- What a price includes is free text (`excludes`) that the comparison
-  never reads: J&T's quote includes VAT, the integrators' cards do not.
-- Nothing says which offer is current: the 2024 J&T card and the 2026
-  quote are both compared.
-- Assumed zone mappings (AU → J&T zone 1, FICP zones = IP zones) are
-  in `notes` only, so their totals show as verified.
-- Price drops with weight (J&T's JP and US at 5 kg) are found by eye.
-
-Duties and import taxes are also left out of the all-in total, on the
-grounds that they are the same for every carrier. That is only roughly
-true: the duty-handling fee is a share of the duties, some countries tax
-goods plus freight (MY, KR, CH), and on a duties-unpaid (DAP) service the
-buyer pays duty and a collection fee at the door, which a merchant of
-record must avoid. We want one breakdown per carrier service ×
-destination × reference parcel: freight, fuel, fixed surcharges,
-duty-handling fee, duty, import tax, total landed cost.
-
-### Phase 1: terms per rate card, inclusions as fixed values, zone status
-
-Built 14-Nov-2026. Besides the plan below: `fuel` also takes `unknown`
-(VN Post's calculator and VIO Extra do not say); the J&T 2024 card's
-surcharges moved onto that card, so the quote does not inherit them; VIO's
-and the sea-line estimate's 0% fuel rows became `fuel=included`; J&T's
-goods rules were copied to `jt_intl_sg_fast`; FedEx cards whose PDFs do not
-state VAT are `vat=unknown`; the VAT question went into the Vietnam
-adviser question q15.
-
-**A. Surcharges per rate card.** `surcharges.csv` gets a `rate_card`
-column. Blank means every card of the service; a value limits the row to
-that card. For a card, the card's own rows for a surcharge name replace
-the service rows of that name. Migration:
-
-- `jt_intl_vn_2026_quote` moves to service `jt_intl`; its card-level
-  remote-area and delivery-day fees move with it, and service
-  `jt_intl_quote` and its 0% fuel row are removed.
-- The Singapore 2-3 days column stays a service of its own (a faster
-  product, with its own transit), renamed `jt_intl_sg_fast`. Its four
-  fees stay on it: cheap duplication of a different product.
-- `jt_intl` becomes `ddp=no`, as the quote says duties are unpaid.
-
-**B. Inclusions as fixed values.** `rate_cards.csv` replaces `excludes`
-with:
-
-- `fuel`: `included` | `extra`. `included` makes the fuel line read
-  "bundled in freight" instead of needing a 0% fuel row.
-- `vat`: `included` | `excluded` | `unknown`. The total keeps the price
-  as quoted and carries an "incl. VAT" mark. Whether Vietnamese VAT on
-  export freight is 0% or 10%, and whether we could reclaim it, goes to
-  the adviser as a new question; until it is answered we do not adjust.
-
-The rest of the old `excludes` text (discount, duties) moves to `notes`.
-
-**D. Zone status.** `zones.csv` gets a `status` column. Existing rows are
-`verified`, except the assumptions (J&T AU → `au_1`, FICP zones from the
-IP column), which become `estimate`. A total takes the worst status of
-its parts, its zone included.
-
-### Phase 2: the landed-cost breakdown
-
-**Computable duty and tax rates.** A new `landed_rates.csv`, one row per
-country or group × category (blank = all) × charge:
-
-| Column | Values |
-|---|---|
-| `charge` | `duty`, `import_tax`, `other_tax` (e.g. ID's 5% PPh on apparel) |
-| `basis` | `percent`, `per_line`, `per_parcel` |
-| `rate_percent` / `amount_minor` + `currency` | the rate or the flat amount |
-| `base` | `goods`, `goods_plus_freight`, `goods_freight_duty` (CIF plus duty) |
-| `effective_from` | when the rate started |
-| status, source columns | as in the other tables |
-
-Most specific row wins, as in `facts.csv`. The `duty_rate` and
-`import_tax` facts stay as the readable summary with ranges; this table
-holds the single figure we compute with, and its `notes` say which end
-of a range was taken. The EU's EUR 3 flat duty moves here from VIO's
-`passthrough` surcharge; VIO's EUR 5 customs fee stays a surcharge.
-
-Rates come from the destinations' public tariff and tax sources. No paid
-landed-cost API (Dutify, Zonos) is called for this.
-
-**Breakdown per parcel.** For each service × reference destination ×
-scenario, lines in this order, each with its status:
-
-1. freight
-2. fuel (or "bundled in freight")
-3. fixed surcharges (`always`)
-4. duty-handling fee, now computed from the duty amount instead of
-   taking only the minimum
-5. duty
-6. import tax and other taxes
-7. total landed cost
-
-Each duty or tax line says who pays it: `us_at_checkout` (we collect it
-through the country's seller scheme), `us_via_carrier` (a duties-paid
-service bills us) or `buyer_at_door` (a duties-unpaid service). The
-border rule in `border_charges.csv` decides whether duty is due at all.
-Customs values that include freight use freight plus fuel. Amounts stay
-exact `Fraction`s and are rounded half up only for display, in USD at the
-ECB rates as now.
-
-**Size counts.** `scenarios.csv` gets `length_cm`, `width_cm` and
-`height_cm`. The billed weight is the greater of actual and volumetric
-weight (L×W×H / the service's `volumetric_divisor`), rounded up to the
-card's weight step.
-
-**Views.** `markets.html` gets a breakdown table per destination (rows:
-services, columns: the lines above). The `.xlsx` gets a long-format sheet
-(service, card, destination, scenario, category, line, amount, currency,
-status, paid by) for filtering in Drive.
-
-**Default category: apparel** (decided 14-Nov-2026: duty depends on the
-category and showing all six multiplies the table by six; apparel is
-where duty weighs most, e.g. ID's 25%). Other categories can be built on
-request.
-
-**Built 14-Nov-2026**, with these changes to the design above:
-
-- Each `landed_rates.csv` row carries its own band (`applies` = `always`,
-  `up_to` or `above` a limit, with the limit's basis) and `collected`
-  (`border` or `seller`), instead of `border_charges.csv` deciding. The
-  law draws different lines for different charges (EU: the EUR 3 duty and
-  the EUR 2 fee at the border, VAT through IOSS up to EUR 150), which one
-  border rule cannot express. The most specific row whose band holds the
-  parcel's value wins. `check` fails on overlapping bands for one country,
-  category and charge. Where `border_charges.csv` disagrees (MY: its
-  border limit tests goods plus freight, the LVG band tests the item), the
-  parcel's duty and tax lines are marked unverified with a note.
-- Charges are `duty`, `additional_duty` (US Section 301), `fee` (EU
-  handling fee), `import_tax` and `other_tax` (ID income tax); bases are
-  `percent`, `per_line` and `per_parcel`. Duties and fees come first; the
-  taxes' `goods_freight_duty` base includes them (q41 found the EU VAT base
-  includes the EUR 3 and EUR 2).
-- Seeded for apparel only, for the 11 reference destinations, with a
-  cotton knitted T-shirt (HS 6109.10) as the reference product. US 16.5%
-  MFN, US Section 301 12.5% and TH 30% MFN were checked on the web on
-  14-Nov-2026; JP's simplified rate and PH's rate were not found and are
+**The landed-cost breakdown.**
+- `landed_rates.csv`: one row per country or group × category (blank =
+  all) × charge (`duty`, `additional_duty` such as US Section 301, `fee`
+  such as the EU handling fee, `import_tax`, `other_tax` such as ID's
+  income tax), with a basis (`percent`, `per_line`, `per_parcel`), a base
+  (`goods`, `goods_plus_freight`, `goods_freight_duty`), a band
+  (`applies` = `always`, `up_to` or `above` a limit) and `collected`
+  (`border` or `seller`). The most specific row whose band holds the
+  parcel's value wins; `check` fails on overlapping bands. Bands live per
+  row, not in `border_charges.csv`, because the law draws different lines
+  per charge (EU: the EUR 3 duty and EUR 2 fee at the border, VAT through
+  IOSS up to EUR 150). Where `border_charges.csv` disagrees (MY), the
+  lines are marked unverified. The `duty_rate` and `import_tax` facts stay
+  the readable summary with ranges. Rates come from public tariff and tax
+  sources, never a paid landed-cost API.
+- Per service × reference destination × scenario: freight, fuel (or
+  "bundled in freight"), fixed surcharges, the duty-handling fee computed
+  from the duty, duty, import and other taxes, total landed cost. Each
+  duty or tax line says who pays: `us_at_checkout`, `us_via_carrier` or
+  `buyer_at_door`. Customs values that include freight use freight plus
+  fuel. Amounts stay exact `Fraction`s, rounded half up only for display,
+  in USD at the ECB rates.
+- `scenarios.csv` has box sizes; billed weight is the greater of actual
+  and volumetric weight, rounded up to the card's step.
+- Seeded for apparel only (decided 14-Nov-2026: duty weighs most there,
+  e.g. ID's 25%), for the 11 reference destinations, with a cotton
+  knitted T-shirt (HS 6109.10). JP's simplified rate and PH's rate are
   `estimate`. Other categories need their own rows.
-- VIO's EUR 2 per HS code (from 01-Nov-2026, the date of the EU handling
-  fee) is the EU fee passed through: its surcharge is `passthrough` and the
-  fee counts once, in the landed lines.
-- Reference boxes are sized at or just below their actual weight at
-  divisor 5000, so no carrier total changed; the billed weight now follows
-  the box when a scenario's size is changed.
-- The `.xlsx` Landed sheet holds amounts as integer US cents.
+- VIO's EUR 2 per HS code is the EU handling fee passed through: its
+  surcharge is `passthrough`, and the fee counts once, in the landed
+  lines.
+- `markets.html` has a breakdown table per destination; the `.xlsx` a
+  long-format Landed sheet, amounts in integer US cents.
 
-### Phase 3, after phases 1 and 2: offer lifecycle and data checks
-
-**C. Which offer is current.** `rate_cards.csv` gets:
-
-- `received_on`: when we got the price (a quote often has no start date).
-- `valid_until`: the end of validity, where given (alongside
-  `effective_to`, which is when the carrier says the card ends).
-- `supersedes`: the card this one replaces, from the same provider.
-- `volume_per_month` (an integer, blank = any) and `account_required`
-  (`yes` | `no` | `unknown`) for conditional quotes.
-
-The comparison shows by default only current cards: not superseded, not
-past `valid_until` on the build date. Superseded and expired cards are
-listed in their own section. `check` fails on a `supersedes` that points
-to another provider or forms a cycle.
-
-**E. Checks on entered prices.** `check` fails when a card's price for a
-zone falls as weight rises, unless the row's new `ack` column names the
-question that asked about it (e.g. `q45`) or is `confirmed`. (A rate for
-a zone with no destinations already fails `check`.) A mapped zone with no
-rates also fails. `build` also lists, per current card, the reference destinations it does
-not cover, so a gap is visible instead of silently missing from a table.
-
-**Phase 3 built 14-Nov-2026**, with these changes to the design above:
-
-- `supersedes` works per destination: a newer card replaces the older
-  one only where the newer card has a price. J&T's 2026 quote replaces
-  the 2024 card for its quoted lanes (all 11 reference destinations), and
-  the 2024 card is still compared for the rest (CN, HK, ...). The Older
-  offers section lists both kinds (ended, replaced).
-- `received_on` was filled from each card's `checked_on`, the date we
-  read it; `account_required` is `yes` for the FedEx promo cards (for VN
-  account holders), `unknown` for J&T's quotes and our sea-line estimate,
-  `no` elsewhere. No card has a `valid_until` or `volume_per_month` yet.
-- J&T's JP and US 5 kg prices carry `ack=q45`, the follow-up that asks
-  about them. The weight check runs once the other rate checks pass.
-- The all-in section lists, per current card, the reference destinations
-  it has no price for.
-- Dates on the page and in the workbook's own sheets are shown as
-  14-Nov-2026 (one helper, `date_text`); free-text CSV columns (notes,
-  values, answers, sources) were rewritten the same way on 14-Nov-2026.
-  Date columns (`checked_on`, `due_on`, ...), file names and URLs keep ISO.
+**Which offer is current, and checks on prices.**
+- `rate_cards.csv` has `received_on`, `valid_until`, `supersedes`,
+  `volume_per_month` and `account_required`. `supersedes` works per
+  destination: a newer card replaces an older one only where it has a
+  price. The comparison shows current cards; ended and replaced ones are
+  listed under Older offers. `check` fails on a `supersedes` to another
+  provider or in a cycle.
+- `check` fails when a zone's price falls as weight rises, unless the
+  row's `ack` names the question that asked about it (J&T's JP and US
+  5 kg carry `ack=q45`) or is `confirmed`, and on a mapped zone with no
+  rates. `build` lists, per current card, the reference destinations it
+  has no price for.
 
 ## Project rules applied
 

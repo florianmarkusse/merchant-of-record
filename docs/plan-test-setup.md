@@ -1,6 +1,7 @@
 # Slice 3: the test setup
 
-Confirmed 17-Nov-2026. Implements plan-architecture.md §6 ("the test
+Status: confirmed and built 17-Nov-2026; the deploy waits for a VPS (§1).
+Implements plan-architecture.md §6 ("the test
 setup") and §14 step 3: a running copy with `ENVIRONMENT=test`, web (with
 the fakes under `/_fake/`) and worker, its own database with synthetic
 data only, where the echo flow can be walked by hand in every mode and the
