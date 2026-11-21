@@ -50,10 +50,10 @@ def invoice_lines(
     items = 0
     weights = [0] * len(sold)
     for part in quote.goods:
-        items += part.amount_minor
+        items += part.amount.amount_minor
         if part.kind == PartKind.GOODS:
             assert part.line is not None, "a goods part names its line"
-            weights[part.line] += part.amount_minor
+            weights[part.line] += part.amount.amount_minor
     if sum(weights) == 0:
         weights = [1] * len(sold)  # every price zero: equal shares
     shares = allocate(Money(items, quote.currency), weights)
@@ -74,7 +74,7 @@ def invoice_lines(
     for part in option.parts:
         match group_of(part.kind):
             case "shipping":
-                shipping += part.amount_minor
+                shipping += part.amount.amount_minor
             case "duties_and_taxes":
                 words = CHARGE_WORDS[part.kind]
                 if part.line is not None:
@@ -84,7 +84,7 @@ def invoice_lines(
                         _section(part.collector),
                         words,
                         None,
-                        part.amount_minor,
+                        part.amount.amount_minor,
                         part.label,
                         part.source,
                     )

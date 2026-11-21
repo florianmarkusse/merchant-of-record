@@ -26,13 +26,14 @@ from datetime import datetime
 from typing import assert_never
 
 from mor.audit import Actor
-from mor.checkout.quotes import MadeQuote, StoredPart
+from mor.checkout.quotes import MadeQuote
 from mor.checkout.records import SoldLine
 from mor.ledger.account import Account, AccountKind
 from mor.ledger.entry import JournalEntry, Line, build_entry
 from mor.markets.records import Collector
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.quote.build import Part
 from mor.quote.groups import PartKind
 
 
@@ -41,7 +42,7 @@ def capture_key(attempt_id: uuid.UUID) -> str:
 
 
 def _account_of(
-    part: StoredPart,
+    part: Part,
     lines: tuple[SoldLine, ...],
     quote_currency: Currency,
     merchant_id: uuid.UUID,
@@ -109,12 +110,12 @@ def capture_entry(
         Account(AccountKind.PSP_CLEARING, str(psp_account_id)),
         Money(option.total_minor, currency),
     )
-    parts: list[StoredPart] = []
+    parts: list[Part] = []
     parts.extend(quote.goods)
     parts.extend(option.parts)
     for part in parts:
         account = _account_of(part, lines, currency, merchant_id, country, courier)
-        post(account, Money(-part.amount_minor, currency))
+        post(account, Money(-part.amount.amount_minor, part.amount.currency))
     for line in lines:
         price = line.unit_price
         if price.currency == currency:

@@ -8,15 +8,15 @@ from datetime import datetime
 
 import htpy
 
-from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredPart, StoredQuote
+from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredQuote
 from mor.checkout.records import CheckoutSession
 from mor.checkout.sessions import SessionSummary
 from mor.dates import format_moment
 from mor.money.amount import Money
-from mor.money.currency import Currency
 from mor.orders.store import Order
 from mor.payments.attempts import Attempt
 from mor.public_ids import ORDER_PREFIX, QUOTE_PREFIX, SESSION_PREFIX, public_id
+from mor.quote.build import Part
 from mor.quote.groups import group_of
 from mor.web.api_estimates import collected_by
 from mor.web.staff_layout import money_text, staff_page
@@ -67,7 +67,7 @@ def render_sessions_page(rows: list[SessionSummary], now: datetime) -> str:
     )
 
 
-def _parts_rows(parts: tuple[StoredPart, ...], currency: Currency) -> list[htpy.Node]:
+def _parts_rows(parts: tuple[Part, ...]) -> list[htpy.Node]:
     rows: list[htpy.Node] = []
     for part in parts:
         line = "" if part.line is None else str(part.line + 1)
@@ -76,8 +76,8 @@ def _parts_rows(parts: tuple[StoredPart, ...], currency: Currency) -> list[htpy.
                 htpy.td[group_of(part.kind)],
                 htpy.td[part.kind.value],
                 htpy.td[line],
-                htpy.td(class_="num")[money_text(Money(part.amount_minor, currency))],
-                htpy.td[part.rounding.value],
+                htpy.td(class_="num")[money_text(part.amount)],
+                htpy.td[part.mode.value],
                 htpy.td[collected_by(part.collector) or ""],
                 htpy.td[part.label],
                 htpy.td[part.source],
@@ -110,7 +110,7 @@ def _made(quote: MadeQuote) -> htpy.Node:
                         htpy.th["Source"],
                     ]
                 ],
-                htpy.tbody[_parts_rows(quote.goods + option.parts, currency)],
+                htpy.tbody[_parts_rows(quote.goods + option.parts)],
             ]
         )
     notes: list[htpy.Node] = []

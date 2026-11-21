@@ -17,7 +17,7 @@ import htpy
 
 from mor.checkout import addresses as fields
 from mor.checkout.addresses import Address, AddressError, AddressErrors
-from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredOption, StoredPart
+from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredOption
 from mor.checkout.records import CheckoutSession, SessionState
 from mor.dates import format_moment
 from mor.entity import ENTITY
@@ -26,6 +26,7 @@ from mor.money.currency import Currency
 from mor.payments.attempts import Attempt
 from mor.payments.transitions import AttemptState
 from mor.psp.port import PaymentMethod
+from mor.quote.build import Part
 from mor.quote.groups import group_of
 from mor.quote.refusals import RefusalCode
 from mor.web.qr import qr_svg
@@ -232,11 +233,11 @@ def _address_form(view: BuyerView, action: str) -> htpy.Node:
     ]
 
 
-def _sum(parts: tuple[StoredPart, ...], groups: tuple[str, ...]) -> int:
+def _sum(parts: tuple[Part, ...], groups: tuple[str, ...]) -> int:
     total = 0
     for part in parts:
         if group_of(part.kind) in groups:
-            total += part.amount_minor
+            total += part.amount.amount_minor
     return total
 
 

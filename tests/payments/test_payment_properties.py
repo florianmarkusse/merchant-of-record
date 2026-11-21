@@ -12,7 +12,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from mor.audit import Actor, ActorKind
-from mor.checkout.quotes import MadeQuote, QuoteInputs, StoredOption, StoredPart
+from mor.checkout.quotes import MadeQuote, QuoteInputs, StoredOption
 from mor.checkout.records import Customs, SoldLine
 from mor.invoices.lines import invoice_lines
 from mor.invoices.records import InvoiceSection
@@ -31,6 +31,7 @@ from mor.psp.fake_client import (
 from mor.psp.port import (
     EventKind,
 )
+from mor.quote.build import Part
 from mor.quote.groups import PartKind
 from mor.vendor_failures import UndecodableBody
 
@@ -79,13 +80,13 @@ def test_a_capture_is_never_undone_by_a_later_event() -> None:
 
 def _part(
     kind: PartKind, amount: int, line: int | None, collector: Collector | None
-) -> StoredPart:
-    return StoredPart(
+) -> Part:
+    return Part(
         kind,
         kind.value,
         line,
         Fraction(amount),
-        amount,
+        Money(amount, Currency.SGD),
         RoundingMode.HALF_EVEN,
         collector,
         "test",
@@ -108,7 +109,7 @@ def _paid_quotes(draw: st.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
     in SGD or in other currencies."""
     count = draw(st.integers(1, 4))
     lines: list[SoldLine] = []
-    goods: list[StoredPart] = []
+    goods: list[Part] = []
     for number in range(count):
         currency = draw(st.sampled_from((Currency.SGD, Currency.USD, Currency.VND)))
         price = Money(draw(st.integers(0, 10**7)), currency)
@@ -126,7 +127,7 @@ def _paid_quotes(draw: st.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
         goods.append(_part(PartKind.GOODS, draw(st.integers(0, 10**8)), number, None))
     for kind in (PartKind.PSP_FEE, PartKind.FX, PartKind.MOR_MARGIN):
         goods.append(_part(kind, draw(st.integers(0, 10**6)), None, None))
-    option_parts: list[StoredPart] = []
+    option_parts: list[Part] = []
     for kind in draw(
         st.lists(
             st.sampled_from(SHIPPING_KINDS + (PartKind.DUTY_PAID_FEE,)), max_size=4
@@ -136,7 +137,7 @@ def _paid_quotes(draw: st.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
     for kind in draw(st.lists(st.sampled_from(TAX_KINDS), max_size=4)):
         collector = draw(st.sampled_from((Collector.BORDER, Collector.SELLER)))
         option_parts.append(_part(kind, draw(st.integers(0, 10**6)), None, collector))
-    total = sum(part.amount_minor for part in goods + option_parts)
+    total = sum(part.amount.amount_minor for part in goods + option_parts)
     if total == 0:
         option_parts.append(_part(PartKind.FREIGHT, 1, None, None))
         total = 1
@@ -215,7 +216,7 @@ def test_invoice_lines_sum_to_the_total_and_its_goods_lines_to_the_items(
     goods = [line for line in invoice if line.section == InvoiceSection.GOODS]
     assert len(goods) == len(lines)
     assert sum(line.amount_minor for line in goods) == sum(
-        part.amount_minor for part in quote.goods
+        part.amount.amount_minor for part in quote.goods
     )
     for line in goods:
         assert line.amount_minor >= 0
@@ -229,7 +230,7 @@ def test_invoice_lines_sum_to_the_total_and_its_goods_lines_to_the_items(
         parts = [part for part in option.parts if part.collector == collector]
         shown = [line for line in invoice if line.section == section]
         assert [line.amount_minor for line in shown] == [
-            part.amount_minor for part in parts
+            part.amount.amount_minor for part in parts
         ]
 
 

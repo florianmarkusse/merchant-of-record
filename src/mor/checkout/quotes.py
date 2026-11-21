@@ -15,23 +15,12 @@ from psycopg.rows import class_row
 
 from mor.db.connect import Connection
 from mor.markets.records import Collector, ServiceTier, Standing
+from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode
 from mor.quote.build import Part, Quote
 from mor.quote.groups import PartKind
 from mor.quote.refusals import RefusalCode
-
-
-@dataclass(frozen=True)
-class StoredPart:
-    kind: PartKind
-    label: str
-    line: int | None
-    exact: Fraction  # minor units of the quote's currency
-    amount_minor: int
-    rounding: RoundingMode
-    collector: Collector | None
-    source: str
 
 
 @dataclass(frozen=True)
@@ -43,7 +32,7 @@ class StoredOption:
     transit: tuple[int, int] | None
     total_minor: int
     standing: Standing
-    parts: tuple[StoredPart, ...]  # shipping, then duties and taxes
+    parts: tuple[Part, ...]  # shipping, then duties and taxes
 
 
 @dataclass(frozen=True)
@@ -63,7 +52,7 @@ class MadeQuote:
     made_at: datetime
     valid_until: datetime
     currency: Currency
-    goods: tuple[StoredPart, ...]  # each line's price, then the fees
+    goods: tuple[Part, ...]  # each line's price, then the fees
     options: tuple[StoredOption, ...]  # cheapest first
     placeholders: tuple[str, ...]
     not_offered: tuple[tuple[str, str], ...]  # (key, reason)
@@ -84,17 +73,10 @@ class RefusedQuote:
 type StoredQuote = MadeQuote | RefusedQuote
 
 
-def _stored_part(part: Part) -> StoredPart:
-    return StoredPart(
-        part.kind,
-        part.label,
-        part.line,
-        part.exact,
-        part.amount.amount_minor,
-        part.mode,
-        part.collector,
-        part.source,
-    )
+def _in_quote_currency(part: Part, currency: Currency) -> Part:
+    # A part row keeps only the minor amount: its currency is the quote's.
+    assert part.amount.currency == currency, part
+    return part
 
 
 def stored_from(
@@ -108,14 +90,14 @@ def stored_from(
     inputs: QuoteInputs,
 ) -> MadeQuote:
     """What is stored of a built quote. Pure."""
-    goods: list[StoredPart] = []
+    goods: list[Part] = []
     for part in quote.goods:
-        goods.append(_stored_part(part))
+        goods.append(_in_quote_currency(part, quote.currency))
     options: list[StoredOption] = []
     for option in quote.options:
-        parts: list[StoredPart] = []
+        parts: list[Part] = []
         for part in option.parts:
-            parts.append(_stored_part(part))
+            parts.append(_in_quote_currency(part, quote.currency))
         options.append(
             StoredOption(
                 option.key,
@@ -152,7 +134,7 @@ async def _insert_part(
     quote_id: uuid.UUID,
     option_no: int | None,
     part_no: int,
-    part: StoredPart,
+    part: Part,
 ) -> None:
     collector = None if part.collector is None else part.collector.value
     await conn.execute(
@@ -171,8 +153,8 @@ async def _insert_part(
             part.line,
             part.exact.numerator,
             part.exact.denominator,
-            part.amount_minor,
-            part.rounding.value,
+            part.amount.amount_minor,
+            part.mode.value,
             collector,
             part.source,
         ),
@@ -335,13 +317,13 @@ def _refusal_code(text: str) -> RefusalCode:
     raise AssertionError(f"unknown refusal code {text!r}")
 
 
-def _part(row: _PartRow) -> StoredPart:
-    return StoredPart(
+def _part(row: _PartRow, currency: Currency) -> Part:
+    return Part(
         row.kind,
         row.label,
         row.line,
         Fraction(int(row.exact_numerator), int(row.exact_denominator)),
-        row.amount_minor,
+        Money(row.amount_minor, currency),
         row.rounding,
         row.collector,
         row.source,
@@ -395,13 +377,15 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
             (quote_id,),
         )
         option_rows = await cur.fetchall()
-    goods: list[StoredPart] = []
-    by_option: dict[int, list[StoredPart]] = {}
+    goods: list[Part] = []
+    by_option: dict[int, list[Part]] = {}
     for part_row in part_rows:
         if part_row.option_no is None:
-            goods.append(_part(part_row))
+            goods.append(_part(part_row, row.currency))
         else:
-            by_option.setdefault(part_row.option_no, []).append(_part(part_row))
+            by_option.setdefault(part_row.option_no, []).append(
+                _part(part_row, row.currency)
+            )
     options: list[StoredOption] = []
     for option_row in option_rows:
         transit: tuple[int, int] | None = None
