@@ -277,10 +277,13 @@ class PaymentFlow(RuleBasedStateMachine):
     def the_buyer_answers_at_the_psp(
         self, data: st.DataObject, outcome: str, push: str
     ) -> None:
+        # Ordered by our attempt id (uuid7, in creation order), not the
+        # fake's random `pay_…` id: a replay of the same example must draw
+        # the same payment, or Hypothesis reports FlakyStrategyDefinition.
         cur = self.run(
             self.worker.execute(
                 "SELECT id FROM fake_vendor.psp_fake_payment"
-                " WHERE status = 'requires_action' ORDER BY id"
+                " WHERE status = 'requires_action' ORDER BY reference"
             )
         )
         waiting = [row[0] for row in self.run(cur.fetchall())]
