@@ -16,13 +16,16 @@ from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import connect
 from mor.ledger.account import Account, AccountKind
 from mor.ledger.store import balance
+from mor.messaging.facts import PaymentDeclinedV1
 from mor.messaging.guard import DuplicateGuard
+from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.payments.transitions import AttemptState
 from mor.psp.port import CaptureMode, StatusMode
 from mor.web.staff_layout import money_text
 from tests.payments.support import (
+    ACTOR,
     FAT_SALE_KEYED,
     NOW,
     Setup,
@@ -215,6 +218,46 @@ def test_declined_card_lets_the_buyer_pay_again(database_url: str) -> None:
             )
             == 1
         )
+
+    asyncio.run(with_setup(database_url, FAT_SALE_KEYED, body))
+
+
+def test_an_earlier_attempts_end_met_again_leaves_the_open_one_paying(
+    database_url: str,
+) -> None:
+    """A session's first attempt ended and the buyer is paying again; that
+    first end, appended once more (a producer retrying), must not set the
+    session back to `quoted` under the open second attempt."""
+
+    async def body(setup: Setup) -> None:
+        await pay_on_page(setup)
+        await drain(setup)
+        (first,) = await attempts_of(setup)
+        await release(setup, first, "declined")
+        await drain(setup)
+        await pay_on_page(setup)
+        await drain(setup)
+        assert await session_state(setup) == "paying"
+
+        async with await connect(setup.url) as conn:
+            await append_fact(
+                conn,
+                PaymentDeclinedV1(
+                    payment_attempt_id=first.id,
+                    checkout_session_id=setup.session_id,
+                    reason="declined",
+                ),
+                ACTOR,
+                setup.clock[0],
+            )
+            await conn.commit()
+        await drain(setup)
+
+        assert await session_state(setup) == "paying"
+        _, second = await attempts_of(setup)
+        await release(setup, second, "paid")
+        await drain(setup)
+        assert await session_state(setup) == "completed"
 
     asyncio.run(with_setup(database_url, FAT_SALE_KEYED, body))
 

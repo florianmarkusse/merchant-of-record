@@ -17,6 +17,16 @@ when following a fact through the code.
   `schema_version` as `ClassVar`s; `fact_type` is gone
   (`src/mor/messaging/facts.py`, checked by
   `tests/messaging/test_facts.py`).
+- 23-Nov-2026: §3.1 and §3.2 built (commit 83a9a04), with settlement
+  reworked to take lines and payouts in any order
+  (`plan-settlement-reconciliation.md`).
+- 23-Nov-2026: `session_payment_ended` acts only on the session's newest
+  attempt. Found while checking each local consumer for lock-first: an
+  earlier attempt's end appended again (a producer retrying) set a session
+  back to `quoted` under its open second attempt
+  (`test_an_earlier_attempts_end_met_again_leaves_the_open_one_paying`).
+  The payment fuzzer's meet-again rule could reach this but did not: a
+  second attempt open while the first's end is met again is rare there.
 
 ## 2. Decided: drop ordering per consumer and aggregate
 
@@ -154,6 +164,23 @@ async def run_capture(conn, http, environment, delivery, fact, now) -> EffectEnd
   whole run. Converted first: `duty_rate_ask`, measured, then the rest;
   the echo consumers are transitional and go last (or with the echo
   flow).
+
+### 3.3b The lock each local consumer takes, applied by the worker
+
+Decided 23-Nov-2026 (option 1 of three): a note saying which row each
+consumer locks is easy to forget, so it becomes a declaration the worker
+applies. Next to `consumer_kind` (`src/mor/messaging/routing.py`), an
+exhaustive `match` maps every local consumer to the row it locks (the
+attempt, the session, the payout, …) or to "reads only rows that never
+change" (the inbox decoders). pyright refuses a new consumer without
+one. The worker locks that row before any of the consumer's code runs,
+so the lock cannot be forgotten. To design with §3.3: for some consumers
+the row is found from the fact with a lookup (a settlement line's
+attempt, a line's payout), and that mapping should live in the same one
+place per consumer §3.3 asks for. Rejected: declared and checked only by
+a fuzzer rule (proves the row is locked, not that it is locked before
+reading), and an ast-grep rule on `UPDATE` without `FOR UPDATE` (text,
+not meaning).
 
 ### 3.4 Order of work
 

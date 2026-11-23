@@ -42,6 +42,7 @@ from mor.checkout.sessions import (
 )
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.duties.records import LookupState
 from mor.markets.store import load_in_force
 from mor.messaging.facts import (
@@ -479,18 +480,31 @@ async def end_payment(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
     """Consumer `session_payment_ended`: an attempt ended without money
     taken, so the buyer may pay another way, or the session expires now if
     its time passed while it was paying. Decided under the session's
-    lock."""
+    lock, and only for the session's newest attempt: an earlier one's end,
+    met again, must not end the payment open now."""
     match fact:
         case (
-            PaymentDeclinedV1(checkout_session_id=session_id)
-            | PaymentExpiredV1(checkout_session_id=session_id)
-            | PaymentCancelledV1(checkout_session_id=session_id)
+            PaymentDeclinedV1(checkout_session_id=session_id, payment_attempt_id=ended)
+            | PaymentExpiredV1(checkout_session_id=session_id, payment_attempt_id=ended)
+            | PaymentCancelledV1(
+                checkout_session_id=session_id, payment_attempt_id=ended
+            )
         ):
             pass
         case _:
             raise WrongFact(f"session_payment_ended got {fact!r}")
     session = await lock_session(conn, session_id)
     if session is None or session.state != SessionState.PAYING:
+        return Stale()
+    # Attempts are only made under this lock (`pay`), so the newest cannot
+    # change while it is held.
+    newest = await one_value(
+        conn,
+        "SELECT id FROM payment_attempt WHERE session_id = %s ORDER BY id DESC LIMIT 1",
+        (session_id,),
+        uuid.UUID,
+    )
+    if newest != ended:
         return Stale()
     if now >= session.expires_at:
         await set_session_state(
