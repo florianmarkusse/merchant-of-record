@@ -10,7 +10,6 @@ after a deploy), and it is the flow the messaging fuzzer drives.
 
 import uuid
 from datetime import datetime
-from enum import StrEnum
 from typing import assert_never
 
 from mor.audit import Actor, ActorKind
@@ -19,14 +18,7 @@ from mor.messaging.facts import Fact, ProbeEchoedV1, ProbeStartedV1
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
 from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
-
-
-class ProbeState(StrEnum):
-    """Matches the `probe_state` enum type."""
-
-    STARTED = "started"
-    ECHOED = "echoed"
-    FINISHED = "finished"
+from mor.probe.records import ProbeState
 
 
 def after_echo(state: ProbeState) -> ProbeState | Stale:
@@ -63,7 +55,7 @@ async def start_probe(conn: Connection, actor: Actor, now: datetime) -> uuid.UUI
 
 
 async def probe_state(conn: Connection, probe_id: uuid.UUID) -> ProbeState | None:
-    cur = await conn.execute("SELECT state::text FROM probe WHERE id = %s", (probe_id,))
+    cur = await conn.execute("SELECT state FROM probe WHERE id = %s", (probe_id,))
     row = await cur.fetchone()
     if row is None:
         return None
@@ -72,7 +64,7 @@ async def probe_state(conn: Connection, probe_id: uuid.UUID) -> ProbeState | Non
 
 async def _lock(conn: Connection, probe_id: uuid.UUID) -> ProbeState:
     cur = await conn.execute(
-        "SELECT state::text FROM probe WHERE id = %s FOR UPDATE", (probe_id,)
+        "SELECT state FROM probe WHERE id = %s FOR UPDATE", (probe_id,)
     )
     row = await cur.fetchone()
     if row is None:

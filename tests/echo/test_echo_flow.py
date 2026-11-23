@@ -14,12 +14,12 @@ from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection, connect
 from mor.echo.flow import (
-    EchoJobState,
     create_echo_account,
     create_echo_job,
     echo_job_state,
 )
 from mor.echo.port import EchoProvider
+from mor.echo.records import EchoJobState
 from mor.fakes.echo import make_app
 from mor.fakes.hang import hang_a_minute
 from mor.messaging.outcome import Applied, Stale

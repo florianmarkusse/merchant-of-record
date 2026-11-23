@@ -43,9 +43,10 @@ from hypothesis.stateful import (
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
 from mor.echo.events import VendorStatus, derive_status, rank
-from mor.echo.flow import EchoJobState, create_echo_account, create_echo_job
+from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.inbound import record_manual_event
 from mor.echo.port import EchoProvider, EventKind, EventMode
+from mor.echo.records import EchoJobState
 from mor.echo.reports import start_report_schedule
 from mor.messaging import consumers
 from mor.messaging.facts import AggregateType

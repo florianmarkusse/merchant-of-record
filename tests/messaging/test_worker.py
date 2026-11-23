@@ -22,7 +22,8 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
-from mor.probe.flow import ProbeState, probe_state, start_probe
+from mor.probe.flow import probe_state, start_probe
+from mor.probe.records import ProbeState
 from tests.helpers import ENV, NO_HTTP, advisory_locks_held, crash, local_consumer
 
 

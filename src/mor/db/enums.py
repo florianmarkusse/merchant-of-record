@@ -10,8 +10,8 @@ psycopg matches members to labels by member name (`CARD`); ours match by
 value (`card`), so each registration passes the mapping by value.
 
 Not listed: a database enum the code reads as a `Literal` or never reads
-alone, and `echo_job_state` and `probe_state`, whose StrEnums live in flow
-modules that import the database themselves.
+alone. A StrEnum listed here lives in a module that does not import the
+database (a flow module's states go in its `records`).
 
 This module may not import `mor.db.connect`, which imports it: it names
 the connection type itself.
@@ -35,6 +35,7 @@ from mor.duties.port import DutyProvider
 from mor.duties.records import LookupState
 from mor.echo.events import VendorStatus
 from mor.echo.port import EchoProvider, EventKind, EventMode
+from mor.echo.records import EchoJobState
 from mor.invoices.records import InvoiceSection
 from mor.ledger.account import AccountKind
 from mor.markets.records import (
@@ -61,11 +62,12 @@ from mor.markets.records import (
 )
 from mor.merchants.records import KeyEnv, KeyState, KybState
 from mor.messaging.facts import AggregateType, MessageType
-from mor.messaging.guard import DuplicateGuard
+from mor.messaging.guard import DuplicateGuard, VendorRequestState
 from mor.messaging.routing import ConsumerName
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode
 from mor.payments.transitions import AttemptState
+from mor.probe.records import ProbeState
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.port import (
     CaptureMode,
@@ -99,6 +101,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("duty_provider", DutyProvider),
     ("echo_event_kind", EventKind),
     ("echo_event_mode", EventMode),
+    ("echo_job_state", EchoJobState),
     ("echo_provider", EchoProvider),
     ("echo_vendor_status", VendorStatus),
     ("fee_component", FeeComponent),
@@ -118,6 +121,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("preference_condition", PreferenceCondition),
     ("price_expiry", PriceExpiry),
     ("price_source", PriceSource),
+    ("probe_state", ProbeState),
     ("provider_account_kind", ProviderAccountKind),
     ("psp_capture_mode", CaptureMode),
     ("psp_inbound_mode", InboundMode),
@@ -134,6 +138,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("shipping_price_state", PriceState),
     ("surcharge_basis", SurchargeBasis),
     ("surcharge_trigger", SurchargeTrigger),
+    ("vendor_request_state", VendorRequestState),
 )
 
 

@@ -1,7 +1,8 @@
 import pytest
 
 from mor.messaging.outcome import Stale
-from mor.probe.flow import ProbeState, after_echo, after_finish
+from mor.probe.flow import after_echo, after_finish
+from mor.probe.records import ProbeState
 
 
 def test_echo_moves_a_started_probe_and_is_stale_after() -> None:

@@ -42,7 +42,7 @@ from mor.messaging.facts import (
     PaymentEventsWantedV1,
     PaymentPollDueV1,
 )
-from mor.messaging.guard import DuplicateGuard
+from mor.messaging.guard import DuplicateGuard, VendorRequestState
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
 from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
@@ -354,7 +354,7 @@ class _Request:
     id: uuid.UUID
     number: int
     idempotency_key: str
-    state: str
+    state: VendorRequestState
 
 
 async def _latest_request(
@@ -363,7 +363,7 @@ async def _latest_request(
     async with conn.cursor(row_factory=class_row(_Request)) as cur:
         await cur.execute(
             """
-            SELECT id, number, idempotency_key, state::text FROM psp_request
+            SELECT id, number, idempotency_key, state FROM psp_request
             WHERE attempt_id = %s AND operation = %s
             ORDER BY number DESC LIMIT 1
             """,
@@ -389,7 +389,7 @@ async def _new_request(
         """,
         (request_id, attempt_id, operation, number, key, now),
     )
-    return _Request(request_id, number, key, "not_sent")
+    return _Request(request_id, number, key, VendorRequestState.NOT_SENT)
 
 
 async def _mark_sent(conn: Connection, request_id: uuid.UUID) -> None:
@@ -501,7 +501,7 @@ async def prepare_create(
     request = await _latest_request(conn, attempt.id, "create")
     if request is None:
         request = await _new_request(conn, attempt.id, "create", 1, now)
-    elif request.state == "sent":
+    elif request.state == VendorRequestState.SENT:
         # Marked sent, no answer recorded: an earlier run died mid-call or
         # got no answer. Whether to send again is the PSP's promise.
         match account.create_guard:
@@ -513,7 +513,7 @@ async def prepare_create(
                 raise AssertionError("a payment is never compensable")
             case _ as unreachable:
                 assert_never(unreachable)
-    elif request.state != "not_sent":
+    elif request.state != VendorRequestState.NOT_SENT:
         raise AssertionError(f"attempt {attempt.id} requested, create {request.state}")
     await _mark_sent(conn, request.id)
     return CreateCall(
@@ -617,7 +617,7 @@ async def prepare_capture(
     request = await _latest_request(conn, attempt.id, "capture")
     if request is None:
         request = await _new_request(conn, attempt.id, "capture", 1, now)
-    elif request.state == "sent":
+    elif request.state == VendorRequestState.SENT:
         match account.capture_guard:
             case DuplicateGuard.VENDOR_CONSTRAINT:
                 pass
@@ -627,7 +627,7 @@ async def prepare_capture(
                 raise AssertionError("a capture is never compensable")
             case _ as unreachable:
                 assert_never(unreachable)
-    elif request.state != "not_sent":
+    elif request.state != VendorRequestState.NOT_SENT:
         raise AssertionError(
             f"attempt {attempt.id} authorised, capture {request.state}"
         )

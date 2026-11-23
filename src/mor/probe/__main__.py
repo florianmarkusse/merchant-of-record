@@ -14,7 +14,8 @@ from datetime import UTC, datetime
 from mor.audit import Actor, ActorKind
 from mor.config import load_settings
 from mor.db.connect import connect
-from mor.probe.flow import ProbeState, probe_state, start_probe
+from mor.probe.flow import probe_state, start_probe
+from mor.probe.records import ProbeState
 
 
 WAIT_SECONDS = 30

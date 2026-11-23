@@ -42,7 +42,8 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
-from mor.probe.flow import ProbeState, start_probe
+from mor.probe.flow import start_probe
+from mor.probe.records import ProbeState
 from tests.helpers import ENV, NO_HTTP, TEST_URL, crash, empty_tables, local_consumer
 
 

@@ -19,7 +19,8 @@ from mor.messaging.worker import (
     run_worker,
     wait_for_work,
 )
-from mor.probe.flow import ProbeState, probe_state, start_probe
+from mor.probe.flow import probe_state, start_probe
+from mor.probe.records import ProbeState
 from tests.helpers import ENV, NO_HTTP
 
 

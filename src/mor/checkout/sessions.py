@@ -334,7 +334,7 @@ class SessionSummary:
 
     id: uuid.UUID
     merchant_name: str
-    state: str
+    state: SessionState
     created_at: datetime
     country: str | None
     quote_id: uuid.UUID | None
@@ -345,7 +345,7 @@ async def recent_sessions(conn: Connection, limit: int) -> list[SessionSummary]:
     async with conn.cursor(row_factory=class_row(SessionSummary)) as cur:
         await cur.execute(
             """
-            SELECT s.id, m.display_name AS merchant_name, s.state::text AS state,
+            SELECT s.id, m.display_name AS merchant_name, s.state,
                    s.created_at, a.country, s.quote_id,
                    (SELECT count(*) FROM quote_wait w
                       LEFT JOIN duty_lookup d ON d.id = w.duty_lookup_id

@@ -197,6 +197,10 @@ async def record_document(
 # --- booking a line ---------------------------------------------------------------
 
 
+type LineState = Literal["received", "waiting", "booked", "exception"]
+"""Matches `settlement_line_state`, read as text."""
+
+
 @dataclass(frozen=True)
 class _Line:
     id: uuid.UUID
@@ -211,7 +215,7 @@ class _Line:
     gross_numerator: int
     gross_denominator: int
     fee_minor: int
-    state: str
+    state: LineState
     batch_currency: Currency
     paid_out_at: datetime
 

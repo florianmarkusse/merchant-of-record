@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from fractions import Fraction
+from typing import Literal
 
 from psycopg.rows import class_row
 
@@ -259,13 +260,17 @@ async def store_refused(conn: Connection, refused: RefusedQuote) -> None:
     )
 
 
+type QuoteState = Literal["made", "refused"]
+"""Matches `quote_state`, read as text."""
+
+
 @dataclass(frozen=True)
 class _QuoteRow:
     id: uuid.UUID
     session_id: uuid.UUID
     address_id: uuid.UUID
     market_load_id: uuid.UUID
-    state: str
+    state: QuoteState
     made_at: datetime
     currency: Currency | None
     valid_until: datetime | None

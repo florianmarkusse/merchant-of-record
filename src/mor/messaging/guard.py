@@ -18,3 +18,14 @@ class DuplicateGuard(StrEnum):
     VENDOR_CONSTRAINT = "vendor_constraint"
     COMPENSABLE = "compensable"
     NONE = "none"
+
+
+class VendorRequestState(StrEnum):
+    """Matches `vendor_request_state`: one request to a vendor, as the
+    duplicate guard sees it. `sent` is committed before the call, so `sent`
+    with no answer recorded is what the guard decides about."""
+
+    NOT_SENT = "not_sent"
+    SENT = "sent"
+    SUCCEEDED = "succeeded"
+    REFUSED = "refused"

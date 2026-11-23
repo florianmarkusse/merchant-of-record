@@ -35,9 +35,11 @@ from starlette.responses import HTMLResponse, RedirectResponse, Response
 from mor.audit import Actor, ActorKind
 from mor.dates import format_moment
 from mor.db.connect import Connection, connect
+from mor.echo.events import VendorStatus
 from mor.echo.flow import create_echo_job
 from mor.echo.inbound import JobNotFound, record_manual_event
-from mor.echo.port import EventKind
+from mor.echo.port import EchoProvider, EventKind, EventMode
+from mor.echo.records import EchoJobState
 from mor.fakes.psp import CUT_FAULTS
 from mor.web.forms import read_form, same_origin
 
@@ -91,8 +93,8 @@ def _back(note: str) -> Response:
 @dataclass(frozen=True)
 class AccountRow:
     id: uuid.UUID
-    provider: str
-    event_mode: str
+    provider: EchoProvider
+    event_mode: EventMode
     base_url: str
 
 
@@ -100,8 +102,8 @@ class AccountRow:
 class JobRow:
     id: uuid.UUID
     account_id: uuid.UUID
-    state: str
-    vendor_status: str
+    state: EchoJobState
+    vendor_status: VendorStatus
     vendor_echo_id: str | None
     created_at: datetime
 
@@ -132,13 +134,13 @@ class View:
 async def read_view(conn: Connection, note: str | None) -> View:
     async with conn.cursor(row_factory=class_row(AccountRow)) as cur:
         await cur.execute(
-            "SELECT id, provider::text, event_mode::text, base_url FROM echo_account"
+            "SELECT id, provider, event_mode, base_url FROM echo_account"
             " ORDER BY provider, event_mode"
         )
         accounts = await cur.fetchall()
     async with conn.cursor(row_factory=class_row(JobRow)) as cur:
         await cur.execute(
-            "SELECT id, account_id, state::text, vendor_status::text,"
+            "SELECT id, account_id, state, vendor_status,"
             " vendor_echo_id, created_at FROM echo_job"
             " ORDER BY created_at DESC LIMIT %s",
             (JOBS_SHOWN,),
@@ -211,7 +213,7 @@ def _account_section(account: AccountRow, view: View) -> htpy.Element:
     actions: list[htpy.Node] = [
         _button("/_fake/sandbox/jobs", "create a job", {"account_id": account_id})
     ]
-    if account.event_mode in ("push", "push_thin"):
+    if account.event_mode in (EventMode.PUSH, EventMode.PUSH_THIN):
         actions.append(
             _button(
                 "/_fake/sandbox/redeliver",
@@ -219,7 +221,7 @@ def _account_section(account: AccountRow, view: View) -> htpy.Element:
                 {"account_id": account_id},
             )
         )
-    if account.event_mode == "file":
+    if account.event_mode == EventMode.FILE:
         actions.append(
             _button(
                 "/_fake/sandbox/cut", "vendor: cut a report", {"account_id": account_id}

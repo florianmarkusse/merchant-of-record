@@ -18,7 +18,6 @@ job's row lock and never commit; `call` runs with no transaction open.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 from typing import Literal, assert_never
 
 import httpx2
@@ -42,6 +41,7 @@ from mor.echo.port import (
     SendResult,
     Sent,
 )
+from mor.echo.records import EchoJobState
 from mor.messaging.facts import (
     EchoJobEchoedV1,
     EchoJobNeedsPersonV1,
@@ -49,7 +49,7 @@ from mor.messaging.facts import (
     EchoJobRequestedV1,
     Fact,
 )
-from mor.messaging.guard import DuplicateGuard
+from mor.messaging.guard import DuplicateGuard, VendorRequestState
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater, Stale
 from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
@@ -58,16 +58,6 @@ from mor.vendor_failures import OutcomeUnknown, Unavailable
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "echo_send")
-
-
-class EchoJobState(StrEnum):
-    """Matches the `echo_job_state` enum type."""
-
-    REQUESTED = "requested"
-    DEDUPLICATING = "deduplicating"
-    ECHOED = "echoed"
-    REFUSED = "refused"
-    NEEDS_PERSON = "needs_person"
 
 
 # --- calls: what prepare asks for, and call carries out -------------------
@@ -128,7 +118,7 @@ class _JobRow:
     id: uuid.UUID
     account_id: uuid.UUID
     message: str
-    state: str
+    state: EchoJobState
     vendor_echo_id: str | None
     refusal: str | None
 
@@ -147,7 +137,7 @@ class _RequestRow:
     id: uuid.UUID
     number: int
     idempotency_key: str
-    state: str
+    state: VendorRequestState
     sends: int
     target_echo_id: str | None
 
@@ -203,9 +193,7 @@ async def create_echo_job(
 
 
 async def echo_job_state(conn: Connection, job_id: uuid.UUID) -> EchoJobState:
-    cur = await conn.execute(
-        "SELECT state::text FROM echo_job WHERE id = %s", (job_id,)
-    )
+    cur = await conn.execute("SELECT state FROM echo_job WHERE id = %s", (job_id,))
     row = await cur.fetchone()
     assert row is not None, f"no echo job {job_id}"
     return EchoJobState(row[0])
@@ -215,7 +203,7 @@ async def _lock_job(conn: Connection, job_id: uuid.UUID) -> _JobRow:
     async with conn.cursor(row_factory=class_row(_JobRow)) as cur:
         await cur.execute(
             """
-            SELECT id, account_id, message, state::text, vendor_echo_id, refusal
+            SELECT id, account_id, message, state, vendor_echo_id, refusal
             FROM echo_job WHERE id = %s FOR UPDATE
             """,
             (job_id,),
@@ -250,7 +238,7 @@ async def _latest_request(
     async with conn.cursor(row_factory=class_row(_RequestRow)) as cur:
         await cur.execute(
             """
-            SELECT id, number, idempotency_key, state::text, sends, target_echo_id
+            SELECT id, number, idempotency_key, state, sends, target_echo_id
             FROM echo_request
             WHERE echo_job_id = %s AND operation = %s
             ORDER BY number DESC LIMIT 1
@@ -279,7 +267,9 @@ async def _new_request(
         """,
         (request_id, job_id, operation, number, key, target_echo_id, now),
     )
-    return _RequestRow(request_id, number, key, "not_sent", 0, target_echo_id)
+    return _RequestRow(
+        request_id, number, key, VendorRequestState.NOT_SENT, 0, target_echo_id
+    )
 
 
 async def _mark_sent(conn: Connection, request: _RequestRow) -> None:
@@ -328,7 +318,7 @@ async def _set_job(
         SET state = %s, vendor_echo_id = %s, refusal = %s, updated_at = %s
         WHERE id = %s
         """,
-        (state.value, vendor_echo_id, refusal, now, job_id),
+        (state, vendor_echo_id, refusal, now, job_id),
     )
 
 
@@ -346,12 +336,15 @@ def _job_id(fact: Fact) -> uuid.UUID:
 async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | EchoCall:
     job = await _lock_job(conn, _job_id(fact))
     account = await _account(conn, job.account_id)
-    match EchoJobState(job.state):
+    match job.state:
         case EchoJobState.ECHOED | EchoJobState.REFUSED | EchoJobState.NEEDS_PERSON:
             return NoCall(Stale())
         case EchoJobState.DEDUPLICATING:
             cancel = await _latest_request(conn, job.id, "cancel")
-            if cancel is not None and cancel.state in ("not_sent", "sent"):
+            if cancel is not None and cancel.state in (
+                VendorRequestState.NOT_SENT,
+                VendorRequestState.SENT,
+            ):
                 # Cancelling twice leaves an echo cancelled: always resend.
                 assert cancel.target_echo_id is not None
                 await _mark_sent(conn, cancel)
@@ -369,7 +362,7 @@ async def _prepare_send(
     send = await _latest_request(conn, job.id, "send")
     if send is None:
         send = await _new_request(conn, job.id, "send", 1, None, now)
-    elif send.state == "sent":
+    elif send.state == VendorRequestState.SENT:
         # Marked sent, no result recorded: an earlier run died mid-call or
         # got no answer. Whether to send again is the vendor's promise.
         match send_guard(account.provider):
@@ -379,7 +372,7 @@ async def _prepare_send(
                 return FindCall(account, str(job.id))
             case _ as unreachable:
                 assert_never(unreachable)
-    elif send.state != "not_sent":
+    elif send.state != VendorRequestState.NOT_SENT:
         raise AssertionError(f"job {job.id} requested but send is {send.state}")
     await _mark_sent(conn, send)
     request = SendRequest(str(job.id), job.message, send.idempotency_key)
@@ -415,7 +408,7 @@ async def complete(
     conn: Connection, fact: Fact, answer: EchoAnswer, now: datetime
 ) -> Done | RetryLater | Again:
     job = await _lock_job(conn, _job_id(fact))
-    state = EchoJobState(job.state)
+    state = job.state
     match answer:
         case SendAnswer():
             assert state == EchoJobState.REQUESTED, state
