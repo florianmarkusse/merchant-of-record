@@ -27,6 +27,10 @@ line-length = 88
 # The shared baseline (~/Desktop/conventions/AGENTS.md).
 select = ["E", "F", "I", "UP", "B", "DTZ005", "DTZ011"]
 
+[tool.ruff.lint.per-file-ignores]
+# Vulture's whitelist format is bare attribute expressions.
+"vulture_whitelist.py" = ["B018"]
+
 [tool.ruff.lint.isort]
 lines-after-imports = 2
 
@@ -53,4 +57,10 @@ dev = [
     "pyright>=1.1.414",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
+    "vulture>=2.16",
 ]
+
+[tool.vulture]
+# src only: a name used only by tests is reported, then whitelisted with a
+# reason if it is meant to stay.
+paths = ["src", "vulture_whitelist.py"]

@@ -105,7 +105,9 @@ this project.
   the other projects). Run `npm install` once, then `npx tsc` after
   changing a `.ts` file. Every page works without them: a script only
   improves a form or table the server already handles.
-- Checks: the shared order plus `npx tsc`; pyright in strict mode.
+- Checks: the shared order plus `uv run vulture` (set up 23-Nov-2026;
+  settings in `pyproject.toml`, reviewed false positives with their reason
+  in `vulture_whitelist.py`) and `npx tsc`; pyright in strict mode.
   `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
   the invoice PDF; it also needs Pango from the system). `scripts/` holds
   PEP 723 scripts with their own dependencies (`uv run scripts/markets.py

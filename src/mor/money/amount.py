@@ -49,10 +49,6 @@ def subtract(a: Money, b: Money) -> Money:
     return Money(a.amount_minor - b.amount_minor, a.currency)
 
 
-def negate(a: Money) -> Money:
-    return Money(-a.amount_minor, a.currency)
-
-
 _MAJOR = re.compile(r"(-?)([0-9]+)(?:\.([0-9]+))?")
 
 

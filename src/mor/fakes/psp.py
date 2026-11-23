@@ -81,13 +81,6 @@ type Outcome = Literal["paid", "declined", "expired"]
 type PushHow = Literal["once", "twice", "bad_signature"]
 type Push = Literal["not_subscribed", "delivered", "failed"]
 
-OPERATIONS: tuple[Operation, ...] = (
-    "create",
-    "capture",
-    "cancel",
-    "get",
-    "settlements",
-)
 # What a cut can be scripted to get wrong, each once, in its first batch:
 # a line for a payment nobody made, a gross that is not what was captured,
 # a payment settled again under a new line id, a line of a type no client

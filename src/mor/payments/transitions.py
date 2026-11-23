@@ -43,8 +43,6 @@ OPEN_STATES = (
     AttemptState.AUTHORISED,
     AttemptState.CANCELLING,
 )
-# Ended without money taken: the session may be paid another way.
-ENDED_STATES = (AttemptState.DECLINED, AttemptState.EXPIRED, AttemptState.CANCELLED)
 
 
 @dataclass(frozen=True)
