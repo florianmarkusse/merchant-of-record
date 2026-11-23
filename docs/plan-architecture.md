@@ -1000,6 +1000,7 @@ far it is:
 | Fuzzing depth (amends §10) | `plan-fuzz-reach.md` |
 | Messaging rework (open, from a code review) | `plan-messaging-rework.md` |
 | Settlement as vendors send it (amends 5c-1) | `plan-settlement-reconciliation.md` |
+| Rules to check, not only write down (survey) | `plan-codified-rules.md` |
 
 Next: 5c-2, the bank statement import that moves a PSP payout from
 `payout_in_transit` to `bank`, to be designed (`plan-payments.md` §7.1);
