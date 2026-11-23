@@ -51,7 +51,9 @@ from mor.messaging.facts import (
 )
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
+from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import OutcomeUnknown, Unavailable
 
 
@@ -66,10 +68,6 @@ class EchoJobState(StrEnum):
     ECHOED = "echoed"
     REFUSED = "refused"
     NEEDS_PERSON = "needs_person"
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 # --- calls: what prepare asks for, and call carries out -------------------
@@ -138,7 +136,8 @@ class _JobRow:
 @dataclass(frozen=True)
 class _AccountRow:
     id: uuid.UUID
-    provider: str
+    provider: EchoProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout_ms: int
 
@@ -165,20 +164,22 @@ async def create_echo_account(
     webhook_secret: str = "",
     poll_interval: timedelta = timedelta(minutes=5),
 ) -> uuid.UUID:
+    """Every echo provider is a fake, so every echo account is too."""
     account_id = uuid.uuid7()
     await conn.execute(
         """
         INSERT INTO echo_account
-          (id, provider, base_url, timeout_ms, event_mode, webhook_secret,
+          (id, provider, kind, base_url, timeout_ms, event_mode, webhook_secret,
            poll_interval_s)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             account_id,
-            provider.value,
+            provider,
+            ProviderAccountKind.FAKE,
             base_url,
             int(timeout.total_seconds() * 1000),
-            event_mode.value,
+            event_mode,
             webhook_secret,
             int(poll_interval.total_seconds()),
         ),
@@ -228,7 +229,7 @@ async def _lock_job(conn: Connection, job_id: uuid.UUID) -> _JobRow:
 async def _account(conn: Connection, account_id: uuid.UUID) -> EchoAccount:
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
-            "SELECT id, provider::text, base_url, timeout_ms FROM echo_account"
+            "SELECT id, provider, kind, base_url, timeout_ms FROM echo_account"
             " WHERE id = %s",
             (account_id,),
         )
@@ -236,7 +237,8 @@ async def _account(conn: Connection, account_id: uuid.UUID) -> EchoAccount:
     assert row is not None, f"no echo account {account_id}"
     return EchoAccount(
         row.id,
-        EchoProvider(row.provider),
+        row.provider,
+        row.kind,
         row.base_url,
         timedelta(milliseconds=row.timeout_ms),
     )

@@ -46,16 +46,14 @@ from mor.messaging.facts import (
     Fact,
 )
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
+from mor.provider_accounts import ProviderAccountKind
 from mor.tax.line_rates import Line, own_standard_row
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "duty_rate_ask")
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 @dataclass(frozen=True)
@@ -101,6 +99,7 @@ class _AccountRow:
     id: uuid.UUID
     vendor_name: str
     provider: DutyProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout_ms: int
 
@@ -122,6 +121,7 @@ async def create_vendor_account(
     conn: Connection,
     vendor_name: str,
     provider: DutyProvider,
+    kind: ProviderAccountKind,
     base_url: str,
     timeout: timedelta,
 ) -> uuid.UUID:
@@ -129,13 +129,14 @@ async def create_vendor_account(
     await conn.execute(
         """
         INSERT INTO duty_vendor_account
-          (id, vendor_name, provider, base_url, timeout_ms)
-        VALUES (%s, %s, %s, %s, %s)
+          (id, vendor_name, provider, kind, base_url, timeout_ms)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (
             account_id,
             vendor_name,
-            provider.value,
+            provider,
+            kind,
             base_url,
             int(timeout.total_seconds() * 1000),
         ),
@@ -148,7 +149,7 @@ async def vendor_account(
 ) -> DutyVendorAccount | None:
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
-            "SELECT id, vendor_name, provider, base_url, timeout_ms"
+            "SELECT id, vendor_name, provider, kind, base_url, timeout_ms"
             " FROM duty_vendor_account WHERE vendor_name = %s",
             (vendor_name,),
         )
@@ -159,6 +160,7 @@ async def vendor_account(
         row.id,
         row.vendor_name,
         row.provider,
+        row.kind,
         row.base_url,
         timedelta(milliseconds=row.timeout_ms),
     )

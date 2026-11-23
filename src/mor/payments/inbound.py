@@ -29,6 +29,7 @@ from mor.messaging.facts import (
     PspInboxStoredV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -48,10 +49,6 @@ from mor.vendor_failures import UndecodableBody
 RECEIVER = Actor(ActorKind.SYSTEM, "psp_inbox")
 DECODER = Actor(ActorKind.SYSTEM, "psp_inbox_decode")
 APPLIER = Actor(ActorKind.SYSTEM, "payment_event_apply")
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 class UndecodableInbox(Exception):

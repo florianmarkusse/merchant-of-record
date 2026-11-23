@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from mor.money.amount import Money
+from mor.provider_accounts import ProviderAccountKind
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class CourierAccount:
     id: uuid.UUID
     carrier: str
     provider: CourierProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout: timedelta
     price_valid_for: timedelta

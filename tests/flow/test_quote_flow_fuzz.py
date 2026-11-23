@@ -65,6 +65,7 @@ from mor.messaging.worker import (
 )
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.provider_accounts import ProviderAccountKind
 from tests.helpers import (
     ENV,
     TEST_URL,
@@ -364,6 +365,7 @@ class QuoteFlow(RuleBasedStateMachine):
                 conn,
                 "carrier",
                 CourierProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://mor/_fake/courier/acct",
                 VENDOR_TIMEOUT,
                 timedelta(hours=6),

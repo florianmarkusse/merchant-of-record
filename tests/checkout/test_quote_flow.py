@@ -38,6 +38,7 @@ from mor.merchants.store import create_api_key, create_merchant, set_kyb_state
 from mor.messaging.worker import drain_once
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.provider_accounts import ProviderAccountKind
 from mor.quote.build import Quote, QuoteLine, QuoteRequest, build_quote
 from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, wire
 from tests.quote.fixtures import live_market, quote_market
@@ -121,6 +122,7 @@ async def _with_setup(
             conn,
             "carrier",
             CourierProvider.FAKE,
+            ProviderAccountKind.FAKE,
             "http://mor/_fake/courier/acct",
             VENDOR_TIMEOUT,
             timedelta(hours=24),

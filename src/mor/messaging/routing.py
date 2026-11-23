@@ -5,6 +5,10 @@ from typing import Literal, assert_never
 from mor.messaging.facts import MessageType
 
 
+class WrongFact(Exception):
+    """A consumer got a fact routing never sends it: a bug in routing."""
+
+
 class ConsumerName(StrEnum):
     """Matches the `consumer_name` enum type."""
 

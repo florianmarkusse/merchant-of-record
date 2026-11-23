@@ -38,15 +38,12 @@ from mor.echo.port import (
 )
 from mor.messaging.facts import EchoReportDueV1, Fact
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.vendor_failures import OutcomeUnknown, Unavailable
 
 
 SCHEDULER = Actor(ActorKind.SYSTEM, "echo_report_fetch")
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 @dataclass(frozen=True)

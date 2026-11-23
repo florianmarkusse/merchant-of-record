@@ -32,6 +32,7 @@ from mor.markets.records import Charge
 from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.messaging.worker import drain_once
+from mor.provider_accounts import AccountNotAllowed, ProviderAccountKind
 from tests.helpers import ENV, RefusingTransport
 from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
 
@@ -62,6 +63,7 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
                 conn,
                 "acme",
                 DutyProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://fake/_fake/duty/acct",
                 timedelta(milliseconds=200),
             )
@@ -258,7 +260,7 @@ def test_the_fake_vendor_is_refused_in_prod(database_url: str) -> None:
         async with await connect(setup.url) as conn:
             account = await vendor_account(conn, "acme")
         assert account is not None
-        with pytest.raises(registry.FakeInProd):
+        with pytest.raises(AccountNotAllowed):
             await registry.ask_rates(setup.http, Environment.PROD, account, T_SHIRT)
 
     asyncio.run(_with_setup(database_url, body))

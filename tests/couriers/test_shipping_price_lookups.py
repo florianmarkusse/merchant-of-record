@@ -38,6 +38,7 @@ from mor.markets.store import Loaded, load_market
 from mor.messaging.worker import drain_once
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.provider_accounts import AccountNotAllowed, ProviderAccountKind
 from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, wire
 from tests.quote.fixtures import quote_market
 
@@ -67,6 +68,7 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
                 conn,
                 "carrier",
                 CourierProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://mor/_fake/courier/acct",
                 VENDOR_TIMEOUT,
                 VALID_FOR,
@@ -314,7 +316,7 @@ def test_the_fake_courier_is_refused_in_prod(database_url: str) -> None:
         async with await connect(setup.url) as conn:
             account = await courier_account(conn, "carrier")
         assert account is not None
-        with pytest.raises(registry.FakeInProd):
+        with pytest.raises(AccountNotAllowed):
             await registry.quote_rate(
                 setup.wired.http, Environment.PROD, account, TO_SG
             )

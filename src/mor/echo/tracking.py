@@ -46,6 +46,7 @@ from mor.messaging.outcome import (
     RetryLater,
     Stale,
 )
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.vendor_failures import OutcomeUnknown, Unavailable
 
@@ -54,10 +55,6 @@ SCHEDULER = Actor(ActorKind.SYSTEM, "echo_poll")
 
 # The last status a job can reach: nothing is polled after it.
 FINAL = VendorStatus.ARCHIVED
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 @dataclass(frozen=True)

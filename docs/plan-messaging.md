@@ -315,7 +315,8 @@ mor/echo/port.py       EchoAccount, SendRequest, CancelRequest, and the
                        result union: Sent(echo_id) | Refused(reason)
                        | Unavailable | OutcomeUnknown; FindResult
 mor/echo/registry.py   send / cancel / find_by_reference: an exhaustive
-                       match on the provider, refusing a fake in prod
+                       match on the provider, refusing an account kind
+                       the environment does not allow
 mor/echo/fake_client.py   httpx client for the fake's made-up API
 mor/echo/capabilities.py  the duplicate guard per provider and operation
 mor/echo/flow.py       create_echo_job; prepare, call, complete

@@ -39,6 +39,7 @@ from mor.messaging.facts import (
     SettlementLineReceivedV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -82,10 +83,6 @@ ENDED_OTHERWISE = (
     AttemptState.CANCELLED,
     AttemptState.NEEDS_PERSON,
 )
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 # --- decoding a stored report or page -------------------------------------------

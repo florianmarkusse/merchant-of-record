@@ -26,6 +26,7 @@ from mor.config import Environment
 from mor.db.connect import Connection
 from mor.messaging.facts import Fact, PspSettlementDueV1
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.payments.inbound import store_inbox
 from mor.psp import registry
@@ -43,10 +44,6 @@ from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 SCHEDULER = Actor(ActorKind.SYSTEM, "psp_settlement_fetch")
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 @dataclass(frozen=True)

@@ -37,6 +37,7 @@ from mor.messaging.worker import (
 )
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.provider_accounts import ProviderAccountKind
 from tests.helpers import ENV, effect_consumer, wire
 from tests.quote.fixtures import live_market
 
@@ -68,6 +69,7 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
                 conn,
                 "carrier",
                 CourierProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://mor/_fake/courier/acct",
                 timedelta(seconds=2),
                 timedelta(hours=24),

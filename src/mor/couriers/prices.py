@@ -54,19 +54,17 @@ from mor.messaging.facts import (
     ShippingPriceNotServedV1,
 )
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
+from mor.provider_accounts import ProviderAccountKind
 from mor.quote.shipping import own_card_price
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "shipping_price_ask")
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 @dataclass(frozen=True)
@@ -100,6 +98,7 @@ class _AccountRow:
     id: uuid.UUID
     carrier: str
     provider: CourierProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout_ms: int
     price_valid_for_s: int
@@ -137,6 +136,7 @@ async def create_courier_account(
     conn: Connection,
     carrier: str,
     provider: CourierProvider,
+    kind: ProviderAccountKind,
     base_url: str,
     timeout: timedelta,
     price_valid_for: timedelta,
@@ -146,18 +146,19 @@ async def create_courier_account(
     await conn.execute(
         """
         INSERT INTO courier_account
-          (id, carrier, provider, base_url, timeout_ms, price_valid_for_s,
+          (id, carrier, provider, kind, base_url, timeout_ms, price_valid_for_s,
            price_expiry)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             account_id,
             carrier,
-            provider.value,
+            provider,
+            kind,
             base_url,
             int(timeout.total_seconds() * 1000),
             int(price_valid_for.total_seconds()),
-            price_expiry.value,
+            price_expiry,
         ),
     )
     return account_id
@@ -167,7 +168,7 @@ async def courier_account(conn: Connection, carrier: str) -> CourierAccount | No
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
             """
-            SELECT id, carrier, provider, base_url, timeout_ms,
+            SELECT id, carrier, provider, kind, base_url, timeout_ms,
                    price_valid_for_s, price_expiry
             FROM courier_account WHERE carrier = %s
             """,
@@ -180,6 +181,7 @@ async def courier_account(conn: Connection, carrier: str) -> CourierAccount | No
         row.id,
         row.carrier,
         row.provider,
+        row.kind,
         row.base_url,
         timedelta(milliseconds=row.timeout_ms),
         timedelta(seconds=row.price_valid_for_s),

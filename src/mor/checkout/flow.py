@@ -63,6 +63,7 @@ from mor.messaging.facts import (
     ShippingPriceNotServedV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.quote.build import InputsMissing, Quote, QuoteLine, QuoteRequest, build_quote
 from mor.quote.inputs import (
@@ -89,10 +90,6 @@ LIVE_STATES = (
     SessionState.QUOTED,
     SessionState.REFUSED,
 )
-
-
-class WrongFact(Exception):
-    """A consumer got a fact it is not routed."""
 
 
 @dataclass(frozen=True)

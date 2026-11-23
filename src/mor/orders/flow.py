@@ -25,6 +25,7 @@ from mor.messaging.facts import (
     PaymentCapturedV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.orders.posting import capture_entry
 from mor.payments.attempts import read_attempt
@@ -32,10 +33,6 @@ from mor.payments.transitions import AttemptState
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "order_create")
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 async def _courier(conn: Connection, load_id: uuid.UUID, service: str) -> str:

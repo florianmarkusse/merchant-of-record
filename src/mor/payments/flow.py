@@ -44,6 +44,7 @@ from mor.messaging.facts import (
 )
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.payments.attempts import (
@@ -80,10 +81,6 @@ from mor.psp.port import (
     StatusMode,
 )
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 # --- the buyer's steps (handlers) -----------------------------------------

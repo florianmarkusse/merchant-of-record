@@ -270,7 +270,7 @@ def test_a_fake_provider_is_refused_in_prod(database_url: str) -> None:
         job_id = await _job(setup, EchoProvider.FAKE_KEYED)
         results = await drain_once(setup.worker, setup.http, Environment.PROD, NOW)
         assert len(results) == 1 and isinstance(results[0], Failed)
-        assert "FakeInProd" in results[0].error
+        assert "AccountNotAllowed" in results[0].error
         assert await _vendor_echoes(setup, job_id) == []
         assert await _state(setup, job_id) == EchoJobState.REQUESTED
 

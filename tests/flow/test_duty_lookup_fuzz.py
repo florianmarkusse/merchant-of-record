@@ -51,6 +51,7 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
+from mor.provider_accounts import ProviderAccountKind
 from tests.helpers import (
     ENV,
     TEST_URL,
@@ -281,6 +282,7 @@ class DutyLookupFlow(RuleBasedStateMachine):
                 conn,
                 "acme",
                 DutyProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://mor/_fake/duty/acct",
                 VENDOR_TIMEOUT,
             )

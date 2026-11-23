@@ -414,7 +414,8 @@ in one currency, and a `valid_until` when the carrier gives one. Decoding
 checks that the parts add up to the total. When they don't, the answer is
 `UndecodableBody`. `NotServed` is the carrier saying it does not carry
 this lane or parcel. One registry picks the module by `courier_provider`
-with an exhaustive `match`, and refuses the fake in prod.
+with an exhaustive `match`, and refuses an account kind the environment
+does not allow (`mor.provider_accounts`).
 
 **Which price a route uses**: `price_source` gains `carrier_api`. A route
 names a service, plus a rate card only when the source is `own_table`.

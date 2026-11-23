@@ -16,6 +16,7 @@ from enum import StrEnum
 from fractions import Fraction
 
 from mor.markets.records import Charge
+from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import CallFailure
 
 
@@ -31,6 +32,7 @@ class DutyVendorAccount:
     id: uuid.UUID
     vendor_name: str
     provider: DutyProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout: timedelta
 

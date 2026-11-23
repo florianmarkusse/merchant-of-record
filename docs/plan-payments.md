@@ -86,7 +86,8 @@ fuzzer's proof that nothing was charged twice.
 ## 3. Our side: port, accounts, routing (5a)
 
 `src/mor/psp/`: `port.py` (records and result unions, no provider words),
-`registry.py` (one `match` on `PspProvider`, refusing the fake in prod),
+`registry.py` (one `match` on `PspProvider`, refusing an account kind the
+environment does not allow),
 `fake_client.py` (httpx2 against `account.base_url`, the amount through
 `to_provider_amount`/`from_provider_amount`, plan-psp-integration §4).
 

@@ -62,6 +62,7 @@ from mor.messaging.worker import (
     run_one,
     try_lock_aggregate,
 )
+from mor.provider_accounts import ProviderAccountKind
 from tests.helpers import (
     ENV,
     TEST_URL,
@@ -326,6 +327,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
                 conn,
                 "carrier",
                 CourierProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://mor/_fake/courier/acct",
                 VENDOR_TIMEOUT,
                 VALID_FOR,

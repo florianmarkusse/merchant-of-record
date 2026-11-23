@@ -33,9 +33,9 @@ from mor.invoices.records import (
 from mor.merchants.store import read_merchant
 from mor.messaging.facts import Fact, InvoiceIssuedV1, OrderPaidV1
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.currency import Currency
-from mor.orders.flow import WrongFact
 from mor.orders.store import lock_order
 
 

@@ -192,7 +192,9 @@ async def seed_duty_vendors(
         if await vendor_account(conn, name) is not None:
             continue
         url = f"{settings.self_url}/_fake/duty/sandbox-{name}"
-        await create_vendor_account(conn, name, DutyProvider.FAKE, url, TIMEOUT)
+        await create_vendor_account(
+            conn, name, DutyProvider.FAKE, ProviderAccountKind.FAKE, url, TIMEOUT
+        )
         created.append(name)
     return created
 
@@ -221,6 +223,7 @@ async def seed_couriers(conn: Connection, settings: Settings) -> list[str] | See
                 conn,
                 carrier,
                 CourierProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 f"{settings.self_url}/_fake/courier/sandbox-{carrier}",
                 TIMEOUT,
                 PRICE_VALID_FOR,

@@ -384,7 +384,10 @@ an order end to end against the real API without real money or parcels.
   sandbox; `prod` allows live accounts only. Each account row says which
   of `fake`, `sandbox` or `live` it is, and the registry refuses any
   account whose kind the environment does not allow, so a live key can
-  never be used outside prod, nor a sandbox key in prod.
+  never be used outside prod, nor a sandbox key in prod. Every account
+  table has the `kind` (PSP, courier, duty vendor, echo; migration 0023),
+  and a CHECK makes a fake provider's account always `fake`, so the kind
+  check alone keeps the fakes out of prod.
 - A sandbox account is routed only to merchants we pick (a routing row
   per merchant); the default routes stay on the fakes.
 - The fakes remain what the fuzzer, the soak and `pytest` use: a vendor's

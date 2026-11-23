@@ -1,4 +1,6 @@
-"""The one place that picks an echo provider module by name.
+"""The one place that picks an echo provider module by name. Every call
+first checks that this environment may use the account's kind
+(`mor.provider_accounts`).
 
 Transitional with the echo flow (docs/plan-messaging.md §10).
 """
@@ -21,17 +23,12 @@ from mor.echo.port import (
     SendResult,
     VendorEvent,
 )
+from mor.provider_accounts import require_allowed
 from mor.vendor_failures import UndecodableBody
 
 
-class FakeInProd(Exception):
-    """A fake provider reached in prod: the fakes never run there
-    (plan-architecture.md §6), so an account row is wrong."""
-
-
-def _refuse_fake_in_prod(environment: Environment, account: EchoAccount) -> None:
-    if environment == Environment.PROD:
-        raise FakeInProd(f"echo account {account.id} is {account.provider}")
+def _check(environment: Environment, account: EchoAccount) -> None:
+    require_allowed(environment, account.kind, f"echo account {account.id}")
 
 
 async def send(
@@ -40,13 +37,13 @@ async def send(
     account: EchoAccount,
     request: SendRequest,
 ) -> SendResult:
+    _check(environment, account)
     match account.provider:
         case (
             EchoProvider.FAKE_KEYED
             | EchoProvider.FAKE_CANCELLABLE
             | EchoProvider.FAKE_PLAIN
         ):
-            _refuse_fake_in_prod(environment, account)
             return await fake_client.send(http, account, request)
         case _:
             assert_never(account.provider)
@@ -58,13 +55,13 @@ async def find_by_reference(
     account: EchoAccount,
     reference: str,
 ) -> FindResult:
+    _check(environment, account)
     match account.provider:
         case (
             EchoProvider.FAKE_KEYED
             | EchoProvider.FAKE_CANCELLABLE
             | EchoProvider.FAKE_PLAIN
         ):
-            _refuse_fake_in_prod(environment, account)
             return await fake_client.find_by_reference(http, account, reference)
         case _:
             assert_never(account.provider)
@@ -76,13 +73,13 @@ async def cancel(
     account: EchoAccount,
     echo_id: str,
 ) -> CancelResult:
+    _check(environment, account)
     match account.provider:
         case (
             EchoProvider.FAKE_KEYED
             | EchoProvider.FAKE_CANCELLABLE
             | EchoProvider.FAKE_PLAIN
         ):
-            _refuse_fake_in_prod(environment, account)
             return await fake_client.cancel(http, account, echo_id)
         case _:
             assert_never(account.provider)
@@ -148,13 +145,13 @@ async def fetch_events(
     account: EchoAccount,
     reference: str,
 ) -> FetchResult:
+    _check(environment, account)
     match account.provider:
         case (
             EchoProvider.FAKE_KEYED
             | EchoProvider.FAKE_CANCELLABLE
             | EchoProvider.FAKE_PLAIN
         ):
-            _refuse_fake_in_prod(environment, account)
             return await fake_client.fetch_events(http, account, reference)
         case _:
             assert_never(account.provider)
@@ -166,13 +163,13 @@ async def list_reports(
     account: EchoAccount,
     after: str,
 ) -> ListResult:
+    _check(environment, account)
     match account.provider:
         case (
             EchoProvider.FAKE_KEYED
             | EchoProvider.FAKE_CANCELLABLE
             | EchoProvider.FAKE_PLAIN
         ):
-            _refuse_fake_in_prod(environment, account)
             return await fake_client.list_reports(http, account, after)
         case _:
             assert_never(account.provider)
@@ -184,13 +181,13 @@ async def fetch_report(
     account: EchoAccount,
     name: str,
 ) -> FetchResult:
+    _check(environment, account)
     match account.provider:
         case (
             EchoProvider.FAKE_KEYED
             | EchoProvider.FAKE_CANCELLABLE
             | EchoProvider.FAKE_PLAIN
         ):
-            _refuse_fake_in_prod(environment, account)
             return await fake_client.fetch_report(http, account, name)
         case _:
             assert_never(account.provider)

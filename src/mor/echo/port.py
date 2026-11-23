@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Literal
 
+from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import OutcomeUnknown, Unavailable
 
 
@@ -27,6 +28,7 @@ class EchoProvider(StrEnum):
 class EchoAccount:
     id: uuid.UUID
     provider: EchoProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout: timedelta
 

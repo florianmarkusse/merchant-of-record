@@ -20,6 +20,7 @@ from mor.duties.port import DutyProvider
 from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.messaging.worker import drain_once
+from mor.provider_accounts import ProviderAccountKind
 from mor.web.main import make_app
 from tests.helpers import ENV, wire
 from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
@@ -154,6 +155,7 @@ def test_a_vendor_country_is_asked_from_the_page_and_its_answer_shown(
                 conn,
                 "acme",
                 DutyProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://mor/_fake/duty/acct",
                 timedelta(seconds=5),
             )
@@ -341,6 +343,7 @@ def test_a_live_route_is_priced_by_asking_the_carrier_from_the_page(
                 conn,
                 "carrier",
                 CourierProvider.FAKE,
+                ProviderAccountKind.FAKE,
                 "http://mor/_fake/courier/acct",
                 timedelta(seconds=5),
                 timedelta(hours=24),

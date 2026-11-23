@@ -17,6 +17,7 @@ from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
 from mor.messaging.facts import Fact, ProbeEchoedV1, ProbeStartedV1
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 
 
@@ -26,10 +27,6 @@ class ProbeState(StrEnum):
     STARTED = "started"
     ECHOED = "echoed"
     FINISHED = "finished"
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 def after_echo(state: ProbeState) -> ProbeState | Stale:

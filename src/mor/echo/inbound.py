@@ -37,17 +37,15 @@ from mor.messaging.facts import (
     Fact,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
+from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
+from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import UndecodableBody
 
 
 DECODER = Actor(ActorKind.SYSTEM, "echo_inbox_decode")
 APPLIER = Actor(ActorKind.SYSTEM, "echo_event_apply")
 RECEIVER = Actor(ActorKind.SYSTEM, "echo_inbox")
-
-
-class WrongFact(Exception):
-    """A consumer got a fact routing never sends it: a bug in routing."""
 
 
 class UndecodableInbox(Exception):
@@ -88,10 +86,11 @@ class JobNotFound:
 @dataclass(frozen=True)
 class _AccountRow:
     id: uuid.UUID
-    provider: str
+    provider: EchoProvider
+    kind: ProviderAccountKind
     base_url: str
     timeout_ms: int
-    event_mode: str
+    event_mode: EventMode
     webhook_secret: str
     poll_interval_s: int
 
@@ -102,7 +101,7 @@ async def inbound_account(
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
             """
-            SELECT id, provider::text, base_url, timeout_ms, event_mode::text,
+            SELECT id, provider, kind, base_url, timeout_ms, event_mode,
                    webhook_secret, poll_interval_s
             FROM echo_account WHERE id = %s
             """,
@@ -113,13 +112,14 @@ async def inbound_account(
         return None
     account = EchoAccount(
         row.id,
-        EchoProvider(row.provider),
+        row.provider,
+        row.kind,
         row.base_url,
         timedelta(milliseconds=row.timeout_ms),
     )
     return InboundAccount(
         account,
-        EventMode(row.event_mode),
+        row.event_mode,
         row.webhook_secret,
         timedelta(seconds=row.poll_interval_s),
     )
