@@ -2,13 +2,16 @@
 
 A shape change is a new version (`ProbeStartedV2`), even an additive one,
 and the old one stays decodable while prod holds undelivered messages of it.
+Each record names its own `message_type` and `schema_version` (class
+constants, not encoded); `decode` is the one table from those back to the
+record, and `tests/messaging/test_facts.py` checks the two agree.
 """
 
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import ClassVar, Literal
 
 import msgspec
 
@@ -94,23 +97,38 @@ class Aggregate:
 
 
 class ProbeStartedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.PROBE_STARTED
+    schema_version: ClassVar[int] = 1
+
     probe_id: uuid.UUID
 
 
 class ProbeEchoedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.PROBE_ECHOED
+    schema_version: ClassVar[int] = 1
+
     probe_id: uuid.UUID
 
 
 class EchoJobRequestedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.ECHO_JOB_REQUESTED
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
 
 
 class EchoJobEchoedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.ECHO_JOB_ECHOED
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
     vendor_echo_id: str
 
 
 class EchoJobRefusedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.ECHO_JOB_REFUSED
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
     reason: str
 
@@ -119,12 +137,18 @@ class EchoJobNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tr
     """A send whose answer was lost, on a vendor that promises nothing about
     a resend, and the vendor does not know it: a person decides."""
 
+    message_type: ClassVar[MessageType] = MessageType.ECHO_JOB_NEEDS_PERSON
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
 
 
 class EchoInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Raw bytes from the vendor (a webhook, a page, a file) were stored,
     not yet decoded."""
+
+    message_type: ClassVar[MessageType] = MessageType.ECHO_INBOX_STORED
+    schema_version: ClassVar[int] = 1
 
     account_id: uuid.UUID
     inbox_id: uuid.UUID
@@ -136,6 +160,9 @@ class EchoVendorEventReceivedV1(
     """One event about a job: decoded from the vendor's bytes (`inbox_id`
     set), or recorded by hand (`manual`, the person is the fact's actor)."""
 
+    message_type: ClassVar[MessageType] = MessageType.ECHO_VENDOR_EVENT_RECEIVED
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
     vendor_event_id: str
     kind: EventKind
@@ -145,10 +172,16 @@ class EchoVendorEventReceivedV1(
 
 
 class EchoJobConfirmedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.ECHO_JOB_CONFIRMED
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
 
 
 class EchoJobArchivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.ECHO_JOB_ARCHIVED
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
 
 
@@ -156,17 +189,26 @@ class EchoPollDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Scheduled: the time to poll a job's events came. Whether a poll is
     still wanted is decided under the job's lock."""
 
+    message_type: ClassVar[MessageType] = MessageType.ECHO_POLL_DUE
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
 
 
 class EchoEventsWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """A thin webhook said the job has news, without saying what."""
 
+    message_type: ClassVar[MessageType] = MessageType.ECHO_EVENTS_WANTED
+    schema_version: ClassVar[int] = 1
+
     echo_job_id: uuid.UUID
 
 
 class EchoReportDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Scheduled: the time to look for new report files of an account."""
+
+    message_type: ClassVar[MessageType] = MessageType.ECHO_REPORT_DUE
+    schema_version: ClassVar[int] = 1
 
     account_id: uuid.UUID
 
@@ -175,21 +217,33 @@ class DutyRateNeededV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """A combination (vendor, destination, origin, HS code) was seen for
     the first time: ask the vendor once."""
 
+    message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_NEEDED
+    schema_version: ClassVar[int] = 1
+
     duty_lookup_id: uuid.UUID
 
 
 class DutyRateFoundV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_FOUND
+    schema_version: ClassVar[int] = 1
+
     duty_lookup_id: uuid.UUID
 
 
 class DutyRateUnknownCodeV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The vendor does not know the HS code."""
 
+    message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_UNKNOWN_CODE
+    schema_version: ClassVar[int] = 1
+
     duty_lookup_id: uuid.UUID
 
 
 class DutyRateNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The vendor's answer could not be read."""
+
+    message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_NEEDS_PERSON
+    schema_version: ClassVar[int] = 1
 
     duty_lookup_id: uuid.UUID
     detail: str
@@ -198,6 +252,9 @@ class DutyRateNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
 class DutyRateDisagreedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The vendor's rate for a charge differs from our own row's. Rates are
     exact fractions written as "numerator/denominator"."""
+
+    message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_DISAGREED
+    schema_version: ClassVar[int] = 1
 
     duty_lookup_id: uuid.UUID
     charge: str
@@ -210,15 +267,24 @@ class ShippingPriceNeededV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     """No usable price is held for a (carrier, service, lane, parcel) and
     none is being asked: ask the carrier."""
 
+    message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_NEEDED
+    schema_version: ClassVar[int] = 1
+
     shipping_price_lookup_id: uuid.UUID
 
 
 class ShippingPriceFoundV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_FOUND
+    schema_version: ClassVar[int] = 1
+
     shipping_price_lookup_id: uuid.UUID
 
 
 class ShippingPriceNotServedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The carrier does not carry this service, lane or parcel."""
+
+    message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_NOT_SERVED
+    schema_version: ClassVar[int] = 1
 
     shipping_price_lookup_id: uuid.UUID
     detail: str
@@ -229,12 +295,18 @@ class ShippingPriceNeedsPersonV1(
 ):
     """The carrier's answer could not be read."""
 
+    message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_NEEDS_PERSON
+    schema_version: ClassVar[int] = 1
+
     shipping_price_lookup_id: uuid.UUID
     detail: str
 
 
 class CheckoutSessionCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """A merchant created a checkout session (4d-1). No consumers yet."""
+
+    message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_CREATED
+    schema_version: ClassVar[int] = 1
 
     checkout_session_id: uuid.UUID
     merchant_id: uuid.UUID
@@ -243,16 +315,25 @@ class CheckoutSessionCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_field
 class QuoteRequestedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """A buyer gave an address and an input is missing: asked, waiting."""
 
+    message_type: ClassVar[MessageType] = MessageType.QUOTE_REQUESTED
+    schema_version: ClassVar[int] = 1
+
     checkout_session_id: uuid.UUID
     address_id: uuid.UUID
 
 
 class QuoteMadeV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.QUOTE_MADE
+    schema_version: ClassVar[int] = 1
+
     checkout_session_id: uuid.UUID
     quote_id: uuid.UUID
 
 
 class QuoteRefusedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.QUOTE_REFUSED
+    schema_version: ClassVar[int] = 1
+
     checkout_session_id: uuid.UUID
     quote_id: uuid.UUID
     code: str
@@ -260,6 +341,9 @@ class QuoteRefusedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 
 class QuoteInputsArrivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """A lookup this session's address waited on has finished: build again."""
+
+    message_type: ClassVar[MessageType] = MessageType.QUOTE_INPUTS_ARRIVED
+    schema_version: ClassVar[int] = 1
 
     checkout_session_id: uuid.UUID
     address_id: uuid.UUID
@@ -270,15 +354,24 @@ class CheckoutSessionExpiryDueV1(
 ):
     """Delivered at the session's `expires_at`: expire it unless it is done."""
 
+    message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_EXPIRY_DUE
+    schema_version: ClassVar[int] = 1
+
     checkout_session_id: uuid.UUID
 
 
 class CheckoutSessionExpiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_EXPIRED
+    schema_version: ClassVar[int] = 1
+
     checkout_session_id: uuid.UUID
 
 
 class PaymentAttemptCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The buyer chose to pay a quote's option: ask the PSP."""
+
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_ATTEMPT_CREATED
+    schema_version: ClassVar[int] = 1
 
     payment_attempt_id: uuid.UUID
     checkout_session_id: uuid.UUID
@@ -287,11 +380,17 @@ class PaymentAttemptCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields
 class PaymentActionRequiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The PSP made the payment; the buyer must act on its page or a QR."""
 
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_ACTION_REQUIRED
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
 
 
 class PaymentAuthorisedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Approved and not captured yet: capture it."""
+
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_AUTHORISED
+    schema_version: ClassVar[int] = 1
 
     payment_attempt_id: uuid.UUID
 
@@ -299,22 +398,34 @@ class PaymentAuthorisedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tru
 class PaymentCapturedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The money is taken, for exactly the attempt's amount."""
 
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_CAPTURED
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
     checkout_session_id: uuid.UUID
 
 
 class PaymentDeclinedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_DECLINED
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
     checkout_session_id: uuid.UUID
     reason: str
 
 
 class PaymentExpiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_EXPIRED
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
     checkout_session_id: uuid.UUID
 
 
 class PaymentCancelledV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_CANCELLED
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
     checkout_session_id: uuid.UUID
 
@@ -322,6 +433,9 @@ class PaymentCancelledV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True
 class PaymentNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """An answer lost on a `none` guard, or the PSP reported something that
     does not fit (another amount, a second capture): a person decides."""
+
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_NEEDS_PERSON
+    schema_version: ClassVar[int] = 1
 
     payment_attempt_id: uuid.UUID
     checkout_session_id: uuid.UUID
@@ -331,6 +445,9 @@ class PaymentNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tr
 class PaymentCancelWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """The buyer chose to pay another way: tell the PSP."""
 
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_CANCEL_WANTED
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
 
 
@@ -338,17 +455,26 @@ class PaymentPollDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Scheduled: ask the PSP how the payment stands (a poll account's turn,
     or a QR's expiry). What it says decides, under the attempt's lock."""
 
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_POLL_DUE
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
 
 
 class PaymentEventsWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """A thin webhook said the payment has news, without saying what."""
 
+    message_type: ClassVar[MessageType] = MessageType.PAYMENT_EVENTS_WANTED
+    schema_version: ClassVar[int] = 1
+
     payment_attempt_id: uuid.UUID
 
 
 class PspInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Raw bytes from the PSP (a webhook or a fetched page) were stored."""
+
+    message_type: ClassVar[MessageType] = MessageType.PSP_INBOX_STORED
+    schema_version: ClassVar[int] = 1
 
     psp_account_id: uuid.UUID
     inbox_id: uuid.UUID
@@ -357,6 +483,9 @@ class PspInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 class PspEventReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """One PSP event about an attempt, decoded from stored bytes. The
     amount is ours, converted from the PSP's units."""
+
+    message_type: ClassVar[MessageType] = MessageType.PSP_EVENT_RECEIVED
+    schema_version: ClassVar[int] = 1
 
     payment_attempt_id: uuid.UUID
     vendor_event_id: str
@@ -371,12 +500,18 @@ class PspEventReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True
 class CheckoutSessionCompletedV1(
     msgspec.Struct, frozen=True, forbid_unknown_fields=True
 ):
+    message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_COMPLETED
+    schema_version: ClassVar[int] = 1
+
     checkout_session_id: uuid.UUID
     order_id: uuid.UUID
 
 
 class OrderPaidV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """An order exists and is paid; its invoice is issued next."""
+
+    message_type: ClassVar[MessageType] = MessageType.ORDER_PAID
+    schema_version: ClassVar[int] = 1
 
     order_id: uuid.UUID
     checkout_session_id: uuid.UUID
@@ -387,6 +522,9 @@ class InvoiceIssuedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """An order's invoice is issued, numbered in its series. A record for
     now; merchant webhooks and the buyer's email consume it later."""
 
+    message_type: ClassVar[MessageType] = MessageType.INVOICE_ISSUED
+    schema_version: ClassVar[int] = 1
+
     invoice_id: uuid.UUID
     order_id: uuid.UUID
     merchant_id: uuid.UUID
@@ -396,11 +534,17 @@ class PspSettlementDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True
     """Scheduled: look for settlement the PSP has published, one report or
     page per look (docs/plan-payments.md §7.1)."""
 
+    message_type: ClassVar[MessageType] = MessageType.PSP_SETTLEMENT_DUE
+    schema_version: ClassVar[int] = 1
+
     psp_account_id: uuid.UUID
 
 
 class SettlementLineReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """A settled line, stored once by the PSP's line id: book it."""
+
+    message_type: ClassVar[MessageType] = MessageType.SETTLEMENT_LINE_RECEIVED
+    schema_version: ClassVar[int] = 1
 
     settlement_line_id: uuid.UUID
     psp_account_id: uuid.UUID
@@ -410,6 +554,9 @@ class SettlementBatchReceivedV1(
     msgspec.Struct, frozen=True, forbid_unknown_fields=True
 ):
     """A batch with all its lines stored: book its payout."""
+
+    message_type: ClassVar[MessageType] = MessageType.SETTLEMENT_BATCH_RECEIVED
+    schema_version: ClassVar[int] = 1
 
     settlement_batch_id: uuid.UUID
     psp_account_id: uuid.UUID
@@ -468,117 +615,11 @@ type Fact = (
 
 
 @dataclass(frozen=True)
-class FactType:
-    message_type: MessageType
-    schema_version: int
-
-
-@dataclass(frozen=True)
 class UndecodableFact:
     message_type: MessageType
     schema_version: int
     reason: Literal["unknown_version", "invalid_payload"]
     detail: str
-
-
-def fact_type(fact: Fact) -> FactType:
-    match fact:
-        case ProbeStartedV1():
-            return FactType(MessageType.PROBE_STARTED, 1)
-        case ProbeEchoedV1():
-            return FactType(MessageType.PROBE_ECHOED, 1)
-        case EchoJobRequestedV1():
-            return FactType(MessageType.ECHO_JOB_REQUESTED, 1)
-        case EchoJobEchoedV1():
-            return FactType(MessageType.ECHO_JOB_ECHOED, 1)
-        case EchoJobRefusedV1():
-            return FactType(MessageType.ECHO_JOB_REFUSED, 1)
-        case EchoJobNeedsPersonV1():
-            return FactType(MessageType.ECHO_JOB_NEEDS_PERSON, 1)
-        case EchoInboxStoredV1():
-            return FactType(MessageType.ECHO_INBOX_STORED, 1)
-        case EchoVendorEventReceivedV1():
-            return FactType(MessageType.ECHO_VENDOR_EVENT_RECEIVED, 1)
-        case EchoJobConfirmedV1():
-            return FactType(MessageType.ECHO_JOB_CONFIRMED, 1)
-        case EchoJobArchivedV1():
-            return FactType(MessageType.ECHO_JOB_ARCHIVED, 1)
-        case EchoPollDueV1():
-            return FactType(MessageType.ECHO_POLL_DUE, 1)
-        case EchoEventsWantedV1():
-            return FactType(MessageType.ECHO_EVENTS_WANTED, 1)
-        case EchoReportDueV1():
-            return FactType(MessageType.ECHO_REPORT_DUE, 1)
-        case DutyRateNeededV1():
-            return FactType(MessageType.DUTY_RATE_NEEDED, 1)
-        case DutyRateFoundV1():
-            return FactType(MessageType.DUTY_RATE_FOUND, 1)
-        case DutyRateUnknownCodeV1():
-            return FactType(MessageType.DUTY_RATE_UNKNOWN_CODE, 1)
-        case DutyRateNeedsPersonV1():
-            return FactType(MessageType.DUTY_RATE_NEEDS_PERSON, 1)
-        case DutyRateDisagreedV1():
-            return FactType(MessageType.DUTY_RATE_DISAGREED, 1)
-        case ShippingPriceNeededV1():
-            return FactType(MessageType.SHIPPING_PRICE_NEEDED, 1)
-        case ShippingPriceFoundV1():
-            return FactType(MessageType.SHIPPING_PRICE_FOUND, 1)
-        case ShippingPriceNotServedV1():
-            return FactType(MessageType.SHIPPING_PRICE_NOT_SERVED, 1)
-        case ShippingPriceNeedsPersonV1():
-            return FactType(MessageType.SHIPPING_PRICE_NEEDS_PERSON, 1)
-        case CheckoutSessionCreatedV1():
-            return FactType(MessageType.CHECKOUT_SESSION_CREATED, 1)
-        case QuoteRequestedV1():
-            return FactType(MessageType.QUOTE_REQUESTED, 1)
-        case QuoteMadeV1():
-            return FactType(MessageType.QUOTE_MADE, 1)
-        case QuoteRefusedV1():
-            return FactType(MessageType.QUOTE_REFUSED, 1)
-        case QuoteInputsArrivedV1():
-            return FactType(MessageType.QUOTE_INPUTS_ARRIVED, 1)
-        case CheckoutSessionExpiryDueV1():
-            return FactType(MessageType.CHECKOUT_SESSION_EXPIRY_DUE, 1)
-        case CheckoutSessionExpiredV1():
-            return FactType(MessageType.CHECKOUT_SESSION_EXPIRED, 1)
-        case PaymentAttemptCreatedV1():
-            return FactType(MessageType.PAYMENT_ATTEMPT_CREATED, 1)
-        case PaymentActionRequiredV1():
-            return FactType(MessageType.PAYMENT_ACTION_REQUIRED, 1)
-        case PaymentAuthorisedV1():
-            return FactType(MessageType.PAYMENT_AUTHORISED, 1)
-        case PaymentCapturedV1():
-            return FactType(MessageType.PAYMENT_CAPTURED, 1)
-        case PaymentDeclinedV1():
-            return FactType(MessageType.PAYMENT_DECLINED, 1)
-        case PaymentExpiredV1():
-            return FactType(MessageType.PAYMENT_EXPIRED, 1)
-        case PaymentCancelledV1():
-            return FactType(MessageType.PAYMENT_CANCELLED, 1)
-        case PaymentNeedsPersonV1():
-            return FactType(MessageType.PAYMENT_NEEDS_PERSON, 1)
-        case PaymentCancelWantedV1():
-            return FactType(MessageType.PAYMENT_CANCEL_WANTED, 1)
-        case PaymentPollDueV1():
-            return FactType(MessageType.PAYMENT_POLL_DUE, 1)
-        case PaymentEventsWantedV1():
-            return FactType(MessageType.PAYMENT_EVENTS_WANTED, 1)
-        case PspInboxStoredV1():
-            return FactType(MessageType.PSP_INBOX_STORED, 1)
-        case PspEventReceivedV1():
-            return FactType(MessageType.PSP_EVENT_RECEIVED, 1)
-        case CheckoutSessionCompletedV1():
-            return FactType(MessageType.CHECKOUT_SESSION_COMPLETED, 1)
-        case OrderPaidV1():
-            return FactType(MessageType.ORDER_PAID, 1)
-        case InvoiceIssuedV1():
-            return FactType(MessageType.INVOICE_ISSUED, 1)
-        case PspSettlementDueV1():
-            return FactType(MessageType.PSP_SETTLEMENT_DUE, 1)
-        case SettlementLineReceivedV1():
-            return FactType(MessageType.SETTLEMENT_LINE_RECEIVED, 1)
-        case SettlementBatchReceivedV1():
-            return FactType(MessageType.SETTLEMENT_BATCH_RECEIVED, 1)
 
 
 def aggregate_of(fact: Fact) -> Aggregate:

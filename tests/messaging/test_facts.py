@@ -1,4 +1,5 @@
 import uuid
+from typing import get_args
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -6,10 +7,6 @@ from hypothesis import strategies as st
 from mor.messaging.facts import (
     Aggregate,
     AggregateType,
-    EchoJobEchoedV1,
-    EchoJobNeedsPersonV1,
-    EchoJobRefusedV1,
-    EchoJobRequestedV1,
     Fact,
     MessageType,
     ProbeEchoedV1,
@@ -18,24 +15,26 @@ from mor.messaging.facts import (
     aggregate_of,
     decode,
     encode,
-    fact_type,
 )
 
 
-facts = st.one_of(
-    st.builds(ProbeStartedV1, probe_id=st.uuids()),
-    st.builds(ProbeEchoedV1, probe_id=st.uuids()),
-    st.builds(EchoJobRequestedV1, echo_job_id=st.uuids()),
-    st.builds(EchoJobEchoedV1, echo_job_id=st.uuids(), vendor_echo_id=st.text()),
-    st.builds(EchoJobRefusedV1, echo_job_id=st.uuids(), reason=st.text()),
-    st.builds(EchoJobNeedsPersonV1, echo_job_id=st.uuids()),
-)
+FACT_RECORDS: tuple[type[Fact], ...] = get_args(Fact.__value__)
+
+facts = st.one_of([st.from_type(record) for record in FACT_RECORDS])
 
 
 @given(fact=facts)
-def test_every_fact_decodes_back_to_itself(fact: Fact) -> None:
-    kind = fact_type(fact)
-    assert decode(kind.message_type, kind.schema_version, encode(fact)) == fact
+def test_every_fact_decodes_back_to_itself_by_its_own_type_and_version(
+    fact: Fact,
+) -> None:
+    assert decode(fact.message_type, fact.schema_version, encode(fact)) == fact
+
+
+def test_every_message_type_is_named_by_one_record() -> None:
+    named: list[MessageType] = []
+    for record in FACT_RECORDS:
+        named.append(record.message_type)
+    assert sorted(named) == sorted(MessageType)
 
 
 @given(
@@ -47,16 +46,7 @@ def test_any_bytes_decode_to_a_fact_or_undecodable(
     message_type: MessageType, schema_version: int, payload: bytes
 ) -> None:
     result = decode(message_type, schema_version, payload)
-    assert isinstance(
-        result,
-        ProbeStartedV1
-        | ProbeEchoedV1
-        | EchoJobRequestedV1
-        | EchoJobEchoedV1
-        | EchoJobRefusedV1
-        | EchoJobNeedsPersonV1
-        | UndecodableFact,
-    )
+    assert isinstance(result, (*FACT_RECORDS, UndecodableFact))
 
 
 def test_unknown_field_or_version_is_undecodable() -> None:
