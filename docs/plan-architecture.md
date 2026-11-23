@@ -995,11 +995,16 @@ far it is:
 | 4. Markets, tax path, prices, the quote | `plan-quote.md` |
 | 5. Payments, order, invoice, settlement | `plan-payments.md` |
 | Fuzzing depth (amends §10) | `plan-fuzz-reach.md` |
+| Messaging rework (open, from a code review) | `plan-messaging-rework.md` |
 
 Next: 5c-2, the bank statement import that moves a PSP payout from
 `payout_in_transit` to `bank`, to be designed (`plan-payments.md` §7.1);
 then 5c-3, card fields and the Playwright suite. The echo vendor stays
 until the shipment slice.
+
+Also open (23-Nov-2026): the messaging rework from a code review of the
+foundation, starting with one decision for the user
+(`plan-messaging-rework.md` §2).
 
 Read, in this order:
 
