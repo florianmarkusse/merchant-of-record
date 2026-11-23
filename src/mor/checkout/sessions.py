@@ -21,6 +21,7 @@ from mor.checkout.records import (
 )
 from mor.couriers.records import Parcel
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.messaging.facts import CheckoutSessionCreatedV1, CheckoutSessionExpiryDueV1
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
@@ -312,12 +313,12 @@ async def add_address(
 
 
 async def address_count(conn: Connection, session_id: uuid.UUID) -> int:
-    cur = await conn.execute(
-        "SELECT count(*) FROM checkout_address WHERE session_id = %s", (session_id,)
+    return await one_value(
+        conn,
+        "SELECT count(*) FROM checkout_address WHERE session_id = %s",
+        (session_id,),
+        int,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    return row[0]
 
 
 async def read_address(conn: Connection, address_id: uuid.UUID) -> Address | None:

@@ -7,18 +7,20 @@ component, shipping, and each duty and tax with who collects it), and
 they sum to its total.
 """
 
-from typing import assert_never
+from typing import Literal
 
 import msgspec
 
-from mor.markets.records import Collector
+from mor.markets.records import Collector, ServiceTier
+from mor.money.currency import Currency
 from mor.quote.build import Part, Quote
-from mor.quote.groups import group_of
+from mor.quote.groups import PartGroup, PartKind, group_of
 from mor.quote.refusals import Refusal
+from mor.quote.shipping import NotOfferedReason
 from mor.web.api_wire import ApiError, ErrorType, MoneyOut, money_out
 
 
-def collected_by(collector: Collector | None) -> str | None:
+def collected_by(collector: Collector | None) -> Literal["customs", "us"] | None:
     """`customs`: paid at the border (through the carrier, duty paid);
     `us`: we collect it and file it ourselves."""
     match collector:
@@ -28,16 +30,14 @@ def collected_by(collector: Collector | None) -> str | None:
             return "customs"
         case Collector.SELLER:
             return "us"
-        case _:
-            assert_never(collector)
 
 
 class PartOut(msgspec.Struct, frozen=True):
-    group: str
-    kind: str
+    group: PartGroup
+    kind: PartKind
     line: int | None
     amount: MoneyOut
-    collected_by: str | None
+    collected_by: Literal["customs", "us"] | None
 
 
 class TransitOut(msgspec.Struct, frozen=True):
@@ -49,7 +49,7 @@ class OptionOut(msgspec.Struct, frozen=True):
     key: str
     service: str
     name: str
-    tier: str
+    tier: ServiceTier
     transit: TransitOut | None
     total: MoneyOut
     parts: list[PartOut]
@@ -57,13 +57,13 @@ class OptionOut(msgspec.Struct, frozen=True):
 
 class NotOfferedOut(msgspec.Struct, frozen=True):
     key: str
-    reason: str
+    reason: NotOfferedReason
 
 
 class EstimateOut(msgspec.Struct, frozen=True):
     object: str
     country: str
-    currency: str
+    currency: Currency
     options: list[OptionOut]
     not_offered: list[NotOfferedOut]
     placeholders: list[str]
@@ -72,7 +72,7 @@ class EstimateOut(msgspec.Struct, frozen=True):
 def _part(part: Part) -> PartOut:
     return PartOut(
         group=group_of(part.kind),
-        kind=part.kind.value,
+        kind=part.kind,
         line=part.line,
         amount=money_out(part.amount),
         collected_by=collected_by(part.collector),
@@ -98,7 +98,7 @@ def estimate_out(quote: Quote) -> bytes:
                 key=option.key,
                 service=option.service,
                 name=option.service_name,
-                tier=option.tier.value,
+                tier=option.tier,
                 transit=transit,
                 total=money_out(option.total),
                 parts=parts,
@@ -110,7 +110,7 @@ def estimate_out(quote: Quote) -> bytes:
     out = EstimateOut(
         object="estimate",
         country=quote.destination,
-        currency=quote.currency.value,
+        currency=quote.currency,
         options=options,
         not_offered=not_offered,
         placeholders=list(quote.placeholders),

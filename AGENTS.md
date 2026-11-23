@@ -85,8 +85,12 @@ this project.
     Database enums load as our StrEnums (decided 21-Nov-2026): `connect`
     registers each pair in `mor.db.enums`, so a flat row reads straight
     into its domain record with `class_row`, with no `::text` cast and no
-    mirror row class. A new enum type with a StrEnum joins that table;
-    `tests/db/test_enums.py` fails when the two sides' values differ.
+    mirror row class. Every database enum has a StrEnum in that table
+    (decided 23-Nov-2026: a `Literal` read as text was unchecked at
+    runtime); `tests/db/test_enums.py` fails on an enum missing there or
+    on values that differ. Code writes a state as its member, passed as a
+    parameter, not as a quoted label in SQL; a filter in a `WHERE` may
+    keep the label.
   - Parsing at the edges: msgspec. Every input (API body, webhook, form,
     settlement file) is decoded into a typed, frozen record at the edge
     before anything else sees it, because Python does not check types at
@@ -158,8 +162,21 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
 
 - Records are frozen dataclasses or msgspec structs, not `TypedDict`;
   closed sets are `StrEnum` or `Literal`; results are unions of records
-  matched with `match` and `assert_never`. A payment that can be
-  `captured` or `refunded` is a closed set of states, not booleans.
+  matched with `match`. A payment that can be `captured` or `refunded`
+  is a closed set of states, not booleans. A closed set that is a value
+  we switch on is a `StrEnum` (or a `Literal` when it never reaches the
+  database), never a bare `str`.
+- A `match` over a closed set lists every case and has no `case _:
+  assert_never(...)` fallback (decided 23-Nov-2026): pyright's
+  `reportMatchNotExhaustive` refuses a missing case, and a value outside
+  its type cannot get past the edges. `case _:` stays only where it does
+  real work (a `WrongFact` for a fact routing never sends).
+- `assert` is for what other code guarantees (a foreign key, a CHECK, a
+  row the caller locked), to narrow a type; anything a request or a
+  vendor can cause is a returned value. A read that must find a row uses
+  `mor.db.fetch` (`one_row`, `one_value`), not `fetchone()` and an
+  assert. A check that a state cannot occur is a `match` with one case
+  per state and a comment on why the impossible ones are impossible.
 - A record of 4 or more fields is built with keyword arguments, and a
   query of several columns is read with `class_row` into a row record
   named after its columns, never unpacked from a tuple (decided

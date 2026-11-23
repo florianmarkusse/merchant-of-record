@@ -25,6 +25,7 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.duties import registry
 from mor.duties.port import (
     AskResult,
@@ -202,16 +203,16 @@ async def request_duty_rate(
         lookup_id: uuid.UUID = row[0]
         await append_fact(conn, DutyRateNeededV1(duty_lookup_id=lookup_id), actor, now)
         return lookup_id
-    cur = await conn.execute(
+    # The insert conflicted, so the lookup exists.
+    return await one_value(
+        conn,
         """
         SELECT id FROM duty_lookup
         WHERE vendor_name = %s AND destination = %s AND origin = %s AND hs_code = %s
         """,
         (vendor_name, question.destination, question.origin, question.hs_code),
+        uuid.UUID,
     )
-    existing = await cur.fetchone()
-    assert existing is not None, "a conflicting lookup must exist"
-    return existing[0]
 
 
 async def read_lookup(

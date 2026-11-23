@@ -7,13 +7,15 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+from psycopg.rows import class_row
+
 from mor.audit import Actor
 from mor.couriers.prices import NoCourierAccount, read_price, request_shipping_price
-from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
+from mor.couriers.records import Parcel, PriceHeld, PriceQuestion, PriceState
 from mor.db.connect import Connection
 from mor.duties.lookups import NoVendorAccount, read_lookup, request_duty_rate
 from mor.duties.port import RateQuestion
-from mor.duties.records import VendorLookup
+from mor.duties.records import LookupState, VendorLookup
 from mor.markets.records import DutyMode, MarketSet, PriceSource
 from mor.quote.build import InputsMissing, QuoteRequest
 from mor.quote.shipping import price_question, routes_to
@@ -99,6 +101,16 @@ async def ask_missing(
     return Asked(tuple(duty_lookups), tuple(price_lookups))
 
 
+@dataclass(frozen=True)
+class _DutyStateRow:
+    state: LookupState
+
+
+@dataclass(frozen=True)
+class _PriceStateRow:
+    state: PriceState
+
+
 async def still_open(conn: Connection, asked: Asked) -> bool:
     """Whether every lookup is still being asked, holding a share lock on
     each until the caller commits. A lookup finishes under its own row lock
@@ -107,19 +119,21 @@ async def still_open(conn: Connection, asked: Asked) -> bool:
     that commit is told when it does. False: one finished meanwhile, so
     build again instead of waiting."""
     for lookup_id in asked.duty_lookups:
-        cur = await conn.execute(
-            "SELECT state::text FROM duty_lookup WHERE id = %s FOR SHARE",
-            (lookup_id,),
-        )
-        row = await cur.fetchone()
-        if row is None or row[0] != "requested":
+        async with conn.cursor(row_factory=class_row(_DutyStateRow)) as cur:
+            await cur.execute(
+                "SELECT state FROM duty_lookup WHERE id = %s FOR SHARE",
+                (lookup_id,),
+            )
+            duty = await cur.fetchone()
+        if duty is None or duty.state != LookupState.REQUESTED:
             return False
     for lookup_id in asked.price_lookups:
-        cur = await conn.execute(
-            "SELECT state::text FROM shipping_price_lookup WHERE id = %s FOR SHARE",
-            (lookup_id,),
-        )
-        row = await cur.fetchone()
-        if row is None or row[0] != "requested":
+        async with conn.cursor(row_factory=class_row(_PriceStateRow)) as cur:
+            await cur.execute(
+                "SELECT state FROM shipping_price_lookup WHERE id = %s FOR SHARE",
+                (lookup_id,),
+            )
+            price = await cur.fetchone()
+        if price is None or price.state != PriceState.REQUESTED:
             return False
     return True

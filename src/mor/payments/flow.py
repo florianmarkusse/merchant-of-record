@@ -21,13 +21,13 @@ attempt's row lock and never commit; `call` runs with no transaction open.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, assert_never
+from typing import Literal
 
 import httpx2
 from psycopg.rows import class_row
 
 from mor.audit import Actor
-from mor.checkout.quotes import MadeQuote, read_quote
+from mor.checkout.quotes import read_made_quote
 from mor.checkout.records import SessionState
 from mor.checkout.sessions import lock_session, read_address, set_session_state
 from mor.config import Environment
@@ -57,6 +57,7 @@ from mor.payments.attempts import (
     session_attempts,
 )
 from mor.payments.inbound import store_inbox
+from mor.payments.records import PspOperation
 from mor.payments.transitions import OPEN_STATES, AttemptState, after_event
 from mor.payments.transitions import Stale as StaleEvent
 from mor.psp import registry
@@ -78,6 +79,7 @@ from mor.psp.port import (
     PaymentStatus,
     ProviderPayment,
     PspAccount,
+    PspEventKind,
     StatusMode,
 )
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
@@ -135,8 +137,7 @@ async def pay(
     # SHARE, so a suspension and this attempt cannot cross.
     if await kyb_state_for_pay(conn, session.merchant_id) != KybState.APPROVED:
         return NotPayable("merchant_not_approved")
-    quote = await read_quote(conn, session.quote_id)
-    assert isinstance(quote, MadeQuote), f"session {session_id} quoted without one"
+    quote = await read_made_quote(conn, session.quote_id)
     # The price held is a promise until `valid_until`, decided under the lock.
     if now >= quote.valid_until:
         return NotPayable("quote_lapsed")
@@ -223,8 +224,9 @@ class FindCall:
     """Guard `none` after an answer was lost: look only, never resend."""
 
     account: PspAccount
+    request_id: uuid.UUID
     reference: str
-    operation: Literal["create", "capture"]
+    operation: Literal[PspOperation.CREATE, PspOperation.CAPTURE]
 
 
 @dataclass(frozen=True)
@@ -313,8 +315,6 @@ async def call(
         case PollCall(account=account, provider_payment_id=payment_id):
             page = await registry.fetch_events(http, environment, account, payment_id)
             return PollAnswer(payment_call, page)
-        case _:
-            assert_never(payment_call)
 
 
 async def complete(
@@ -327,11 +327,13 @@ async def complete(
             return await _complete_create(conn, fact, answer.call, answer.result, now)
         case FindAnswer():
             match answer.call.operation:
-                case "create":
-                    return await _complete_create_lookup(conn, fact, answer.result, now)
-                case "capture":
+                case PspOperation.CREATE:
+                    return await _complete_create_lookup(
+                        conn, fact, answer.call, answer.result, now
+                    )
+                case PspOperation.CAPTURE:
                     return await _complete_capture_lookup(
-                        conn, fact, answer.result, now
+                        conn, fact, answer.call, answer.result, now
                     )
         case CaptureAnswer():
             return await _complete_capture(conn, fact, answer.call, answer.result, now)
@@ -339,14 +341,9 @@ async def complete(
             return await _complete_cancel(conn, fact, answer.call, answer.result, now)
         case PollAnswer():
             return await _complete_poll(conn, fact, answer.call, answer.result, now)
-        case _:
-            assert_never(answer)
 
 
 # --- requests -------------------------------------------------------------
-
-
-type Operation = Literal["create", "capture", "cancel"]
 
 
 @dataclass(frozen=True)
@@ -358,7 +355,7 @@ class _Request:
 
 
 async def _latest_request(
-    conn: Connection, attempt_id: uuid.UUID, operation: Operation
+    conn: Connection, attempt_id: uuid.UUID, operation: PspOperation
 ) -> _Request | None:
     async with conn.cursor(row_factory=class_row(_Request)) as cur:
         await cur.execute(
@@ -375,7 +372,7 @@ async def _latest_request(
 async def _new_request(
     conn: Connection,
     attempt_id: uuid.UUID,
-    operation: Operation,
+    operation: PspOperation,
     number: int,
     now: datetime,
 ) -> _Request:
@@ -385,9 +382,17 @@ async def _new_request(
         """
         INSERT INTO psp_request
           (id, attempt_id, operation, number, idempotency_key, state, created_at)
-        VALUES (%s, %s, %s, %s, %s, 'not_sent', %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-        (request_id, attempt_id, operation, number, key, now),
+        (
+            request_id,
+            attempt_id,
+            operation,
+            number,
+            key,
+            VendorRequestState.NOT_SENT,
+            now,
+        ),
     )
     return _Request(
         id=request_id,
@@ -400,15 +405,15 @@ async def _new_request(
 async def _mark_sent(conn: Connection, request_id: uuid.UUID) -> None:
     """The committed "we are about to ask" mark, before any call."""
     await conn.execute(
-        "UPDATE psp_request SET state = 'sent', sends = sends + 1 WHERE id = %s",
-        (request_id,),
+        "UPDATE psp_request SET state = %s, sends = sends + 1 WHERE id = %s",
+        (VendorRequestState.SENT, request_id),
     )
 
 
 async def _finish_request(
     conn: Connection,
     request_id: uuid.UUID,
-    state: Literal["succeeded", "refused", "not_sent"],
+    state: Literal[VendorRequestState.SUCCEEDED, VendorRequestState.REFUSED],
     now: datetime,
     result: str | None = None,
 ) -> None:
@@ -417,7 +422,16 @@ async def _finish_request(
         UPDATE psp_request SET state = %s, result = %s, completed_at = %s
         WHERE id = %s
         """,
-        (state, result, None if state == "not_sent" else now, request_id),
+        (state, result, now, request_id),
+    )
+
+
+async def _unsend_request(conn: Connection, request_id: uuid.UUID) -> None:
+    """The PSP said the call did nothing (Unavailable): the request goes back
+    to `not_sent`, and the retry sends it with the same key."""
+    await conn.execute(
+        "UPDATE psp_request SET state = %s WHERE id = %s",
+        (VendorRequestState.NOT_SENT, request_id),
     )
 
 
@@ -430,24 +444,20 @@ async def _account(conn: Connection, attempt: Attempt) -> PspAccount:
 # --- applying what the PSP says -------------------------------------------
 
 
-def _event_kind(
-    status: PaymentStatus,
-) -> Literal["authorised", "captured", "declined", "expired", "cancelled"] | None:
+def _event_kind(status: PaymentStatus) -> PspEventKind | None:
     match status:
         case PaymentStatus.REQUIRES_ACTION:
             return None
         case PaymentStatus.AUTHORISED:
-            return "authorised"
+            return PspEventKind.AUTHORISED
         case PaymentStatus.CAPTURED:
-            return "captured"
+            return PspEventKind.CAPTURED
         case PaymentStatus.DECLINED:
-            return "declined"
+            return PspEventKind.DECLINED
         case PaymentStatus.EXPIRED:
-            return "expired"
+            return PspEventKind.EXPIRED
         case PaymentStatus.CANCELLED:
-            return "cancelled"
-        case _:
-            assert_never(status)
+            return PspEventKind.CANCELLED
 
 
 async def apply_payment(
@@ -503,23 +513,34 @@ async def prepare_create(
     if attempt.state != AttemptState.REQUESTED:
         return NoCall(Stale())  # an event or a lookup answered first
     account = await _account(conn, attempt)
-    request = await _latest_request(conn, attempt.id, "create")
+    request = await _latest_request(conn, attempt.id, PspOperation.CREATE)
     if request is None:
-        request = await _new_request(conn, attempt.id, "create", 1, now)
-    elif request.state == VendorRequestState.SENT:
-        # Marked sent, no answer recorded: an earlier run died mid-call or
-        # got no answer. Whether to send again is the PSP's promise.
-        match account.create_guard:
-            case DuplicateGuard.VENDOR_CONSTRAINT:
-                pass
-            case DuplicateGuard.NONE:
-                return FindCall(account, str(attempt.id), "create")
-            case DuplicateGuard.COMPENSABLE:
-                raise AssertionError("a payment is never compensable")
-            case _ as unreachable:
-                assert_never(unreachable)
-    elif request.state != VendorRequestState.NOT_SENT:
-        raise AssertionError(f"attempt {attempt.id} requested, create {request.state}")
+        request = await _new_request(conn, attempt.id, PspOperation.CREATE, 1, now)
+    match request.state:
+        case VendorRequestState.NOT_SENT:
+            # New, or the PSP said an earlier send did nothing.
+            pass
+        case VendorRequestState.SENT:
+            # Marked sent, no answer recorded: an earlier run died mid-call
+            # or got no answer. Whether to send again is the PSP's promise.
+            match account.create_guard:
+                case DuplicateGuard.VENDOR_CONSTRAINT:
+                    pass
+                case DuplicateGuard.NONE:
+                    return FindCall(
+                        account=account,
+                        request_id=request.id,
+                        reference=str(attempt.id),
+                        operation=PspOperation.CREATE,
+                    )
+                case DuplicateGuard.COMPENSABLE:
+                    raise AssertionError("a payment is never compensable")
+        case VendorRequestState.SUCCEEDED | VendorRequestState.REFUSED:
+            # An answer moves the attempt past `requested` in the same
+            # transaction that finishes the request.
+            raise AssertionError(
+                f"attempt {attempt.id} requested, create {request.state}"
+            )
     await _mark_sent(conn, request.id)
     return CreateCall(
         account,
@@ -545,13 +566,17 @@ async def _complete_create(
     account = await _account(conn, attempt)
     match result:
         case ProviderPayment() as payment:
-            await _finish_request(conn, create.request_id, "succeeded", now)
+            await _finish_request(
+                conn, create.request_id, VendorRequestState.SUCCEEDED, now
+            )
             return await apply_payment(conn, attempt, account, payment, now)
         case Declined(payment=payment, reason=reason):
-            await _finish_request(conn, create.request_id, "refused", now, reason)
+            await _finish_request(
+                conn, create.request_id, VendorRequestState.REFUSED, now, reason
+            )
             return await apply_payment(conn, attempt, account, payment, now, reason)
         case Unavailable(detail=detail):
-            await _finish_request(conn, create.request_id, "not_sent", now)
+            await _unsend_request(conn, create.request_id)
             return RetryLater(f"create unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"create outcome unknown: {detail}")
@@ -559,12 +584,10 @@ async def _complete_create(
             return await _needs_person(
                 conn, attempt, account, f"create answer: {detail}", now
             )
-        case _:
-            assert_never(result)
 
 
 async def _complete_create_lookup(
-    conn: Connection, fact: Fact, result: FindResult, now: datetime
+    conn: Connection, fact: Fact, find: FindCall, result: FindResult, now: datetime
 ) -> Done | RetryLater:
     attempt = await lock_attempt(conn, _created_id(fact))
     account = await _account(conn, attempt)
@@ -584,9 +607,9 @@ async def _complete_create_lookup(
                 return await _needs_person(
                     conn, attempt, account, "several payments at the PSP", now
                 )
-            request = await _latest_request(conn, attempt.id, "create")
-            assert request is not None
-            await _finish_request(conn, request.id, "succeeded", now)
+            await _finish_request(
+                conn, find.request_id, VendorRequestState.SUCCEEDED, now
+            )
             return await apply_payment(conn, attempt, account, payments[0], now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"create lookup: {detail}")
@@ -594,8 +617,6 @@ async def _complete_create_lookup(
             return await _needs_person(
                 conn, attempt, account, f"lookup answer: {detail}", now
             )
-        case _:
-            assert_never(result)
 
 
 # --- psp_payment_capture --------------------------------------------------
@@ -619,23 +640,32 @@ async def prepare_capture(
         return NoCall(Stale())
     assert attempt.provider_payment_id is not None
     account = await _account(conn, attempt)
-    request = await _latest_request(conn, attempt.id, "capture")
+    request = await _latest_request(conn, attempt.id, PspOperation.CAPTURE)
     if request is None:
-        request = await _new_request(conn, attempt.id, "capture", 1, now)
-    elif request.state == VendorRequestState.SENT:
-        match account.capture_guard:
-            case DuplicateGuard.VENDOR_CONSTRAINT:
-                pass
-            case DuplicateGuard.NONE:
-                return FindCall(account, str(attempt.id), "capture")
-            case DuplicateGuard.COMPENSABLE:
-                raise AssertionError("a capture is never compensable")
-            case _ as unreachable:
-                assert_never(unreachable)
-    elif request.state != VendorRequestState.NOT_SENT:
-        raise AssertionError(
-            f"attempt {attempt.id} authorised, capture {request.state}"
-        )
+        request = await _new_request(conn, attempt.id, PspOperation.CAPTURE, 1, now)
+    match request.state:
+        case VendorRequestState.NOT_SENT:
+            # New, or the PSP said an earlier send did nothing.
+            pass
+        case VendorRequestState.SENT:
+            match account.capture_guard:
+                case DuplicateGuard.VENDOR_CONSTRAINT:
+                    pass
+                case DuplicateGuard.NONE:
+                    return FindCall(
+                        account=account,
+                        request_id=request.id,
+                        reference=str(attempt.id),
+                        operation=PspOperation.CAPTURE,
+                    )
+                case DuplicateGuard.COMPENSABLE:
+                    raise AssertionError("a capture is never compensable")
+        case VendorRequestState.SUCCEEDED | VendorRequestState.REFUSED:
+            # An answer moves the attempt past `authorised` (or to a
+            # person) in the same transaction that finishes the request.
+            raise AssertionError(
+                f"attempt {attempt.id} authorised, capture {request.state}"
+            )
     await _mark_sent(conn, request.id)
     return CaptureCall(
         account=account,
@@ -657,17 +687,21 @@ async def _complete_capture(
     account = await _account(conn, attempt)
     match result:
         case ProviderPayment() as payment:
-            await _finish_request(conn, capture.request_id, "succeeded", now)
+            await _finish_request(
+                conn, capture.request_id, VendorRequestState.SUCCEEDED, now
+            )
             return await apply_payment(conn, attempt, account, payment, now)
         case NotCapturable(payment=payment):
-            await _finish_request(conn, capture.request_id, "refused", now)
+            await _finish_request(
+                conn, capture.request_id, VendorRequestState.REFUSED, now
+            )
             if payment.status == PaymentStatus.AUTHORISED:
                 return await _needs_person(
                     conn, attempt, account, "capture refused", now
                 )
             return await apply_payment(conn, attempt, account, payment, now)
         case Unavailable(detail=detail):
-            await _finish_request(conn, capture.request_id, "not_sent", now)
+            await _unsend_request(conn, capture.request_id)
             return RetryLater(f"capture unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"capture outcome unknown: {detail}")
@@ -675,12 +709,10 @@ async def _complete_capture(
             return await _needs_person(
                 conn, attempt, account, f"capture answer: {detail}", now
             )
-        case _:
-            assert_never(result)
 
 
 async def _complete_capture_lookup(
-    conn: Connection, fact: Fact, result: FindResult, now: datetime
+    conn: Connection, fact: Fact, find: FindCall, result: FindResult, now: datetime
 ) -> Done | RetryLater:
     attempt = await lock_attempt(conn, _authorised_id(fact))
     account = await _account(conn, attempt)
@@ -699,9 +731,9 @@ async def _complete_capture_lookup(
                         "capture answer lost; the PSP shows it authorised",
                         now,
                     )
-                request = await _latest_request(conn, attempt.id, "capture")
-                assert request is not None
-                await _finish_request(conn, request.id, "succeeded", now)
+                await _finish_request(
+                    conn, find.request_id, VendorRequestState.SUCCEEDED, now
+                )
                 return await apply_payment(conn, attempt, account, payment, now)
             return await _needs_person(
                 conn, attempt, account, "the PSP does not show the payment", now
@@ -712,8 +744,6 @@ async def _complete_capture_lookup(
             return await _needs_person(
                 conn, attempt, account, f"lookup answer: {detail}", now
             )
-        case _:
-            assert_never(result)
 
 
 # --- psp_payment_cancel ---------------------------------------------------
@@ -737,10 +767,13 @@ async def prepare_cancel(
         return NoCall(Stale())
     assert attempt.provider_payment_id is not None
     account = await _account(conn, attempt)
-    request = await _latest_request(conn, attempt.id, "cancel")
-    if request is None or request.state not in ("not_sent", "sent"):
+    request = await _latest_request(conn, attempt.id, PspOperation.CANCEL)
+    if request is None or request.state in (
+        VendorRequestState.SUCCEEDED,
+        VendorRequestState.REFUSED,
+    ):
         number = 1 if request is None else request.number + 1
-        request = await _new_request(conn, attempt.id, "cancel", number, now)
+        request = await _new_request(conn, attempt.id, PspOperation.CANCEL, number, now)
     await _mark_sent(conn, request.id)
     return CancelCall(account, request.id, attempt.provider_payment_id)
 
@@ -756,15 +789,19 @@ async def _complete_cancel(
     account = await _account(conn, attempt)
     match result:
         case ProviderPayment() as payment:
-            await _finish_request(conn, cancel.request_id, "succeeded", now)
+            await _finish_request(
+                conn, cancel.request_id, VendorRequestState.SUCCEEDED, now
+            )
             return await apply_payment(conn, attempt, account, payment, now)
         case AlreadyFinal(payment=payment):
             # Too late: the payment ended another way, perhaps captured,
             # which is honoured.
-            await _finish_request(conn, cancel.request_id, "refused", now)
+            await _finish_request(
+                conn, cancel.request_id, VendorRequestState.REFUSED, now
+            )
             return await apply_payment(conn, attempt, account, payment, now)
         case Unavailable(detail=detail):
-            await _finish_request(conn, cancel.request_id, "not_sent", now)
+            await _unsend_request(conn, cancel.request_id)
             return RetryLater(f"cancel unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"cancel outcome unknown: {detail}")
@@ -772,8 +809,6 @@ async def _complete_cancel(
             return await _needs_person(
                 conn, attempt, account, f"cancel answer: {detail}", now
             )
-        case _:
-            assert_never(result)
 
 
 # --- psp_payment_poll -----------------------------------------------------

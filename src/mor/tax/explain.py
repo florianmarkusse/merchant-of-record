@@ -8,7 +8,7 @@ words."""
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
-from typing import Literal, assert_never
+from typing import Literal
 
 from mor.duties.records import VendorLookup
 from mor.markets.changes import BASE_WORDS, percent_text, value_text
@@ -529,8 +529,6 @@ def _needs_person_text(
             )
         case "no_charge":
             return f"the vendor gave no {detail} rate"
-        case _:
-            assert_never(reason)
 
 
 def _own_data(

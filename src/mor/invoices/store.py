@@ -18,9 +18,10 @@ from datetime import datetime
 from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
-from mor.checkout.quotes import MadeQuote, read_quote
+from mor.checkout.quotes import read_made_quote
 from mor.checkout.sessions import read_address, session_by_id
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.entity import ENTITY, registration_for
 from mor.invoices.lines import invoice_lines
 from mor.invoices.numbering import SERIES, number_text, series_for
@@ -54,13 +55,12 @@ async def _take_number(conn: Connection, code: str) -> tuple[Series, int]:
         """,
         (code,),
     )
-    cur = await conn.execute(
+    number = await one_value(
+        conn,
         "SELECT next_number FROM invoice_series WHERE code = %s FOR UPDATE",
         (code,),
+        int,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    number: int = row[0]
     await conn.execute(
         "UPDATE invoice_series SET next_number = next_number + 1 WHERE code = %s",
         (code,),
@@ -79,8 +79,7 @@ async def issue_invoice(conn: Connection, fact: Fact, now: datetime) -> Consumer
     cur = await conn.execute("SELECT 1 FROM invoice WHERE order_id = %s", (order.id,))
     if await cur.fetchone() is not None:
         return Stale()  # issued already
-    quote = await read_quote(conn, order.quote_id)
-    assert isinstance(quote, MadeQuote)
+    quote = await read_made_quote(conn, order.quote_id)
     session = await session_by_id(conn, order.session_id)
     assert session is not None
     address = await read_address(conn, order.address_id)

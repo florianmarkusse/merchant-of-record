@@ -31,6 +31,7 @@ from mor.dates import AwareDatetime, parse_instant, to_utc
 from mor.money.amount import Money
 from mor.money.currency import Currency, exponent
 from mor.psp.port import (
+    ActionKind,
     AlreadyFinal,
     BuyerAction,
     CancelResult,
@@ -48,6 +49,7 @@ from mor.psp.port import (
     ProviderPayment,
     PspAccount,
     PspEvent,
+    PspEventKind,
     SettledLine,
     SettlementBatch,
     SettlementDocument,
@@ -65,7 +67,7 @@ SIGNATURE_HEADER = "Psp-Signature"
 
 
 class _Action(msgspec.Struct, frozen=True):
-    kind: Literal["redirect", "qr"]
+    kind: ActionKind
     url: str
     expires_at: AwareDatetime | None
 
@@ -99,7 +101,7 @@ class _Event(msgspec.Struct, frozen=True):
     id: str
     payment_id: str
     reference: str
-    kind: Literal["authorised", "captured", "declined", "expired", "cancelled"]
+    kind: PspEventKind
     amount_minor: int
     currency: str
     occurred_at: AwareDatetime

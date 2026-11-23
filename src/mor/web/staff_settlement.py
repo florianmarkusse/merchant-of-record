@@ -53,8 +53,8 @@ class ResolveForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     note: str
 
 
-def _money(amount_minor: int, currency: str) -> str:
-    return money_text(Money(amount_minor, Currency(currency)))
+def _money(amount_minor: int, currency: Currency) -> str:
+    return money_text(Money(amount_minor, currency))
 
 
 def _balances(summary: AccountSummary) -> htpy.Node:

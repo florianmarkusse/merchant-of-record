@@ -39,8 +39,9 @@ from mor.echo.events import VendorStatus
 from mor.echo.flow import create_echo_job
 from mor.echo.inbound import JobNotFound, record_manual_event
 from mor.echo.port import EchoProvider, EventKind, EventMode
-from mor.echo.records import EchoJobState
+from mor.echo.records import EchoEventSource, EchoJobState
 from mor.fakes.psp import CUT_FAULTS
+from mor.psp.port import SettlementMode
 from mor.web.forms import read_form, same_origin
 
 
@@ -111,15 +112,15 @@ class JobRow:
 @dataclass(frozen=True)
 class EventRow:
     echo_job_id: uuid.UUID
-    kind: str
-    source: str
+    kind: EventKind
+    source: EchoEventSource
 
 
 @dataclass(frozen=True)
 class PspRow:
     id: uuid.UUID
     name: str
-    settlement_mode: str
+    settlement_mode: SettlementMode
 
 
 @dataclass(frozen=True)
@@ -148,13 +149,12 @@ async def read_view(conn: Connection, note: str | None) -> View:
         jobs = await cur.fetchall()
     async with conn.cursor(row_factory=class_row(EventRow)) as cur:
         await cur.execute(
-            "SELECT echo_job_id, kind::text, source::text FROM echo_job_event"
-            " ORDER BY recorded_at"
+            "SELECT echo_job_id, kind, source FROM echo_job_event ORDER BY recorded_at"
         )
         events = await cur.fetchall()
     async with conn.cursor(row_factory=class_row(PspRow)) as cur:
         await cur.execute(
-            "SELECT id, name, settlement_mode::text AS settlement_mode"
+            "SELECT id, name, settlement_mode"
             " FROM psp_account WHERE kind = 'fake' ORDER BY name"
         )
         psp_accounts = await cur.fetchall()

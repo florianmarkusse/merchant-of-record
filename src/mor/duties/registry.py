@@ -2,8 +2,6 @@
 first checks that this environment may use the account's kind
 (`mor.provider_accounts`)."""
 
-from typing import assert_never
-
 import httpx2
 
 from mor.config import Environment
@@ -24,5 +22,3 @@ async def ask_rates(
     match account.provider:
         case DutyProvider.FAKE:
             return await fake_client.ask_rates(http, account, question)
-        case _:
-            assert_never(account.provider)

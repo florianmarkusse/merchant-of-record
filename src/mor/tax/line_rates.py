@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
-from typing import Literal, assert_never
+from typing import Literal
 
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
 from mor.markets.records import (
@@ -170,8 +170,6 @@ def line_rate(
                 return RateNeeded(charge, "no_hs_code")
             assert source.vendor is not None
             return _vendor_rate(source.vendor, charge, lookup)
-        case _:
-            assert_never(source.mode)
 
 
 def _vendor_rate(vendor: str, charge: Charge, lookup: VendorLookup | None) -> LineRate:
@@ -187,8 +185,6 @@ def _vendor_rate(vendor: str, charge: Charge, lookup: VendorLookup | None) -> Li
             return VendorNeedsPerson(lookup.id, "undecodable", lookup.detail or "")
         case LookupState.ANSWERED:
             pass
-        case _:
-            assert_never(lookup.state)
     for answer in lookup.answers:
         if answer.charge != charge:
             continue

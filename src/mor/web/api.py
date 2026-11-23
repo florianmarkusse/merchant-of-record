@@ -17,7 +17,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from mor.audit import Actor, ActorKind
-from mor.checkout.quotes import MadeQuote, StoredQuote, read_quote
+from mor.checkout.quotes import StoredQuote, read_made_quote, read_quote
 from mor.checkout.sessions import create_session, read_address, read_session
 from mor.config import Settings
 from mor.db.connect import Connection, connect
@@ -211,8 +211,7 @@ async def get_order(request: Request, settings: Settings) -> Response:
             return error_response(not_found)
         session = await read_session(conn, auth.merchant.id, order.session_id)
         assert session is not None
-        quote = await read_quote(conn, order.quote_id)
-        assert isinstance(quote, MadeQuote)
+        quote = await read_made_quote(conn, order.quote_id)
         address = await read_address(conn, order.address_id)
         assert address is not None
         invoice = await invoice_for_order(conn, order.id)

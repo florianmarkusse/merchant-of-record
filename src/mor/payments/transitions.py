@@ -16,9 +16,8 @@ table only ever moves forward:
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import assert_never
 
-from mor.psp.port import EventKind
+from mor.psp.port import PspEventKind
 
 
 class AttemptState(StrEnum):
@@ -50,63 +49,64 @@ class Stale:
     """The attempt is already past what this event says."""
 
 
-def _ended(kind: EventKind) -> AttemptState | Stale:
+def _ended(kind: PspEventKind) -> AttemptState | Stale:
     match kind:
-        case "declined":
+        case PspEventKind.DECLINED:
             return AttemptState.DECLINED
-        case "expired":
+        case PspEventKind.EXPIRED:
             return AttemptState.EXPIRED
-        case "cancelled":
+        case PspEventKind.CANCELLED:
             return AttemptState.CANCELLED
-        case "authorised" | "captured":
+        case PspEventKind.AUTHORISED | PspEventKind.CAPTURED:
             return Stale()
-        case _:
-            assert_never(kind)
 
 
-def after_event(state: AttemptState, kind: EventKind) -> AttemptState | Stale:
+def after_event(state: AttemptState, kind: PspEventKind) -> AttemptState | Stale:
     match state:
         case AttemptState.REQUESTED | AttemptState.ACTION_REQUIRED:
             match kind:
-                case "authorised":
+                case PspEventKind.AUTHORISED:
                     return AttemptState.AUTHORISED
-                case "captured":
+                case PspEventKind.CAPTURED:
                     return AttemptState.CAPTURED
-                case "declined" | "expired" | "cancelled":
+                case (
+                    PspEventKind.DECLINED
+                    | PspEventKind.EXPIRED
+                    | PspEventKind.CANCELLED
+                ):
                     return _ended(kind)
-                case _:
-                    assert_never(kind)
         case AttemptState.AUTHORISED:
             match kind:
-                case "captured":
+                case PspEventKind.CAPTURED:
                     return AttemptState.CAPTURED
-                case "authorised" | "declined":
+                case PspEventKind.AUTHORISED | PspEventKind.DECLINED:
                     return Stale()
-                case "expired" | "cancelled":
+                case PspEventKind.EXPIRED | PspEventKind.CANCELLED:
                     return _ended(kind)
-                case _:
-                    assert_never(kind)
         case AttemptState.CANCELLING:
             match kind:
-                case "captured":
+                case PspEventKind.CAPTURED:
                     return AttemptState.CAPTURED  # a payment made is honoured
-                case "authorised":
+                case PspEventKind.AUTHORISED:
                     return Stale()  # still cancelling: never captured
-                case "declined" | "expired" | "cancelled":
+                case (
+                    PspEventKind.DECLINED
+                    | PspEventKind.EXPIRED
+                    | PspEventKind.CANCELLED
+                ):
                     return _ended(kind)
-                case _:
-                    assert_never(kind)
         case AttemptState.DECLINED | AttemptState.EXPIRED | AttemptState.CANCELLED:
             match kind:
-                case "captured":
+                case PspEventKind.CAPTURED:
                     # Money taken on an attempt the PSP had ended: never
                     # booked by itself.
                     return AttemptState.NEEDS_PERSON
-                case "authorised" | "declined" | "expired" | "cancelled":
+                case (
+                    PspEventKind.AUTHORISED
+                    | PspEventKind.DECLINED
+                    | PspEventKind.EXPIRED
+                    | PspEventKind.CANCELLED
+                ):
                     return Stale()
-                case _:
-                    assert_never(kind)
         case AttemptState.CAPTURED | AttemptState.NEEDS_PERSON:
             return Stale()
-        case _:
-            assert_never(state)

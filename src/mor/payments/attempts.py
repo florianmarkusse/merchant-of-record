@@ -6,7 +6,6 @@ Every function runs under the caller's transaction and never commits;
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import assert_never
 
 from psycopg.rows import class_row
 
@@ -29,7 +28,7 @@ from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.payments.transitions import AttemptState
-from mor.psp.port import BuyerAction, PaymentMethod, PspAccount, StatusMode
+from mor.psp.port import ActionKind, BuyerAction, PaymentMethod, PspAccount, StatusMode
 
 
 FLOW = Actor(ActorKind.SYSTEM, "payments")
@@ -67,7 +66,7 @@ class _Row:
     return_url: str
     state: AttemptState
     provider_payment_id: str | None
-    action_kind: str | None
+    action_kind: ActionKind | None
     action_url: str | None
     action_expires_at: datetime | None
     ended_reason: str | None
@@ -77,7 +76,8 @@ class _Row:
 def _attempt(row: _Row) -> Attempt:
     action: BuyerAction | None = None
     if row.action_url is not None:
-        assert row.action_kind == "redirect" or row.action_kind == "qr"
+        # A CHECK keeps the kind and the url set together.
+        assert row.action_kind is not None
         action = BuyerAction(row.action_kind, row.action_url, row.action_expires_at)
     return Attempt(
         id=row.id,
@@ -158,7 +158,7 @@ async def lock_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt:
             SELECT id, session_id, quote_id, option_no, psp_account_id, route_id,
                    method, amount_minor, currency, return_url,
                    state,
-                   provider_payment_id, action_kind::text, action_url,
+                   provider_payment_id, action_kind, action_url,
                    action_expires_at, ended_reason, created_at
             FROM payment_attempt WHERE id = %s FOR UPDATE
             """,
@@ -177,7 +177,7 @@ async def read_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt | Non
             """
             SELECT id, session_id, quote_id, option_no, psp_account_id, route_id,
                    method, amount_minor, currency, return_url,
-                   state, provider_payment_id, action_kind::text, action_url,
+                   state, provider_payment_id, action_kind, action_url,
                    action_expires_at, ended_reason, created_at
             FROM payment_attempt WHERE id = %s
             """,
@@ -195,7 +195,7 @@ async def session_attempts(conn: Connection, session_id: uuid.UUID) -> list[Atte
             SELECT id, session_id, quote_id, option_no, psp_account_id, route_id,
                    method, amount_minor, currency, return_url,
                    state,
-                   provider_payment_id, action_kind::text, action_url,
+                   provider_payment_id, action_kind, action_url,
                    action_expires_at, ended_reason, created_at
             FROM payment_attempt WHERE session_id = %s ORDER BY id
             """,
@@ -347,8 +347,6 @@ async def move(
             fact = PaymentCancelWantedV1(payment_attempt_id=attempt_id)
         case AttemptState.REQUESTED:
             raise AssertionError("an attempt never returns to requested")
-        case _:
-            assert_never(state)
     await append_fact(conn, fact, actor, now)
     return state
 

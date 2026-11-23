@@ -13,3 +13,17 @@ class EchoJobState(StrEnum):
     ECHOED = "echoed"
     REFUSED = "refused"
     NEEDS_PERSON = "needs_person"
+
+
+class EchoEventSource(StrEnum):
+    """Matches the `echo_event_source` enum type."""
+
+    VENDOR = "vendor"
+    MANUAL = "manual"
+
+
+class EchoOperation(StrEnum):
+    """Matches the `echo_operation` enum type."""
+
+    SEND = "send"
+    CANCEL = "cancel"

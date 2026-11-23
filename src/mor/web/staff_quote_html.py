@@ -121,21 +121,21 @@ COLLECTOR_WORDS = {
 }
 
 NOT_OFFERED_WORDS: dict[NotOfferedReason, str] = {
-    "service_not_confirmed": "service not confirmed",
-    "card_not_in_force": "rate card not in force",
-    "card_not_confirmed": "rate card not confirmed",
-    "no_zone": "no zone for the country",
-    "zone_not_confirmed": "zone not confirmed",
-    "over_weight": "too heavy",
-    "price_range": "price is a range",
-    "category_restricted": "category restricted",
-    "surcharge_not_confirmed": "a surcharge is not confirmed",
-    "fuel_unknown": "fuel rate unknown",
-    "not_duty_paid": "not duty-paid",
-    "fx_missing": "no exchange rate",
-    "carrier_not_served": "the carrier does not serve it",
-    "carrier_needs_person": "the carrier's answer needs a person",
-    "placeholder": "a placeholder, not offered in prod",
+    NotOfferedReason.SERVICE_NOT_CONFIRMED: "service not confirmed",
+    NotOfferedReason.CARD_NOT_IN_FORCE: "rate card not in force",
+    NotOfferedReason.CARD_NOT_CONFIRMED: "rate card not confirmed",
+    NotOfferedReason.NO_ZONE: "no zone for the country",
+    NotOfferedReason.ZONE_NOT_CONFIRMED: "zone not confirmed",
+    NotOfferedReason.OVER_WEIGHT: "too heavy",
+    NotOfferedReason.PRICE_RANGE: "price is a range",
+    NotOfferedReason.CATEGORY_RESTRICTED: "category restricted",
+    NotOfferedReason.SURCHARGE_NOT_CONFIRMED: "a surcharge is not confirmed",
+    NotOfferedReason.FUEL_UNKNOWN: "fuel rate unknown",
+    NotOfferedReason.NOT_DUTY_PAID: "not duty-paid",
+    NotOfferedReason.FX_MISSING: "no exchange rate",
+    NotOfferedReason.CARRIER_NOT_SERVED: "the carrier does not serve it",
+    NotOfferedReason.CARRIER_NEEDS_PERSON: "the carrier's answer needs a person",
+    NotOfferedReason.PLACEHOLDER: "a placeholder, not offered in prod",
 }
 
 # The groups a price is built from, in order: label, colour class, kinds.

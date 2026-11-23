@@ -9,7 +9,6 @@ to it, so `complete` is picked by the answer alone, and each module's
 `complete` matches exactly the results its call can get."""
 
 from datetime import datetime
-from typing import assert_never
 
 import httpx2
 
@@ -93,8 +92,6 @@ async def handle(
             return await settlement_store.book_lines(conn, fact, now)
         case ConsumerName.SETTLEMENT_PAYOUT_BOOK:
             return await settlement_store.book_payout(conn, fact, now)
-        case _:
-            assert_never(consumer)
 
 
 async def prepare(
@@ -122,8 +119,6 @@ async def prepare(
             return await payment_flow.prepare_poll(conn, fact, now)
         case ConsumerName.PSP_SETTLEMENT_FETCH:
             return await settlement_fetch.prepare_fetch(conn, fact, now)
-        case _:
-            assert_never(consumer)
 
 
 async def call(
@@ -152,8 +147,6 @@ async def call(
             return await payment_flow.call(http, environment, effect_call)
         case settlement_fetch.ListCall() | settlement_fetch.FetchCall():
             return await settlement_fetch.call_fetch(http, environment, effect_call)
-        case _:
-            assert_never(effect_call)
 
 
 async def complete(
@@ -182,5 +175,3 @@ async def complete(
             return await payment_flow.complete(conn, fact, answer, now)
         case settlement_fetch.ListAnswer() | settlement_fetch.FetchAnswer():
             return await settlement_fetch.complete_fetch(conn, fact, answer, now)
-        case _:
-            assert_never(answer)

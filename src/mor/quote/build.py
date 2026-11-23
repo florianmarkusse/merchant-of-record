@@ -59,6 +59,7 @@ from mor.quote.shipping import (
     FromCard,
     FromCarrier,
     NotOffered,
+    NotOfferedReason,
     Offer,
     PriceMissing,
     ShipPart,
@@ -414,7 +415,9 @@ def _option(
     if at_border and not carries_duties_paid(
         market, offer.service, request.destination
     ):
-        return NotOffered(key, "not_duty_paid", "something is due at the border")
+        return NotOffered(
+            key, NotOfferedReason.NOT_DUTY_PAID, "something is due at the border"
+        )
 
     charges = _charges(market, request, lookups, paths, line_goods, freight, currency)
     if not isinstance(charges, list):

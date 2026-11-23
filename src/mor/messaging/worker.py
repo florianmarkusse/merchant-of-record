@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal, assert_never
+from typing import Literal
 
 import httpx2
 import watchfiles
@@ -25,6 +25,7 @@ from watchfiles import PythonFilter
 from mor.config import Environment, Settings, load_settings
 from mor.dates import format_moment
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_row, one_value
 from mor.messaging import consumers
 from mor.messaging.consumers import EffectAnswer, EffectCall
 from mor.messaging.facts import (
@@ -146,22 +147,23 @@ async def try_lock_aggregate(conn: Connection, candidate: Candidate) -> bool:
     """The session advisory lock on the aggregate: held across commits and
     freed when the connection dies. A 64-bit hash of the name; a collision
     only makes two aggregates wait for each other."""
-    cur = await conn.execute(
+    return await one_value(
+        conn,
         "SELECT pg_try_advisory_lock(hashtextextended(%s, 0))",
         (_lock_name(candidate),),
+        bool,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    return row[0] is True
 
 
 async def unlock_aggregate(conn: Connection, candidate: Candidate) -> None:
-    cur = await conn.execute(
+    unlocked = await one_value(
+        conn,
         "SELECT pg_advisory_unlock(hashtextextended(%s, 0))",
         (_lock_name(candidate),),
+        bool,
     )
-    row = await cur.fetchone()
-    assert row is not None and row[0] is True, "unlocked a lock not held"
+    if not unlocked:
+        raise AssertionError(f"unlocked a lock not held: {candidate}")
 
 
 async def _open_delivery(
@@ -179,8 +181,7 @@ async def _open_delivery(
             """,
             {"message_id": candidate.message_id, "consumer": candidate.consumer.value},
         )
-        delivery = await cur.fetchone()
-    assert delivery is not None, f"no delivery for {candidate}"
+        delivery = await one_row(cur, f"delivery {candidate}")
     if delivery.handled_at is not None:
         return Skipped("already_handled")
     if delivery.not_before > now:
@@ -240,17 +241,16 @@ async def _defer(
 ) -> datetime:
     """Leave the delivery open and set when to try again. Time only
     triggers the retry; what happens then is decided under the locks."""
-    cur = await conn.execute(
+    attempts = 1 + await one_value(
+        conn,
         """
         SELECT attempts FROM outbox_delivery
         WHERE message_id = %(message_id)s AND consumer = %(consumer)s
         FOR UPDATE
         """,
         {"message_id": candidate.message_id, "consumer": candidate.consumer.value},
+        int,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    attempts = row[0] + 1
     not_before = now + backoff(attempts)
     await conn.execute(
         """
@@ -327,8 +327,6 @@ async def complete_delivery(
             return Deferred(reason, not_before)
         case Again():
             return step
-        case _:
-            assert_never(step)
 
 
 async def run_effect(
@@ -414,29 +412,33 @@ async def drain_once(
     return results
 
 
+@dataclass(frozen=True)
+class _RetryRow:
+    not_before: datetime
+
+
 async def next_retry_at(conn: Connection, now: datetime) -> datetime | None:
     """The earliest future `not_before` among deliveries that could run next
     (the oldest unhandled per consumer and aggregate). Ones already due are
     left out: they are busy on another worker or blocked behind an older
     one, and counting them would make an idle worker spin."""
-    cur = await conn.execute(
-        """
-        SELECT min(not_before)
-        FROM (
-          SELECT DISTINCT ON (consumer, aggregate_type, aggregate_id) not_before
-          FROM outbox_delivery
-          WHERE handled_at IS NULL
-          ORDER BY consumer, aggregate_type, aggregate_id, seq
-        ) AS oldest
-        WHERE not_before > %(now)s
-        """,
-        {"now": now},
-    )
-    row = await cur.fetchone()
-    assert row is not None
-    retry_at = row[0]
-    assert retry_at is None or isinstance(retry_at, datetime)
-    return retry_at
+    async with conn.cursor(row_factory=class_row(_RetryRow)) as cur:
+        await cur.execute(
+            """
+            SELECT not_before
+            FROM (
+              SELECT DISTINCT ON (consumer, aggregate_type, aggregate_id) not_before
+              FROM outbox_delivery
+              WHERE handled_at IS NULL
+              ORDER BY consumer, aggregate_type, aggregate_id, seq
+            ) AS oldest
+            WHERE not_before > %(now)s
+            ORDER BY not_before LIMIT 1
+            """,
+            {"now": now},
+        )
+        retry = await cur.fetchone()
+    return None if retry is None else retry.not_before
 
 
 def idle_wait(

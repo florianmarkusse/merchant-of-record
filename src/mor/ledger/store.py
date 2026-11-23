@@ -6,6 +6,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
+from mor.db.fetch import one_row, one_value
 from mor.ledger.account import Account, AccountKind
 from mor.ledger.entry import JournalEntry, Line
 from mor.money.amount import Money
@@ -115,8 +116,7 @@ async def _compare_with_recorded(
             """,
             {"key": entry.idempotency_key},
         )
-        recorded = await cur.fetchone()
-    assert recorded is not None, "conflict on a key that has no row"
+        recorded = await one_row(cur, f"journal entry {entry.idempotency_key}")
 
     async with conn.cursor(row_factory=class_row(_LineRow)) as cur:
         await cur.execute(
@@ -150,7 +150,8 @@ async def _compare_with_recorded(
 async def balance(conn: Connection, account: Account, currency: Currency) -> Money:
     """An account's balance in one currency, summed from its lines (debit
     positive). Balances are never stored."""
-    cur = await conn.execute(
+    total = await one_value(
+        conn,
         """
         SELECT COALESCE(sum(amount_minor), 0)::bigint
         FROM journal_line
@@ -162,9 +163,6 @@ async def balance(conn: Connection, account: Account, currency: Currency) -> Mon
             "scope": account.scope,
             "currency": currency.value,
         },
+        int,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    total = row[0]
-    assert isinstance(total, int)
     return Money(total, currency)

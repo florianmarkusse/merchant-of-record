@@ -24,15 +24,18 @@ from mor.checkout.records import (
     AfterPayment,
     CheckoutSession,
     Customs,
+    QuoteState,
     SessionDraft,
+    SessionState,
     SoldLine,
 )
 from mor.couriers.records import Parcel
 from mor.dates import format_instant
 from mor.markets.records import MarketSet
-from mor.merchants.records import Merchant
+from mor.merchants.records import KybState, Merchant
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.orders.records import OrderState
 from mor.orders.store import Order
 from mor.public_ids import (
     MERCHANT_PREFIX,
@@ -143,8 +146,8 @@ class ApiError:
 
 
 class _ErrorBody(msgspec.Struct, frozen=True):
-    type: str
-    code: str
+    type: ErrorType
+    code: ErrorCode
     message: str
     param: str | None
 
@@ -156,7 +159,7 @@ class _ErrorOut(msgspec.Struct, frozen=True):
 def error_response(error: ApiError) -> Response:
     body = _ErrorOut(
         _ErrorBody(
-            type=error.type.value,
+            type=error.type,
             code=error.code,
             message=error.message,
             param=error.param,
@@ -301,11 +304,11 @@ def session_draft(market: MarketSet, request: SessionIn) -> SessionDraft | ApiEr
 
 class MoneyOut(msgspec.Struct, frozen=True):
     amount_minor: int
-    currency: str
+    currency: Currency
 
 
 def money_out(money: Money) -> MoneyOut:
-    return MoneyOut(money.amount_minor, money.currency.value)
+    return MoneyOut(money.amount_minor, money.currency)
 
 
 class CustomsOut(msgspec.Struct, frozen=True):
@@ -347,8 +350,8 @@ class QuoteOut(msgspec.Struct, frozen=True):
     """The buyer's quote, without its build-up (the estimate gives that)."""
 
     id: str
-    state: str
-    currency: str | None
+    state: QuoteState
+    currency: Currency | None
     valid_until: str | None
     options: list[QuoteOptionOut]
     refusal: RefusalOut | None
@@ -370,8 +373,8 @@ def quote_out(stored: StoredQuote) -> QuoteOut:
                 )
             return QuoteOut(
                 id=quote_id,
-                state="made",
-                currency=stored.currency.value,
+                state=QuoteState.MADE,
+                currency=stored.currency,
                 valid_until=format_instant(stored.valid_until),
                 options=options,
                 refusal=None,
@@ -379,7 +382,7 @@ def quote_out(stored: StoredQuote) -> QuoteOut:
         case RefusedQuote():
             return QuoteOut(
                 id=quote_id,
-                state="refused",
+                state=QuoteState.REFUSED,
                 currency=None,
                 valid_until=None,
                 options=[],
@@ -391,14 +394,14 @@ class SessionOut(msgspec.Struct, frozen=True):
     id: str
     object: str
     merchant: str
-    state: str
+    state: SessionState
     url: str
     created_at: str
     expires_at: str
     merchant_reference: str | None
     return_url: str
     cancel_url: str
-    after_payment: str
+    after_payment: AfterPayment
     parcel: ParcelOut
     lines: list[LineOut]
     ship_to_country: str | None  # the full address comes with orders
@@ -421,14 +424,14 @@ def session_out(
         id=session_id,
         object="checkout_session",
         merchant=public_id(MERCHANT_PREFIX, session.merchant_id),
-        state=session.state.value,
+        state=session.state,
         url=f"{self_url}/c/{session_id}",
         created_at=format_instant(session.created_at),
         expires_at=format_instant(session.expires_at),
         merchant_reference=session.merchant_reference,
         return_url=session.return_url,
         cancel_url=session.cancel_url,
-        after_payment=session.after_payment.value,
+        after_payment=session.after_payment,
         parcel=ParcelOut(
             weight_g=parcel.weight_g,
             length_mm=parcel.length_mm,
@@ -496,7 +499,7 @@ class OrderOut(msgspec.Struct, frozen=True):
     merchant: str
     checkout_session: str
     merchant_reference: str | None
-    state: str
+    state: OrderState
     paid_at: str
     total: MoneyOut
     lines: list[LineOut]  # as the merchant sent them
@@ -525,7 +528,7 @@ def order_out(
         merchant=public_id(MERCHANT_PREFIX, order.merchant_id),
         checkout_session=public_id(SESSION_PREFIX, order.session_id),
         merchant_reference=session.merchant_reference,
-        state="paid",
+        state=OrderState.PAID,
         paid_at=format_instant(order.paid_at),
         total=money_out(Money(option.total_minor, quote.currency)),
         lines=_lines_out(session.lines),
@@ -566,7 +569,7 @@ class MerchantOut(msgspec.Struct, frozen=True):
     id: str
     object: str
     display_name: str
-    kyb_state: str  # ours: only `approved` takes payments
+    kyb_state: KybState  # ours: only `approved` takes payments
     support_email: str | None
 
 
@@ -576,7 +579,7 @@ def merchant_out(merchant: Merchant) -> bytes:
             id=public_id(MERCHANT_PREFIX, merchant.id),
             object="merchant",
             display_name=merchant.display_name,
-            kyb_state=merchant.kyb_state.value,
+            kyb_state=merchant.kyb_state,
             support_email=merchant.support_email,
         )
     )

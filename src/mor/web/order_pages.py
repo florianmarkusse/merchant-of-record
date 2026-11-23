@@ -13,7 +13,7 @@ import asyncio
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
-from mor.checkout.quotes import MadeQuote, read_quote
+from mor.checkout.quotes import read_made_quote
 from mor.checkout.sessions import read_address, session_by_id
 from mor.config import Settings
 from mor.db.connect import connect
@@ -46,8 +46,7 @@ async def order_page(request: Request, settings: Settings) -> Response:
         assert session is not None
         merchant = await read_merchant(conn, order.merchant_id)
         assert merchant is not None
-        quote = await read_quote(conn, order.quote_id)
-        assert isinstance(quote, MadeQuote)
+        quote = await read_made_quote(conn, order.quote_id)
         address = await read_address(conn, order.address_id)
         assert address is not None
         invoice = await invoice_for_order(conn, order.id)

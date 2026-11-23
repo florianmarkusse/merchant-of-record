@@ -5,8 +5,6 @@ first checks that this environment may use the account's kind
 Transitional with the echo flow (docs/plan-messaging.md §10).
 """
 
-from typing import assert_never
-
 import httpx2
 
 from mor.config import Environment
@@ -45,8 +43,6 @@ async def send(
             | EchoProvider.FAKE_PLAIN
         ):
             return await fake_client.send(http, account, request)
-        case _:
-            assert_never(account.provider)
 
 
 async def find_by_reference(
@@ -63,8 +59,6 @@ async def find_by_reference(
             | EchoProvider.FAKE_PLAIN
         ):
             return await fake_client.find_by_reference(http, account, reference)
-        case _:
-            assert_never(account.provider)
 
 
 async def cancel(
@@ -81,8 +75,6 @@ async def cancel(
             | EchoProvider.FAKE_PLAIN
         ):
             return await fake_client.cancel(http, account, echo_id)
-        case _:
-            assert_never(account.provider)
 
 
 def verify_webhook(
@@ -95,8 +87,6 @@ def verify_webhook(
             | EchoProvider.FAKE_PLAIN
         ):
             return fake_client.verify_webhook(secret, body, signature)
-        case _:
-            assert_never(account.provider)
 
 
 def decode_events(
@@ -120,10 +110,6 @@ def decode_events(
                     return fake_client.decode_report(body)
                 case EventMode.NONE:
                     raise AssertionError("a `none` account stores nothing")
-                case _:
-                    assert_never(mode)
-        case _:
-            assert_never(account.provider)
 
 
 def decode_thin_webhook(account: EchoAccount, body: bytes) -> str | UndecodableBody:
@@ -135,8 +121,6 @@ def decode_thin_webhook(account: EchoAccount, body: bytes) -> str | UndecodableB
             | EchoProvider.FAKE_PLAIN
         ):
             return fake_client.decode_thin_webhook(body)
-        case _:
-            assert_never(account.provider)
 
 
 async def fetch_events(
@@ -153,8 +137,6 @@ async def fetch_events(
             | EchoProvider.FAKE_PLAIN
         ):
             return await fake_client.fetch_events(http, account, reference)
-        case _:
-            assert_never(account.provider)
 
 
 async def list_reports(
@@ -171,8 +153,6 @@ async def list_reports(
             | EchoProvider.FAKE_PLAIN
         ):
             return await fake_client.list_reports(http, account, after)
-        case _:
-            assert_never(account.provider)
 
 
 async def fetch_report(
@@ -189,5 +169,3 @@ async def fetch_report(
             | EchoProvider.FAKE_PLAIN
         ):
             return await fake_client.fetch_report(http, account, name)
-        case _:
-            assert_never(account.provider)

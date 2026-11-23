@@ -13,10 +13,11 @@ import uuid
 from datetime import datetime
 
 from mor.audit import Actor, ActorKind
-from mor.checkout.quotes import MadeQuote, read_quote
+from mor.checkout.quotes import read_made_quote
 from mor.checkout.records import SessionState
 from mor.checkout.sessions import lock_session, read_address, set_session_state
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.ledger.store import record_entry
 from mor.messaging.facts import (
     CheckoutSessionCompletedV1,
@@ -28,6 +29,7 @@ from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
 from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.orders.posting import capture_entry
+from mor.orders.records import OrderState
 from mor.payments.attempts import read_attempt
 from mor.payments.transitions import AttemptState
 
@@ -36,13 +38,12 @@ ACTOR = Actor(ActorKind.SYSTEM, "order_create")
 
 
 async def _courier(conn: Connection, load_id: uuid.UUID, service: str) -> str:
-    cur = await conn.execute(
+    return await one_value(
+        conn,
         "SELECT provider FROM shipping_service WHERE load_id = %s AND code = %s",
         (load_id, service),
+        str,
     )
-    row = await cur.fetchone()
-    assert row is not None, f"no service {service} in load {load_id}"
-    return row[0]
 
 
 async def create_order(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
@@ -55,15 +56,14 @@ async def create_order(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
     assert session is not None, f"no session {sid}"
     attempt = await read_attempt(conn, attempt_id)
     assert attempt is not None and attempt.state == AttemptState.CAPTURED
-    quote = await read_quote(conn, attempt.quote_id)
-    assert isinstance(quote, MadeQuote)
+    quote = await read_made_quote(conn, attempt.quote_id)
     order_id = uuid.uuid7()
     cur = await conn.execute(
         """
         INSERT INTO order_
           (id, session_id, attempt_id, merchant_id, quote_id, option_no,
            address_id, state, paid_at, buyer_token, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, 'paid', %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (session_id) DO NOTHING
         RETURNING id
         """,
@@ -75,6 +75,7 @@ async def create_order(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
             quote.id,
             attempt.option_no,
             quote.address_id,
+            OrderState.PAID,
             now,
             secrets.token_urlsafe(32),
             now,

@@ -14,6 +14,9 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
+from mor.money.currency import Currency
+from mor.psp.port import SettlementMode
+from mor.settlement.records import ExceptionKind
 
 
 @dataclass(frozen=True)
@@ -21,7 +24,7 @@ class Balance:
     """In one currency: what the PSP holds for us by our books, and what it
     says it paid out that our bank has not shown yet."""
 
-    currency: str
+    currency: Currency
     clearing_minor: int
     in_transit_minor: int
 
@@ -30,7 +33,7 @@ class Balance:
 class AccountSummary:
     id: uuid.UUID
     name: str
-    settlement_mode: str
+    settlement_mode: SettlementMode
     last_read: str | None
     balances: tuple[Balance, ...]
     open_exceptions: int
@@ -40,37 +43,37 @@ class AccountSummary:
 class _AccountRow:
     id: uuid.UUID
     name: str
-    settlement_mode: str
+    settlement_mode: SettlementMode
     last_read: str | None
     open_exceptions: int
 
 
 async def _balances(conn: Connection, account_id: uuid.UUID) -> tuple[Balance, ...]:
-    cur = await conn.execute(
-        """
-        SELECT currency::text,
-          coalesce(sum(amount_minor) FILTER (WHERE account_kind = 'psp_clearing'),
-                   0)::bigint,
-          coalesce(sum(amount_minor)
-                     FILTER (WHERE account_kind = 'payout_in_transit'), 0)::bigint
-        FROM journal_line
-        WHERE account_kind IN ('psp_clearing', 'payout_in_transit')
-          AND account_scope = %s
-        GROUP BY currency ORDER BY currency
-        """,
-        (str(account_id),),
-    )
-    found: list[Balance] = []
-    for currency, clearing, in_transit in await cur.fetchall():
-        found.append(Balance(currency, clearing, in_transit))
-    return tuple(found)
+    async with conn.cursor(row_factory=class_row(Balance)) as cur:
+        await cur.execute(
+            """
+            SELECT currency,
+              coalesce(sum(amount_minor)
+                         FILTER (WHERE account_kind = 'psp_clearing'),
+                       0)::bigint AS clearing_minor,
+              coalesce(sum(amount_minor)
+                         FILTER (WHERE account_kind = 'payout_in_transit'),
+                       0)::bigint AS in_transit_minor
+            FROM journal_line
+            WHERE account_kind IN ('psp_clearing', 'payout_in_transit')
+              AND account_scope = %s
+            GROUP BY currency ORDER BY currency
+            """,
+            (str(account_id),),
+        )
+        return tuple(await cur.fetchall())
 
 
 async def account_summaries(conn: Connection) -> list[AccountSummary]:
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
             """
-            SELECT a.id, a.name, a.settlement_mode::text AS settlement_mode,
+            SELECT a.id, a.name, a.settlement_mode,
                    c.last_read,
                    (SELECT count(*) FROM settlement_exception x
                     WHERE x.account_id = a.id AND NOT EXISTS (
@@ -109,7 +112,7 @@ async def account_summary(
 @dataclass(frozen=True)
 class BatchRow:
     vendor_batch_id: str
-    currency: str
+    currency: Currency
     net_minor: int
     paid_out_at: datetime
     booked_at: datetime | None
@@ -124,7 +127,7 @@ async def batches_of(
     async with conn.cursor(row_factory=class_row(BatchRow)) as cur:
         await cur.execute(
             """
-            SELECT b.vendor_batch_id, b.currency::text AS currency, b.net_minor,
+            SELECT b.vendor_batch_id, b.currency, b.net_minor,
                    b.paid_out_at, b.booked_at,
                    (SELECT count(*) FROM settlement_line l
                     WHERE l.batch_id = b.id) AS lines,
@@ -141,7 +144,7 @@ async def batches_of(
 @dataclass(frozen=True)
 class ExceptionRow:
     id: uuid.UUID
-    kind: str
+    kind: ExceptionKind
     detail: str
     created_at: datetime
     vendor_ref: str  # the PSP's line id, or its batch id
@@ -155,7 +158,7 @@ async def exceptions_of(conn: Connection, account_id: uuid.UUID) -> list[Excepti
     async with conn.cursor(row_factory=class_row(ExceptionRow)) as cur:
         await cur.execute(
             """
-            SELECT x.id, x.kind::text AS kind, x.detail, x.created_at,
+            SELECT x.id, x.kind, x.detail, x.created_at,
                    coalesce(l.vendor_line_id, b.vendor_batch_id) AS vendor_ref,
                    r.note, r.actor_id AS resolved_by, r.resolved_at
             FROM settlement_exception x

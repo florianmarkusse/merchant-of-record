@@ -27,6 +27,7 @@ rounds each part with a named mode.
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from enum import StrEnum
 from fractions import Fraction
 from typing import Literal
 
@@ -87,23 +88,25 @@ class ShipPart:
     line_no: int | None  # its row in surcharges.csv
 
 
-type NotOfferedReason = Literal[
-    "service_not_confirmed",
-    "card_not_in_force",
-    "card_not_confirmed",
-    "no_zone",
-    "zone_not_confirmed",
-    "over_weight",
-    "price_range",
-    "category_restricted",
-    "surcharge_not_confirmed",
-    "fuel_unknown",
-    "not_duty_paid",
-    "fx_missing",
-    "carrier_not_served",
-    "carrier_needs_person",
-    "placeholder",  # left out in prod (mor.quote.refusals.offered_in)
-]
+class NotOfferedReason(StrEnum):
+    """Matches the `not_offered_reason` enum type: why a route was left out
+    of a quote."""
+
+    SERVICE_NOT_CONFIRMED = "service_not_confirmed"
+    CARD_NOT_IN_FORCE = "card_not_in_force"
+    CARD_NOT_CONFIRMED = "card_not_confirmed"
+    NO_ZONE = "no_zone"
+    ZONE_NOT_CONFIRMED = "zone_not_confirmed"
+    OVER_WEIGHT = "over_weight"
+    PRICE_RANGE = "price_range"
+    CATEGORY_RESTRICTED = "category_restricted"
+    SURCHARGE_NOT_CONFIRMED = "surcharge_not_confirmed"
+    FUEL_UNKNOWN = "fuel_unknown"
+    NOT_DUTY_PAID = "not_duty_paid"
+    FX_MISSING = "fx_missing"
+    CARRIER_NOT_SERVED = "carrier_not_served"
+    CARRIER_NEEDS_PERSON = "carrier_needs_person"
+    PLACEHOLDER = "placeholder"  # left out in prod (mor.quote.refusals.offered_in)
 
 
 @dataclass(frozen=True)
@@ -319,36 +322,42 @@ def _offer(
     card = _card(market, route.rate_card)
     service = _service(market, card.service)
     if service.status not in USABLE_STATUSES:
-        return NotOffered(code, "service_not_confirmed", service.status.value)
+        return NotOffered(
+            code, NotOfferedReason.SERVICE_NOT_CONFIRMED, service.status.value
+        )
     if not _in_force(card, on):
-        return NotOffered(code, "card_not_in_force", _card_dates(card))
+        return NotOffered(code, NotOfferedReason.CARD_NOT_IN_FORCE, _card_dates(card))
     if card.status not in USABLE_STATUSES:
-        return NotOffered(code, "card_not_confirmed", card.status.value)
+        return NotOffered(code, NotOfferedReason.CARD_NOT_CONFIRMED, card.status.value)
     for category in sorted(categories):
         restricted = _restriction(market, service.code, category)
         if restricted is not None:
-            return NotOffered(code, "category_restricted", restricted)
+            return NotOffered(code, NotOfferedReason.CATEGORY_RESTRICTED, restricted)
     zone = _zone(market, code, destination)
     if zone is None:
-        return NotOffered(code, "no_zone", destination)
+        return NotOffered(code, NotOfferedReason.NO_ZONE, destination)
     if zone.status not in USABLE_STATUSES:
-        return NotOffered(code, "zone_not_confirmed", zone.status.value)
+        return NotOffered(code, NotOfferedReason.ZONE_NOT_CONFIRMED, zone.status.value)
     chargeable = chargeable_kg(service, parcel)
     if service.max_weight_kg is not None and chargeable > service.max_weight_kg:
         detail = f"{_kg(chargeable)} kg over the service's {_kg(service.max_weight_kg)}"
-        return NotOffered(code, "over_weight", detail)
+        return NotOffered(code, NotOfferedReason.OVER_WEIGHT, detail)
     rate = _weight_break(market, code, zone.zone, chargeable)
     if rate is None:
         detail = f"{_kg(chargeable)} kg above the card's last weight break"
-        return NotOffered(code, "over_weight", detail)
+        return NotOffered(code, NotOfferedReason.OVER_WEIGHT, detail)
     if rate.amount_max_minor is not None:
         return NotOffered(
-            code, "price_range", f"zone {zone.zone}, {_kg(rate.weight_kg)} kg"
+            code,
+            NotOfferedReason.PRICE_RANGE,
+            f"zone {zone.zone}, {_kg(rate.weight_kg)} kg",
         )
     freight = convert_minor(market, Money(rate.amount_minor, card.currency), currency)
     if isinstance(freight, FxMissing):
         return NotOffered(
-            code, "fx_missing", f"{card.currency.value} to {currency.value}"
+            code,
+            NotOfferedReason.FX_MISSING,
+            f"{card.currency.value} to {currency.value}",
         )
     how = f"zone {zone.zone}, {_kg(rate.weight_kg)} kg"
     if chargeable > Fraction(parcel.weight_g, GRAMS_PER_KG):
@@ -381,7 +390,7 @@ def _offer(
             continue
         unusable = _unusable(row)
         if unusable is not None:
-            return NotOffered(code, "surcharge_not_confirmed", unusable)
+            return NotOffered(code, NotOfferedReason.SURCHARGE_NOT_CONFIRMED, unusable)
         priced = _surcharge_exact(
             market,
             row,
@@ -394,11 +403,13 @@ def _offer(
         )
         if isinstance(priced, FxMissing):
             return NotOffered(
-                code, "fx_missing", f"{row.currency.value} to {currency.value}"
+                code,
+                NotOfferedReason.FX_MISSING,
+                f"{row.currency.value} to {currency.value}",
             )
         if priced is None:
             detail = f"{row.name} has no amount (surcharges.csv line {row.line_no})"
-            return NotOffered(code, "surcharge_not_confirmed", detail)
+            return NotOffered(code, NotOfferedReason.SURCHARGE_NOT_CONFIRMED, detail)
         exact, taken = priced
         parts.append(
             ShipPart(
@@ -461,15 +472,17 @@ def _live_offer(
     code = route.key
     service = _service(market, route.service)
     if service.status not in USABLE_STATUSES:
-        return NotOffered(code, "service_not_confirmed", service.status.value)
+        return NotOffered(
+            code, NotOfferedReason.SERVICE_NOT_CONFIRMED, service.status.value
+        )
     for category in sorted(categories):
         restricted = _restriction(market, service.code, category)
         if restricted is not None:
-            return NotOffered(code, "category_restricted", restricted)
+            return NotOffered(code, NotOfferedReason.CATEGORY_RESTRICTED, restricted)
     chargeable = chargeable_kg(service, parcel)
     if service.max_weight_kg is not None and chargeable > service.max_weight_kg:
         detail = f"{_kg(chargeable)} kg over the service's {_kg(service.max_weight_kg)}"
-        return NotOffered(code, "over_weight", detail)
+        return NotOffered(code, NotOfferedReason.OVER_WEIGHT, detail)
     question = price_question(service, destination, parcel)
     held = prices.get(question, PriceHeld(None, None))
     latest = held.latest
@@ -477,9 +490,13 @@ def _live_offer(
         return PriceMissing(question, held.open_id)
     match latest.state:
         case PriceState.NOT_SERVED:
-            return NotOffered(code, "carrier_not_served", latest.detail or "")
+            return NotOffered(
+                code, NotOfferedReason.CARRIER_NOT_SERVED, latest.detail or ""
+            )
         case PriceState.NEEDS_PERSON:
-            return NotOffered(code, "carrier_needs_person", latest.detail or "")
+            return NotOffered(
+                code, NotOfferedReason.CARRIER_NEEDS_PERSON, latest.detail or ""
+            )
         case PriceState.REQUESTED:
             raise AssertionError("a finished lookup is never requested")
         case PriceState.ANSWERED:
@@ -509,7 +526,9 @@ def _from_carrier(
         )
         if isinstance(exact, FxMissing):
             return NotOffered(
-                code, "fx_missing", f"{carrier_currency.value} to {currency.value}"
+                code,
+                NotOfferedReason.FX_MISSING,
+                f"{carrier_currency.value} to {currency.value}",
             )
         match part.kind:
             case PricePartKind.FREIGHT:
@@ -579,7 +598,7 @@ def duty_paid_parts(
     for row in offer.duty_paid_rows:
         unusable = _unusable(row)
         if unusable is not None:
-            return NotOffered(code, "surcharge_not_confirmed", unusable)
+            return NotOffered(code, NotOfferedReason.SURCHARGE_NOT_CONFIRMED, unusable)
         priced = _surcharge_exact(
             market,
             row,
@@ -592,11 +611,13 @@ def duty_paid_parts(
         )
         if isinstance(priced, FxMissing):
             return NotOffered(
-                code, "fx_missing", f"{row.currency.value} to {currency.value}"
+                code,
+                NotOfferedReason.FX_MISSING,
+                f"{row.currency.value} to {currency.value}",
             )
         if priced is None:
             detail = f"{row.name} has no amount (surcharges.csv line {row.line_no})"
-            return NotOffered(code, "surcharge_not_confirmed", detail)
+            return NotOffered(code, NotOfferedReason.SURCHARGE_NOT_CONFIRMED, detail)
         exact, taken = priced
         parts.append(
             ShipPart(
@@ -609,7 +630,7 @@ def duty_paid_parts(
         )
         if row.fuel_applies == FuelApplies.YES and offer.fuel_rate is None:
             detail = f"no usable fuel row for {offer.service.code}"
-            return NotOffered(code, "fuel_unknown", detail)
+            return NotOffered(code, NotOfferedReason.FUEL_UNKNOWN, detail)
         if row.fuel_applies == FuelApplies.YES and offer.fuel_rate:
             parts.append(
                 ShipPart(
@@ -658,14 +679,18 @@ def _fuel_rate(card: RateCard, row: Surcharge | None) -> Fraction | NotOffered:
         case CardFuel.INCLUDED:
             return Fraction(0)
         case CardFuel.UNKNOWN:
-            return NotOffered(card.code, "fuel_unknown", "the card does not say")
+            return NotOffered(
+                card.code, NotOfferedReason.FUEL_UNKNOWN, "the card does not say"
+            )
         case CardFuel.EXTRA:
             pass
     if row is None:
-        return NotOffered(card.code, "fuel_unknown", "no fuel row for the service")
+        return NotOffered(
+            card.code, NotOfferedReason.FUEL_UNKNOWN, "no fuel row for the service"
+        )
     if row.status not in USABLE_STATUSES or row.rate is None:
         detail = f"fuel is {row.status.value} (surcharges.csv line {row.line_no})"
-        return NotOffered(card.code, "fuel_unknown", detail)
+        return NotOffered(card.code, NotOfferedReason.FUEL_UNKNOWN, detail)
     return row.rate
 
 

@@ -2,8 +2,6 @@
 first checks that this environment may use the account's kind
 (`mor.provider_accounts`)."""
 
-from typing import assert_never
-
 import httpx2
 
 from mor.config import Environment
@@ -23,5 +21,3 @@ async def quote_rate(
     match account.provider:
         case CourierProvider.FAKE:
             return await fake_client.quote_rate(http, account, question)
-        case _:
-            assert_never(account.provider)

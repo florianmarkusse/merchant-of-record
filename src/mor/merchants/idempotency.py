@@ -12,7 +12,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+from psycopg.rows import class_row
+
 from mor.db.connect import Connection
+from mor.db.fetch import one_row
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,13 @@ class KeyReused:
 type Claim = Claimed | Replay | KeyReused
 
 
+@dataclass(frozen=True)
+class _StoredRow:
+    request_sha256: bytes
+    status: int | None
+    response: bytes | None
+
+
 async def claim_key(
     conn: Connection,
     merchant_id: uuid.UUID,
@@ -56,22 +66,22 @@ async def claim_key(
     )
     if await cur.fetchone() is not None:
         return Claimed()
-    cur = await conn.execute(
-        """
-        SELECT request_sha256, status, response FROM api_idempotency
-        WHERE merchant_id = %s AND key = %s
-        """,
-        (merchant_id, key),
-    )
-    row = await cur.fetchone()
-    assert row is not None, "the conflicting row is committed: it waited for it"
-    stored_sha256, status, response = row
-    if bytes(stored_sha256) != request_sha256:
+    async with conn.cursor(row_factory=class_row(_StoredRow)) as cur:
+        await cur.execute(
+            """
+            SELECT request_sha256, status, response FROM api_idempotency
+            WHERE merchant_id = %s AND key = %s
+            """,
+            (merchant_id, key),
+        )
+        # The insert waited for the conflicting row to commit.
+        stored = await one_row(cur, f"idempotency key {key}")
+    if stored.request_sha256 != request_sha256:
         return KeyReused()
-    assert status is not None and response is not None, (
+    assert stored.status is not None and stored.response is not None, (
         "a committed key always has its response: both are written in one transaction"
     )
-    return Replay(status, bytes(response))
+    return Replay(stored.status, stored.response)
 
 
 async def store_response(

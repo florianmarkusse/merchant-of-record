@@ -53,7 +53,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal, LiteralString, assert_never
+from typing import Literal, LiteralString
 from urllib.parse import parse_qsl
 
 import htpy
@@ -848,8 +848,6 @@ async def _release(
             return await _record_event(
                 conn, account, payment, "expired", how, outgoing, clock
             )
-        case _:
-            assert_never(outcome)
 
 
 async def handle_release(

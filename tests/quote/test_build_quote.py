@@ -27,7 +27,7 @@ from mor.quote.build import (
     VendorAsk,
     build_quote,
 )
-from mor.quote.shipping import NotOffered
+from mor.quote.shipping import NotOffered, NotOfferedReason
 from mor.tax.line_rates import RateNeeded
 from tests.quote.fixtures import quote_market
 
@@ -86,7 +86,7 @@ def test_an_order_above_the_border_limit_adds_tax_and_the_duty_paid_fee() -> Non
         "total": 64928,
     }
     assert NotOffered(
-        "eco_card", "not_duty_paid", "something is due at the border"
+        "eco_card", NotOfferedReason.NOT_DUTY_PAID, "something is due at the border"
     ) in (quote.not_offered)
     [option] = quote.options
     assert option.transit_days == (1, 3)

@@ -18,7 +18,8 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import assert_never
+
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
@@ -102,6 +103,12 @@ async def store_inbox(
     return Stored(inbox_id)
 
 
+@dataclass(frozen=True)
+class _InboxRow:
+    mode: InboundMode
+    body: bytes
+
+
 async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
     """Consumer `psp_inbox_decode`, per account: the stored bytes into one
     fact per event, each for its own attempt (one step locks one
@@ -111,13 +118,12 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
             pass
         case _:
             raise WrongFact(f"psp_inbox_decode got {fact!r}")
-    cur = await conn.execute(
-        "SELECT mode::text, body FROM psp_inbox WHERE id = %s", (inbox_id,)
-    )
-    row = await cur.fetchone()
-    assert row is not None, f"no inbox row {inbox_id}"
-    mode = InboundMode(row[0])
-    body = bytes(row[1])
+    async with conn.cursor(row_factory=class_row(_InboxRow)) as cur:
+        await cur.execute("SELECT mode, body FROM psp_inbox WHERE id = %s", (inbox_id,))
+        stored = await cur.fetchone()
+    assert stored is not None, f"no inbox row {inbox_id}"
+    mode = stored.mode
+    body = stored.body
     account = await read_psp_account(conn, account_id)
     assert account is not None, f"no psp account {account_id}"
 
@@ -129,8 +135,6 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
             settlement = SettlementMode.API
         case InboundMode.PUSH_FAT | InboundMode.PUSH_THIN | InboundMode.POLL:
             pass
-        case _:
-            assert_never(mode)
     if settlement is not None:
         # A settlement report or page (docs/plan-payments.md §7.1).
         failed = await record_document(conn, account, inbox_id, settlement, body, now)

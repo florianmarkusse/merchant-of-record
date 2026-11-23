@@ -2,8 +2,6 @@
 §6). Every call first checks that this environment may use the account's
 kind (`mor.provider_accounts`)."""
 
-from typing import assert_never
-
 import httpx2
 
 from mor.config import Environment
@@ -43,8 +41,6 @@ async def create_payment(
     match account.provider:
         case PspProvider.FAKE:
             return await fake_client.create_payment(http, account, request)
-        case _:
-            assert_never(account.provider)
 
 
 async def find_payments(
@@ -57,8 +53,6 @@ async def find_payments(
     match account.provider:
         case PspProvider.FAKE:
             return await fake_client.find_payments(http, account, reference)
-        case _:
-            assert_never(account.provider)
 
 
 async def capture(
@@ -75,8 +69,6 @@ async def capture(
             return await fake_client.capture(
                 http, account, provider_payment_id, amount, key
             )
-        case _:
-            assert_never(account.provider)
 
 
 async def cancel(
@@ -89,8 +81,6 @@ async def cancel(
     match account.provider:
         case PspProvider.FAKE:
             return await fake_client.cancel(http, account, provider_payment_id)
-        case _:
-            assert_never(account.provider)
 
 
 async def fetch_events(
@@ -103,24 +93,18 @@ async def fetch_events(
     match account.provider:
         case PspProvider.FAKE:
             return await fake_client.fetch_events(http, account, provider_payment_id)
-        case _:
-            assert_never(account.provider)
 
 
 def signature_header(account: PspAccount) -> str:
     match account.provider:
         case PspProvider.FAKE:
             return fake_client.SIGNATURE_HEADER
-        case _:
-            assert_never(account.provider)
 
 
 def verify_webhook(account: PspAccount, body: bytes, signature: str | None) -> bool:
     match account.provider:
         case PspProvider.FAKE:
             return fake_client.verify_webhook(account, body, signature)
-        case _:
-            assert_never(account.provider)
 
 
 def decode_events(
@@ -129,8 +113,6 @@ def decode_events(
     match account.provider:
         case PspProvider.FAKE:
             return fake_client.decode_events(body)
-        case _:
-            assert_never(account.provider)
 
 
 def decode_thin_webhook(
@@ -139,8 +121,6 @@ def decode_thin_webhook(
     match account.provider:
         case PspProvider.FAKE:
             return fake_client.decode_thin_webhook(body)
-        case _:
-            assert_never(account.provider)
 
 
 async def list_settlements(
@@ -153,8 +133,6 @@ async def list_settlements(
     match account.provider:
         case PspProvider.FAKE:
             return await fake_client.list_settlements(http, account, after)
-        case _:
-            assert_never(account.provider)
 
 
 async def fetch_settlement(
@@ -168,8 +146,6 @@ async def fetch_settlement(
     match account.provider:
         case PspProvider.FAKE:
             return await fake_client.fetch_settlement(http, account, name, page)
-        case _:
-            assert_never(account.provider)
 
 
 def decode_settlement(
@@ -182,5 +158,3 @@ def decode_settlement(
                     return fake_client.decode_settlement_file(body)
                 case SettlementMode.API:
                     return fake_client.decode_settlement_page(body)
-        case _:
-            assert_never(account.provider)

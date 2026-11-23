@@ -19,12 +19,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
-from typing import Literal
 
 from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
+from mor.db.fetch import one_row, one_value
 from mor.ledger.account import AccountKind
 from mor.ledger.store import record_entry
 from mor.messaging.facts import (
@@ -61,6 +61,7 @@ from mor.settlement.entries import (
     payout_entry,
     to_minor,
 )
+from mor.settlement.records import ExceptionKind, LineState
 from mor.vendor_failures import UndecodableBody
 
 
@@ -68,15 +69,6 @@ DECODER = Actor(ActorKind.SYSTEM, "psp_inbox_decode")
 LINE_BOOKER = Actor(ActorKind.SYSTEM, "settlement_line_book")
 PAYOUT_BOOKER = Actor(ActorKind.SYSTEM, "settlement_payout_book")
 
-type ExceptionKind = Literal[
-    "unknown_reference",
-    "not_captured",
-    "amount_differs",
-    "currency_differs",
-    "settled_twice",
-    "unknown_type",
-    "net_differs",
-]
 ENDED_OTHERWISE = (
     AttemptState.DECLINED,
     AttemptState.EXPIRED,
@@ -124,14 +116,13 @@ async def record_document(
             now,
         ),
     )
-    cur = await conn.execute(
+    batch_id = await one_value(
+        conn,
         "SELECT id FROM settlement_batch"
         " WHERE account_id = %s AND vendor_batch_id = %s",
         (account.id, batch.vendor_batch_id),
+        uuid.UUID,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    batch_id: uuid.UUID = row[0]
     for line in document.lines:
         # The attempt a reference names never changes: kept from the start,
         # so an attempt's lines are booked in the order the PSP sent them.
@@ -146,7 +137,7 @@ async def record_document(
                gross_denominator, gross_minor, fee_numerator, fee_denominator,
                fee_minor, rounding, attempt_id, state, recorded_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, 'received', %s, %s)
+                    %s, %s, %s, %s, %s)
             ON CONFLICT (account_id, vendor_line_id) DO NOTHING
             RETURNING id
             """,
@@ -168,6 +159,7 @@ async def record_document(
                 to_minor(line.fee),
                 ROUNDING.value,
                 attempt_id,
+                LineState.RECEIVED,
                 now,
                 now,
             ),
@@ -197,10 +189,6 @@ async def record_document(
 # --- booking a line ---------------------------------------------------------------
 
 
-type LineState = Literal["received", "waiting", "booked", "exception"]
-"""Matches `settlement_line_state`, read as text."""
-
-
 @dataclass(frozen=True)
 class _Line:
     id: uuid.UUID
@@ -224,7 +212,7 @@ _LINE_SELECT = """
     SELECT l.id, l.batch_id, l.account_id, l.vendor_line_id, l.type,
            l.vendor_type, l.provider_payment_id, l.our_reference,
            l.currency, l.gross_numerator, l.gross_denominator, l.fee_minor,
-           l.state::text, b.currency AS batch_currency, b.paid_out_at
+           l.state, b.currency AS batch_currency, b.paid_out_at
     FROM settlement_line l JOIN settlement_batch b ON b.id = l.batch_id
 """
 
@@ -232,9 +220,7 @@ _LINE_SELECT = """
 async def _lock_line(conn: Connection, line_id: uuid.UUID) -> _Line:
     async with conn.cursor(row_factory=class_row(_Line)) as cur:
         await cur.execute(_LINE_SELECT + " WHERE l.id = %s FOR UPDATE OF l", (line_id,))
-        row = await cur.fetchone()
-    assert row is not None, f"no settlement line {line_id}"
-    return row
+        return await one_row(cur, f"settlement line {line_id}")
 
 
 async def _lock_pending_lines(conn: Connection, attempt_id: uuid.UUID) -> list[_Line]:
@@ -267,8 +253,8 @@ async def _exception(
         (uuid.uuid7(), line.account_id, line.id, kind, detail, now),
     )
     await conn.execute(
-        "UPDATE settlement_line SET state = 'exception', updated_at = %s WHERE id = %s",
-        (now, line.id),
+        "UPDATE settlement_line SET state = %s, updated_at = %s WHERE id = %s",
+        (LineState.EXCEPTION, now, line.id),
     )
 
 
@@ -277,17 +263,17 @@ async def _estimate(
 ) -> Money:
     """The PSP fee the capture booked as collected: what was booked, not
     recomputed from the quote."""
-    cur = await conn.execute(
+    collected = await one_value(
+        conn,
         """
         SELECT coalesce(sum(l.amount_minor), 0)::bigint
         FROM journal_line l JOIN journal_entry e ON e.id = l.entry_id
         WHERE e.idempotency_key = %s AND l.account_kind = %s AND l.currency = %s
         """,
         (capture_key(attempt_id), AccountKind.PSP_FEE_COLLECTED.value, currency.value),
+        int,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    return Money(-row[0], currency)  # collected is a credit
+    return Money(-collected, currency)  # collected is a credit
 
 
 async def _settle(
@@ -299,7 +285,7 @@ async def _settle(
         await _exception(
             conn,
             line,
-            "unknown_reference",
+            ExceptionKind.UNKNOWN_REFERENCE,
             f"payment {line.provider_payment_id!r} is not the PSP's id for"
             f" attempt {attempt.id} ({attempt.provider_payment_id!r})",
             now,
@@ -310,7 +296,7 @@ async def _settle(
         await _exception(
             conn,
             line,
-            "currency_differs",
+            ExceptionKind.CURRENCY_DIFFERS,
             f"line in {line.currency}, batch in {line.batch_currency},"
             f" payment in {currency.value}",
             now,
@@ -320,7 +306,7 @@ async def _settle(
         await _exception(
             conn,
             line,
-            "not_captured",
+            ExceptionKind.NOT_CAPTURED,
             f"attempt {attempt.id} is {attempt.state.value}",
             now,
         )
@@ -330,7 +316,7 @@ async def _settle(
         await _exception(
             conn,
             line,
-            "amount_differs",
+            ExceptionKind.AMOUNT_DIFFERS,
             f"gross {gross} {currency.value} minor, captured"
             f" {attempt.amount.amount_minor}",
             now,
@@ -348,7 +334,7 @@ async def _settle(
         await _exception(
             conn,
             line,
-            "settled_twice",
+            ExceptionKind.SETTLED_TWICE,
             f"attempt {attempt.id} was settled by line {earlier[0]}",
             now,
         )
@@ -359,11 +345,10 @@ async def _settle(
     if await cur.fetchone() is None:
         # Settlement got ahead of our books. The order's making, or the
         # payment's end, books this line or turns it into an exception.
-        if line.state != "waiting":
+        if line.state != LineState.WAITING:
             await conn.execute(
-                "UPDATE settlement_line SET state = 'waiting', updated_at = %s"
-                " WHERE id = %s",
-                (now, line.id),
+                "UPDATE settlement_line SET state = %s, updated_at = %s WHERE id = %s",
+                (LineState.WAITING, now, line.id),
             )
             if attempt.state in OPEN_STATES:
                 await append_fact(
@@ -386,33 +371,38 @@ async def _settle(
     if entry is not None:
         await record_entry(conn, entry)
     await conn.execute(
-        "UPDATE settlement_line SET state = 'booked', updated_at = %s WHERE id = %s",
-        (now, line.id),
+        "UPDATE settlement_line SET state = %s, updated_at = %s WHERE id = %s",
+        (LineState.BOOKED, now, line.id),
     )
+
+
+@dataclass(frozen=True)
+class _LineStateRow:
+    attempt_id: uuid.UUID | None
+    state: LineState
 
 
 async def _book_received(
     conn: Connection, line_id: uuid.UUID, now: datetime
 ) -> ConsumerOutcome:
-    cur = await conn.execute(
-        "SELECT attempt_id, state::text FROM settlement_line WHERE id = %s",
-        (line_id,),
-    )
-    row = await cur.fetchone()
-    assert row is not None, f"no settlement line {line_id}"
-    attempt_id, state = row
-    if state != "received":
+    async with conn.cursor(row_factory=class_row(_LineStateRow)) as cur:
+        await cur.execute(
+            "SELECT attempt_id, state FROM settlement_line WHERE id = %s",
+            (line_id,),
+        )
+        found = await one_row(cur, f"settlement line {line_id}")
+    if found.state != LineState.RECEIVED:
         return Stale()
-    if attempt_id is not None:
-        return await _settle_pending(conn, attempt_id, now)
+    if found.attempt_id is not None:
+        return await _settle_pending(conn, found.attempt_id, now)
     line = await _lock_line(conn, line_id)
-    if line.state != "received":
+    if line.state != LineState.RECEIVED:
         return Stale()
     if line.type == LineType.UNKNOWN:
         await _exception(
             conn,
             line,
-            "unknown_type",
+            ExceptionKind.UNKNOWN_TYPE,
             f"a {line.vendor_type!r} line is not booked",
             now,
         )
@@ -420,7 +410,7 @@ async def _book_received(
         await _exception(
             conn,
             line,
-            "unknown_reference",
+            ExceptionKind.UNKNOWN_REFERENCE,
             f"no payment of this account has reference {line.our_reference!r}",
             now,
         )
@@ -450,12 +440,13 @@ async def book_lines(conn: Connection, fact: Fact, now: datetime) -> ConsumerOut
         case SettlementLineReceivedV1(settlement_line_id=line_id):
             return await _book_received(conn, line_id, now)
         case OrderPaidV1(order_id=order_id):
-            cur = await conn.execute(
-                "SELECT attempt_id FROM order_ WHERE id = %s", (order_id,)
+            attempt_id = await one_value(
+                conn,
+                "SELECT attempt_id FROM order_ WHERE id = %s",
+                (order_id,),
+                uuid.UUID,
             )
-            row = await cur.fetchone()
-            assert row is not None, f"no order {order_id}"
-            return await _settle_pending(conn, row[0], now)
+            return await _settle_pending(conn, attempt_id, now)
         case (
             PaymentDeclinedV1(payment_attempt_id=attempt_id)
             | PaymentExpiredV1(payment_attempt_id=attempt_id)
@@ -506,8 +497,7 @@ async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
             """,
             (batch_id,),
         )
-        batch = await cur.fetchone()
-    assert batch is not None, f"no settlement batch {batch_id}"
+        batch = await one_row(cur, f"settlement batch {batch_id}")
     if batch.booked_at is not None:
         return Stale()
     account_id = batch.account_id
@@ -549,13 +539,14 @@ async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
             """
             INSERT INTO settlement_exception
               (id, account_id, batch_id, kind, detail, created_at)
-            VALUES (%s, %s, %s, 'net_differs', %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (batch_id) DO NOTHING
             """,
             (
                 uuid.uuid7(),
                 account_id,
                 batch_id,
+                ExceptionKind.NET_DIFFERS,
                 f"net {check.reported} {currency} minor, its lines add up to"
                 f" {check.expected}",
                 now,

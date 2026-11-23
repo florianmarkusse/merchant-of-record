@@ -8,9 +8,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal, assert_never
+from typing import Literal
 
 import msgspec
+
+from mor.echo.port import EventKind
+from mor.echo.records import EchoEventSource
+from mor.psp.port import PspEventKind
 
 
 class AggregateType(StrEnum):
@@ -134,9 +138,9 @@ class EchoVendorEventReceivedV1(
 
     echo_job_id: uuid.UUID
     vendor_event_id: str
-    kind: Literal["confirmed", "archived"]
+    kind: EventKind
     occurred_at: datetime
-    source: Literal["vendor", "manual"]
+    source: EchoEventSource
     inbox_id: uuid.UUID | None
 
 
@@ -357,7 +361,7 @@ class PspEventReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True
     payment_attempt_id: uuid.UUID
     vendor_event_id: str
     provider_payment_id: str
-    kind: Literal["authorised", "captured", "declined", "expired", "cancelled"]
+    kind: PspEventKind
     amount_minor: int
     currency: str
     occurred_at: datetime
@@ -575,8 +579,6 @@ def fact_type(fact: Fact) -> FactType:
             return FactType(MessageType.SETTLEMENT_LINE_RECEIVED, 1)
         case SettlementBatchReceivedV1():
             return FactType(MessageType.SETTLEMENT_BATCH_RECEIVED, 1)
-        case _:
-            assert_never(fact)
 
 
 def aggregate_of(fact: Fact) -> Aggregate:
@@ -653,8 +655,6 @@ def aggregate_of(fact: Fact) -> Aggregate:
             return Aggregate(AggregateType.SETTLEMENT_BATCH, batch_id)
         case OrderPaidV1(order_id=order_id) | InvoiceIssuedV1(order_id=order_id):
             return Aggregate(AggregateType.ORDER, order_id)
-        case _:
-            assert_never(fact)
 
 
 def encode(fact: Fact) -> bytes:
@@ -778,8 +778,6 @@ def decode(
             decoded = _decode(payload, SettlementLineReceivedV1)
         case MessageType.SETTLEMENT_BATCH_RECEIVED:
             decoded = _decode(payload, SettlementBatchReceivedV1)
-        case _:
-            assert_never(message_type)
     if isinstance(decoded, str):
         return UndecodableFact(
             message_type=message_type,

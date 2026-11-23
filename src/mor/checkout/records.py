@@ -27,6 +27,13 @@ class SessionState(StrEnum):
     CANCELED = "canceled"
 
 
+class QuoteState(StrEnum):
+    """Matches the `quote_state` enum type."""
+
+    MADE = "made"
+    REFUSED = "refused"
+
+
 class AfterPayment(StrEnum):
     """Where the buyer lands once paid, as the merchant chose for the
     session (docs/plan-payments.md §6.1). Matches the `after_payment` enum

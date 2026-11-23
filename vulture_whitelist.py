@@ -38,6 +38,7 @@ _.RESTRICTED
 _.PROHIBITED
 _.AGREED
 _.SUSPENDED  # merchants.records KybState
+_.REDIRECT  # psp.port ActionKind: the PSP sends it, the buyer page shows a link
 _.REVOKED  # merchants.records KeyState
 _.SALE  # psp.port CaptureMode
 _.AUTHORISE_CAPTURE

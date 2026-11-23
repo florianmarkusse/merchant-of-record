@@ -10,7 +10,6 @@ after a deploy), and it is the flow the messaging fuzzer drives.
 
 import uuid
 from datetime import datetime
-from typing import assert_never
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
@@ -27,8 +26,6 @@ def after_echo(state: ProbeState) -> ProbeState | Stale:
             return ProbeState.ECHOED
         case ProbeState.ECHOED | ProbeState.FINISHED:
             return Stale()
-        case _:
-            assert_never(state)
 
 
 def after_finish(state: ProbeState) -> ProbeState | Stale:
@@ -40,8 +37,6 @@ def after_finish(state: ProbeState) -> ProbeState | Stale:
             return ProbeState.FINISHED
         case ProbeState.FINISHED:
             return Stale()
-        case _:
-            assert_never(state)
 
 
 async def start_probe(conn: Connection, actor: Actor, now: datetime) -> uuid.UUID:

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal, assert_never
+from typing import Literal
 
 from mor.messaging.facts import MessageType
 
@@ -191,8 +191,6 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             | MessageType.INVOICE_ISSUED
         ):
             return ()
-        case _:
-            assert_never(message_type)
 
 
 def consumer_kind(consumer: ConsumerName) -> Local | Effect:
@@ -230,5 +228,3 @@ def consumer_kind(consumer: ConsumerName) -> Local | Effect:
             | ConsumerName.PSP_SETTLEMENT_FETCH
         ):
             return Effect(consumer)
-        case _:
-            assert_never(consumer)

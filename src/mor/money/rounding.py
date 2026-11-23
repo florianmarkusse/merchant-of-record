@@ -3,7 +3,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
-from typing import assert_never
 
 from mor.money.amount import Money
 
@@ -34,8 +33,6 @@ def round_fraction(value: Fraction, mode: RoundingMode) -> int:
             return math.floor(value)
         case RoundingMode.CEILING:
             return math.ceil(value)
-        case _:
-            assert_never(mode)
 
 
 @dataclass(frozen=True)

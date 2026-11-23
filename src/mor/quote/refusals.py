@@ -9,7 +9,7 @@ without the HS code a country needs).
 """
 
 from dataclasses import dataclass, replace
-from typing import Literal, assert_never
+from typing import Literal
 
 from mor.config import Environment
 from mor.markets.fx import FxMissing
@@ -25,7 +25,7 @@ from mor.quote.build import (
     QuoteRefusal,
     ShippingOption,
 )
-from mor.quote.shipping import NotOffered
+from mor.quote.shipping import NotOffered, NotOfferedReason
 from mor.tax.line_rates import (
     RateNeeded,
     RateNotConfirmed,
@@ -85,8 +85,6 @@ def refusal_of(refusal: QuoteRefusal, country: str) -> Refusal:
                         f"{category} into {country} is not open yet",
                         "country",
                     )
-                case _:
-                    assert_never(closed)
         case NoCurrency():
             return _order(
                 "country_not_supported",
@@ -123,12 +121,8 @@ def refusal_of(refusal: QuoteRefusal, country: str) -> Refusal:
                         f"the {charge.value} rate for this line needs checking",
                         f"lines[{line}]",
                     )
-                case _:
-                    assert_never(problem)
         case NoServiceForLane():
             return NO_SERVICE
-        case _:
-            assert_never(refusal)
 
 
 def offered_in(quote: Quote, environment: Environment) -> Quote | Refusal:
@@ -145,7 +139,7 @@ def offered_in(quote: Quote, environment: Environment) -> Quote | Refusal:
     not_offered = list(quote.not_offered)
     for option in quote.options:
         if option.standing == Standing.PLACEHOLDER:
-            not_offered.append(NotOffered(option.key, "placeholder", ""))
+            not_offered.append(NotOffered(option.key, NotOfferedReason.PLACEHOLDER, ""))
             continue
         options.append(option)
     if not options:

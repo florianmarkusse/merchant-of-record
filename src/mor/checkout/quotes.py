@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from fractions import Fraction
-from typing import Literal
 
 from psycopg.rows import class_row
 
+from mor.checkout.records import QuoteState
 from mor.db.connect import Connection
 from mor.markets.records import Collector, ServiceTier, Standing
 from mor.money.amount import Money
@@ -22,6 +22,7 @@ from mor.money.rounding import RoundingMode
 from mor.quote.build import Part, Quote
 from mor.quote.groups import PartKind
 from mor.quote.refusals import RefusalCode
+from mor.quote.shipping import NotOfferedReason
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ class MadeQuote:
     goods: tuple[Part, ...]  # each line's price, then the fees
     options: tuple[StoredOption, ...]  # cheapest first
     placeholders: tuple[str, ...]
-    not_offered: tuple[tuple[str, str], ...]  # (key, reason)
+    not_offered: tuple[tuple[str, NotOfferedReason], ...]  # (key, reason)
     inputs: QuoteInputs
 
 
@@ -111,7 +112,7 @@ def stored_from(
                 parts=tuple(parts),
             )
         )
-    not_offered: list[tuple[str, str]] = []
+    not_offered: list[tuple[str, NotOfferedReason]] = []
     for refused in quote.not_offered:
         not_offered.append((refused.key, refused.reason))
     return MadeQuote(
@@ -169,13 +170,14 @@ async def store_made(conn: Connection, made: MadeQuote) -> None:
         INSERT INTO quote
           (id, session_id, address_id, market_load_id, state, made_at, currency,
            valid_until)
-        VALUES (%s, %s, %s, %s, 'made', %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             made.id,
             made.session_id,
             made.address_id,
             made.load_id,
+            QuoteState.MADE,
             made.made_at,
             made.currency.value,
             made.valid_until,
@@ -246,22 +248,19 @@ async def store_refused(conn: Connection, refused: RefusedQuote) -> None:
         INSERT INTO quote
           (id, session_id, address_id, market_load_id, state, made_at,
            refusal_code, refusal_message)
-        VALUES (%s, %s, %s, %s, 'refused', %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             refused.id,
             refused.session_id,
             refused.address_id,
             refused.load_id,
+            QuoteState.REFUSED,
             refused.made_at,
             refused.code,
             refused.message,
         ),
     )
-
-
-type QuoteState = Literal["made", "refused"]
-"""Matches `quote_state`, read as text."""
 
 
 @dataclass(frozen=True)
@@ -276,6 +275,12 @@ class _QuoteRow:
     valid_until: datetime | None
     refusal_code: str | None
     refusal_message: str | None
+
+
+@dataclass(frozen=True)
+class _NotOfferedRow:
+    key: str
+    reason: NotOfferedReason
 
 
 @dataclass(frozen=True)
@@ -339,7 +344,7 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
     async with conn.cursor(row_factory=class_row(_QuoteRow)) as cur:
         await cur.execute(
             """
-            SELECT id, session_id, address_id, market_load_id, state::text,
+            SELECT id, session_id, address_id, market_load_id, state,
                    made_at, currency, valid_until, refusal_code,
                    refusal_message
             FROM quote WHERE id = %s
@@ -349,7 +354,7 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
         row = await cur.fetchone()
     if row is None:
         return None
-    if row.state == "refused":
+    if row.state == QuoteState.REFUSED:
         assert row.refusal_code is not None and row.refusal_message is not None
         return RefusedQuote(
             id=row.id,
@@ -415,16 +420,18 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
     placeholders: list[str] = []
     for (key,) in await cur.fetchall():
         placeholders.append(key)
-    cur = await conn.execute(
-        """
-        SELECT key, reason::text FROM quote_not_offered
-        WHERE quote_id = %s ORDER BY not_offered_no
-        """,
-        (quote_id,),
-    )
-    not_offered: list[tuple[str, str]] = []
-    for key, reason in await cur.fetchall():
-        not_offered.append((key, reason))
+    async with conn.cursor(row_factory=class_row(_NotOfferedRow)) as cur:
+        await cur.execute(
+            """
+            SELECT key, reason FROM quote_not_offered
+            WHERE quote_id = %s ORDER BY not_offered_no
+            """,
+            (quote_id,),
+        )
+        not_offered_rows = await cur.fetchall()
+    not_offered: list[tuple[str, NotOfferedReason]] = []
+    for not_offered_row in not_offered_rows:
+        not_offered.append((not_offered_row.key, not_offered_row.reason))
     cur = await conn.execute(
         """
         SELECT duty_lookup_id, shipping_price_lookup_id FROM quote_input
@@ -453,6 +460,17 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
         not_offered=tuple(not_offered),
         inputs=QuoteInputs(tuple(duty_lookups), tuple(price_lookups)),
     )
+
+
+async def read_made_quote(conn: Connection, quote_id: uuid.UUID) -> MadeQuote:
+    """A quote that a payment, an order or an invoice was made from: those
+    only ever point at a made quote, so anything else is a bug."""
+    quote = await read_quote(conn, quote_id)
+    match quote:
+        case MadeQuote():
+            return quote
+        case RefusedQuote() | None:
+            raise AssertionError(f"quote {quote_id} is not a made quote: {quote!r}")
 
 
 async def session_quotes(conn: Connection, session_id: uuid.UUID) -> list[StoredQuote]:

@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import httpx2
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.config import Environment
@@ -79,14 +80,15 @@ class _Job:
 
 
 async def _lock_job(conn: Connection, job_id: uuid.UUID) -> _Job:
-    cur = await conn.execute(
-        "SELECT account_id, vendor_status::text FROM echo_job WHERE id = %s FOR UPDATE",
-        (job_id,),
-    )
-    row = await cur.fetchone()
-    if row is None:
+    async with conn.cursor(row_factory=class_row(_Job)) as cur:
+        await cur.execute(
+            "SELECT account_id, vendor_status FROM echo_job WHERE id = %s FOR UPDATE",
+            (job_id,),
+        )
+        job = await cur.fetchone()
+    if job is None:
         raise LookupError(f"echo job {job_id} does not exist")
-    return _Job(row[0], VendorStatus(row[1]))
+    return job
 
 
 async def start_tracking(

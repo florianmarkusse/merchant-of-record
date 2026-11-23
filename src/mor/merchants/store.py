@@ -14,6 +14,7 @@ from psycopg.rows import class_row
 from mor.audit import Actor
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.merchants.records import (
     Authenticated,
     KeyEnv,
@@ -146,13 +147,12 @@ async def set_kyb_state(
 async def kyb_state_for_pay(conn: Connection, merchant_id: uuid.UUID) -> KybState:
     """The state a pay step decides on, held `FOR SHARE` until it commits:
     a KYB change waits for it, and it waits for a KYB change."""
-    cur = await conn.execute(
+    return await one_value(
+        conn,
         "SELECT kyb_state FROM merchant WHERE id = %s FOR SHARE",
         (merchant_id,),
+        KybState,
     )
-    row = await cur.fetchone()
-    assert row is not None, f"no merchant {merchant_id}"
-    return KybState(row[0])
 
 
 async def set_support_email(

@@ -6,7 +6,6 @@ shipment tracking (plan-architecture.md §9).
 
 from collections.abc import Iterable
 from enum import StrEnum
-from typing import assert_never
 
 from mor.echo.port import EventKind
 
@@ -27,8 +26,6 @@ def rank(status: VendorStatus) -> int:
             return 1
         case VendorStatus.ARCHIVED:
             return 2
-        case _:
-            assert_never(status)
 
 
 def derive_status(kinds: Iterable[EventKind]) -> VendorStatus:
@@ -42,8 +39,6 @@ def derive_status(kinds: Iterable[EventKind]) -> VendorStatus:
                 reached = VendorStatus.CONFIRMED
             case EventKind.ARCHIVED:
                 reached = VendorStatus.ARCHIVED
-            case _:
-                assert_never(kind)
         if rank(reached) > rank(status):
             status = reached
     return status

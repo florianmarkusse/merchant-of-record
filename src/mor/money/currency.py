@@ -1,5 +1,4 @@
 from enum import StrEnum
-from typing import assert_never
 
 
 class Currency(StrEnum):
@@ -44,5 +43,3 @@ def exponent(currency: Currency) -> int:
             return 2
         case Currency.JPY | Currency.KRW:
             return 0
-        case _:
-            assert_never(currency)

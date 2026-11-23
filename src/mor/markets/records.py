@@ -64,6 +64,15 @@ class LimitBasis(StrEnum):
     GOODS_PLUS_FREIGHT = "goods_plus_freight"
 
 
+class LandedBasis(StrEnum):
+    """Matches the `landed_basis` enum type: which `Amount` a landed rate
+    row holds."""
+
+    PERCENT = "percent"
+    PER_LINE = "per_line"
+    PER_PARCEL = "per_parcel"
+
+
 class Base(StrEnum):
     GOODS = "goods"
     GOODS_PLUS_FREIGHT = "goods_plus_freight"

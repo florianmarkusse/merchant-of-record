@@ -28,6 +28,7 @@ from mor.echo.port import (
     EventKind,
     EventMode,
 )
+from mor.echo.records import EchoEventSource
 from mor.messaging.facts import (
     EchoEventsWantedV1,
     EchoInboxStoredV1,
@@ -160,6 +161,12 @@ async def store_inbox(
     return Stored(inbox_id)
 
 
+@dataclass(frozen=True)
+class _InboxRow:
+    mode: EventMode
+    body: bytes
+
+
 async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
     """Consumer `echo_inbox_decode`, per account: the stored bytes into one
     fact per event, each for its own job (one step locks one aggregate)."""
@@ -168,13 +175,14 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
             pass
         case _:
             raise WrongFact(f"echo_inbox_decode got {fact!r}")
-    cur = await conn.execute(
-        "SELECT mode::text, body FROM echo_inbox WHERE id = %s", (inbox_id,)
-    )
-    row = await cur.fetchone()
-    assert row is not None, f"no inbox row {inbox_id}"
-    mode = EventMode(row[0])
-    body = bytes(row[1])
+    async with conn.cursor(row_factory=class_row(_InboxRow)) as cur:
+        await cur.execute(
+            "SELECT mode, body FROM echo_inbox WHERE id = %s", (inbox_id,)
+        )
+        stored = await cur.fetchone()
+    assert stored is not None, f"no inbox row {inbox_id}"
+    mode = stored.mode
+    body = stored.body
     inbound = await inbound_account(conn, account_id)
     assert inbound is not None, f"no echo account {account_id}"
 
@@ -201,9 +209,9 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
             EchoVendorEventReceivedV1(
                 echo_job_id=job_id,
                 vendor_event_id=event.vendor_event_id,
-                kind=event.kind.value,
+                kind=event.kind,
                 occurred_at=event.occurred_at,
-                source="vendor",
+                source=EchoEventSource.VENDOR,
                 inbox_id=inbox_id,
             ),
             DECODER,
@@ -246,9 +254,9 @@ async def record_manual_event(
         EchoVendorEventReceivedV1(
             echo_job_id=job_id,
             vendor_event_id=f"manual:{uuid.uuid7()}",
-            kind=kind.value,
+            kind=kind,
             occurred_at=occurred_at,
-            source="manual",
+            source=EchoEventSource.MANUAL,
             inbox_id=None,
         ),
         actor,
@@ -266,13 +274,13 @@ async def apply_event(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
         case _:
             raise WrongFact(f"echo_event_apply got {fact!r}")
     cur = await conn.execute(
-        "SELECT vendor_status::text FROM echo_job WHERE id = %s FOR UPDATE",
+        "SELECT vendor_status FROM echo_job WHERE id = %s FOR UPDATE",
         (event.echo_job_id,),
     )
     row = await cur.fetchone()
     if row is None:
         raise LookupError(f"echo job {event.echo_job_id} does not exist")
-    current = VendorStatus(row[0])
+    current: VendorStatus = row[0]
 
     cur = await conn.execute(
         """
@@ -297,12 +305,12 @@ async def apply_event(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
         return Stale()  # the same event, already recorded
 
     cur = await conn.execute(
-        "SELECT kind::text FROM echo_job_event WHERE echo_job_id = %s",
+        "SELECT kind FROM echo_job_event WHERE echo_job_id = %s",
         (event.echo_job_id,),
     )
     kinds: list[EventKind] = []
     for (kind,) in await cur.fetchall():
-        kinds.append(EventKind(kind))
+        kinds.append(kind)
     status = derive_status(kinds)
     if rank(status) <= rank(current):
         return Applied()

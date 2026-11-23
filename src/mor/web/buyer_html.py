@@ -25,7 +25,7 @@ from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.payments.attempts import Attempt
 from mor.payments.transitions import AttemptState
-from mor.psp.port import PaymentMethod
+from mor.psp.port import ActionKind, PaymentMethod
 from mor.quote.build import Part
 from mor.quote.groups import group_of
 from mor.quote.refusals import RefusalCode
@@ -398,7 +398,7 @@ def _paying(view: BuyerView, attempt: Attempt | None) -> htpy.Node:
             ],
             ".",
         ]
-    if action.kind == "qr":
+    if action.kind == ActionKind.QR:
         return htpy.section(class_="paying")[
             total,
             htpy.p["Scan this code with your banking app to pay."],

@@ -18,7 +18,7 @@ job's row lock and never commit; `call` runs with no transaction open.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal, assert_never
+from typing import Literal
 
 import httpx2
 from psycopg.rows import class_row
@@ -26,6 +26,7 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.db.fetch import one_row, one_value
 from mor.echo import registry
 from mor.echo.capabilities import send_guard
 from mor.echo.port import (
@@ -41,7 +42,7 @@ from mor.echo.port import (
     SendResult,
     Sent,
 )
-from mor.echo.records import EchoJobState
+from mor.echo.records import EchoJobState, EchoOperation
 from mor.messaging.facts import (
     EchoJobEchoedV1,
     EchoJobNeedsPersonV1,
@@ -142,9 +143,6 @@ class _RequestRow:
     target_echo_id: str | None
 
 
-type Operation = Literal["send", "cancel"]
-
-
 async def create_echo_account(
     conn: Connection,
     provider: EchoProvider,
@@ -193,10 +191,9 @@ async def create_echo_job(
 
 
 async def echo_job_state(conn: Connection, job_id: uuid.UUID) -> EchoJobState:
-    cur = await conn.execute("SELECT state FROM echo_job WHERE id = %s", (job_id,))
-    row = await cur.fetchone()
-    assert row is not None, f"no echo job {job_id}"
-    return EchoJobState(row[0])
+    return await one_value(
+        conn, "SELECT state FROM echo_job WHERE id = %s", (job_id,), EchoJobState
+    )
 
 
 async def _lock_job(conn: Connection, job_id: uuid.UUID) -> _JobRow:
@@ -221,8 +218,7 @@ async def _account(conn: Connection, account_id: uuid.UUID) -> EchoAccount:
             " WHERE id = %s",
             (account_id,),
         )
-        row = await cur.fetchone()
-    assert row is not None, f"no echo account {account_id}"
+        row = await one_row(cur, f"echo account {account_id}")
     return EchoAccount(
         id=row.id,
         provider=row.provider,
@@ -233,7 +229,7 @@ async def _account(conn: Connection, account_id: uuid.UUID) -> EchoAccount:
 
 
 async def _latest_request(
-    conn: Connection, job_id: uuid.UUID, operation: Operation
+    conn: Connection, job_id: uuid.UUID, operation: EchoOperation
 ) -> _RequestRow | None:
     async with conn.cursor(row_factory=class_row(_RequestRow)) as cur:
         await cur.execute(
@@ -251,7 +247,7 @@ async def _latest_request(
 async def _new_request(
     conn: Connection,
     job_id: uuid.UUID,
-    operation: Operation,
+    operation: EchoOperation,
     number: int,
     target_echo_id: str | None,
     now: datetime,
@@ -263,9 +259,18 @@ async def _new_request(
         INSERT INTO echo_request
           (id, echo_job_id, operation, number, idempotency_key, state,
            target_echo_id, created_at)
-        VALUES (%s, %s, %s, %s, %s, 'not_sent', %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (request_id, job_id, operation, number, key, target_echo_id, now),
+        (
+            request_id,
+            job_id,
+            operation,
+            number,
+            key,
+            VendorRequestState.NOT_SENT,
+            target_echo_id,
+            now,
+        ),
     )
     return _RequestRow(
         id=request_id,
@@ -280,15 +285,15 @@ async def _new_request(
 async def _mark_sent(conn: Connection, request: _RequestRow) -> None:
     """The committed "we are about to ask" mark, before any call."""
     await conn.execute(
-        "UPDATE echo_request SET state = 'sent', sends = sends + 1 WHERE id = %s",
-        (request.id,),
+        "UPDATE echo_request SET state = %s, sends = sends + 1 WHERE id = %s",
+        (VendorRequestState.SENT, request.id),
     )
 
 
 async def _finish_request(
     conn: Connection,
     request_id: uuid.UUID,
-    state: Literal["succeeded", "refused", "not_sent"],
+    state: Literal[VendorRequestState.SUCCEEDED, VendorRequestState.REFUSED],
     now: datetime,
     result_echo_id: str | None = None,
     refusal: str | None = None,
@@ -303,9 +308,18 @@ async def _finish_request(
             state,
             result_echo_id,
             refusal,
-            None if state == "not_sent" else now,
+            now,
             request_id,
         ),
+    )
+
+
+async def _unsend_request(conn: Connection, request_id: uuid.UUID) -> None:
+    """The vendor said the call did nothing (Unavailable): the request goes
+    back to `not_sent`, and the retry sends it with the same key."""
+    await conn.execute(
+        "UPDATE echo_request SET state = %s WHERE id = %s",
+        (VendorRequestState.NOT_SENT, request_id),
     )
 
 
@@ -345,7 +359,7 @@ async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | EchoC
         case EchoJobState.ECHOED | EchoJobState.REFUSED | EchoJobState.NEEDS_PERSON:
             return NoCall(Stale())
         case EchoJobState.DEDUPLICATING:
-            cancel = await _latest_request(conn, job.id, "cancel")
+            cancel = await _latest_request(conn, job.id, EchoOperation.CANCEL)
             if cancel is not None and cancel.state in (
                 VendorRequestState.NOT_SENT,
                 VendorRequestState.SENT,
@@ -357,28 +371,31 @@ async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | EchoC
             return FindCall(account, str(job.id))
         case EchoJobState.REQUESTED:
             return await _prepare_send(conn, job, account, now)
-        case _ as unreachable:
-            assert_never(unreachable)
 
 
 async def _prepare_send(
     conn: Connection, job: _JobRow, account: EchoAccount, now: datetime
 ) -> EchoCall:
-    send = await _latest_request(conn, job.id, "send")
+    send = await _latest_request(conn, job.id, EchoOperation.SEND)
     if send is None:
-        send = await _new_request(conn, job.id, "send", 1, None, now)
-    elif send.state == VendorRequestState.SENT:
-        # Marked sent, no result recorded: an earlier run died mid-call or
-        # got no answer. Whether to send again is the vendor's promise.
-        match send_guard(account.provider):
-            case DuplicateGuard.VENDOR_CONSTRAINT | DuplicateGuard.COMPENSABLE:
-                pass
-            case DuplicateGuard.NONE:
-                return FindCall(account, str(job.id))
-            case _ as unreachable:
-                assert_never(unreachable)
-    elif send.state != VendorRequestState.NOT_SENT:
-        raise AssertionError(f"job {job.id} requested but send is {send.state}")
+        send = await _new_request(conn, job.id, EchoOperation.SEND, 1, None, now)
+    match send.state:
+        case VendorRequestState.NOT_SENT:
+            # New, or the vendor said an earlier send did nothing.
+            pass
+        case VendorRequestState.SENT:
+            # Marked sent, no result recorded: an earlier run died mid-call
+            # or got no answer. Whether to send again is the vendor's
+            # promise.
+            match send_guard(account.provider):
+                case DuplicateGuard.VENDOR_CONSTRAINT | DuplicateGuard.COMPENSABLE:
+                    pass
+                case DuplicateGuard.NONE:
+                    return FindCall(account, str(job.id))
+        case VendorRequestState.SUCCEEDED | VendorRequestState.REFUSED:
+            # An answer moves the job past `requested` in the same
+            # transaction that finishes the request.
+            raise AssertionError(f"job {job.id} requested but send is {send.state}")
     await _mark_sent(conn, send)
     request = SendRequest(str(job.id), job.message, send.idempotency_key)
     return SendCall(account, send.id, request)
@@ -402,8 +419,6 @@ async def call(
         case CancelCall(account=account, echo_id=echo_id):
             cancelled = await registry.cancel(http, environment, account, echo_id)
             return CancelAnswer(echo_call, cancelled)
-        case _:
-            assert_never(echo_call)
 
 
 # --- complete -------------------------------------------------------------
@@ -429,8 +444,6 @@ async def complete(
         case CancelAnswer():
             assert state == EchoJobState.DEDUPLICATING, state
             return await _complete_cancel(conn, answer.call, answer.result, now)
-        case _:
-            assert_never(answer)
 
 
 async def _echoed(
@@ -456,7 +469,7 @@ async def _refused(
 async def _complete_send(
     conn: Connection, job: _JobRow, send: SendCall, result: SendResult, now: datetime
 ) -> Done | RetryLater | Again:
-    request = await _latest_request(conn, job.id, "send")
+    request = await _latest_request(conn, job.id, EchoOperation.SEND)
     assert request is not None and request.id == send.request_id
     # Sent more than once on a vendor that may have made a duplicate: look
     # before deciding, whatever this answer was.
@@ -467,7 +480,11 @@ async def _complete_send(
     match result:
         case Sent(echo_id=echo_id):
             await _finish_request(
-                conn, request.id, "succeeded", now, result_echo_id=echo_id
+                conn,
+                request.id,
+                VendorRequestState.SUCCEEDED,
+                now,
+                result_echo_id=echo_id,
             )
             if may_duplicate:
                 await _set_job(
@@ -480,7 +497,9 @@ async def _complete_send(
                 return Again()
             return await _echoed(conn, job.id, echo_id, now)
         case Refused(reason=reason):
-            await _finish_request(conn, request.id, "refused", now, refusal=reason)
+            await _finish_request(
+                conn, request.id, VendorRequestState.REFUSED, now, refusal=reason
+            )
             if may_duplicate:
                 # An earlier send may still have made an echo: keep it if so.
                 await _set_job(
@@ -489,12 +508,10 @@ async def _complete_send(
                 return Again()
             return await _refused(conn, job.id, reason, now)
         case Unavailable(detail=detail):
-            await _finish_request(conn, request.id, "not_sent", now)
+            await _unsend_request(conn, request.id)
             return RetryLater(f"unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"outcome unknown: {detail}")
-        case _:
-            assert_never(result)
 
 
 async def _complete_lookup(
@@ -504,7 +521,7 @@ async def _complete_lookup(
     match result:
         case Found(echoes=echoes):
             assert len(echoes) <= 1, f"two echoes for {job.id} on a none guard"
-            request = await _latest_request(conn, job.id, "send")
+            request = await _latest_request(conn, job.id, EchoOperation.SEND)
             assert request is not None
             if len(echoes) == 0:
                 # Not found proves nothing: it may still be on its way. A
@@ -516,13 +533,15 @@ async def _complete_lookup(
                 return Done(Applied())
             echo_id = echoes[0].echo_id
             await _finish_request(
-                conn, request.id, "succeeded", now, result_echo_id=echo_id
+                conn,
+                request.id,
+                VendorRequestState.SUCCEEDED,
+                now,
+                result_echo_id=echo_id,
             )
             return await _echoed(conn, job.id, echo_id, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"lookup: {detail}")
-        case _:
-            assert_never(result)
 
 
 async def _complete_dedupe_find(
@@ -542,9 +561,11 @@ async def _complete_dedupe_find(
                 if echo_id != keep:
                     extras.append(echo_id)
             if extras:
-                last = await _latest_request(conn, job.id, "cancel")
+                last = await _latest_request(conn, job.id, EchoOperation.CANCEL)
                 number = 1 if last is None else last.number + 1
-                await _new_request(conn, job.id, "cancel", number, extras[0], now)
+                await _new_request(
+                    conn, job.id, EchoOperation.CANCEL, number, extras[0], now
+                )
                 return Again()
             if keep is not None:
                 return await _echoed(conn, job.id, keep, now)
@@ -552,8 +573,6 @@ async def _complete_dedupe_find(
             return await _refused(conn, job.id, job.refusal, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"dedupe lookup: {detail}")
-        case _:
-            assert_never(result)
 
 
 async def _complete_cancel(
@@ -561,14 +580,14 @@ async def _complete_cancel(
 ) -> Done | RetryLater | Again:
     match result:
         case Cancelled():
-            await _finish_request(conn, cancel.request_id, "succeeded", now)
+            await _finish_request(
+                conn, cancel.request_id, VendorRequestState.SUCCEEDED, now
+            )
             return Again()
         case Unavailable(detail=detail):
-            await _finish_request(conn, cancel.request_id, "not_sent", now)
+            await _unsend_request(conn, cancel.request_id)
             return RetryLater(f"cancel unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"cancel outcome unknown: {detail}")
         case Refused(reason=reason):
             raise AssertionError(f"cancel of {cancel.echo_id} refused: {reason}")
-        case _:
-            assert_never(result)

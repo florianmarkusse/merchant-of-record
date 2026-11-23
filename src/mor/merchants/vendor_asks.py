@@ -8,6 +8,7 @@ import uuid
 from datetime import date
 
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 
 
 async def take_vendor_asks(
@@ -25,16 +26,16 @@ async def take_vendor_asks(
         """,
         (merchant_id, day),
     )
-    cur = await conn.execute(
+    asks = await one_value(
+        conn,
         """
         SELECT asks FROM merchant_vendor_asks
         WHERE merchant_id = %s AND day = %s FOR UPDATE
         """,
         (merchant_id, day),
+        int,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    if row[0] + count > limit:
+    if asks + count > limit:
         return False
     await conn.execute(
         """

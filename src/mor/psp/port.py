@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from fractions import Fraction
-from typing import Literal
 
 from mor.messaging.guard import DuplicateGuard
 from mor.money.amount import Money
@@ -112,7 +111,12 @@ class PaymentStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-type ActionKind = Literal["redirect", "qr"]
+class ActionKind(StrEnum):
+    """Matches the `payment_action_kind` enum type: what the buyer does
+    next at the PSP."""
+
+    REDIRECT = "redirect"
+    QR = "qr"
 
 
 @dataclass(frozen=True)
@@ -172,7 +176,15 @@ type CancelResult = ProviderPayment | AlreadyFinal | CallFailure
 type FetchResult = Page | Unavailable | OutcomeUnknown
 
 
-type EventKind = Literal["authorised", "captured", "declined", "expired", "cancelled"]
+class PspEventKind(StrEnum):
+    """Matches the `psp_event_kind` enum type: what a PSP event says
+    happened to a payment."""
+
+    AUTHORISED = "authorised"
+    CAPTURED = "captured"
+    DECLINED = "declined"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)
@@ -180,7 +192,7 @@ class PspEvent:
     vendor_event_id: str
     provider_payment_id: str
     reference: str
-    kind: EventKind
+    kind: PspEventKind
     amount: Money
     occurred_at: datetime
 

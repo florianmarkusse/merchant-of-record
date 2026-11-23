@@ -1,5 +1,3 @@
-from typing import assert_never
-
 from mor.echo.port import EchoProvider
 from mor.messaging.guard import DuplicateGuard
 
@@ -14,5 +12,3 @@ def send_guard(provider: EchoProvider) -> DuplicateGuard:
             return DuplicateGuard.COMPENSABLE
         case EchoProvider.FAKE_PLAIN:
             return DuplicateGuard.NONE
-        case _:
-            assert_never(provider)

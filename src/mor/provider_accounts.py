@@ -5,7 +5,6 @@ so a wrong account row can never reach a real vendor, nor a live key run
 outside prod."""
 
 from enum import StrEnum
-from typing import assert_never
 
 from mor.config import Environment
 
@@ -32,8 +31,6 @@ def allowed(environment: Environment, kind: ProviderAccountKind) -> bool:
             return kind in (ProviderAccountKind.FAKE, ProviderAccountKind.SANDBOX)
         case Environment.PROD:
             return kind == ProviderAccountKind.LIVE
-        case _:
-            assert_never(environment)
 
 
 def require_allowed(

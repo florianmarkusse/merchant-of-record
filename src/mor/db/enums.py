@@ -9,8 +9,8 @@ PostgreSQL instead of stored as text.
 psycopg matches members to labels by member name (`CARD`); ours match by
 value (`card`), so each registration passes the mapping by value.
 
-Not listed: a database enum the code reads as a `Literal` or never reads
-alone. A StrEnum listed here lives in a module that does not import the
+Every database enum is listed (`tests/db/test_enums.py`). A StrEnum
+listed here lives in a module that does not import the
 database (a flow module's states go in its `records`).
 
 This module may not import `mor.db.connect`, which imports it: it names
@@ -24,7 +24,7 @@ from psycopg.rows import TupleRow
 from psycopg.types.enum import EnumInfo, register_enum
 
 from mor.audit import ActorKind
-from mor.checkout.records import AfterPayment, SessionState
+from mor.checkout.records import AfterPayment, QuoteState, SessionState
 from mor.couriers.records import (
     CourierProvider,
     PriceExpiry,
@@ -35,7 +35,7 @@ from mor.duties.port import DutyProvider
 from mor.duties.records import LookupState
 from mor.echo.events import VendorStatus
 from mor.echo.port import EchoProvider, EventKind, EventMode
-from mor.echo.records import EchoJobState
+from mor.echo.records import EchoEventSource, EchoJobState, EchoOperation
 from mor.invoices.records import InvoiceSection
 from mor.ledger.account import AccountKind
 from mor.markets.records import (
@@ -49,6 +49,7 @@ from mor.markets.records import (
     FeeComponent,
     FuelApplies,
     GroupKind,
+    LandedBasis,
     LimitBasis,
     MarketStatus,
     PreferenceCondition,
@@ -66,19 +67,25 @@ from mor.messaging.guard import DuplicateGuard, VendorRequestState
 from mor.messaging.routing import ConsumerName
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode
+from mor.orders.records import OrderState
+from mor.payments.records import PspOperation
 from mor.payments.transitions import AttemptState
 from mor.probe.records import ProbeState
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.port import (
+    ActionKind,
     CaptureMode,
     InboundMode,
     LineType,
     PaymentMethod,
+    PspEventKind,
     PspProvider,
     SettlementMode,
     StatusMode,
 )
 from mor.quote.groups import PartKind
+from mor.quote.shipping import NotOfferedReason
+from mor.settlement.records import ExceptionKind, LineState
 
 
 DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
@@ -101,7 +108,9 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("duty_provider", DutyProvider),
     ("echo_event_kind", EventKind),
     ("echo_event_mode", EventMode),
+    ("echo_event_source", EchoEventSource),
     ("echo_job_state", EchoJobState),
+    ("echo_operation", EchoOperation),
     ("echo_provider", EchoProvider),
     ("echo_vendor_status", VendorStatus),
     ("fee_component", FeeComponent),
@@ -109,6 +118,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("invoice_section", InvoiceSection),
     ("landed_band", Band),
     ("landed_base", Base),
+    ("landed_basis", LandedBasis),
     ("landed_charge", Charge),
     ("landed_collector", Collector),
     ("landed_limit_basis", LimitBasis),
@@ -116,6 +126,9 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("market_status", MarketStatus),
     ("merchant_kyb_state", KybState),
     ("message_type", MessageType),
+    ("not_offered_reason", NotOfferedReason),
+    ("order_state", OrderState),
+    ("payment_action_kind", ActionKind),
     ("payment_attempt_state", AttemptState),
     ("payment_method", PaymentMethod),
     ("preference_condition", PreferenceCondition),
@@ -124,16 +137,21 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("probe_state", ProbeState),
     ("provider_account_kind", ProviderAccountKind),
     ("psp_capture_mode", CaptureMode),
+    ("psp_event_kind", PspEventKind),
     ("psp_inbound_mode", InboundMode),
+    ("psp_operation", PspOperation),
     ("psp_provider", PspProvider),
     ("psp_settlement_mode", SettlementMode),
     ("psp_status_mode", StatusMode),
     ("quote_part_kind", PartKind),
+    ("quote_state", QuoteState),
     ("research_status", ResearchStatus),
     ("restriction_rule", RestrictionRule),
     ("rounding_mode", RoundingMode),
     ("row_standing", Standing),
     ("service_tier", ServiceTier),
+    ("settlement_exception_kind", ExceptionKind),
+    ("settlement_line_state", LineState),
     ("settlement_line_type", LineType),
     ("shipping_price_state", PriceState),
     ("surcharge_basis", SurchargeBasis),

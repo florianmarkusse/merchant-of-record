@@ -20,10 +20,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import httpx2
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.db.fetch import one_row
 from mor.messaging.facts import Fact, PspSettlementDueV1
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater
 from mor.messaging.routing import WrongFact
@@ -116,14 +118,13 @@ def _account_id(fact: Fact) -> uuid.UUID:
 
 
 async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
-    cur = await conn.execute(
-        "SELECT last_read, pending, pending_page FROM psp_settlement_cursor"
-        " WHERE account_id = %s FOR UPDATE",
-        (account_id,),
-    )
-    row = await cur.fetchone()
-    assert row is not None, f"no settlement cursor for {account_id}"
-    return _Cursor(row[0], row[1], row[2])
+    async with conn.cursor(row_factory=class_row(_Cursor)) as cur:
+        await cur.execute(
+            "SELECT last_read, pending, pending_page FROM psp_settlement_cursor"
+            " WHERE account_id = %s FOR UPDATE",
+            (account_id,),
+        )
+        return await one_row(cur, f"settlement cursor for {account_id}")
 
 
 async def prepare_fetch(

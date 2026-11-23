@@ -23,7 +23,6 @@ conversion's rounding sits in `fx_position`.
 
 import uuid
 from datetime import datetime
-from typing import assert_never
 
 from mor.audit import Actor
 from mor.checkout.quotes import MadeQuote
@@ -77,10 +76,6 @@ def _account_of(
                     return Account(AccountKind.TAX_PAYABLE, country)
                 case None:
                     raise AssertionError(f"{part.kind} part without a collector")
-                case _:
-                    assert_never(part.collector)
-        case _:
-            assert_never(part.kind)
 
 
 def capture_entry(

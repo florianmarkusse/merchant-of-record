@@ -29,6 +29,7 @@ from mor.markets.records import (
     Group,
     GroupKind,
     HsRate,
+    LandedBasis,
     LandedRate,
     Limit,
     LimitBasis,
@@ -466,19 +467,19 @@ def _landed_params(load_id: uuid.UUID, rate: LandedRate) -> tuple[object, ...]:
     amount_minor: int | None = None
     amount_currency: str | None = None
     base: str | None = None
-    basis: str
+    basis: LandedBasis
     match rate.amount:
         case Percent(rate=fraction, base=percent_base):
-            basis = "percent"
+            basis = LandedBasis.PERCENT
             numerator = fraction.numerator
             denominator = fraction.denominator
             base = percent_base.value
         case PerLine(amount=money):
-            basis = "per_line"
+            basis = LandedBasis.PER_LINE
             amount_minor = money.amount_minor
             amount_currency = money.currency.value
         case PerParcel(amount=money):
-            basis = "per_parcel"
+            basis = LandedBasis.PER_PARCEL
             amount_minor = money.amount_minor
             amount_currency = money.currency.value
     return (
@@ -617,7 +618,7 @@ class _LandedRow:
     limit_minor: int | None
     limit_currency: Currency | None
     limit_basis: LimitBasis | None
-    basis: str
+    basis: LandedBasis
     rate_numerator: int | None
     rate_denominator: int | None
     amount_minor: int | None
@@ -634,7 +635,7 @@ async def _read_landed(conn: Connection, load_id: uuid.UUID) -> tuple[LandedRate
         await cur.execute(
             "SELECT line_no, country_iso2, group_code, category, charge,"
             " collector, band, limit_minor, limit_currency,"
-            " limit_basis, basis::text, rate_numerator, rate_denominator,"
+            " limit_basis, basis, rate_numerator, rate_denominator,"
             " amount_minor, amount_currency, base, effective_from,"
             " status, source, source_url"
             " FROM landed_rate WHERE load_id = %s ORDER BY line_no",
@@ -658,14 +659,21 @@ def _landed_from_row(row: _LandedRow) -> LandedRate:
             amount=Money(row.limit_minor, row.limit_currency), basis=row.limit_basis
         )
     amount: Amount
-    if row.basis == "percent":
-        assert row.rate_numerator is not None and row.rate_denominator is not None
-        assert row.base is not None
-        amount = Percent(Fraction(row.rate_numerator, row.rate_denominator), row.base)
-    else:
-        assert row.amount_minor is not None and row.amount_currency is not None
-        money = Money(row.amount_minor, row.amount_currency)
-        amount = PerLine(money) if row.basis == "per_line" else PerParcel(money)
+    # CHECKs on landed_rate keep each basis's columns set and the others
+    # empty.
+    match row.basis:
+        case LandedBasis.PERCENT:
+            assert row.rate_numerator is not None and row.rate_denominator is not None
+            assert row.base is not None
+            amount = Percent(
+                Fraction(row.rate_numerator, row.rate_denominator), row.base
+            )
+        case LandedBasis.PER_LINE:
+            assert row.amount_minor is not None and row.amount_currency is not None
+            amount = PerLine(Money(row.amount_minor, row.amount_currency))
+        case LandedBasis.PER_PARCEL:
+            assert row.amount_minor is not None and row.amount_currency is not None
+            amount = PerParcel(Money(row.amount_minor, row.amount_currency))
     return LandedRate(
         line_no=row.line_no,
         scope=Scope(country=row.country_iso2, group=row.group_code),

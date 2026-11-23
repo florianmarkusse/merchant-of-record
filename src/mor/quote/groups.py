@@ -4,7 +4,7 @@ buyer page, the estimate API, the staff pages and the invoice all group
 quote parts by this one table, so the kinds of part live here too."""
 
 from enum import StrEnum
-from typing import Literal, assert_never
+from typing import Literal
 
 
 class PartKind(StrEnum):
@@ -47,5 +47,3 @@ def group_of(kind: PartKind) -> PartGroup:
             | PartKind.OTHER_TAX
         ):
             return "duties_and_taxes"
-        case _:
-            assert_never(kind)

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from mor.audit import Actor
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.messaging.facts import Fact, aggregate_of, encode, fact_type
 from mor.messaging.routing import ConsumerName, consumers_for
 
@@ -32,7 +33,8 @@ async def append_fact(
     message_id = uuid.uuid7()
     aggregate = aggregate_of(fact)
     kind = fact_type(fact)
-    cur = await conn.execute(
+    seq = await one_value(
+        conn,
         """
         INSERT INTO outbox
           (id, aggregate_type, aggregate_id, message_type, schema_version,
@@ -54,10 +56,8 @@ async def append_fact(
             "actor_kind": actor.kind.value,
             "actor_id": actor.id,
         },
+        int,
     )
-    row = await cur.fetchone()
-    assert row is not None
-    seq = row[0]
 
     for consumer in consumers_for(kind.message_type):
         await conn.execute(

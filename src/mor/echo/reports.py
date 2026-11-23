@@ -22,10 +22,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import httpx2
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.db.fetch import one_row
 from mor.echo import registry
 from mor.echo.inbound import inbound_account, store_inbox
 from mor.echo.port import (
@@ -110,14 +112,13 @@ async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
         " ON CONFLICT (account_id) DO NOTHING",
         (account_id,),
     )
-    cur = await conn.execute(
-        "SELECT last_report, pending_report FROM echo_report_cursor"
-        " WHERE account_id = %s FOR UPDATE",
-        (account_id,),
-    )
-    row = await cur.fetchone()
-    assert row is not None
-    return _Cursor(row[0], row[1])
+    async with conn.cursor(row_factory=class_row(_Cursor)) as cur:
+        await cur.execute(
+            "SELECT last_report, pending_report FROM echo_report_cursor"
+            " WHERE account_id = %s FOR UPDATE",
+            (account_id,),
+        )
+        return await one_row(cur, f"echo report cursor for {account_id}")
 
 
 async def prepare_reports(

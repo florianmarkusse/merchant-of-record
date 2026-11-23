@@ -11,8 +11,6 @@ whole minor units that sum to the option's total:
   it, with how the quote reached it (its rate inside that text).
 """
 
-from typing import assert_never
-
 from mor.checkout.quotes import MadeQuote
 from mor.checkout.records import SoldLine
 from mor.invoices.records import InvoiceLine, InvoiceSection
@@ -39,8 +37,6 @@ def _section(collector: Collector | None) -> InvoiceSection:
             return InvoiceSection.BORDER
         case None:
             raise AssertionError("a duty or tax part with no collector")
-        case _:
-            assert_never(collector)
 
 
 def invoice_lines(

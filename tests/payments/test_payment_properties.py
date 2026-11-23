@@ -29,7 +29,7 @@ from mor.psp.fake_client import (
     to_provider_amount,
 )
 from mor.psp.port import (
-    EventKind,
+    PspEventKind,
 )
 from mor.quote.build import Part
 from mor.quote.groups import PartKind
@@ -37,13 +37,7 @@ from mor.vendor_failures import UndecodableBody
 
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
-KINDS: tuple[EventKind, ...] = (
-    "authorised",
-    "captured",
-    "declined",
-    "expired",
-    "cancelled",
-)
+KINDS = tuple(PspEventKind)
 # Where an event can never take an attempt: those are our own steps.
 NEVER_BY_EVENT = (
     AttemptState.REQUESTED,

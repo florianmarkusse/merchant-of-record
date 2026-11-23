@@ -137,8 +137,8 @@ def test_a_carrier_price_in_another_currency_is_converted_and_rounded_up() -> No
 
 def test_not_served_or_an_unread_answer_leaves_the_option_out() -> None:
     cases: tuple[tuple[PriceState, NotOfferedReason], ...] = (
-        (PriceState.NOT_SERVED, "carrier_not_served"),
-        (PriceState.NEEDS_PERSON, "carrier_needs_person"),
+        (PriceState.NOT_SERVED, NotOfferedReason.CARRIER_NOT_SERVED),
+        (PriceState.NEEDS_PERSON, NotOfferedReason.CARRIER_NEEDS_PERSON),
     )
     for state, reason in cases:
         held = _held(state=state, price=None)

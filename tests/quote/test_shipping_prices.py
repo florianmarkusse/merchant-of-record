@@ -9,7 +9,14 @@ from mor.couriers.records import Parcel
 from mor.markets.records import MarketSet
 from mor.money.currency import Currency
 from mor.quote.groups import PartKind
-from mor.quote.shipping import NotOffered, Offer, PriceMissing, ShipPartKind, offers
+from mor.quote.shipping import (
+    NotOffered,
+    NotOfferedReason,
+    Offer,
+    PriceMissing,
+    ShipPartKind,
+    offers,
+)
 from tests.quote.fixtures import SHIPPING, quote_market
 
 
@@ -79,14 +86,16 @@ def test_a_fuel_rate_past_its_week_is_still_used_and_flagged() -> None:
 def test_a_card_is_left_out_with_the_reason() -> None:
     small = Parcel(500, 100, 100, 100)
     heavy = _offers(quote_market(), Parcel(3000, 100, 100, 100))["eco_card"]
-    assert isinstance(heavy, NotOffered) and heavy.reason == "over_weight"
+    assert (
+        isinstance(heavy, NotOffered) and heavy.reason == NotOfferedReason.OVER_WEIGHT
+    )
 
     banned = quote_market(
         {"service_restrictions": "eco,apparel,prohibited,verified,,,\n"}
     )
     restricted = _offers(banned, small)["eco_card"]
     assert isinstance(restricted, NotOffered)
-    assert restricted.reason == "category_restricted"
+    assert restricted.reason == NotOfferedReason.CATEGORY_RESTRICTED
 
     awaiting = SHIPPING["surcharges"].replace(
         "demand,per_kg,,100,,SGD,always,SG TH,yes,,,verified",
@@ -94,13 +103,19 @@ def test_a_card_is_left_out_with_the_reason() -> None:
     )
     unconfirmed = _offers(quote_market({"surcharges": awaiting}), small)["exp_card"]
     assert isinstance(unconfirmed, NotOffered)
-    assert unconfirmed.reason == "surcharge_not_confirmed"
+    assert unconfirmed.reason == NotOfferedReason.SURCHARGE_NOT_CONFIRMED
 
     early = _offers(quote_market(), small, date(2025, 12, 31))["exp_card"]
-    assert isinstance(early, NotOffered) and early.reason == "card_not_in_force"
+    assert (
+        isinstance(early, NotOffered)
+        and early.reason == NotOfferedReason.CARD_NOT_IN_FORCE
+    )
 
     ranged = SHIPPING["rates"].replace(
         "eco_card,1,0.5,100000,,,", "eco_card,1,0.5,100000,120000,,"
     )
     estimate = _offers(quote_market({"rates": ranged}), small)["eco_card"]
-    assert isinstance(estimate, NotOffered) and estimate.reason == "price_range"
+    assert (
+        isinstance(estimate, NotOffered)
+        and estimate.reason == NotOfferedReason.PRICE_RANGE
+    )
