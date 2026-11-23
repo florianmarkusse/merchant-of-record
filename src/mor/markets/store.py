@@ -20,10 +20,14 @@ from mor.markets.records import (
     Charge,
     Collector,
     Country,
+    DutiesPaid,
     DutySource,
+    FeeComponent,
     FeeRule,
+    FuelApplies,
     FxRate,
     Group,
+    GroupKind,
     HsRate,
     LandedRate,
     Limit,
@@ -34,14 +38,19 @@ from mor.markets.records import (
     PerParcel,
     Preference,
     PreferenceCondition,
+    PriceSource,
     RateCard,
     Registration,
     ResearchStatus,
     Scope,
     Service,
     ServiceRestriction,
+    ServiceTier,
     ShippingRoute,
+    Standing,
     Surcharge,
+    SurchargeBasis,
+    SurchargeTrigger,
     Transit,
     content_sha256,
 )
@@ -498,6 +507,102 @@ def _landed_params(load_id: uuid.UUID, rate: LandedRate) -> tuple[object, ...]:
 
 
 # --- reading a load back --------------------------------------------------------
+# Each table is read with `class_row` into a row record named after its
+# columns, then turned into its domain record with keyword arguments.
+
+
+async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
+    """The complete set of one load, sorted by key (landed rates by their
+    line in the file). Its content hash is the stored one, never recomputed
+    from this order."""
+    async with conn.cursor(row_factory=class_row(Category)) as cur:
+        await cur.execute(
+            "SELECT category, label FROM market_category WHERE load_id = %s"
+            " ORDER BY category",
+            (load_id,),
+        )
+        categories = await cur.fetchall()
+    async with conn.cursor(row_factory=class_row(Country)) as cur:
+        await cur.execute(
+            "SELECT iso2, name, currency, status, status_note FROM market_country"
+            " WHERE load_id = %s ORDER BY iso2",
+            (load_id,),
+        )
+        countries = await cur.fetchall()
+    async with conn.cursor(row_factory=class_row(Registration)) as cur:
+        await cur.execute(
+            "SELECT iso2 AS country, scheme, number, effective_from"
+            " FROM market_registration WHERE load_id = %s ORDER BY iso2, scheme",
+            (load_id,),
+        )
+        registrations = await cur.fetchall()
+    async with conn.cursor(row_factory=class_row(DutySource)) as cur:
+        await cur.execute(
+            "SELECT iso2 AS country, mode, vendor_name AS vendor FROM duty_source"
+            " WHERE load_id = %s ORDER BY iso2",
+            (load_id,),
+        )
+        duty_sources = await cur.fetchall()
+    shipping = await _read_shipping(conn, load_id)
+    return MarketSet(
+        categories=tuple(categories),
+        countries=tuple(countries),
+        groups=await _read_groups(conn, load_id),
+        landed_rates=await _read_landed(conn, load_id),
+        registrations=tuple(registrations),
+        fx_rates=await _read_fx_rates(conn, load_id),
+        hs_rates=await _read_hs_rates(conn, load_id),
+        duty_sources=tuple(duty_sources),
+        services=shipping.services,
+        rate_cards=shipping.rate_cards,
+        zones=shipping.zones,
+        rates=shipping.rates,
+        surcharges=shipping.surcharges,
+        transit=shipping.transit,
+        restrictions=shipping.restrictions,
+        routes=shipping.routes,
+        fees=shipping.fees,
+    )
+
+
+def _optional_fraction(
+    numerator: int | None, denominator: int | None
+) -> Fraction | None:
+    if numerator is None or denominator is None:
+        return None
+    return Fraction(numerator, denominator)
+
+
+@dataclass(frozen=True)
+class _GroupRow:
+    code: str
+    label: str
+    kind: GroupKind
+    members: list[str]
+
+
+async def _read_groups(conn: Connection, load_id: uuid.UUID) -> tuple[Group, ...]:
+    async with conn.cursor(row_factory=class_row(_GroupRow)) as cur:
+        await cur.execute(
+            "SELECT g.code, g.label, g.kind,"
+            " array(SELECT m.iso2::text FROM market_group_member m"
+            "       WHERE m.load_id = g.load_id AND m.group_code = g.code"
+            "       ORDER BY m.iso2) AS members"
+            " FROM market_group g WHERE g.load_id = %s ORDER BY g.code",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    groups: list[Group] = []
+    for row in rows:
+        groups.append(
+            Group(
+                code=row.code,
+                label=row.label,
+                kind=row.kind,
+                members=tuple(row.members),
+            )
+        )
+    return tuple(groups)
 
 
 @dataclass(frozen=True)
@@ -524,37 +629,9 @@ class _LandedRow:
     source_url: str
 
 
-async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
-    """The complete set of one load, sorted by key (landed rates by their
-    line in the file). Its content hash is the stored one, never recomputed
-    from this order."""
-    async with conn.cursor(row_factory=class_row(Category)) as category_cur:
-        await category_cur.execute(
-            "SELECT category, label FROM market_category WHERE load_id = %s"
-            " ORDER BY category",
-            (load_id,),
-        )
-        categories = await category_cur.fetchall()
-    async with conn.cursor(row_factory=class_row(Country)) as country_cur:
-        await country_cur.execute(
-            "SELECT iso2, name, currency, status, status_note FROM market_country"
-            " WHERE load_id = %s ORDER BY iso2",
-            (load_id,),
-        )
-        countries = await country_cur.fetchall()
-    cur = await conn.execute(
-        "SELECT g.code, g.label, g.kind,"
-        " array(SELECT m.iso2::text FROM market_group_member m"
-        "       WHERE m.load_id = g.load_id AND m.group_code = g.code"
-        "       ORDER BY m.iso2)"
-        " FROM market_group g WHERE g.load_id = %s ORDER BY g.code",
-        (load_id,),
-    )
-    groups: list[Group] = []
-    for code, label, kind, members in await cur.fetchall():
-        groups.append(Group(code, label, kind, tuple(members)))
-    async with conn.cursor(row_factory=class_row(_LandedRow)) as landed_cur:
-        await landed_cur.execute(
+async def _read_landed(conn: Connection, load_id: uuid.UUID) -> tuple[LandedRate, ...]:
+    async with conn.cursor(row_factory=class_row(_LandedRow)) as cur:
+        await cur.execute(
             "SELECT line_no, country_iso2, group_code, category, charge,"
             " collector, band, limit_minor, limit_currency,"
             " limit_basis, basis::text, rate_numerator, rate_denominator,"
@@ -563,279 +640,81 @@ async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
             " FROM landed_rate WHERE load_id = %s ORDER BY line_no",
             (load_id,),
         )
-        landed: list[LandedRate] = []
-        for row in await landed_cur.fetchall():
-            landed.append(_landed_from_row(row))
-    async with conn.cursor(row_factory=class_row(Registration)) as registration_cur:
-        await registration_cur.execute(
-            "SELECT iso2 AS country, scheme, number, effective_from"
-            " FROM market_registration WHERE load_id = %s ORDER BY iso2, scheme",
-            (load_id,),
+        rows = await cur.fetchall()
+    landed: list[LandedRate] = []
+    for row in rows:
+        landed.append(_landed_from_row(row))
+    return tuple(landed)
+
+
+def _landed_from_row(row: _LandedRow) -> LandedRate:
+    limit: Limit | None = None
+    if (
+        row.limit_minor is not None
+        and row.limit_currency is not None
+        and row.limit_basis is not None
+    ):
+        limit = Limit(
+            amount=Money(row.limit_minor, row.limit_currency), basis=row.limit_basis
         )
-        registrations = await registration_cur.fetchall()
-    cur = await conn.execute(
-        "SELECT base_currency, quote_currency, rate_numerator,"
-        " rate_denominator, as_of, status, source FROM market_fx_rate"
-        " WHERE load_id = %s ORDER BY base_currency, quote_currency",
-        (load_id,),
-    )
-    fx_rates: list[FxRate] = []
-    for (
-        base,
-        quote,
-        numerator,
-        denominator,
-        as_of,
-        status,
-        source,
-    ) in await cur.fetchall():
-        fx_rates.append(
-            FxRate(base, quote, Fraction(numerator, denominator), as_of, status, source)
-        )
-    async with conn.cursor(row_factory=class_row(_HsRow)) as hs_cur:
-        await hs_cur.execute(
-            "SELECT line_no, country_iso2, group_code, hs_prefix, charge,"
-            " origin_iso2, agreement, conditions, rate_numerator,"
-            " rate_denominator, effective_from, status, source, source_url"
-            " FROM hs_rate WHERE load_id = %s ORDER BY line_no",
-            (load_id,),
-        )
-        hs_rates: list[HsRate] = []
-        for row in await hs_cur.fetchall():
-            hs_rates.append(_hs_from_row(row))
-    async with conn.cursor(row_factory=class_row(DutySource)) as source_cur:
-        await source_cur.execute(
-            "SELECT iso2 AS country, mode, vendor_name AS vendor FROM duty_source"
-            " WHERE load_id = %s ORDER BY iso2",
-            (load_id,),
-        )
-        duty_sources = await source_cur.fetchall()
-    shipping = await _read_shipping(conn, load_id)
-    return MarketSet(
-        tuple(categories),
-        tuple(countries),
-        tuple(groups),
-        tuple(landed),
-        tuple(registrations),
-        tuple(fx_rates),
-        tuple(hs_rates),
-        tuple(duty_sources),
-        shipping.services,
-        shipping.rate_cards,
-        shipping.zones,
-        shipping.rates,
-        shipping.surcharges,
-        shipping.transit,
-        shipping.restrictions,
-        shipping.routes,
-        shipping.fees,
+    amount: Amount
+    if row.basis == "percent":
+        assert row.rate_numerator is not None and row.rate_denominator is not None
+        assert row.base is not None
+        amount = Percent(Fraction(row.rate_numerator, row.rate_denominator), row.base)
+    else:
+        assert row.amount_minor is not None and row.amount_currency is not None
+        money = Money(row.amount_minor, row.amount_currency)
+        amount = PerLine(money) if row.basis == "per_line" else PerParcel(money)
+    return LandedRate(
+        line_no=row.line_no,
+        scope=Scope(country=row.country_iso2, group=row.group_code),
+        category=row.category,
+        charge=row.charge,
+        collector=row.collector,
+        band=row.band,
+        limit=limit,
+        amount=amount,
+        effective_from=row.effective_from,
+        status=row.status,
+        source=row.source,
+        source_url=row.source_url,
     )
 
 
 @dataclass(frozen=True)
-class _Shipping:
-    services: tuple[Service, ...]
-    rate_cards: tuple[RateCard, ...]
-    zones: tuple[CardZone, ...]
-    rates: tuple[CardRate, ...]
-    surcharges: tuple[Surcharge, ...]
-    transit: tuple[Transit, ...]
-    restrictions: tuple[ServiceRestriction, ...]
-    routes: tuple[ShippingRoute, ...]
-    fees: tuple[FeeRule, ...]
+class _FxRow:
+    base_currency: Currency
+    quote_currency: Currency
+    rate_numerator: int
+    rate_denominator: int
+    as_of: date
+    status: ResearchStatus
+    source: str
 
 
-def _optional_fraction(
-    numerator: int | None, denominator: int | None
-) -> Fraction | None:
-    if numerator is None or denominator is None:
-        return None
-    return Fraction(numerator, denominator)
-
-
-async def _read_shipping(conn: Connection, load_id: uuid.UUID) -> _Shipping:
-    cur = await conn.execute(
-        "SELECT code, provider, name, origin_iso2, tier, duties_paid,"
-        " volumetric_divisor, max_weight_numerator, max_weight_denominator,"
-        " status FROM shipping_service WHERE load_id = %s ORDER BY code",
-        (load_id,),
-    )
-    services: list[Service] = []
-    for (
-        code,
-        provider,
-        name,
-        origin,
-        tier,
-        duties_paid,
-        divisor,
-        max_numerator,
-        max_denominator,
-        status,
-    ) in await cur.fetchall():
-        services.append(
-            Service(
-                code,
-                provider,
-                name,
-                origin,
-                tier,
-                duties_paid,
-                divisor,
-                _optional_fraction(max_numerator, max_denominator),
-                status,
-            )
-        )
-    async with conn.cursor(row_factory=class_row(RateCard)) as card_cur:
-        await card_cur.execute(
-            "SELECT code, service, currency, effective_from, effective_to, fuel,"
-            " status, source FROM rate_card WHERE load_id = %s ORDER BY code",
+async def _read_fx_rates(conn: Connection, load_id: uuid.UUID) -> tuple[FxRate, ...]:
+    async with conn.cursor(row_factory=class_row(_FxRow)) as cur:
+        await cur.execute(
+            "SELECT base_currency, quote_currency, rate_numerator,"
+            " rate_denominator, as_of, status, source FROM market_fx_rate"
+            " WHERE load_id = %s ORDER BY base_currency, quote_currency",
             (load_id,),
         )
-        cards = await card_cur.fetchall()
-    async with conn.cursor(row_factory=class_row(CardZone)) as zone_cur:
-        await zone_cur.execute(
-            "SELECT rate_card, destination_iso2 AS destination, zone, status"
-            " FROM rate_card_zone WHERE load_id = %s"
-            " ORDER BY rate_card, destination_iso2",
-            (load_id,),
-        )
-        zones = await zone_cur.fetchall()
-    cur = await conn.execute(
-        "SELECT rate_card, zone, weight_numerator, weight_denominator, amount_minor,"
-        " amount_max_minor FROM rate_card_rate WHERE load_id = %s"
-        " ORDER BY rate_card, zone, weight_numerator::numeric / weight_denominator",
-        (load_id,),
-    )
-    rates: list[CardRate] = []
-    for card, zone, numerator, denominator, amount, amount_max in await cur.fetchall():
-        rates.append(
-            CardRate(card, zone, Fraction(numerator, denominator), amount, amount_max)
-        )
-    cur = await conn.execute(
-        "SELECT line_no, service, rate_card, name, basis, rate_numerator,"
-        " rate_denominator, amount_minor, min_amount_minor, currency,"
-        " trigger, destinations, fuel_applies, valid_until,"
-        " status, source FROM shipping_surcharge WHERE load_id = %s"
-        " ORDER BY line_no",
-        (load_id,),
-    )
-    surcharges: list[Surcharge] = []
-    for (
-        line_no,
-        service,
-        card,
-        name,
-        basis,
-        rate_numerator,
-        rate_denominator,
-        amount,
-        minimum,
-        currency,
-        trigger,
-        destinations,
-        fuel_applies,
-        valid_until,
-        status,
-        source,
-    ) in await cur.fetchall():
-        surcharges.append(
-            Surcharge(
-                line_no,
-                service,
-                card,
-                name,
-                basis,
-                _optional_fraction(rate_numerator, rate_denominator),
-                amount,
-                minimum,
-                currency,
-                trigger,
-                tuple(destinations),
-                fuel_applies,
-                valid_until,
-                status,
-                source,
+        rows = await cur.fetchall()
+    fx_rates: list[FxRate] = []
+    for row in rows:
+        fx_rates.append(
+            FxRate(
+                base=row.base_currency,
+                quote=row.quote_currency,
+                rate=Fraction(row.rate_numerator, row.rate_denominator),
+                as_of=row.as_of,
+                status=row.status,
+                source=row.source,
             )
         )
-    cur = await conn.execute(
-        "SELECT service, country_iso2, group_code, days_min, days_max, status"
-        " FROM shipping_transit WHERE load_id = %s"
-        " ORDER BY service, country_iso2, group_code",
-        (load_id,),
-    )
-    transit: list[Transit] = []
-    for service, country, group, days_min, days_max, status in await cur.fetchall():
-        transit.append(
-            Transit(service, Scope(country, group), days_min, days_max, status)
-        )
-    async with conn.cursor(row_factory=class_row(ServiceRestriction)) as rule_cur:
-        await rule_cur.execute(
-            "SELECT service, category, rule, status FROM service_restriction"
-            " WHERE load_id = %s ORDER BY service, category",
-            (load_id,),
-        )
-        restrictions = await rule_cur.fetchall()
-    cur = await conn.execute(
-        "SELECT country_iso2, group_code, service, rate_card, source,"
-        " standing FROM shipping_route WHERE load_id = %s"
-        " ORDER BY service, rate_card, country_iso2, group_code",
-        (load_id,),
-    )
-    routes: list[ShippingRoute] = []
-    for country, group, service, card, source, standing in await cur.fetchall():
-        routes.append(
-            ShippingRoute(Scope(country, group), service, card, source, standing)
-        )
-    cur = await conn.execute(
-        "SELECT line_no, component, country_iso2, group_code, rate_numerator,"
-        " rate_denominator, fixed_minor, fixed_currency, effective_from,"
-        " standing, source FROM fee_rule WHERE load_id = %s ORDER BY line_no",
-        (load_id,),
-    )
-    fees: list[FeeRule] = []
-    for (
-        line_no,
-        component,
-        country,
-        group,
-        numerator,
-        denominator,
-        fixed_minor,
-        fixed_currency,
-        effective_from,
-        standing,
-        source,
-    ) in await cur.fetchall():
-        scope: Scope | None = None
-        if country is not None or group is not None:
-            scope = Scope(country, group)
-        fixed: Money | None = None
-        if fixed_minor is not None and fixed_currency is not None:
-            fixed = Money(fixed_minor, fixed_currency)
-        fees.append(
-            FeeRule(
-                line_no,
-                component,
-                scope,
-                Fraction(numerator, denominator),
-                fixed,
-                effective_from,
-                standing,
-                source,
-            )
-        )
-    return _Shipping(
-        tuple(services),
-        tuple(cards),
-        tuple(zones),
-        tuple(rates),
-        tuple(surcharges),
-        tuple(transit),
-        tuple(restrictions),
-        tuple(routes),
-        tuple(fees),
-    )
+    return tuple(fx_rates)
 
 
 @dataclass(frozen=True)
@@ -856,53 +735,340 @@ class _HsRow:
     source_url: str
 
 
-def _hs_from_row(row: _HsRow) -> HsRate:
-    preference: Preference | None = None
-    if row.agreement is not None:
-        preference = Preference(row.agreement, frozenset(row.conditions))
-    return HsRate(
-        row.line_no,
-        Scope(row.country_iso2, row.group_code),
-        row.hs_prefix,
-        row.charge,
-        row.origin_iso2,
-        preference,
-        Fraction(row.rate_numerator, row.rate_denominator),
-        row.effective_from,
-        row.status,
-        row.source,
-        row.source_url,
+async def _read_hs_rates(conn: Connection, load_id: uuid.UUID) -> tuple[HsRate, ...]:
+    async with conn.cursor(row_factory=class_row(_HsRow)) as cur:
+        await cur.execute(
+            "SELECT line_no, country_iso2, group_code, hs_prefix, charge,"
+            " origin_iso2, agreement, conditions, rate_numerator,"
+            " rate_denominator, effective_from, status, source, source_url"
+            " FROM hs_rate WHERE load_id = %s ORDER BY line_no",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    hs_rates: list[HsRate] = []
+    for row in rows:
+        preference: Preference | None = None
+        if row.agreement is not None:
+            preference = Preference(
+                agreement=row.agreement, conditions=frozenset(row.conditions)
+            )
+        hs_rates.append(
+            HsRate(
+                line_no=row.line_no,
+                scope=Scope(country=row.country_iso2, group=row.group_code),
+                hs_prefix=row.hs_prefix,
+                charge=row.charge,
+                origin=row.origin_iso2,
+                preference=preference,
+                rate=Fraction(row.rate_numerator, row.rate_denominator),
+                effective_from=row.effective_from,
+                status=row.status,
+                source=row.source,
+                source_url=row.source_url,
+            )
+        )
+    return tuple(hs_rates)
+
+
+# --- shipping -----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Shipping:
+    services: tuple[Service, ...]
+    rate_cards: tuple[RateCard, ...]
+    zones: tuple[CardZone, ...]
+    rates: tuple[CardRate, ...]
+    surcharges: tuple[Surcharge, ...]
+    transit: tuple[Transit, ...]
+    restrictions: tuple[ServiceRestriction, ...]
+    routes: tuple[ShippingRoute, ...]
+    fees: tuple[FeeRule, ...]
+
+
+async def _read_shipping(conn: Connection, load_id: uuid.UUID) -> _Shipping:
+    async with conn.cursor(row_factory=class_row(RateCard)) as cur:
+        await cur.execute(
+            "SELECT code, service, currency, effective_from, effective_to, fuel,"
+            " status, source FROM rate_card WHERE load_id = %s ORDER BY code",
+            (load_id,),
+        )
+        cards = await cur.fetchall()
+    async with conn.cursor(row_factory=class_row(CardZone)) as cur:
+        await cur.execute(
+            "SELECT rate_card, destination_iso2 AS destination, zone, status"
+            " FROM rate_card_zone WHERE load_id = %s"
+            " ORDER BY rate_card, destination_iso2",
+            (load_id,),
+        )
+        zones = await cur.fetchall()
+    async with conn.cursor(row_factory=class_row(ServiceRestriction)) as cur:
+        await cur.execute(
+            "SELECT service, category, rule, status FROM service_restriction"
+            " WHERE load_id = %s ORDER BY service, category",
+            (load_id,),
+        )
+        restrictions = await cur.fetchall()
+    return _Shipping(
+        services=await _read_services(conn, load_id),
+        rate_cards=tuple(cards),
+        zones=tuple(zones),
+        rates=await _read_card_rates(conn, load_id),
+        surcharges=await _read_surcharges(conn, load_id),
+        transit=await _read_transit(conn, load_id),
+        restrictions=tuple(restrictions),
+        routes=await _read_routes(conn, load_id),
+        fees=await _read_fees(conn, load_id),
     )
 
 
-def _landed_from_row(row: _LandedRow) -> LandedRate:
-    limit: Limit | None = None
-    if (
-        row.limit_minor is not None
-        and row.limit_currency is not None
-        and row.limit_basis is not None
-    ):
-        limit = Limit(Money(row.limit_minor, row.limit_currency), row.limit_basis)
-    amount: Amount
-    if row.basis == "percent":
-        assert row.rate_numerator is not None and row.rate_denominator is not None
-        assert row.base is not None
-        amount = Percent(Fraction(row.rate_numerator, row.rate_denominator), row.base)
-    else:
-        assert row.amount_minor is not None and row.amount_currency is not None
-        money = Money(row.amount_minor, row.amount_currency)
-        amount = PerLine(money) if row.basis == "per_line" else PerParcel(money)
-    return LandedRate(
-        row.line_no,
-        Scope(row.country_iso2, row.group_code),
-        row.category,
-        row.charge,
-        row.collector,
-        row.band,
-        limit,
-        amount,
-        row.effective_from,
-        row.status,
-        row.source,
-        row.source_url,
-    )
+@dataclass(frozen=True)
+class _ServiceRow:
+    code: str
+    provider: str
+    name: str
+    origin_iso2: str
+    tier: ServiceTier
+    duties_paid: DutiesPaid
+    volumetric_divisor: int | None
+    max_weight_numerator: int | None
+    max_weight_denominator: int | None
+    status: ResearchStatus
+
+
+async def _read_services(conn: Connection, load_id: uuid.UUID) -> tuple[Service, ...]:
+    async with conn.cursor(row_factory=class_row(_ServiceRow)) as cur:
+        await cur.execute(
+            "SELECT code, provider, name, origin_iso2, tier, duties_paid,"
+            " volumetric_divisor, max_weight_numerator, max_weight_denominator,"
+            " status FROM shipping_service WHERE load_id = %s ORDER BY code",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    services: list[Service] = []
+    for row in rows:
+        services.append(
+            Service(
+                code=row.code,
+                provider=row.provider,
+                name=row.name,
+                origin=row.origin_iso2,
+                tier=row.tier,
+                duties_paid=row.duties_paid,
+                volumetric_divisor=row.volumetric_divisor,
+                max_weight_kg=_optional_fraction(
+                    row.max_weight_numerator, row.max_weight_denominator
+                ),
+                status=row.status,
+            )
+        )
+    return tuple(services)
+
+
+@dataclass(frozen=True)
+class _CardRateRow:
+    rate_card: str
+    zone: str
+    weight_numerator: int
+    weight_denominator: int
+    amount_minor: int
+    amount_max_minor: int | None
+
+
+async def _read_card_rates(
+    conn: Connection, load_id: uuid.UUID
+) -> tuple[CardRate, ...]:
+    async with conn.cursor(row_factory=class_row(_CardRateRow)) as cur:
+        await cur.execute(
+            "SELECT rate_card, zone, weight_numerator, weight_denominator,"
+            " amount_minor, amount_max_minor FROM rate_card_rate"
+            " WHERE load_id = %s ORDER BY rate_card, zone,"
+            " weight_numerator::numeric / weight_denominator",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    rates: list[CardRate] = []
+    for row in rows:
+        rates.append(
+            CardRate(
+                rate_card=row.rate_card,
+                zone=row.zone,
+                weight_kg=Fraction(row.weight_numerator, row.weight_denominator),
+                amount_minor=row.amount_minor,
+                amount_max_minor=row.amount_max_minor,
+            )
+        )
+    return tuple(rates)
+
+
+@dataclass(frozen=True)
+class _SurchargeRow:
+    line_no: int
+    service: str
+    rate_card: str | None
+    name: str
+    basis: SurchargeBasis
+    rate_numerator: int | None
+    rate_denominator: int | None
+    amount_minor: int | None
+    min_amount_minor: int | None
+    currency: Currency
+    trigger: SurchargeTrigger
+    destinations: list[str]
+    fuel_applies: FuelApplies
+    valid_until: date | None
+    status: ResearchStatus
+    source: str
+
+
+async def _read_surcharges(
+    conn: Connection, load_id: uuid.UUID
+) -> tuple[Surcharge, ...]:
+    async with conn.cursor(row_factory=class_row(_SurchargeRow)) as cur:
+        await cur.execute(
+            "SELECT line_no, service, rate_card, name, basis, rate_numerator,"
+            " rate_denominator, amount_minor, min_amount_minor, currency,"
+            " trigger, destinations, fuel_applies, valid_until,"
+            " status, source FROM shipping_surcharge WHERE load_id = %s"
+            " ORDER BY line_no",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    surcharges: list[Surcharge] = []
+    for row in rows:
+        surcharges.append(
+            Surcharge(
+                line_no=row.line_no,
+                service=row.service,
+                rate_card=row.rate_card,
+                name=row.name,
+                basis=row.basis,
+                rate=_optional_fraction(row.rate_numerator, row.rate_denominator),
+                amount_minor=row.amount_minor,
+                min_amount_minor=row.min_amount_minor,
+                currency=row.currency,
+                trigger=row.trigger,
+                destinations=tuple(row.destinations),
+                fuel_applies=row.fuel_applies,
+                valid_until=row.valid_until,
+                status=row.status,
+                source=row.source,
+            )
+        )
+    return tuple(surcharges)
+
+
+@dataclass(frozen=True)
+class _TransitRow:
+    service: str
+    country_iso2: str | None
+    group_code: str | None
+    days_min: int
+    days_max: int
+    status: ResearchStatus
+
+
+async def _read_transit(conn: Connection, load_id: uuid.UUID) -> tuple[Transit, ...]:
+    async with conn.cursor(row_factory=class_row(_TransitRow)) as cur:
+        await cur.execute(
+            "SELECT service, country_iso2, group_code, days_min, days_max, status"
+            " FROM shipping_transit WHERE load_id = %s"
+            " ORDER BY service, country_iso2, group_code",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    transit: list[Transit] = []
+    for row in rows:
+        transit.append(
+            Transit(
+                service=row.service,
+                scope=Scope(country=row.country_iso2, group=row.group_code),
+                days_min=row.days_min,
+                days_max=row.days_max,
+                status=row.status,
+            )
+        )
+    return tuple(transit)
+
+
+@dataclass(frozen=True)
+class _RouteRow:
+    country_iso2: str | None
+    group_code: str | None
+    service: str
+    rate_card: str | None
+    source: PriceSource
+    standing: Standing
+
+
+async def _read_routes(
+    conn: Connection, load_id: uuid.UUID
+) -> tuple[ShippingRoute, ...]:
+    async with conn.cursor(row_factory=class_row(_RouteRow)) as cur:
+        await cur.execute(
+            "SELECT country_iso2, group_code, service, rate_card, source,"
+            " standing FROM shipping_route WHERE load_id = %s"
+            " ORDER BY service, rate_card, country_iso2, group_code",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    routes: list[ShippingRoute] = []
+    for row in rows:
+        routes.append(
+            ShippingRoute(
+                scope=Scope(country=row.country_iso2, group=row.group_code),
+                service=row.service,
+                rate_card=row.rate_card,
+                source=row.source,
+                standing=row.standing,
+            )
+        )
+    return tuple(routes)
+
+
+@dataclass(frozen=True)
+class _FeeRow:
+    line_no: int
+    component: FeeComponent
+    country_iso2: str | None
+    group_code: str | None
+    rate_numerator: int
+    rate_denominator: int
+    fixed_minor: int | None
+    fixed_currency: Currency | None
+    effective_from: date
+    standing: Standing
+    source: str
+
+
+async def _read_fees(conn: Connection, load_id: uuid.UUID) -> tuple[FeeRule, ...]:
+    async with conn.cursor(row_factory=class_row(_FeeRow)) as cur:
+        await cur.execute(
+            "SELECT line_no, component, country_iso2, group_code, rate_numerator,"
+            " rate_denominator, fixed_minor, fixed_currency, effective_from,"
+            " standing, source FROM fee_rule WHERE load_id = %s ORDER BY line_no",
+            (load_id,),
+        )
+        rows = await cur.fetchall()
+    fees: list[FeeRule] = []
+    for row in rows:
+        # A fee with neither country nor group applies everywhere.
+        scope: Scope | None = None
+        if row.country_iso2 is not None or row.group_code is not None:
+            scope = Scope(country=row.country_iso2, group=row.group_code)
+        fixed: Money | None = None
+        if row.fixed_minor is not None and row.fixed_currency is not None:
+            fixed = Money(row.fixed_minor, row.fixed_currency)
+        fees.append(
+            FeeRule(
+                line_no=row.line_no,
+                component=row.component,
+                scope=scope,
+                rate=Fraction(row.rate_numerator, row.rate_denominator),
+                fixed=fixed,
+                effective_from=row.effective_from,
+                standing=row.standing,
+                source=row.source,
+            )
+        )
+    return tuple(fees)
