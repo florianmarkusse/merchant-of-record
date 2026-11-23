@@ -33,7 +33,7 @@ class AggregateType(StrEnum):
     PSP_ACCOUNT = "psp_account"
     ORDER = "order"
     SETTLEMENT_LINE = "settlement_line"
-    SETTLEMENT_BATCH = "settlement_batch"
+    SETTLEMENT_PAYOUT = "settlement_payout"
 
 
 class MessageType(StrEnum):
@@ -87,7 +87,7 @@ class MessageType(StrEnum):
     INVOICE_ISSUED = "invoice_issued"
     PSP_SETTLEMENT_DUE = "psp_settlement_due"
     SETTLEMENT_LINE_RECEIVED = "settlement_line_received"
-    SETTLEMENT_BATCH_RECEIVED = "settlement_batch_received"
+    SETTLEMENT_PAYOUT_REPORTED = "settlement_payout_reported"
 
 
 @dataclass(frozen=True)
@@ -541,7 +541,8 @@ class PspSettlementDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True
 
 
 class SettlementLineReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
-    """A settled line, stored once by the PSP's line id: book it."""
+    """A settled line, stored once by the PSP's line id: book it, and
+    reconcile its payout."""
 
     message_type: ClassVar[MessageType] = MessageType.SETTLEMENT_LINE_RECEIVED
     schema_version: ClassVar[int] = 1
@@ -550,15 +551,16 @@ class SettlementLineReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_field
     psp_account_id: uuid.UUID
 
 
-class SettlementBatchReceivedV1(
+class SettlementPayoutReportedV1(
     msgspec.Struct, frozen=True, forbid_unknown_fields=True
 ):
-    """A batch with all its lines stored: book its payout."""
+    """A payout the PSP reports, stored once by its id, whatever of its lines
+    have arrived: book it, and reconcile it."""
 
-    message_type: ClassVar[MessageType] = MessageType.SETTLEMENT_BATCH_RECEIVED
+    message_type: ClassVar[MessageType] = MessageType.SETTLEMENT_PAYOUT_REPORTED
     schema_version: ClassVar[int] = 1
 
-    settlement_batch_id: uuid.UUID
+    settlement_payout_id: uuid.UUID
     psp_account_id: uuid.UUID
 
 
@@ -610,7 +612,7 @@ type Fact = (
     | InvoiceIssuedV1
     | PspSettlementDueV1
     | SettlementLineReceivedV1
-    | SettlementBatchReceivedV1
+    | SettlementPayoutReportedV1
 )
 
 
@@ -623,7 +625,10 @@ class UndecodableFact:
 
 
 def aggregate_of(fact: Fact) -> Aggregate:
-    """The aggregate a fact belongs to; its order is kept per aggregate."""
+    """The thing a fact is about. An effect consumer of the fact holds the
+    session advisory lock on it across its vendor call, so it is the row
+    that consumer's `prepare` locks. Facts carry no order: consumers take
+    them in any order."""
     match fact:
         case ProbeStartedV1(probe_id=probe_id) | ProbeEchoedV1(probe_id=probe_id):
             return Aggregate(AggregateType.PROBE, probe_id)
@@ -692,8 +697,8 @@ def aggregate_of(fact: Fact) -> Aggregate:
             return Aggregate(AggregateType.PSP_ACCOUNT, account_id)
         case SettlementLineReceivedV1(settlement_line_id=line_id):
             return Aggregate(AggregateType.SETTLEMENT_LINE, line_id)
-        case SettlementBatchReceivedV1(settlement_batch_id=batch_id):
-            return Aggregate(AggregateType.SETTLEMENT_BATCH, batch_id)
+        case SettlementPayoutReportedV1(settlement_payout_id=payout_id):
+            return Aggregate(AggregateType.SETTLEMENT_PAYOUT, payout_id)
         case OrderPaidV1(order_id=order_id) | InvoiceIssuedV1(order_id=order_id):
             return Aggregate(AggregateType.ORDER, order_id)
 
@@ -817,8 +822,8 @@ def decode(
             decoded = _decode(payload, PspSettlementDueV1)
         case MessageType.SETTLEMENT_LINE_RECEIVED:
             decoded = _decode(payload, SettlementLineReceivedV1)
-        case MessageType.SETTLEMENT_BATCH_RECEIVED:
-            decoded = _decode(payload, SettlementBatchReceivedV1)
+        case MessageType.SETTLEMENT_PAYOUT_REPORTED:
+            decoded = _decode(payload, SettlementPayoutReportedV1)
     if isinstance(decoded, str):
         return UndecodableFact(
             message_type=message_type,

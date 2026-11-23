@@ -1,10 +1,12 @@
-"""The worker: runs due deliveries, one aggregate at a time per worker.
+"""The worker: runs due deliveries, in no particular order.
 
     uv run python -m mor.messaging.worker      # DATABASE_URL, default mor_dev
 
-plan-architecture.md §5: pick due deliveries, take the session advisory
-lock on the delivery's aggregate (try, never wait), re-read the delivery
-under its row lock, run the consumer, mark it handled, release the lock.
+plan-architecture.md §5, as amended by plan-messaging-rework.md §3: pick
+due deliveries, lock the delivery row (skip it if another worker has it),
+run the consumer, mark it handled. An effect consumer also holds the
+session advisory lock on the fact's aggregate from `prepare` to
+`complete`, across its vendor call. Consumers take facts in any order.
 A lock guards; time only decides when to try again (`not_before`).
 """
 
@@ -25,7 +27,7 @@ from watchfiles import PythonFilter
 from mor.config import Environment, Settings, load_settings
 from mor.dates import format_moment
 from mor.db.connect import Connection, connect
-from mor.db.fetch import one_row, one_value
+from mor.db.fetch import one_value
 from mor.messaging import consumers
 from mor.messaging.consumers import EffectAnswer, EffectCall
 from mor.messaging.facts import (
@@ -60,7 +62,7 @@ SOURCE = Path(__file__).resolve().parent.parent.parent  # src/, watched outside 
 
 @dataclass(frozen=True)
 class Candidate:
-    """The oldest unhandled delivery of one consumer for one aggregate."""
+    """A due, unhandled delivery: one fact for one consumer."""
 
     message_id: uuid.UUID
     consumer: ConsumerName
@@ -75,17 +77,17 @@ class Ran:
 
 @dataclass(frozen=True)
 class Skipped:
-    """Nothing ran. `busy`: another worker holds the aggregate. `not_due`:
-    retry time not reached. `not_next`: an older delivery comes first.
+    """Nothing ran. `busy`: another worker holds the delivery, or the
+    aggregate of an effect. `not_due`: retry time not reached.
     `already_handled`: handled since it was picked (a redelivery)."""
 
-    reason: Literal["busy", "not_due", "not_next", "already_handled"]
+    reason: Literal["busy", "not_due", "already_handled"]
 
 
 @dataclass(frozen=True)
 class Failed:
     """The consumer raised: a bug. Rolled back and retried after a backoff;
-    the aggregate's later facts wait behind it."""
+    other deliveries do not wait for it."""
 
     error: str
     not_before: datetime
@@ -105,7 +107,6 @@ type RunResult = Ran | Skipped | Deferred | Failed
 
 @dataclass(frozen=True)
 class _DeliveryRow:
-    seq: int
     not_before: datetime
     attempts: int
     handled_at: datetime | None
@@ -117,20 +118,14 @@ class _DeliveryRow:
 async def find_candidates(
     conn: Connection, now: datetime, limit: int
 ) -> list[Candidate]:
-    """Per (consumer, aggregate), the oldest unhandled delivery, if due.
-    Oldest first. Reading only: the advisory lock decides who runs it."""
+    """Unhandled deliveries that are due, oldest first. Reading only: the
+    delivery's row lock decides who runs it."""
     async with conn.cursor(row_factory=class_row(Candidate)) as cur:
         await cur.execute(
             """
             SELECT message_id, consumer, aggregate_type, aggregate_id
-            FROM (
-              SELECT DISTINCT ON (consumer, aggregate_type, aggregate_id)
-                message_id, consumer, aggregate_type, aggregate_id, seq, not_before
-              FROM outbox_delivery
-              WHERE handled_at IS NULL
-              ORDER BY consumer, aggregate_type, aggregate_id, seq
-            ) AS oldest
-            WHERE not_before <= %(now)s
+            FROM outbox_delivery
+            WHERE handled_at IS NULL AND not_before <= %(now)s
             ORDER BY seq
             LIMIT %(limit)s
             """,
@@ -169,40 +164,27 @@ async def unlock_aggregate(conn: Connection, candidate: Candidate) -> None:
 async def _open_delivery(
     conn: Connection, candidate: Candidate, now: datetime
 ) -> Fact | Skipped:
-    """Lock the delivery row and decode its fact, if it should run now."""
+    """Lock the delivery row and decode its fact, if it should run now. A
+    row another worker has locked is skipped, never waited for: that worker
+    is running it."""
     async with conn.cursor(row_factory=class_row(_DeliveryRow)) as cur:
         await cur.execute(
             """
-            SELECT d.seq, d.not_before, d.attempts, d.handled_at,
+            SELECT d.not_before, d.attempts, d.handled_at,
                    o.message_type, o.schema_version, o.payload::text
             FROM outbox_delivery d JOIN outbox o ON o.id = d.message_id
             WHERE d.message_id = %(message_id)s AND d.consumer = %(consumer)s
-            FOR UPDATE OF d
+            FOR UPDATE OF d SKIP LOCKED
             """,
             {"message_id": candidate.message_id, "consumer": candidate.consumer.value},
         )
-        delivery = await one_row(cur, f"delivery {candidate}")
+        delivery = await cur.fetchone()
+    if delivery is None:
+        return Skipped("busy")
     if delivery.handled_at is not None:
         return Skipped("already_handled")
     if delivery.not_before > now:
         return Skipped("not_due")
-    cur = await conn.execute(
-        """
-        SELECT 1 FROM outbox_delivery
-        WHERE consumer = %(consumer)s AND aggregate_type = %(aggregate_type)s
-          AND aggregate_id = %(aggregate_id)s AND handled_at IS NULL
-          AND seq < %(seq)s
-        LIMIT 1
-        """,
-        {
-            "consumer": candidate.consumer.value,
-            "aggregate_type": candidate.aggregate_type.value,
-            "aggregate_id": candidate.aggregate_id,
-            "seq": delivery.seq,
-        },
-    )
-    if await cur.fetchone() is not None:
-        return Skipped("not_next")
     fact = decode(
         delivery.message_type,
         delivery.schema_version,
@@ -278,7 +260,7 @@ async def handle_delivery(
     now: datetime,
 ) -> Ran | Skipped:
     """A local consumer's delivery, in the caller's transaction, under the
-    aggregate's advisory lock. Never commits."""
+    delivery's row lock. Never commits."""
     fact = await _open_delivery(conn, candidate, now)
     if isinstance(fact, Skipped):
         return fact
@@ -368,26 +350,29 @@ async def run_one(
     candidate: Candidate,
     now: datetime,
 ) -> RunResult:
-    """Lock the aggregate, run one delivery, unlock. `conn` is the worker's
-    dedicated autocommit connection."""
-    if not await try_lock_aggregate(conn, candidate):
-        return Skipped("busy")
-    try:
-        try:
-            match consumer_kind(candidate.consumer):
-                case Local(consumer=local):
-                    async with conn.transaction():
-                        return await handle_delivery(
-                            conn, candidate, local, environment, now
-                        )
-                case Effect(consumer=effect):
-                    return await run_effect(
-                        conn, http, environment, candidate, effect, now
+    """Run one delivery. A local consumer runs in one transaction under the
+    delivery's row lock and locks the rows it changes. An effect consumer
+    spans commits, so it also holds the aggregate's advisory lock: without
+    it a second worker's `prepare` would take a call still in flight for a
+    dead one. `conn` is the worker's dedicated autocommit connection."""
+    match consumer_kind(candidate.consumer):
+        case Local(consumer=local):
+            try:
+                async with conn.transaction():
+                    return await handle_delivery(
+                        conn, candidate, local, environment, now
                     )
-        except Exception as error:
-            return await _record_failure(conn, candidate, repr(error), now)
-    finally:
-        await unlock_aggregate(conn, candidate)
+            except Exception as error:
+                return await _record_failure(conn, candidate, repr(error), now)
+        case Effect(consumer=effect):
+            if not await try_lock_aggregate(conn, candidate):
+                return Skipped("busy")
+            try:
+                return await run_effect(conn, http, environment, candidate, effect, now)
+            except Exception as error:
+                return await _record_failure(conn, candidate, repr(error), now)
+            finally:
+                await unlock_aggregate(conn, candidate)
 
 
 async def _record_failure(
@@ -418,21 +403,14 @@ class _RetryRow:
 
 
 async def next_retry_at(conn: Connection, now: datetime) -> datetime | None:
-    """The earliest future `not_before` among deliveries that could run next
-    (the oldest unhandled per consumer and aggregate). Ones already due are
-    left out: they are busy on another worker or blocked behind an older
-    one, and counting them would make an idle worker spin."""
+    """The earliest future `not_before` among unhandled deliveries. Ones
+    already due are left out: they are busy on another worker, and counting
+    them would make an idle worker spin."""
     async with conn.cursor(row_factory=class_row(_RetryRow)) as cur:
         await cur.execute(
             """
-            SELECT not_before
-            FROM (
-              SELECT DISTINCT ON (consumer, aggregate_type, aggregate_id) not_before
-              FROM outbox_delivery
-              WHERE handled_at IS NULL
-              ORDER BY consumer, aggregate_type, aggregate_id, seq
-            ) AS oldest
-            WHERE not_before > %(now)s
+            SELECT not_before FROM outbox_delivery
+            WHERE handled_at IS NULL AND not_before > %(now)s
             ORDER BY not_before LIMIT 1
             """,
             {"now": now},

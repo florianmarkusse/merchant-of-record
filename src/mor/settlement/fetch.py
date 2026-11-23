@@ -1,18 +1,24 @@
-"""Reading what a PSP settled (docs/plan-payments.md §7.1), per account, by
-report file or by API, as the echo's report files are read
-(docs/plan-messaging.md §12):
+"""Reading what a PSP settled, per account, as the PSP sends it
+(docs/plan-settlement-reconciliation.md §2 and §4.5):
 
     start_settlement_reading ─▶ psp_settlement_due (scheduled, per account)
-    psp_settlement_fetch (effect), one look, at most one report or page:
+    psp_settlement_fetch (effect), one look:
         nothing pending: list after `last_read` ─▶ the first is `pending`,
             `Again`
-        `pending`: fetch it (an API batch a page at a time) ─▶ stored raw in
-            the inbox, the cursor moves on, the next look is due now
+        file: fetch the report ─▶ stored raw in the inbox, the cursor moves
+            on, the next look is due now
+        api, phase `payout`: fetch the payout object ─▶ stored raw; once the
+            PSP lists all its lines (`completed`), phase `lines`, the next
+            look due now; until then, after the account's interval
+        api, phase `lines`: fetch a page after `pending_after` ─▶ stored raw
+            with the payout it was asked for; the cursor moves to its last
+            line, or on to the next payout after the last page
         nothing new ─▶ the next look is due after the account's interval
 
 A list or a fetch only reads, so one repeated after a crash needs no guard:
-the inbox absorbs bytes stored twice, and every batch and line is stored
-once by the PSP's own id.
+the inbox absorbs bytes stored twice, and every payout and line is stored
+once by the PSP's own id. Decoding is the inbox's, in any order: nothing
+here waits for a page to be decoded.
 """
 
 import uuid
@@ -35,13 +41,18 @@ from mor.psp import registry
 from mor.psp.accounts import read_psp_account
 from mor.psp.port import (
     InboundMode,
+    LinesPage,
+    LinesResult,
+    PayoutObject,
+    PayoutResult,
     PspAccount,
+    SettlementFile,
+    SettlementFileResult,
     SettlementList,
     SettlementListResult,
     SettlementMode,
-    SettlementPage,
-    SettlementPageResult,
 )
+from mor.settlement.records import ReadPhase
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 
@@ -55,39 +66,62 @@ class ListCall:
 
 
 @dataclass(frozen=True)
-class FetchCall:
+class FileCall:
     account: PspAccount
     name: str
-    page: int
 
 
-type SettlementCall = ListCall | FetchCall
+@dataclass(frozen=True)
+class PayoutCall:
+    account: PspAccount
+    payout_id: str
+
+
+@dataclass(frozen=True)
+class LinesCall:
+    account: PspAccount
+    payout_id: str
+    after: str | None
+
+
+type SettlementCall = ListCall | FileCall | PayoutCall | LinesCall
 
 
 @dataclass(frozen=True)
 class ListAnswer:
-    """A list call and what the PSP said to it, from `call` to `complete`."""
+    """A call and what the PSP said to it, from `call` to `complete`."""
 
     call: ListCall
     result: SettlementListResult | UndecodableBody
 
 
 @dataclass(frozen=True)
-class FetchAnswer:
-    """A fetch call and what the PSP said to it, from `call` to `complete`."""
-
-    call: FetchCall
-    result: SettlementPageResult | UndecodableBody
+class FileAnswer:
+    call: FileCall
+    result: SettlementFileResult | UndecodableBody
 
 
-type SettlementAnswer = ListAnswer | FetchAnswer
+@dataclass(frozen=True)
+class PayoutAnswer:
+    call: PayoutCall
+    result: PayoutResult | UndecodableBody
+
+
+@dataclass(frozen=True)
+class LinesAnswer:
+    call: LinesCall
+    result: LinesResult | UndecodableBody
+
+
+type SettlementAnswer = ListAnswer | FileAnswer | PayoutAnswer | LinesAnswer
 
 
 @dataclass(frozen=True)
 class _Cursor:
     last_read: str | None
     pending: str | None
-    pending_page: int | None
+    pending_phase: ReadPhase | None
+    pending_after: str | None
 
 
 async def start_settlement_reading(
@@ -120,8 +154,10 @@ def _account_id(fact: Fact) -> uuid.UUID:
 async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
     async with conn.cursor(row_factory=class_row(_Cursor)) as cur:
         await cur.execute(
-            "SELECT last_read, pending, pending_page FROM psp_settlement_cursor"
-            " WHERE account_id = %s FOR UPDATE",
+            """
+            SELECT last_read, pending, pending_phase, pending_after
+            FROM psp_settlement_cursor WHERE account_id = %s FOR UPDATE
+            """,
             (account_id,),
         )
         return await one_row(cur, f"settlement cursor for {account_id}")
@@ -134,9 +170,19 @@ async def prepare_fetch(
     account = await read_psp_account(conn, account_id)
     assert account is not None, f"no psp account {account_id}"
     cursor = await _lock_cursor(conn, account_id)
-    if cursor.pending is not None:
-        return FetchCall(account, cursor.pending, cursor.pending_page or 1)
-    return ListCall(account, cursor.last_read or "")
+    if cursor.pending is None:
+        return ListCall(account, cursor.last_read or "")
+    match account.settlement_mode:
+        case SettlementMode.FILE:
+            return FileCall(account, cursor.pending)
+        case SettlementMode.API:
+            match cursor.pending_phase:
+                # None never comes with a pending payout: `_listed` sets the
+                # phase with it. Read as its start, the payout object.
+                case ReadPhase.PAYOUT | None:
+                    return PayoutCall(account, cursor.pending)
+                case ReadPhase.LINES:
+                    return LinesCall(account, cursor.pending, cursor.pending_after)
 
 
 async def call_fetch(
@@ -146,19 +192,19 @@ async def call_fetch(
         case ListCall(account=account, after=after):
             listed = await registry.list_settlements(http, environment, account, after)
             return ListAnswer(settlement_call, listed)
-        case FetchCall(account=account, name=name, page=page):
-            fetched = await registry.fetch_settlement(
-                http, environment, account, name, page
+        case FileCall(account=account, name=name):
+            report = await registry.fetch_settlement_file(
+                http, environment, account, name
             )
-            return FetchAnswer(settlement_call, fetched)
-
-
-def _inbound_mode(account: PspAccount) -> InboundMode:
-    match account.settlement_mode:
-        case SettlementMode.FILE:
-            return InboundMode.SETTLEMENT_FILE
-        case SettlementMode.API:
-            return InboundMode.SETTLEMENT_PAGE
+            return FileAnswer(settlement_call, report)
+        case PayoutCall(account=account, payout_id=payout_id):
+            payout = await registry.fetch_payout(http, environment, account, payout_id)
+            return PayoutAnswer(settlement_call, payout)
+        case LinesCall(account=account, payout_id=payout_id, after=after):
+            page = await registry.fetch_payout_lines(
+                http, environment, account, payout_id, after
+            )
+            return LinesAnswer(settlement_call, page)
 
 
 async def complete_fetch(
@@ -167,10 +213,14 @@ async def complete_fetch(
     account_id = _account_id(fact)
     await _lock_cursor(conn, account_id)
     match answer:
-        case ListAnswer():
-            return await _listed(conn, account_id, answer.call, answer.result, now)
-        case FetchAnswer():
-            return await _fetched(conn, account_id, answer.call, answer.result, now)
+        case ListAnswer(call=call, result=result):
+            return await _listed(conn, account_id, call, result, now)
+        case FileAnswer(call=call, result=result):
+            return await _file_fetched(conn, account_id, call, result, now)
+        case PayoutAnswer(call=call, result=result):
+            return await _payout_fetched(conn, account_id, call, result, now)
+        case LinesAnswer(call=call, result=result):
+            return await _lines_fetched(conn, account_id, call, result, now)
 
 
 def _retry(failure: Unavailable | OutcomeUnknown | UndecodableBody) -> RetryLater:
@@ -184,6 +234,25 @@ def _retry(failure: Unavailable | OutcomeUnknown | UndecodableBody) -> RetryLate
             return RetryLater(f"settlement answer: {detail}")
 
 
+async def _look_now(conn: Connection, account_id: uuid.UUID, now: datetime) -> None:
+    """There is more to read: the next look now, in a delivery of its own."""
+    await append_fact(
+        conn, PspSettlementDueV1(psp_account_id=account_id), SCHEDULER, now
+    )
+
+
+async def _look_later(conn: Connection, account: PspAccount, now: datetime) -> None:
+    """Nothing more to read now: the next look after the account's
+    interval."""
+    await append_fact(
+        conn,
+        PspSettlementDueV1(psp_account_id=account.id),
+        SCHEDULER,
+        now,
+        deliver_at=now + account.settlement_interval,
+    )
+
+
 async def _listed(
     conn: Connection,
     account_id: uuid.UUID,
@@ -193,56 +262,123 @@ async def _listed(
 ) -> Done | RetryLater | Again:
     match result:
         case SettlementList(names=names):
-            if names:
-                await conn.execute(
-                    "UPDATE psp_settlement_cursor SET pending = %s, pending_page = 1"
-                    " WHERE account_id = %s",
-                    (names[0], account_id),
-                )
-                return Again()
-            await append_fact(
-                conn,
-                PspSettlementDueV1(psp_account_id=account_id),
-                SCHEDULER,
-                now,
-                deliver_at=now + list_call.account.settlement_interval,
+            if not names:
+                await _look_later(conn, list_call.account, now)
+                return Done(Applied())
+            phase: ReadPhase | None = None
+            match list_call.account.settlement_mode:
+                case SettlementMode.FILE:
+                    pass
+                case SettlementMode.API:
+                    phase = ReadPhase.PAYOUT
+            await conn.execute(
+                """
+                UPDATE psp_settlement_cursor
+                SET pending = %s, pending_phase = %s, pending_after = NULL
+                WHERE account_id = %s
+                """,
+                (names[0], phase, account_id),
             )
+            return Again()
+        case Unavailable() | OutcomeUnknown() | UndecodableBody():
+            return _retry(result)
+
+
+async def _read_whole(conn: Connection, account_id: uuid.UUID, name: str) -> None:
+    """The pending report or payout is read: on to the next."""
+    await conn.execute(
+        """
+        UPDATE psp_settlement_cursor
+        SET last_read = %s, pending = NULL, pending_phase = NULL,
+            pending_after = NULL
+        WHERE account_id = %s
+        """,
+        (name, account_id),
+    )
+
+
+async def _file_fetched(
+    conn: Connection,
+    account_id: uuid.UUID,
+    file_call: FileCall,
+    result: SettlementFileResult | UndecodableBody,
+    now: datetime,
+) -> Done | RetryLater:
+    match result:
+        case SettlementFile(body=body):
+            await store_inbox(
+                conn, account_id, InboundMode.SETTLEMENT_FILE, body, None, now
+            )
+            await _read_whole(conn, account_id, file_call.name)
+            await _look_now(conn, account_id, now)
             return Done(Applied())
         case Unavailable() | OutcomeUnknown() | UndecodableBody():
             return _retry(result)
 
 
-async def _fetched(
+async def _payout_fetched(
     conn: Connection,
     account_id: uuid.UUID,
-    fetch_call: FetchCall,
-    result: SettlementPageResult | UndecodableBody,
+    payout_call: PayoutCall,
+    result: PayoutResult | UndecodableBody,
     now: datetime,
 ) -> Done | RetryLater:
     match result:
-        case SettlementPage(body=body, next_page=next_page):
+        case PayoutObject(body=body, lines_ready=lines_ready):
             await store_inbox(
-                conn, account_id, _inbound_mode(fetch_call.account), body, now
+                conn,
+                account_id,
+                InboundMode.SETTLEMENT_PAYOUT,
+                body,
+                payout_call.payout_id,
+                now,
             )
-            if next_page is not None:
+            if not lines_ready:
+                # Its lines are not all listed yet: look again later.
+                await _look_later(conn, payout_call.account, now)
+                return Done(Applied())
+            await conn.execute(
+                """
+                UPDATE psp_settlement_cursor
+                SET pending_phase = %s, pending_after = NULL
+                WHERE account_id = %s
+                """,
+                (ReadPhase.LINES, account_id),
+            )
+            await _look_now(conn, account_id, now)
+            return Done(Applied())
+        case Unavailable() | OutcomeUnknown() | UndecodableBody():
+            return _retry(result)
+
+
+async def _lines_fetched(
+    conn: Connection,
+    account_id: uuid.UUID,
+    lines_call: LinesCall,
+    result: LinesResult | UndecodableBody,
+    now: datetime,
+) -> Done | RetryLater:
+    match result:
+        case LinesPage(body=body, last_line_id=last_line_id, has_more=has_more):
+            if has_more and last_line_id is None:
+                return _retry(UndecodableBody("more lines promised after none"))
+            await store_inbox(
+                conn,
+                account_id,
+                InboundMode.SETTLEMENT_PAGE,
+                body,
+                lines_call.payout_id,
+                now,
+            )
+            if has_more:
                 await conn.execute(
-                    "UPDATE psp_settlement_cursor SET pending_page = %s"
+                    "UPDATE psp_settlement_cursor SET pending_after = %s"
                     " WHERE account_id = %s",
-                    (next_page, account_id),
+                    (last_line_id, account_id),
                 )
             else:
-                await conn.execute(
-                    """
-                    UPDATE psp_settlement_cursor
-                    SET last_read = %s, pending = NULL, pending_page = NULL
-                    WHERE account_id = %s
-                    """,
-                    (fetch_call.name, account_id),
-                )
-            # More may wait: look again at once, in a delivery of its own.
-            await append_fact(
-                conn, PspSettlementDueV1(psp_account_id=account_id), SCHEDULER, now
-            )
+                await _read_whole(conn, account_id, lines_call.payout_id)
+            await _look_now(conn, account_id, now)
             return Done(Applied())
         case Unavailable() | OutcomeUnknown() | UndecodableBody():
             return _retry(result)

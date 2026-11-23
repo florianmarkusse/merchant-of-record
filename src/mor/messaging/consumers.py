@@ -92,6 +92,8 @@ async def handle(
             return await settlement_store.book_lines(conn, fact, now)
         case ConsumerName.SETTLEMENT_PAYOUT_BOOK:
             return await settlement_store.book_payout(conn, fact, now)
+        case ConsumerName.SETTLEMENT_PAYOUT_RECONCILE:
+            return await settlement_store.reconcile_payout(conn, fact, now)
 
 
 async def prepare(
@@ -145,7 +147,12 @@ async def call(
             | payment_flow.PollCall()
         ):
             return await payment_flow.call(http, environment, effect_call)
-        case settlement_fetch.ListCall() | settlement_fetch.FetchCall():
+        case (
+            settlement_fetch.ListCall()
+            | settlement_fetch.FileCall()
+            | settlement_fetch.PayoutCall()
+            | settlement_fetch.LinesCall()
+        ):
             return await settlement_fetch.call_fetch(http, environment, effect_call)
 
 
@@ -173,5 +180,10 @@ async def complete(
             | payment_flow.PollAnswer()
         ):
             return await payment_flow.complete(conn, fact, answer, now)
-        case settlement_fetch.ListAnswer() | settlement_fetch.FetchAnswer():
+        case (
+            settlement_fetch.ListAnswer()
+            | settlement_fetch.FileAnswer()
+            | settlement_fetch.PayoutAnswer()
+            | settlement_fetch.LinesAnswer()
+        ):
             return await settlement_fetch.complete_fetch(conn, fact, answer, now)

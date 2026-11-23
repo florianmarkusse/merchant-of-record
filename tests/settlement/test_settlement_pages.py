@@ -1,5 +1,6 @@
 """The Settlement staff pages and the sandbox's cut (docs/plan-payments.md
-§7.1): a request in, the page and the rows out. Every merchant, buyer and
+§7.1, docs/plan-settlement-reconciliation.md §4.3): a request in, the page
+and the rows out. Every merchant, buyer and
 address here is made up."""
 
 import asyncio
@@ -52,17 +53,19 @@ def test_the_staff_page_shows_an_exception_and_resolving_records_one_note(
     database_url: str,
 ) -> None:
     async def body(setup: Setup) -> None:
-        await _settled_with(setup, "net_differs")
+        # An adjustment of -5.00 SGD the PSP took: an exception, the payout
+        # still adds up.
+        await _settled_with(setup, "unknown_type")
         account_page = f"http://mor/staff/settlement/{setup.shop.account.id}"
 
         listing = await setup.wired.control.get("http://mor/staff/settlement")
         assert listing.status_code == 200
-        assert "clearing 1.00 SGD" in words(listing.text)
+        assert "clearing 5.00 SGD" in words(listing.text)
 
         page = await setup.wired.control.get(account_page)
         assert page.status_code == 200
         text = words(page.text)
-        assert "net_differs" in text and "Resolve" in text
+        assert "unknown_type" in text and "Resolve" in text
         async with await connect(setup.url) as conn:
             cur = await conn.execute("SELECT id FROM settlement_exception")
             row = await cur.fetchone()
@@ -79,14 +82,14 @@ def test_the_staff_page_shows_an_exception_and_resolving_records_one_note(
         assert empty.status_code == 303
         assert "write what was found" in empty.headers["location"].replace("+", " ")
 
-        for note in ("PSP kept 1.00 SGD; asked for a correction", "a second note"):
+        for note in ("PSP kept 5.00 SGD; asked for a correction", "a second note"):
             sent = await setup.wired.control.post(
                 action, data={"note": note}, headers=SAME_SITE
             )
             assert sent.status_code == 303
         page = await setup.wired.control.get(account_page)
         text = words(page.text)
-        assert "PSP kept 1.00 SGD; asked for a correction" in text
+        assert "PSP kept 5.00 SGD; asked for a correction" in text
         assert "a second note" not in text
         assert (
             await count_rows(
@@ -116,5 +119,23 @@ def test_a_clean_settlement_leaves_nothing_to_resolve(database_url: str) -> None
         assert "No exceptions." in text
         assert "clearing 0.00 SGD" in text
         assert "1 of 1" in text  # lines booked
+
+    asyncio.run(with_setup(database_url, WIRING, body))
+
+
+def test_a_payout_that_does_not_add_up_is_shown_open_not_raised(
+    database_url: str,
+) -> None:
+    async def body(setup: Setup) -> None:
+        await _settled_with(setup, "net_differs")
+        listing = await setup.wired.control.get("http://mor/staff/settlement")
+        assert "clearing 1.00 SGD" in words(listing.text)
+        page = await setup.wired.control.get(
+            f"http://mor/staff/settlement/{setup.shop.account.id}"
+        )
+        text = words(page.text)
+        assert "No exceptions." in text
+        # How long it has been open depends on the clock; the gap does not.
+        assert "open " in text and "off by -1.00 SGD" in text
 
     asyncio.run(with_setup(database_url, WIRING, body))

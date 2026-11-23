@@ -41,23 +41,27 @@ from mor.psp.port import (
     FetchResult,
     FindResult,
     Found,
+    LinesPage,
+    LinesResult,
     LineType,
     NotCapturable,
     Page,
     PaymentRequest,
     PaymentStatus,
+    PayoutObject,
+    PayoutResult,
     ProviderPayment,
     PspAccount,
     PspEvent,
     PspEventKind,
     SettledLine,
-    SettlementBatch,
     SettlementDocument,
+    SettlementFile,
+    SettlementFileResult,
     SettlementList,
     SettlementListResult,
     SettlementMode,
-    SettlementPage,
-    SettlementPageResult,
+    SettlementPayout,
     ThinNotice,
 )
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
@@ -379,97 +383,137 @@ def decode_thin_webhook(body: bytes) -> ThinNotice | UndecodableBody:
     return ThinNotice(thin.reference)
 
 
-# --- settlement (docs/plan-payments.md §7.1) ---------------------------------
+# --- settlement (docs/plan-settlement-reconciliation.md) ----------------------
 
 
 class _Files(msgspec.Struct, frozen=True):
     files: list[str]
 
 
-class _Batches(msgspec.Struct, frozen=True):
-    batches: list[str]
+class _Payouts(msgspec.Struct, frozen=True):
+    payouts: list[str]
 
 
-class _PageBatch(msgspec.Struct, frozen=True):
+class _Payout(msgspec.Struct, frozen=True):
     id: str
+    amount_minor: int
     currency: str
-    net_minor: int
-    paid_out_at: AwareDatetime
+    arrival_date: AwareDatetime
+    reconciliation_status: Literal["in_progress", "completed"]
 
 
-class _PageLine(msgspec.Struct, frozen=True):
+class _Line(msgspec.Struct, frozen=True):
     id: str
     type: str
     payment_id: str
     reference: str
+    currency: str
     gross_minor: int
     fee_minor: int
+    created: AwareDatetime
 
 
-class _BatchPage(msgspec.Struct, frozen=True):
-    batch: _PageBatch
-    lines: list[_PageLine]
-    next_page: int | None
+class _Lines(msgspec.Struct, frozen=True):
+    data: list[_Line]
+    has_more: bool
 
 
-class _NextPage(msgspec.Struct, frozen=True):
-    next_page: int | None
+class _LineId(msgspec.Struct, frozen=True):
+    id: str
+
+
+class _LineIds(msgspec.Struct, frozen=True):
+    """Only what the reader needs from a page: its cursor."""
+
+    data: list[_LineId]
+    has_more: bool
+
+
+class _Readiness(msgspec.Struct, frozen=True):
+    reconciliation_status: Literal["in_progress", "completed"]
+
+
+async def _get(
+    http: httpx2.AsyncClient,
+    account: PspAccount,
+    path: str,
+    params: dict[str, str] | None = None,
+) -> httpx2.Response | Unavailable | OutcomeUnknown | UndecodableBody:
+    """A read: a 5xx is an outcome unknown, any other status but 200 an
+    answer we do not understand."""
+    sent = await _send(http, account, "GET", path, params=params)
+    if not isinstance(sent, httpx2.Response):
+        return sent
+    if sent.status_code >= 500:
+        return OutcomeUnknown(f"status {sent.status_code}")
+    if sent.status_code != 200:
+        return UndecodableBody(f"status {sent.status_code}")
+    return sent
 
 
 async def list_settlements(
     http: httpx2.AsyncClient, account: PspAccount, after: str
 ) -> SettlementListResult | UndecodableBody:
-    """Reports (file) or batches (api) after `after`, oldest first."""
+    """Reports (file) or payouts (api) after `after`, oldest first."""
     match account.settlement_mode:
         case SettlementMode.FILE:
             path = "/settlement-files"
         case SettlementMode.API:
-            path = "/settlements"
-    sent = await _send(http, account, "GET", path, params={"after": after})
+            path = "/payouts"
+    sent = await _get(http, account, path, {"after": after})
     if not isinstance(sent, httpx2.Response):
         return sent
-    if sent.status_code >= 500:
-        return OutcomeUnknown(f"status {sent.status_code}")
-    if sent.status_code != 200:
-        return UndecodableBody(f"status {sent.status_code}")
     try:
         match account.settlement_mode:
             case SettlementMode.FILE:
                 names = msgspec.json.decode(sent.content, type=_Files).files
             case SettlementMode.API:
-                names = msgspec.json.decode(sent.content, type=_Batches).batches
+                names = msgspec.json.decode(sent.content, type=_Payouts).payouts
     except msgspec.DecodeError as error:
         return UndecodableBody(str(error))
     return SettlementList(tuple(names))
 
 
-async def fetch_settlement(
-    http: httpx2.AsyncClient, account: PspAccount, name: str, page: int
-) -> SettlementPageResult | UndecodableBody:
-    """A report whole (file), or one page of a batch (api). The bytes are
-    kept raw; only the next page's number is read here."""
-    match account.settlement_mode:
-        case SettlementMode.FILE:
-            sent = await _send(http, account, "GET", f"/settlement-files/{name}")
-        case SettlementMode.API:
-            sent = await _send(
-                http, account, "GET", f"/settlements/{name}", params={"page": str(page)}
-            )
+async def fetch_settlement_file(
+    http: httpx2.AsyncClient, account: PspAccount, name: str
+) -> SettlementFileResult | UndecodableBody:
+    sent = await _get(http, account, f"/settlement-files/{name}")
     if not isinstance(sent, httpx2.Response):
         return sent
-    if sent.status_code >= 500:
-        return OutcomeUnknown(f"status {sent.status_code}")
-    if sent.status_code != 200:
-        return UndecodableBody(f"status {sent.status_code}")
-    match account.settlement_mode:
-        case SettlementMode.FILE:
-            return SettlementPage(sent.content, None)
-        case SettlementMode.API:
-            try:
-                next_page = msgspec.json.decode(sent.content, type=_NextPage)
-            except msgspec.DecodeError as error:
-                return UndecodableBody(str(error))
-            return SettlementPage(sent.content, next_page.next_page)
+    return SettlementFile(sent.content)
+
+
+async def fetch_payout(
+    http: httpx2.AsyncClient, account: PspAccount, payout_id: str
+) -> PayoutResult | UndecodableBody:
+    """The payout object, raw; only its readiness is read here."""
+    sent = await _get(http, account, f"/payouts/{payout_id}")
+    if not isinstance(sent, httpx2.Response):
+        return sent
+    try:
+        readiness = msgspec.json.decode(sent.content, type=_Readiness)
+    except msgspec.DecodeError as error:
+        return UndecodableBody(str(error))
+    return PayoutObject(sent.content, readiness.reconciliation_status == "completed")
+
+
+async def fetch_payout_lines(
+    http: httpx2.AsyncClient, account: PspAccount, payout_id: str, after: str | None
+) -> LinesResult | UndecodableBody:
+    """A page of the payout's lines after the cursor, raw; only the cursor
+    is read here."""
+    params: dict[str, str] = {}
+    if after is not None:
+        params["starting_after"] = after
+    sent = await _get(http, account, f"/payouts/{payout_id}/lines", params)
+    if not isinstance(sent, httpx2.Response):
+        return sent
+    try:
+        page = msgspec.json.decode(sent.content, type=_LineIds)
+    except msgspec.DecodeError as error:
+        return UndecodableBody(str(error))
+    last = page.data[-1].id if page.data else None
+    return LinesPage(sent.content, last, page.has_more)
 
 
 def _int(text: str) -> int | UndecodableBody:
@@ -479,12 +523,34 @@ def _int(text: str) -> int | UndecodableBody:
         return UndecodableBody(f"not a whole number: {text!r}")
 
 
-def decode_settlement_file(body: bytes) -> SettlementDocument | UndecodableBody:
-    """A report: a header row, one `batch` row, then one `line` row each.
+def _line_type(vendor_type: str) -> LineType:
+    match vendor_type:
+        case "capture":
+            return LineType.CAPTURE
+        case "balance_transfer":
+            return LineType.BALANCE_TRANSFER
+        case _:
+            return LineType.UNKNOWN
 
-    record,id,type,payment_id,reference,currency,gross_minor,fee_minor,
-        net_minor,paid_out_at
-    """
+
+CSV_HEADER = [
+    "record",
+    "batch",
+    "id",
+    "type",
+    "payment_id",
+    "reference",
+    "currency",
+    "gross_minor",
+    "fee_minor",
+    "net_minor",
+    "date",
+]
+
+
+def decode_settlement_file(body: bytes) -> SettlementDocument | UndecodableBody:
+    """A report, as Adyen's: a header row, one `line` row each, and one
+    `merchant_payout` row, every row naming the batch."""
     try:
         text = body.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -493,105 +559,110 @@ def decode_settlement_file(body: bytes) -> SettlementDocument | UndecodableBody:
         rows = list(csv.reader(io.StringIO(text)))
     except csv.Error as error:
         return UndecodableBody(str(error))
-    header = [
-        "record",
-        "id",
-        "type",
-        "payment_id",
-        "reference",
-        "currency",
-        "gross_minor",
-        "fee_minor",
-        "net_minor",
-        "paid_out_at",
-    ]
-    if not rows or rows[0] != header:
+    if not rows or rows[0] != CSV_HEADER:
         return UndecodableBody("no header row")
-    batch: SettlementBatch | None = None
+    payout: SettlementPayout | None = None
+    batch_id: str | None = None
     lines: list[SettledLine] = []
     for row in rows[1:]:
-        if len(row) != len(header):
+        if len(row) != len(CSV_HEADER):
             return UndecodableBody(f"a row of {len(row)} fields")
-        record, row_id, line_type, payment_id, reference, code = row[:6]
+        record, batch, row_id, vendor_type, payment_id, reference, code = row[:7]
+        if batch_id is None:
+            batch_id = batch
+        elif batch != batch_id:
+            return UndecodableBody(f"rows of batches {batch_id!r} and {batch!r}")
         currency = _currency(code)
         if isinstance(currency, UndecodableBody):
             return currency
-        if record == "batch":
-            if batch is not None or lines:
-                return UndecodableBody("the batch row is not the first")
-            net = _int(row[8])
-            if isinstance(net, UndecodableBody):
-                return net
-            paid_out_at = parse_instant(row[9])
-            if paid_out_at is None:
-                return UndecodableBody(
-                    f"paid_out_at {row[9]!r} is no moment with an offset"
-                )
-            batch = SettlementBatch(
-                vendor_batch_id=row_id,
-                currency=currency,
-                net=exact_amount(net, currency),
-                paid_out_at=paid_out_at,
-            )
-        elif record == "line":
-            if batch is None:
-                return UndecodableBody("a line before the batch row")
-            gross = _int(row[6])
-            if isinstance(gross, UndecodableBody):
-                return gross
-            fee = _int(row[7])
-            if isinstance(fee, UndecodableBody):
-                return fee
-            lines.append(
-                SettledLine(
-                    vendor_line_id=row_id,
-                    line_type=LineType.CAPTURE
-                    if line_type == "capture"
-                    else LineType.UNKNOWN,
-                    vendor_type=line_type,
-                    provider_payment_id=payment_id,
-                    reference=reference,
+        moment = parse_instant(row[10])
+        if moment is None:
+            return UndecodableBody(f"date {row[10]!r} is no moment with an offset")
+        match record:
+            case "merchant_payout":
+                if payout is not None:
+                    return UndecodableBody("two payout rows")
+                net = _int(row[9])
+                if isinstance(net, UndecodableBody):
+                    return net
+                payout = SettlementPayout(
+                    vendor_payout_id=batch,
                     currency=currency,
-                    gross=exact_amount(gross, currency),
-                    fee=exact_amount(fee, currency),
+                    net=exact_amount(net, currency),
+                    paid_out_at=moment,
                 )
-            )
-        else:
-            return UndecodableBody(f"record {record!r}")
-    if batch is None:
-        return UndecodableBody("no batch row")
-    return SettlementDocument(batch, tuple(lines), True)
+            case "line":
+                gross = _int(row[7])
+                if isinstance(gross, UndecodableBody):
+                    return gross
+                fee = _int(row[8])
+                if isinstance(fee, UndecodableBody):
+                    return fee
+                lines.append(
+                    SettledLine(
+                        vendor_line_id=row_id,
+                        vendor_payout_id=batch,
+                        line_type=_line_type(vendor_type),
+                        vendor_type=vendor_type,
+                        provider_payment_id=payment_id,
+                        reference=reference,
+                        currency=currency,
+                        gross=exact_amount(gross, currency),
+                        fee=exact_amount(fee, currency),
+                        settled_at=moment,
+                    )
+                )
+            case _:
+                return UndecodableBody(f"record {record!r}")
+    if payout is None:
+        return UndecodableBody("no payout row")
+    return SettlementDocument(payout, tuple(lines))
 
 
-def decode_settlement_page(body: bytes) -> SettlementDocument | UndecodableBody:
-    """One page of a batch; its lines are in the batch's currency."""
+def decode_payout(body: bytes) -> SettlementDocument | UndecodableBody:
+    """A payout object, as Stripe's: the payout alone."""
     try:
-        page = msgspec.json.decode(body, type=_BatchPage)
+        raw = msgspec.json.decode(body, type=_Payout)
     except msgspec.DecodeError as error:
         return UndecodableBody(str(error))
-    currency = _currency(page.batch.currency)
+    currency = _currency(raw.currency)
     if isinstance(currency, UndecodableBody):
         return currency
-    batch = SettlementBatch(
-        vendor_batch_id=page.batch.id,
+    payout = SettlementPayout(
+        vendor_payout_id=raw.id,
         currency=currency,
-        net=exact_amount(page.batch.net_minor, currency),
-        paid_out_at=to_utc(page.batch.paid_out_at),
+        net=exact_amount(raw.amount_minor, currency),
+        paid_out_at=to_utc(raw.arrival_date),
     )
+    return SettlementDocument(payout, ())
+
+
+def decode_payout_lines(
+    body: bytes, vendor_payout_id: str
+) -> SettlementDocument | UndecodableBody:
+    """A page of a payout's lines. The page does not name its payout: the
+    request did, and the caller says which it was."""
+    try:
+        page = msgspec.json.decode(body, type=_Lines)
+    except msgspec.DecodeError as error:
+        return UndecodableBody(str(error))
     lines: list[SettledLine] = []
-    for raw in page.lines:
+    for raw in page.data:
+        currency = _currency(raw.currency)
+        if isinstance(currency, UndecodableBody):
+            return currency
         lines.append(
             SettledLine(
                 vendor_line_id=raw.id,
-                line_type=LineType.CAPTURE
-                if raw.type == "capture"
-                else LineType.UNKNOWN,
+                vendor_payout_id=vendor_payout_id,
+                line_type=_line_type(raw.type),
                 vendor_type=raw.type,
                 provider_payment_id=raw.payment_id,
                 reference=raw.reference,
                 currency=currency,
                 gross=exact_amount(raw.gross_minor, currency),
                 fee=exact_amount(raw.fee_minor, currency),
+                settled_at=to_utc(raw.created),
             )
         )
-    return SettlementDocument(batch, tuple(lines), page.next_page is None)
+    return SettlementDocument(None, tuple(lines))

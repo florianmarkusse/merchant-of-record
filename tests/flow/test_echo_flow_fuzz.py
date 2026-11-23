@@ -235,13 +235,13 @@ class EchoFlow(RuleBasedStateMachine):
         async def step() -> None:
             crashing = await connect(TEST_URL, autocommit=True)
             try:
-                assert await try_lock_aggregate(crashing, candidate)
                 match consumer_kind(candidate.consumer):
                     case Local(consumer=local):
                         # One transaction: run it, die before COMMIT.
                         await crashing.execute("BEGIN")
                         await handle_delivery(crashing, candidate, local, ENV, self.now)
                     case Effect(consumer=effect):
+                        assert await try_lock_aggregate(crashing, candidate)
                         async with crashing.transaction():
                             prepared = await prepare_delivery(
                                 crashing, candidate, effect, self.now

@@ -19,7 +19,6 @@ from mor.messaging.routing import ConsumerName
 from mor.messaging.worker import (
     find_candidates,
     handle_delivery,
-    try_lock_aggregate,
 )
 from mor.orders.store import order_by_session
 from mor.web.staff_layout import money_text
@@ -368,7 +367,6 @@ def test_a_crash_while_issuing_gives_the_invoice_number_back(
                 for found in await find_candidates(crashing, setup.clock[0], 50)
                 if found.consumer == ConsumerName.INVOICE_ISSUE
             ]
-            assert await try_lock_aggregate(crashing, candidate)
             try:
                 async with crashing.transaction():
                     await handle_delivery(

@@ -61,7 +61,7 @@ async def psp_webhook(request: Request, database_url: str, now: datetime) -> Res
         if not psp_registry.verify_webhook(account, body, signature):
             return Response(status_code=401)
         await store_psp_inbox(
-            conn, account_id, InboundMode(account.status_mode.value), body, now
+            conn, account_id, InboundMode(account.status_mode.value), body, None, now
         )
         await conn.commit()
     # Stored now or before: either way the PSP may stop sending it.

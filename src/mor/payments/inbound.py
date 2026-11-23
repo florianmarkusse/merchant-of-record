@@ -41,7 +41,6 @@ from mor.psp import registry
 from mor.psp.accounts import read_psp_account
 from mor.psp.port import (
     InboundMode,
-    SettlementMode,
 )
 from mor.settlement.store import record_document
 from mor.vendor_failures import UndecodableBody
@@ -78,19 +77,32 @@ async def store_inbox(
     account_id: uuid.UUID,
     mode: InboundMode,
     body: bytes,
+    request_ref: str | None,
     now: datetime,
 ) -> Stored | AlreadyStored:
     """Keep the raw bytes, nothing decoded, with the fact that starts the
-    decoding. Insert, and a conflict means stored already. Never commits."""
+    decoding. `request_ref` is what we asked for, when the bytes do not say
+    (the payout a page of lines belongs to); None for what the PSP sends
+    on its own. Insert, and a conflict means stored already. Never
+    commits."""
     inbox_id = uuid.uuid7()
     cur = await conn.execute(
         """
-        INSERT INTO psp_inbox (id, account_id, mode, body_sha256, body, received_at)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO psp_inbox
+          (id, account_id, mode, body_sha256, body, request_ref, received_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (account_id, body_sha256) DO NOTHING
         RETURNING id
         """,
-        (inbox_id, account_id, mode.value, hashlib.sha256(body).hexdigest(), body, now),
+        (
+            inbox_id,
+            account_id,
+            mode.value,
+            hashlib.sha256(body).hexdigest(),
+            body,
+            request_ref,
+            now,
+        ),
     )
     if await cur.fetchone() is None:
         return AlreadyStored()
@@ -107,6 +119,7 @@ async def store_inbox(
 class _InboxRow:
     mode: InboundMode
     body: bytes
+    request_ref: str | None
 
 
 async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
@@ -119,7 +132,9 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
         case _:
             raise WrongFact(f"psp_inbox_decode got {fact!r}")
     async with conn.cursor(row_factory=class_row(_InboxRow)) as cur:
-        await cur.execute("SELECT mode, body FROM psp_inbox WHERE id = %s", (inbox_id,))
+        await cur.execute(
+            "SELECT mode, body, request_ref FROM psp_inbox WHERE id = %s", (inbox_id,)
+        )
         stored = await cur.fetchone()
     assert stored is not None, f"no inbox row {inbox_id}"
     mode = stored.mode
@@ -127,20 +142,22 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
     account = await read_psp_account(conn, account_id)
     assert account is not None, f"no psp account {account_id}"
 
-    settlement: SettlementMode | None = None
     match mode:
-        case InboundMode.SETTLEMENT_FILE:
-            settlement = SettlementMode.FILE
-        case InboundMode.SETTLEMENT_PAGE:
-            settlement = SettlementMode.API
+        case (
+            InboundMode.SETTLEMENT_FILE
+            | InboundMode.SETTLEMENT_PAYOUT
+            | InboundMode.SETTLEMENT_PAGE
+        ):
+            # A report, a payout or a page of its lines
+            # (docs/plan-settlement-reconciliation.md §4.5).
+            failed = await record_document(
+                conn, account, inbox_id, mode, body, stored.request_ref, now
+            )
+            if failed is not None:
+                raise UndecodableInbox(f"inbox {inbox_id}: {failed.detail}")
+            return Applied()
         case InboundMode.PUSH_FAT | InboundMode.PUSH_THIN | InboundMode.POLL:
             pass
-    if settlement is not None:
-        # A settlement report or page (docs/plan-payments.md §7.1).
-        failed = await record_document(conn, account, inbox_id, settlement, body, now)
-        if failed is not None:
-            raise UndecodableInbox(f"inbox {inbox_id}: {failed.detail}")
-        return Applied()
 
     if mode == InboundMode.PUSH_THIN:
         notice = registry.decode_thin_webhook(account, body)

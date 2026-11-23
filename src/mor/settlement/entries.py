@@ -1,22 +1,23 @@
 """Settlement's journal entries and the payout's check (docs/plan-payments.md
-§7.1). Pure.
+§7.1, docs/plan-settlement-reconciliation.md §4). Pure.
 
     a settled line, in its currency:
       Dr psp_fee_collected               the estimate the capture booked
       Cr psp_clearing:{account}          the fee the PSP kept, rounded
       Dr/Cr psp_fee_variance:{account}   the gap, ours
-    a payout:
+    a payout, as reported, whatever of its lines have arrived:
       Dr payout_in_transit:{account}     the net the PSP says it paid
-      Cr psp_clearing:{account}          its lines' gross less their fees
-      Dr/Cr rounding:{account}           the PSP's rounding of the net
+      Cr psp_clearing:{account}          the same
+    a change to a payout's rounding, once its lines add up (or no longer):
+      Dr/Cr psp_clearing:{account}       the PSP's rounding of the net
+      Cr/Dr rounding:{account}           the same
 
 A PSP may count finer than we do (IDR at 2 decimals): a fee is rounded
 here, half-even, the one place that rounds it (plan-psp-integration §4),
 and its exact value is kept on the line. The payout's check is exact,
 never a tolerance: the reported net must be the lines' exact net rounded
-one way or the other to our units. Only then is the difference a
-`rounding` line; otherwise the net is booked as reported and the gap
-stays in `psp_clearing`, named by an exception.
+one way or the other to our units. Only then is the difference rounding;
+otherwise the gap stays in `psp_clearing` and the payout stays open.
 """
 
 import math
@@ -30,7 +31,6 @@ from mor.audit import Actor
 from mor.ledger.account import Account, AccountKind
 from mor.ledger.entry import JournalEntry, Line, build_entry, credit, debit
 from mor.money.amount import Money
-from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
 
 
@@ -45,8 +45,13 @@ def line_key(account_id: uuid.UUID, vendor_line_id: str) -> str:
     return f"settlement:{account_id}:{vendor_line_id}"
 
 
-def payout_key(account_id: uuid.UUID, vendor_batch_id: str) -> str:
-    return f"payout:{account_id}:{vendor_batch_id}"
+def payout_key(account_id: uuid.UUID, vendor_payout_id: str) -> str:
+    return f"payout:{account_id}:{vendor_payout_id}"
+
+
+def rounding_key(account_id: uuid.UUID, vendor_payout_id: str, number: int) -> str:
+    """The `number`th change to a payout's rounding, counted from 1."""
+    return f"payout-rounding:{account_id}:{vendor_payout_id}:{number}"
 
 
 def _post(lines: list[Line], account: Account, amount: Money) -> None:
@@ -133,39 +138,58 @@ def check_net(reported: Fraction, lines: Sequence[LineAmounts]) -> AddedUp | Net
 
 def payout_entry(
     account_id: uuid.UUID,
-    vendor_batch_id: str,
-    currency: Currency,
-    net: int,
-    check: AddedUp | NetDiffers,
+    vendor_payout_id: str,
+    net: Money,
     effective_at: datetime,
     actor: Actor,
     now: datetime,
 ) -> JournalEntry | None:
-    """The net leaves `psp_clearing` for the way to our bank. With a net
-    that adds up, its rounding is booked beside it; with one that does not,
-    the net is booked as reported. None for a batch that paid nothing."""
-    clearing = Account(AccountKind.PSP_CLEARING, str(account_id))
+    """The net leaves `psp_clearing` for the way to our bank, as reported.
+    None for a payout of nothing."""
     lines: list[Line] = []
+    _post(lines, Account(AccountKind.PAYOUT_IN_TRANSIT, str(account_id)), net)
     _post(
         lines,
-        Account(AccountKind.PAYOUT_IN_TRANSIT, str(account_id)),
-        Money(net, currency),
+        Account(AccountKind.PSP_CLEARING, str(account_id)),
+        Money(-net.amount_minor, net.currency),
     )
-    match check:
-        case AddedUp(rounding=rounding):
-            _post(lines, clearing, Money(-(net - rounding), currency))
-            _post(
-                lines,
-                Account(AccountKind.ROUNDING, str(account_id)),
-                Money(-rounding, currency),
-            )
-        case NetDiffers():
-            _post(lines, clearing, Money(-net, currency))
     if not lines:
         return None
     return build_entry(
-        payout_key(account_id, vendor_batch_id),
-        f"payout of settlement batch {vendor_batch_id}",
+        payout_key(account_id, vendor_payout_id),
+        f"payout {vendor_payout_id}",
+        effective_at,
+        actor,
+        lines,
+        now,
+    )
+
+
+def rounding_entry(
+    account_id: uuid.UUID,
+    vendor_payout_id: str,
+    number: int,
+    change: Money,
+    effective_at: datetime,
+    actor: Actor,
+    now: datetime,
+) -> JournalEntry | None:
+    """Move a payout's booked rounding by `change` (reported net less what
+    its lines left in `psp_clearing`): a positive one is paid out beyond
+    the lines, so `psp_clearing` gets it back from `rounding`. None for no
+    change."""
+    lines: list[Line] = []
+    _post(lines, Account(AccountKind.PSP_CLEARING, str(account_id)), change)
+    _post(
+        lines,
+        Account(AccountKind.ROUNDING, str(account_id)),
+        Money(-change.amount_minor, change.currency),
+    )
+    if not lines:
+        return None
+    return build_entry(
+        rounding_key(account_id, vendor_payout_id, number),
+        f"rounding of payout {vendor_payout_id}",
         effective_at,
         actor,
         lines,

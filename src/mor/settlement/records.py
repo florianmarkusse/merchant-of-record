@@ -11,6 +11,7 @@ class LineState(StrEnum):
     WAITING = "waiting"  # its order does not exist yet
     BOOKED = "booked"
     EXCEPTION = "exception"
+    COUNTED = "counted"  # a balance transfer: books nothing, counts
 
 
 class ExceptionKind(StrEnum):
@@ -23,4 +24,21 @@ class ExceptionKind(StrEnum):
     CURRENCY_DIFFERS = "currency_differs"
     SETTLED_TWICE = "settled_twice"
     UNKNOWN_TYPE = "unknown_type"
-    NET_DIFFERS = "net_differs"
+
+
+class Reconciliation(StrEnum):
+    """Matches `settlement_reconciliation`: does a payout's net add up to the
+    lines that have arrived for it? Shown, not raised (answer 1 of
+    23-Nov-2026)."""
+
+    OPEN = "open"
+    BALANCED = "balanced"
+
+
+class ReadPhase(StrEnum):
+    """Matches `psp_settlement_read_phase`: in `api` mode, whether the payout
+    being read is waiting for its object to say its lines are listable, or
+    has its lines being read."""
+
+    PAYOUT = "payout"
+    LINES = "lines"

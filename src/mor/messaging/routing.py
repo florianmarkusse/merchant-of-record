@@ -39,6 +39,7 @@ class ConsumerName(StrEnum):
     PSP_SETTLEMENT_FETCH = "psp_settlement_fetch"
     SETTLEMENT_LINE_BOOK = "settlement_line_book"
     SETTLEMENT_PAYOUT_BOOK = "settlement_payout_book"
+    SETTLEMENT_PAYOUT_RECONCILE = "settlement_payout_reconcile"
 
 
 # The two kinds, as types: the worker hands `handle` only a local consumer
@@ -60,6 +61,7 @@ type LocalConsumer = Literal[
     ConsumerName.SESSION_PAYMENT_ENDED,
     ConsumerName.SETTLEMENT_LINE_BOOK,
     ConsumerName.SETTLEMENT_PAYOUT_BOOK,
+    ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
 ]
 type EffectConsumer = Literal[
     ConsumerName.ECHO_SEND,
@@ -138,8 +140,10 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.PSP_PAYMENT_CANCEL,)
         case MessageType.PAYMENT_POLL_DUE:
             return (ConsumerName.PSP_PAYMENT_POLL,)
-        # Its own consumer: deliveries run in order per consumer and
-        # aggregate, and a poll scheduled for later would hold it back.
+        # Its own consumer from when deliveries ran in order and a poll
+        # scheduled for later held it back. Folding it into
+        # psp_payment_poll would retire a `consumer_name` value for no
+        # gain, so it stays.
         case MessageType.PAYMENT_EVENTS_WANTED:
             return (ConsumerName.PSP_PAYMENT_FETCH,)
         case MessageType.PSP_INBOX_STORED:
@@ -166,10 +170,18 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.SETTLEMENT_LINE_BOOK,)
         case MessageType.PSP_SETTLEMENT_DUE:
             return (ConsumerName.PSP_SETTLEMENT_FETCH,)
+        # A line and its payout arrive in any order; each runs the payout's
+        # reconciliation (docs/plan-settlement-reconciliation.md §4.2).
         case MessageType.SETTLEMENT_LINE_RECEIVED:
-            return (ConsumerName.SETTLEMENT_LINE_BOOK,)
-        case MessageType.SETTLEMENT_BATCH_RECEIVED:
-            return (ConsumerName.SETTLEMENT_PAYOUT_BOOK,)
+            return (
+                ConsumerName.SETTLEMENT_LINE_BOOK,
+                ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
+            )
+        case MessageType.SETTLEMENT_PAYOUT_REPORTED:
+            return (
+                ConsumerName.SETTLEMENT_PAYOUT_BOOK,
+                ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
+            )
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
@@ -212,6 +224,7 @@ def consumer_kind(consumer: ConsumerName) -> Local | Effect:
             | ConsumerName.SESSION_PAYMENT_ENDED
             | ConsumerName.SETTLEMENT_LINE_BOOK
             | ConsumerName.SETTLEMENT_PAYOUT_BOOK
+            | ConsumerName.SETTLEMENT_PAYOUT_RECONCILE
         ):
             return Local(consumer)
         case (

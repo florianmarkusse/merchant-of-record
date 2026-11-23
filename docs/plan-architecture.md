@@ -141,7 +141,7 @@ Rules:
 - **Handlers never wait on a vendor.** A handler takes the row lock,
   changes state, writes facts, commits. The advisory lock is taken only
   by workers, so a buyer cancelling is never blocked by a courier call in
-  flight; the cancel is recorded and handled next, in order.
+  flight; the cancel is recorded and handled once the call is done.
 - **The ledger needs no lock to append** (the idempotency key is unique),
   but a decision that depends on a balance takes the merchant lock, so two
   payouts cannot both spend the same money.
@@ -182,16 +182,19 @@ Tables (detailed in `plan-messaging.md` §2):
 - `inbox (consumer, message_id)`: unchanged. With a broker it becomes the
   only dedupe; today `handled_at` and it are written together.
 
-The worker loop:
+The worker loop (amended 23-Nov-2026: no ordering, and the advisory lock
+for effects only; `plan-messaging-rework.md` §2 and §3):
 
 1. Pick deliveries that are unhandled and whose `not_before` has passed,
-   oldest first.
-2. Try the advisory lock for the delivery's aggregate
+   oldest first. Consumers take facts in any order.
+2. An effect consumer: try the advisory lock for the delivery's aggregate
    (`pg_try_advisory_lock`, which returns at once). Not acquired: another
-   worker has that aggregate; take the next one. No waiting, no lease.
-3. Under the lock, re-read the oldest unhandled delivery for that
-   aggregate and consumer (this gives ordering per aggregate) and run it.
-4. Release the lock.
+   worker has that aggregate mid-call; take the next one. No waiting, no
+   lease. A local consumer takes no advisory lock: it locks the rows it
+   changes.
+3. Lock the delivery row (`FOR UPDATE SKIP LOCKED`: a row another worker
+   holds is skipped), check it is still open and due, and run it.
+4. Release the advisory lock, if taken.
 
 Two kinds of consumer, told apart by a closed type and matched
 exhaustively:
@@ -889,7 +892,7 @@ Data-oriented records and plain functions (§2, §6); closed sets with
 `assert_never` (§5, §6, §8); errors as values from every port (§6);
 explicit over clever: registry by `match`, no injection, no reflection
 (§6); transactional outbox, idempotent consumers, facts in the past tense,
-ordering per aggregate, state machines that commit before the next
+facts taken in any order, state machines that commit before the next
 message (§5); a table per thing with enum types and unique keys (§7);
 money as minor units with currency, exact FX, named rounding, booked
 remainders, append-only double-entry ledger (§9); tax rules per
@@ -996,6 +999,7 @@ far it is:
 | 5. Payments, order, invoice, settlement | `plan-payments.md` |
 | Fuzzing depth (amends §10) | `plan-fuzz-reach.md` |
 | Messaging rework (open, from a code review) | `plan-messaging-rework.md` |
+| Settlement as vendors send it (amends 5c-1) | `plan-settlement-reconciliation.md` |
 
 Next: 5c-2, the bank statement import that moves a PSP payout from
 `payout_in_transit` to `bank`, to be designed (`plan-payments.md` §7.1);

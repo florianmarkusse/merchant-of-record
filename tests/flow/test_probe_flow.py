@@ -2,8 +2,8 @@
 machine against mor_test.
 
 Hypothesis picks the next action: start a probe, run a delivery, crash in
-the middle of one (the connection dies before COMMIT), crash right after
-taking the aggregate's lock, redeliver a handled message, repeat a fact as
+the middle of one (the connection dies before COMMIT), crash while
+holding a delivery's row lock, redeliver a handled message, repeat a fact as
 a retrying producer would, move the clock. After every action the database
 must be in a state the model allows; after draining, every probe is
 finished and every effect happened exactly once.
@@ -40,7 +40,6 @@ from mor.messaging.worker import (
     find_candidates,
     handle_delivery,
     run_one,
-    try_lock_aggregate,
 )
 from mor.probe.flow import start_probe
 from mor.probe.records import ProbeState
@@ -114,7 +113,6 @@ class ProbeFlow(RuleBasedStateMachine):
 
         async def step() -> None:
             crashing = await connect(TEST_URL, autocommit=True)
-            assert await try_lock_aggregate(crashing, candidate)
             await crashing.execute("BEGIN")
             await handle_delivery(
                 crashing, candidate, local_consumer(candidate), ENV, self.now
@@ -124,7 +122,7 @@ class ProbeFlow(RuleBasedStateMachine):
         self.run(step())
 
     @rule(data=st.data())
-    def crash_holding_the_lock(self, data: st.DataObject) -> None:
+    def crash_holding_the_delivery(self, data: st.DataObject) -> None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return
@@ -132,7 +130,12 @@ class ProbeFlow(RuleBasedStateMachine):
 
         async def step() -> None:
             crashing = await connect(TEST_URL, autocommit=True)
-            assert await try_lock_aggregate(crashing, candidate)
+            await crashing.execute("BEGIN")
+            await crashing.execute(
+                "SELECT 1 FROM outbox_delivery"
+                " WHERE message_id = %s AND consumer = %s FOR UPDATE",
+                (candidate.message_id, candidate.consumer),
+            )
             await crash(crashing)
 
         self.run(step())

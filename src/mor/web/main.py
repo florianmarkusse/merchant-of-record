@@ -128,7 +128,7 @@ def make_app(
         return await staff_settlement.accounts_page(url)
 
     async def staff_settlement_account(request: Request) -> Response:
-        return await staff_settlement.account_page(request, url)
+        return await staff_settlement.account_page(request, url, clock())
 
     async def staff_settlement_resolve(request: Request) -> Response:
         return await staff_settlement.resolve(request, url, clock())

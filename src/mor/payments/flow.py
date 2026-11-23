@@ -849,7 +849,7 @@ async def _complete_poll(
     match result:
         case Page(body=body):
             # Stored raw and decoded on the webhook's path.
-            await store_inbox(conn, account.id, InboundMode.POLL, body, now)
+            await store_inbox(conn, account.id, InboundMode.POLL, body, None, now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"poll: {detail}")
     match fact:

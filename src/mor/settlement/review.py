@@ -1,6 +1,7 @@
-"""What a person reviews of settlement (docs/plan-payments.md §7.1): per
-PSP account its health figures, its batches and its exceptions, and the
-note a person writes on resolving one. A note books nothing (question 10
+"""What a person reviews of settlement (docs/plan-payments.md §7.1,
+docs/plan-settlement-reconciliation.md §4.3): per PSP account its health
+figures, its payouts with whether each adds up yet, its exceptions, and
+the note a person writes on resolving one. A note books nothing (question 10
 of 20-Nov-2026): a correcting entry is made by hand.
 
 Persistence functions take the connection first and never commit.
@@ -9,6 +10,7 @@ Persistence functions take the connection first and never commit.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from fractions import Fraction
 
 from psycopg.rows import class_row
 
@@ -16,7 +18,7 @@ from mor.audit import Actor
 from mor.db.connect import Connection
 from mor.money.currency import Currency
 from mor.psp.port import SettlementMode
-from mor.settlement.records import ExceptionKind
+from mor.settlement.records import ExceptionKind, Reconciliation
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ class AccountSummary:
     last_read: str | None
     balances: tuple[Balance, ...]
     open_exceptions: int
+    open_payouts: int
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,7 @@ class _AccountRow:
     settlement_mode: SettlementMode
     last_read: str | None
     open_exceptions: int
+    open_payouts: int
 
 
 async def _balances(conn: Connection, account_id: uuid.UUID) -> tuple[Balance, ...]:
@@ -78,7 +82,10 @@ async def account_summaries(conn: Connection) -> list[AccountSummary]:
                    (SELECT count(*) FROM settlement_exception x
                     WHERE x.account_id = a.id AND NOT EXISTS (
                       SELECT 1 FROM settlement_exception_resolved r
-                      WHERE r.exception_id = x.id)) AS open_exceptions
+                      WHERE r.exception_id = x.id)) AS open_exceptions,
+                   (SELECT count(*) FROM settlement_payout p
+                    WHERE p.account_id = a.id
+                      AND p.reconciliation = 'open') AS open_payouts
             FROM psp_account a
             LEFT JOIN psp_settlement_cursor c ON c.account_id = a.id
             ORDER BY a.name
@@ -95,6 +102,7 @@ async def account_summaries(conn: Connection) -> list[AccountSummary]:
                 last_read=row.last_read,
                 balances=await _balances(conn, row.id),
                 open_exceptions=row.open_exceptions,
+                open_payouts=row.open_payouts,
             )
         )
     return found
@@ -110,31 +118,50 @@ async def account_summary(
 
 
 @dataclass(frozen=True)
-class BatchRow:
-    vendor_batch_id: str
+class PayoutRow:
+    """A payout and whether its lines add up yet. `difference` is its net
+    less the exact sum of its lines arrived so far, in minor units; open
+    since it was stored."""
+
+    vendor_payout_id: str
     currency: Currency
     net_minor: int
     paid_out_at: datetime
+    recorded_at: datetime
     booked_at: datetime | None
+    reconciliation: Reconciliation
+    difference_numerator: int
+    difference_denominator: int
     lines: int
     booked_lines: int
 
+    @property
+    def difference(self) -> Fraction:
+        return Fraction(self.difference_numerator, self.difference_denominator)
 
-async def batches_of(
+
+async def payouts_of(
     conn: Connection, account_id: uuid.UUID, limit: int
-) -> list[BatchRow]:
-    """The newest first."""
-    async with conn.cursor(row_factory=class_row(BatchRow)) as cur:
+) -> list[PayoutRow]:
+    """Open ones first, the longest open first; then the newest."""
+    async with conn.cursor(row_factory=class_row(PayoutRow)) as cur:
         await cur.execute(
             """
-            SELECT b.vendor_batch_id, b.currency, b.net_minor,
-                   b.paid_out_at, b.booked_at,
+            SELECT p.vendor_payout_id, p.currency, p.net_minor, p.paid_out_at,
+                   p.recorded_at, p.booked_at, p.reconciliation,
+                   p.difference_numerator, p.difference_denominator,
                    (SELECT count(*) FROM settlement_line l
-                    WHERE l.batch_id = b.id) AS lines,
+                    WHERE l.account_id = p.account_id
+                      AND l.vendor_payout_id = p.vendor_payout_id) AS lines,
                    (SELECT count(*) FROM settlement_line l
-                    WHERE l.batch_id = b.id AND l.state = 'booked') AS booked_lines
-            FROM settlement_batch b WHERE b.account_id = %s
-            ORDER BY b.recorded_at DESC, b.id DESC LIMIT %s
+                    WHERE l.account_id = p.account_id
+                      AND l.vendor_payout_id = p.vendor_payout_id
+                      AND l.state = 'booked') AS booked_lines
+            FROM settlement_payout p WHERE p.account_id = %s
+            ORDER BY (p.reconciliation = 'open') DESC,
+                     CASE WHEN p.reconciliation = 'open' THEN p.recorded_at END,
+                     p.recorded_at DESC, p.id DESC
+            LIMIT %s
             """,
             (account_id, limit),
         )
@@ -147,7 +174,7 @@ class ExceptionRow:
     kind: ExceptionKind
     detail: str
     created_at: datetime
-    vendor_ref: str  # the PSP's line id, or its batch id
+    vendor_ref: str  # the PSP's line id
     note: str | None
     resolved_by: str | None
     resolved_at: datetime | None
@@ -159,11 +186,10 @@ async def exceptions_of(conn: Connection, account_id: uuid.UUID) -> list[Excepti
         await cur.execute(
             """
             SELECT x.id, x.kind, x.detail, x.created_at,
-                   coalesce(l.vendor_line_id, b.vendor_batch_id) AS vendor_ref,
+                   l.vendor_line_id AS vendor_ref,
                    r.note, r.actor_id AS resolved_by, r.resolved_at
             FROM settlement_exception x
-            LEFT JOIN settlement_line l ON l.id = x.line_id
-            LEFT JOIN settlement_batch b ON b.id = x.batch_id
+            JOIN settlement_line l ON l.id = x.line_id
             LEFT JOIN settlement_exception_resolved r ON r.exception_id = x.id
             WHERE x.account_id = %s
             ORDER BY (r.exception_id IS NULL) DESC, x.created_at DESC, x.id DESC

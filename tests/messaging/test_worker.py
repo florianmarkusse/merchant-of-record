@@ -97,7 +97,7 @@ def test_a_handled_delivery_is_not_run_again(database_url: str) -> None:
     asyncio.run(scenario())
 
 
-def test_facts_of_one_aggregate_run_in_order_and_a_repeat_is_stale(
+def test_a_later_fact_of_one_aggregate_may_run_first_and_the_other_is_stale(
     database_url: str,
 ) -> None:
     async def scenario() -> None:
@@ -110,13 +110,13 @@ def test_facts_of_one_aggregate_run_in_order_and_a_repeat_is_stale(
             await conn.commit()
         repeat = _echo_candidate(repeat_id, probe_id)
         async with await connect(database_url, autocommit=True) as worker:
-            assert await run_one(worker, NO_HTTP, ENV, repeat, NOW) == Skipped(
-                "not_next"
-            )
-            first = await _only_candidate(worker, NOW)
+            candidates = await find_candidates(worker, NOW, 10)
+            assert len(candidates) == 2
+            first = candidates[0]
             assert first.message_id != repeat_id
-            assert await run_one(worker, NO_HTTP, ENV, first, NOW) == Ran(Applied())
-            assert await run_one(worker, NO_HTTP, ENV, repeat, NOW) == Ran(Stale())
+            # No order per aggregate: the later one runs, the older is stale.
+            assert await run_one(worker, NO_HTTP, ENV, repeat, NOW) == Ran(Applied())
+            assert await run_one(worker, NO_HTTP, ENV, first, NOW) == Ran(Stale())
         echoed = b"SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
         assert await _count(database_url, echoed) == 1
 
@@ -178,7 +178,7 @@ def test_a_failing_consumer_is_retried_later_and_holds_only_its_aggregate(
     asyncio.run(scenario())
 
 
-def test_a_worker_skips_an_aggregate_another_holds_until_it_dies(
+def test_a_worker_skips_a_delivery_another_holds_until_it_dies(
     database_url: str,
 ) -> None:
     async def scenario() -> None:
@@ -186,7 +186,11 @@ def test_a_worker_skips_an_aggregate_another_holds_until_it_dies(
         async with await connect(database_url, autocommit=True) as worker:
             candidate = await _only_candidate(worker, NOW)
             other = await connect(database_url, autocommit=True)
-            assert await try_lock_aggregate(other, candidate)
+            await other.execute("BEGIN")
+            await other.execute(
+                "SELECT 1 FROM outbox_delivery WHERE message_id = %s FOR UPDATE",
+                (candidate.message_id,),
+            )
             assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Skipped(
                 "busy"
             )
@@ -198,14 +202,32 @@ def test_a_worker_skips_an_aggregate_another_holds_until_it_dies(
     asyncio.run(scenario())
 
 
-def test_a_crash_before_commit_leaves_nothing_and_frees_the_lock(
+def test_a_local_consumer_runs_while_another_holds_its_aggregate(
+    database_url: str,
+) -> None:
+    """The aggregate's advisory lock is for effects mid-call; a local
+    consumer locks its own rows and does not wait for it."""
+
+    async def scenario() -> None:
+        probe_id = await _start(database_url)
+        async with await connect(database_url, autocommit=True) as worker:
+            candidate = await _only_candidate(worker, NOW)
+            other = await connect(database_url, autocommit=True)
+            assert await try_lock_aggregate(other, candidate)
+            assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Ran(Applied())
+            await crash(other)
+        assert await _state(database_url, probe_id) == ProbeState.ECHOED
+
+    asyncio.run(scenario())
+
+
+def test_a_crash_before_commit_leaves_nothing_and_frees_the_delivery(
     database_url: str,
 ) -> None:
     async def scenario() -> None:
         probe_id = await _start(database_url)
         crashing = await connect(database_url, autocommit=True)
         candidate = await _only_candidate(crashing, NOW)
-        assert await try_lock_aggregate(crashing, candidate)
         await crashing.execute("BEGIN")
         assert await handle_delivery(
             crashing, candidate, local_consumer(candidate), ENV, NOW

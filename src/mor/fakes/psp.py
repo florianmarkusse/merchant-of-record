@@ -35,9 +35,15 @@ A made-up acquirer API, with PSP-side accounts as a path segment
                                  currency, of every captured payment not
                                  settled yet (docs/plan-payments.md §7.1)
     GET  A/settlement-files?after=      {"files": [...]}, oldest first
-    GET  A/settlement-files/{name}      a report: CSV
-    GET  A/settlements?after=           {"batches": [...]}, oldest first
-    GET  A/settlements/{id}?page=n      {"batch", "lines", "next_page"}
+    GET  A/settlement-files/{name}      a report, as Adyen's: CSV, a row
+                                        per line, then the payout's row
+    GET  A/payouts?after=               {"payouts": [...]}, oldest first
+    GET  A/payouts/{id}                 the payout, as Stripe's: amount,
+                                        reconciliation_status
+    GET  A/payouts/{id}/lines?starting_after=   {"data", "has_more"},
+                                        newest first; 409 while the
+                                        payout's reconciliation is in
+                                        progress
 
 Amounts are in the PSP's own minor units, ISO 4217's (IDR has 2 here),
 so our client converts. Events are released by a call, never by a timer.
@@ -84,9 +90,15 @@ type Push = Literal["not_subscribed", "delivered", "failed"]
 # What a cut can be scripted to get wrong, each once, in its first batch:
 # a line for a payment nobody made, a gross that is not what was captured,
 # a payment settled again under a new line id, a line of a type no client
-# books (an adjustment), and a net that is not what the lines add up to.
+# books (an adjustment), a net that is not what the lines add up to, and
+# part of the net held back for the next batch (Adyen's balance transfer).
 type CutFault = Literal[
-    "unknown_reference", "gross_differs", "settled_again", "unknown_type", "net_differs"
+    "unknown_reference",
+    "gross_differs",
+    "settled_again",
+    "unknown_type",
+    "net_differs",
+    "balance_transfer",
 ]
 CUT_FAULTS: tuple[CutFault, ...] = (
     "unknown_reference",
@@ -94,10 +106,17 @@ CUT_FAULTS: tuple[CutFault, ...] = (
     "settled_again",
     "unknown_type",
     "net_differs",
+    "balance_transfer",
 )
 SETTLEMENT_PAGE_SIZE = 2
+# How long after a cut a payout's lines become listable (`api` mode), as
+# Stripe's `reconciliation_status` goes from `in_progress` to `completed`.
+RECONCILIATION_DELAY = timedelta(minutes=10)
+# What a `balance_transfer` fault holds back for the next batch.
+HELD_BACK_MINOR = 300
 CSV_HEADER = (
     "record",
+    "batch",
     "id",
     "type",
     "payment_id",
@@ -106,7 +125,7 @@ CSV_HEADER = (
     "gross_minor",
     "fee_minor",
     "net_minor",
-    "paid_out_at",
+    "date",
 )
 FAULTS: tuple[Fault, ...] = (
     "fail_500",
@@ -1063,10 +1082,53 @@ async def handle_cut_settlement(
                         settles=False,
                     )
                 )
+        cur = await conn.execute(
+            "SELECT currency, amount_minor FROM psp_fake_carry WHERE account = %s",
+            (account,),
+        )
+        carried: dict[str, int] = {}
+        for currency, amount in await cur.fetchall():
+            carried[currency] = amount
         made: list[str] = []
         for currency in sorted(groups):
             lines = groups[currency]
             first = not made
+            if currency in carried:
+                # What an earlier batch held back is paid with this one.
+                lines.append(
+                    _CutLine(
+                        type="balance_transfer",
+                        payment_id="-",
+                        reference="-",
+                        gross_minor=carried[currency],
+                        fee_minor=0,
+                        fault=None,
+                        settles=False,
+                    )
+                )
+                await conn.execute(
+                    "DELETE FROM psp_fake_carry WHERE account = %s AND currency = %s",
+                    (account, currency),
+                )
+            if first and "balance_transfer" in faults:
+                lines.append(
+                    _CutLine(
+                        type="balance_transfer",
+                        payment_id="-",
+                        reference="-",
+                        gross_minor=-HELD_BACK_MINOR,
+                        fee_minor=0,
+                        fault="balance_transfer",
+                        settles=False,
+                    )
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO psp_fake_carry (account, currency, amount_minor)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (account, currency, HELD_BACK_MINOR),
+                )
             if first and "gross_differs" in faults:
                 for index, line in enumerate(lines):
                     if line.settles:
@@ -1116,10 +1178,19 @@ async def handle_cut_settlement(
             await conn.execute(
                 """
                 INSERT INTO psp_fake_settlement_batch
-                  (id, account, currency, net_minor, paid_out_at, fault)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                  (id, account, currency, net_minor, paid_out_at, fault,
+                   reconciled_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (batch_id, account, currency, net, clock(), batch_fault),
+                (
+                    batch_id,
+                    account,
+                    currency,
+                    net,
+                    clock(),
+                    batch_fault,
+                    clock() + RECONCILIATION_DELAY,
+                ),
             )
             for number, line in enumerate(lines, start=1):
                 await conn.execute(
@@ -1173,13 +1244,15 @@ class _BatchRow:
     currency: str
     net_minor: int
     paid_out_at: datetime
+    reconciled_at: datetime
 
 
 async def _batch(conn: FakeConnection, account: str, batch_id: str) -> _BatchRow | None:
     async with conn.cursor(row_factory=class_row(_BatchRow)) as cur:
         await cur.execute(
             """
-            SELECT currency, net_minor, paid_out_at FROM psp_fake_settlement_batch
+            SELECT currency, net_minor, paid_out_at, reconciled_at
+            FROM psp_fake_settlement_batch
             WHERE account = %s AND id = %s
             """,
             (account, batch_id),
@@ -1249,10 +1322,28 @@ async def handle_get_file(request: Request, database_url: str, hang: Hang) -> Re
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(CSV_HEADER)
+    for line in lines:
+        writer.writerow(
+            [
+                "line",
+                batch_id,
+                line.id,
+                line.type,
+                line.payment_id,
+                line.reference,
+                batch.currency,
+                line.gross_minor,
+                line.fee_minor,
+                line.gross_minor - line.fee_minor,
+                batch.paid_out_at.isoformat(),
+            ]
+        )
+    # The payout last, as Adyen's MerchantPayout row.
     writer.writerow(
         [
-            "batch",
+            "merchant_payout",
             batch_id,
+            f"{batch_id}-payout",
             "",
             "",
             "",
@@ -1263,27 +1354,12 @@ async def handle_get_file(request: Request, database_url: str, hang: Hang) -> Re
             batch.paid_out_at.isoformat(),
         ]
     )
-    for line in lines:
-        writer.writerow(
-            [
-                "line",
-                line.id,
-                line.type,
-                line.payment_id,
-                line.reference,
-                batch.currency,
-                line.gross_minor,
-                line.fee_minor,
-                line.gross_minor - line.fee_minor,
-                "",
-            ]
-        )
     if fault == "timeout_after_work":
         await hang()
     return Response(out.getvalue().encode("utf-8"), media_type="text/csv")
 
 
-async def handle_list_batches(
+async def handle_list_payouts(
     request: Request, database_url: str, hang: Hang
 ) -> Response:
     account = request.path_params["account"]
@@ -1296,57 +1372,85 @@ async def handle_list_batches(
         )
     if fault == "timeout_after_work":
         await hang()
-    return _json({"batches": found})
+    return _json({"payouts": found})
 
 
-async def handle_get_batch_page(
-    request: Request, database_url: str, hang: Hang
+def _reconciliation(batch: _BatchRow, now: datetime) -> str:
+    return "completed" if now >= batch.reconciled_at else "in_progress"
+
+
+async def handle_get_payout(
+    request: Request, database_url: str, hang: Hang, clock: Callable[[], datetime]
 ) -> Response:
+    """The payout alone, as Stripe's object: no lines, no count."""
     account = request.path_params["account"]
-    batch_id = request.path_params["batch_id"]
-    try:
-        page = int(request.query_params.get("page", "1"))
-    except ValueError:
-        return _error(400, "invalid_page")
-    if page < 1:
-        return _error(400, "invalid_page")
+    payout_id = request.path_params["payout_id"]
     async with await _connect(database_url) as conn:
         fault = await _read_fault(conn, account)
         if fault in ("fail_500", "fail_500_after_work"):
             return _error(500, "internal_error")
-        batch = await _batch(conn, account, batch_id)
+        batch = await _batch(conn, account, payout_id)
+    if batch is None:
+        return _error(404, "unknown_payout")
+    if fault == "timeout_after_work":
+        await hang()
+    return _json(
+        {
+            "id": payout_id,
+            "amount_minor": batch.net_minor,
+            "currency": batch.currency,
+            "arrival_date": batch.paid_out_at,
+            "reconciliation_status": _reconciliation(batch, clock()),
+        }
+    )
+
+
+async def handle_payout_lines(
+    request: Request, database_url: str, hang: Hang, clock: Callable[[], datetime]
+) -> Response:
+    """A payout's lines, newest first, after the cursor, as Stripe's
+    balance transactions filtered by payout. The page does not name the
+    payout: the caller asked for it."""
+    account = request.path_params["account"]
+    payout_id = request.path_params["payout_id"]
+    after = request.query_params.get("starting_after")
+    async with await _connect(database_url) as conn:
+        fault = await _read_fault(conn, account)
+        if fault in ("fail_500", "fail_500_after_work"):
+            return _error(500, "internal_error")
+        batch = await _batch(conn, account, payout_id)
         if batch is None:
-            return _error(404, "unknown_batch")
-        lines = await _batch_lines(conn, batch_id)
-    start = (page - 1) * SETTLEMENT_PAGE_SIZE
-    shown = lines[start : start + SETTLEMENT_PAGE_SIZE]
-    more = start + SETTLEMENT_PAGE_SIZE < len(lines)
-    page_lines: list[dict[str, object]] = []
+            return _error(404, "unknown_payout")
+        lines = await _batch_lines(conn, payout_id)
+    if _reconciliation(batch, clock()) != "completed":
+        return _error(409, "reconciliation_in_progress")
+    newest_first = list(reversed(lines))
+    if after is not None:
+        start = None
+        for index, line in enumerate(newest_first):
+            if line.id == after:
+                start = index + 1
+        if start is None:
+            return _error(400, "unknown_cursor")
+        newest_first = newest_first[start:]
+    shown = newest_first[:SETTLEMENT_PAGE_SIZE]
+    data: list[dict[str, object]] = []
     for line in shown:
-        page_lines.append(
+        data.append(
             {
                 "id": line.id,
                 "type": line.type,
                 "payment_id": line.payment_id,
                 "reference": line.reference,
+                "currency": batch.currency,
                 "gross_minor": line.gross_minor,
                 "fee_minor": line.fee_minor,
+                "created": batch.paid_out_at,
             }
         )
     if fault == "timeout_after_work":
         await hang()
-    return _json(
-        {
-            "batch": {
-                "id": batch_id,
-                "currency": batch.currency,
-                "net_minor": batch.net_minor,
-                "paid_out_at": batch.paid_out_at,
-            },
-            "lines": page_lines,
-            "next_page": page + 1 if more else None,
-        }
-    )
+    return _json({"data": data, "has_more": len(newest_first) > SETTLEMENT_PAGE_SIZE})
 
 
 async def handle_script_fault(request: Request, database_url: str) -> Response:
@@ -1413,11 +1517,14 @@ def make_app(
     async def get_file(request: Request) -> Response:
         return await handle_get_file(request, database_url, hang)
 
-    async def list_batches(request: Request) -> Response:
-        return await handle_list_batches(request, database_url, hang)
+    async def list_payouts(request: Request) -> Response:
+        return await handle_list_payouts(request, database_url, hang)
 
-    async def get_batch_page(request: Request) -> Response:
-        return await handle_get_batch_page(request, database_url, hang)
+    async def get_payout(request: Request) -> Response:
+        return await handle_get_payout(request, database_url, hang, clock)
+
+    async def payout_lines(request: Request) -> Response:
+        return await handle_payout_lines(request, database_url, hang, clock)
 
     async def script_fault(request: Request) -> Response:
         return await handle_script_fault(request, database_url)
@@ -1449,10 +1556,11 @@ def make_app(
             ),
             Route(f"{account_path}/events/redeliver", redeliver, methods=["POST"]),
             Route(f"{account_path}/settlements", cut_settlement, methods=["POST"]),
-            Route(f"{account_path}/settlements", list_batches, methods=["GET"]),
+            Route(f"{account_path}/payouts", list_payouts, methods=["GET"]),
+            Route(f"{account_path}/payouts/{{payout_id}}", get_payout, methods=["GET"]),
             Route(
-                f"{account_path}/settlements/{{batch_id}}",
-                get_batch_page,
+                f"{account_path}/payouts/{{payout_id}}/lines",
+                payout_lines,
                 methods=["GET"],
             ),
             Route(f"{account_path}/settlement-files", list_files, methods=["GET"]),

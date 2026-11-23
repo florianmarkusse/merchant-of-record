@@ -2,6 +2,8 @@
 §6). Every call first checks that this environment may use the account's
 kind (`mor.provider_accounts`)."""
 
+from typing import Literal
+
 import httpx2
 
 from mor.config import Environment
@@ -14,14 +16,16 @@ from mor.psp.port import (
     CreateResult,
     FetchResult,
     FindResult,
+    InboundMode,
+    LinesResult,
     PaymentRequest,
+    PayoutResult,
     PspAccount,
     PspEvent,
     PspProvider,
     SettlementDocument,
+    SettlementFileResult,
     SettlementListResult,
-    SettlementMode,
-    SettlementPageResult,
     ThinNotice,
 )
 from mor.vendor_failures import UndecodableBody
@@ -135,26 +139,66 @@ async def list_settlements(
             return await fake_client.list_settlements(http, account, after)
 
 
-async def fetch_settlement(
+async def fetch_settlement_file(
     http: httpx2.AsyncClient,
     environment: Environment,
     account: PspAccount,
     name: str,
-    page: int,
-) -> SettlementPageResult | UndecodableBody:
+) -> SettlementFileResult | UndecodableBody:
     _check(environment, account)
     match account.provider:
         case PspProvider.FAKE:
-            return await fake_client.fetch_settlement(http, account, name, page)
+            return await fake_client.fetch_settlement_file(http, account, name)
+
+
+async def fetch_payout(
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    account: PspAccount,
+    payout_id: str,
+) -> PayoutResult | UndecodableBody:
+    _check(environment, account)
+    match account.provider:
+        case PspProvider.FAKE:
+            return await fake_client.fetch_payout(http, account, payout_id)
+
+
+async def fetch_payout_lines(
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    account: PspAccount,
+    payout_id: str,
+    after: str | None,
+) -> LinesResult | UndecodableBody:
+    _check(environment, account)
+    match account.provider:
+        case PspProvider.FAKE:
+            return await fake_client.fetch_payout_lines(http, account, payout_id, after)
+
+
+type SettlementInbound = Literal[
+    InboundMode.SETTLEMENT_FILE,
+    InboundMode.SETTLEMENT_PAYOUT,
+    InboundMode.SETTLEMENT_PAGE,
+]
 
 
 def decode_settlement(
-    account: PspAccount, mode: SettlementMode, body: bytes
+    account: PspAccount,
+    mode: SettlementInbound,
+    body: bytes,
+    request_ref: str | None,
 ) -> SettlementDocument | UndecodableBody:
+    """`request_ref`: what we asked for, stored with the bytes; a page of
+    lines needs it to know its payout."""
     match account.provider:
         case PspProvider.FAKE:
             match mode:
-                case SettlementMode.FILE:
+                case InboundMode.SETTLEMENT_FILE:
                     return fake_client.decode_settlement_file(body)
-                case SettlementMode.API:
-                    return fake_client.decode_settlement_page(body)
+                case InboundMode.SETTLEMENT_PAYOUT:
+                    return fake_client.decode_payout(body)
+                case InboundMode.SETTLEMENT_PAGE:
+                    if request_ref is None:
+                        return UndecodableBody("a page of lines names no payout")
+                    return fake_client.decode_payout_lines(body, request_ref)

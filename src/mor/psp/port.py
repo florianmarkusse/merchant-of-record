@@ -41,10 +41,10 @@ class StatusMode(StrEnum):
 
 class SettlementMode(StrEnum):
     """How settlement reaches us; matches `psp_settlement_mode`
-    (docs/plan-payments.md §7.1). Both are reads."""
+    (docs/plan-settlement-reconciliation.md §2). Both are reads."""
 
-    FILE = "file"  # a report file per batch
-    API = "api"  # a batch read page by page
+    FILE = "file"  # a report file per batch, its payout a row (Adyen)
+    API = "api"  # a payout object, then its lines by cursor (Stripe)
 
 
 class InboundMode(StrEnum):
@@ -55,7 +55,8 @@ class InboundMode(StrEnum):
     PUSH_THIN = "push_thin"
     POLL = "poll"
     SETTLEMENT_FILE = "settlement_file"
-    SETTLEMENT_PAGE = "settlement_page"
+    SETTLEMENT_PAGE = "settlement_page"  # a page of one payout's lines
+    SETTLEMENT_PAYOUT = "settlement_payout"  # a payout object
 
 
 class CaptureMode(StrEnum):
@@ -204,44 +205,65 @@ class ThinNotice:
     reference: str
 
 
-# --- settlement (docs/plan-payments.md §7.1) ---------------------------------
+# --- settlement (docs/plan-settlement-reconciliation.md) ----------------------
 
 
 @dataclass(frozen=True)
 class SettlementList:
-    """Reports (file) or batches (api) after the one named, oldest first."""
+    """Reports (file) or payouts (api) after the one named, oldest first."""
 
     names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class SettlementPage:
-    """A report, or one page of a batch, raw: stored before decoding.
-    `next_page` is the batch's next page, None when this was its last."""
+class SettlementFile:
+    """A report whole, raw: stored before decoding."""
 
     body: bytes
-    next_page: int | None
+
+
+@dataclass(frozen=True)
+class PayoutObject:
+    """A payout, raw. `lines_ready`: the PSP lists all of its lines now
+    (Stripe's `reconciliation_status` is `completed`)."""
+
+    body: bytes
+    lines_ready: bool
+
+
+@dataclass(frozen=True)
+class LinesPage:
+    """A page of one payout's lines, raw. `last_line_id` is the cursor for
+    the next page, None on an empty page; `has_more` says one follows."""
+
+    body: bytes
+    last_line_id: str | None
+    has_more: bool
 
 
 type SettlementListResult = SettlementList | Unavailable | OutcomeUnknown
-type SettlementPageResult = SettlementPage | Unavailable | OutcomeUnknown
+type SettlementFileResult = SettlementFile | Unavailable | OutcomeUnknown
+type PayoutResult = PayoutObject | Unavailable | OutcomeUnknown
+type LinesResult = LinesPage | Unavailable | OutcomeUnknown
 
 
 class LineType(StrEnum):
     """Matches `settlement_line_type`. A type we do not book yet (refunds and
     chargebacks come in slice 8, a PSP's own charges) is `unknown`, with the
-    PSP's word kept beside it."""
+    PSP's word kept beside it. A balance transfer moves money between a
+    PSP's batches: it books nothing and counts towards its payout."""
 
     CAPTURE = "capture"
     UNKNOWN = "unknown"
+    BALANCE_TRANSFER = "balance_transfer"
 
 
 @dataclass(frozen=True)
-class SettlementBatch:
-    """One payout. Amounts are exact in our minor units: a PSP may count
-    finer than we do (IDR at 2 decimals)."""
+class SettlementPayout:
+    """One transfer to our bank, as the PSP reports it. Amounts are exact in
+    our minor units: a PSP may count finer than we do (IDR at 2 decimals)."""
 
-    vendor_batch_id: str
+    vendor_payout_id: str
     currency: Currency
     net: Fraction
     paid_out_at: datetime
@@ -250,6 +272,7 @@ class SettlementBatch:
 @dataclass(frozen=True)
 class SettledLine:
     vendor_line_id: str
+    vendor_payout_id: str
     line_type: LineType
     vendor_type: str
     provider_payment_id: str
@@ -257,13 +280,13 @@ class SettledLine:
     currency: Currency
     gross: Fraction
     fee: Fraction
+    settled_at: datetime
 
 
 @dataclass(frozen=True)
 class SettlementDocument:
-    """A decoded report, or a decoded page of a batch. `last` says the
-    batch's lines are all read with this one."""
+    """What one stored document holds: a report has its lines and its payout,
+    a payout object its payout only, a page of lines its lines only."""
 
-    batch: SettlementBatch
+    payout: SettlementPayout | None
     lines: tuple[SettledLine, ...]
-    last: bool

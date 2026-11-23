@@ -1,6 +1,8 @@
-"""The staff Settlement pages (docs/plan-payments.md §7.1): per PSP
-account its health figures (`psp_clearing` and `payout_in_transit` per
-currency), its batches and its exceptions, each open one with a form to
+"""The staff Settlement pages (docs/plan-payments.md §7.1,
+docs/plan-settlement-reconciliation.md §4.3): per PSP account its health
+figures (`psp_clearing` and `payout_in_transit` per currency), its payouts
+with whether each adds up to its lines yet (open ones first, with how long
+they have been open), and its exceptions, each open one with a form to
 resolve it with a note (question 10 of 20-Nov-2026). A note books
 nothing.
 
@@ -13,7 +15,7 @@ pages; until then the actor is this page, not a person.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 import htpy
@@ -26,18 +28,19 @@ from mor.dates import format_moment
 from mor.db.connect import connect
 from mor.money.amount import Money
 from mor.money.currency import Currency
+from mor.settlement.records import Reconciliation
 from mor.settlement.review import (
     AccountSummary,
     AlreadyResolved,
-    BatchRow,
     EmptyNote,
     ExceptionRow,
     NoSuchException,
+    PayoutRow,
     Resolved,
     account_summaries,
     account_summary,
-    batches_of,
     exceptions_of,
+    payouts_of,
     resolve_exception,
 )
 from mor.web.forms import read_form, same_origin
@@ -46,7 +49,7 @@ from mor.web.staff_layout import money_text, staff_page
 
 PAGE = "/staff/settlement"
 PERSON = Actor(ActorKind.STAFF, "staff-settlement-page")
-BATCHES_SHOWN = 50
+PAYOUTS_SHOWN = 50
 
 
 class ResolveForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -81,6 +84,7 @@ def render_accounts(summaries: list[AccountSummary]) -> str:
                 htpy.td[summary.last_read or "—"],
                 htpy.td[_balances(summary)],
                 htpy.td(class_="num")[str(summary.open_exceptions)],
+                htpy.td(class_="num")[str(summary.open_payouts)],
             ]
         )
     table: htpy.Node = htpy.p(class_="muted")["No PSP accounts yet."]
@@ -94,6 +98,7 @@ def render_accounts(summaries: list[AccountSummary]) -> str:
                         htpy.th["Last read"],
                         htpy.th["Balances"],
                         htpy.th["Open exceptions"],
+                        htpy.th["Payouts not adding up"],
                     ]
                 ],
                 htpy.tbody[rows],
@@ -114,18 +119,36 @@ def render_accounts(summaries: list[AccountSummary]) -> str:
     )
 
 
-def _batch_rows(batches: list[BatchRow]) -> htpy.Node:
-    if not batches:
-        return htpy.p(class_="muted")["No batches read yet."]
+def _difference(payout: PayoutRow) -> str:
+    """The net less its lines so far: in whole minor units when it is one,
+    else exactly (a PSP that counts finer than we do)."""
+    difference = payout.difference
+    if difference.denominator == 1:
+        return _money(difference.numerator, payout.currency)
+    return f"{difference} {payout.currency} minor"
+
+
+def _payout_rows(payouts: list[PayoutRow], now: datetime) -> htpy.Node:
+    if not payouts:
+        return htpy.p(class_="muted")["No payouts read yet."]
     rows: list[htpy.Node] = []
-    for batch in batches:
-        booked = "—" if batch.booked_at is None else format_moment(batch.booked_at)
+    for payout in payouts:
+        booked = "—" if payout.booked_at is None else format_moment(payout.booked_at)
+        match payout.reconciliation:
+            case Reconciliation.BALANCED:
+                state: htpy.Node = "adds up"
+            case Reconciliation.OPEN:
+                state = htpy.strong[
+                    f"open {_age(now - payout.recorded_at)}, off by"
+                    f" {_difference(payout)}"
+                ]
         rows.append(
             htpy.tr[
-                htpy.td[batch.vendor_batch_id],
-                htpy.td(class_="num")[_money(batch.net_minor, batch.currency)],
-                htpy.td[format_moment(batch.paid_out_at)],
-                htpy.td(class_="num")[f"{batch.booked_lines} of {batch.lines}"],
+                htpy.td[payout.vendor_payout_id],
+                htpy.td(class_="num")[_money(payout.net_minor, payout.currency)],
+                htpy.td[format_moment(payout.paid_out_at)],
+                htpy.td(class_="num")[f"{payout.booked_lines} of {payout.lines}"],
+                htpy.td[state],
                 htpy.td[booked],
             ]
         )
@@ -133,16 +156,26 @@ def _batch_rows(batches: list[BatchRow]) -> htpy.Node:
         htpy.table(class_="data")[
             htpy.thead[
                 htpy.tr[
-                    htpy.th["Batch"],
+                    htpy.th["Payout"],
                     htpy.th["Net paid out"],
                     htpy.th["Paid out"],
                     htpy.th["Lines booked"],
+                    htpy.th["Lines add up"],
                     htpy.th["Payout booked"],
                 ]
             ],
             htpy.tbody[rows],
         ]
     ]
+
+
+def _age(age: timedelta) -> str:
+    """How long, in the largest whole unit."""
+    if age >= timedelta(days=1):
+        return f"{age.days} d"
+    if age >= timedelta(hours=1):
+        return f"{age.seconds // 3600} h"
+    return f"{age.seconds // 60} min"
 
 
 def _exception_rows(account_id: uuid.UUID, found: list[ExceptionRow]) -> htpy.Node:
@@ -192,9 +225,10 @@ def _exception_rows(account_id: uuid.UUID, found: list[ExceptionRow]) -> htpy.No
 
 def render_account(
     summary: AccountSummary,
-    batches: list[BatchRow],
+    payouts: list[PayoutRow],
     found: list[ExceptionRow],
     note: str | None,
+    now: datetime,
 ) -> str:
     return staff_page(
         summary.name,
@@ -208,12 +242,14 @@ def render_account(
             f"Settles by {summary.settlement_mode}; last read "
             f"{summary.last_read or 'nothing yet'}. Resolving an exception"
             " records what was found and books nothing: a correction is a"
-            " journal entry made by hand."
+            " journal entry made by hand. A payout is open until the lines"
+            " that have arrived add up to its net; lines may still be on"
+            " their way."
         ],
         htpy.h2["Exceptions"],
         _exception_rows(summary.id, found),
-        htpy.h2["Batches"],
-        _batch_rows(batches),
+        htpy.h2["Payouts"],
+        _payout_rows(payouts, now),
     )
 
 
@@ -230,7 +266,7 @@ async def accounts_page(database_url: str) -> Response:
     return HTMLResponse(render_accounts(summaries))
 
 
-async def account_page(request: Request, database_url: str) -> Response:
+async def account_page(request: Request, database_url: str, now: datetime) -> Response:
     account_id = _account_id(request)
     if account_id is None:
         return Response("no such account", status_code=404)
@@ -238,10 +274,10 @@ async def account_page(request: Request, database_url: str) -> Response:
         summary = await account_summary(conn, account_id)
         if summary is None:
             return Response("no such account", status_code=404)
-        batches = await batches_of(conn, account_id, BATCHES_SHOWN)
+        payouts = await payouts_of(conn, account_id, PAYOUTS_SHOWN)
         found = await exceptions_of(conn, account_id)
     note = request.query_params.get("note")
-    return HTMLResponse(render_account(summary, batches, found, note))
+    return HTMLResponse(render_account(summary, payouts, found, note, now))
 
 
 async def resolve(request: Request, database_url: str, now: datetime) -> Response:

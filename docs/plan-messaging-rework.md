@@ -1,8 +1,10 @@
 # Messaging rework: easier to follow, same guarantees
 
-Status: open, 23-Nov-2026. Nothing below is designed or built yet except
-§1. The next step is the design of §3, written up and agreed before any
-code (open question in §2 first). Amends `plan-messaging.md` once agreed.
+Status: 23-Nov-2026: §1, §3.1 and §3.2 built but not committed: they
+break settlement's payout check, which relied on page order
+(`plan-settlement-reconciliation.md` §1). That plan lands first; then
+these, then §3.3. Amends `plan-messaging.md` and the worker loop in
+`plan-architecture.md` §5.
 
 The user reviewed the messaging core and found it reliable but hard to
 follow. The goal is the same guarantees (outbox, at-least-once,
@@ -16,63 +18,151 @@ when following a fact through the code.
   (`src/mor/messaging/facts.py`, checked by
   `tests/messaging/test_facts.py`).
 
-## 2. Open decision: keep ordering per consumer and aggregate?
+## 2. Decided: drop ordering per consumer and aggregate
 
-Today a delivery waits until every older unhandled delivery for the same
-consumer and aggregate is handled (the `seq <` check in
-`_open_delivery`, `src/mor/messaging/worker.py`). The shared
-`messaging.md` says "ordering holds per aggregate".
+Decided 23-Nov-2026 by the user. Today a delivery waits until every
+older unhandled delivery for the same consumer and aggregate is handled
+(the `seq <` check in `_open_delivery`, `src/mor/messaging/worker.py`).
+It guarantees nothing a consumer relies on:
 
-The user's point: our consumers already accept facts in any order (a
-webhook and a vendor's answer race, a `delivered` can arrive before an
-`underway`), so the check may only add blocking. Two options:
+- Every consumer that gets several facts for one aggregate already takes
+  them in any order: `payment_event_apply` only moves an attempt forward
+  (`src/mor/payments/transitions.py`, `Stale` otherwise), `echo_event_apply`
+  derives the status from all recorded events and compares ranks,
+  `quote_build` re-checks the session under its lock, a poll re-reads the
+  attempt.
+- `settlement_line_book` gets its facts from three aggregates (order,
+  payment attempt, settlement line), so the check never ordered them.
+- Order across consumers (a cancel and a create on one attempt) was never
+  kept; the advisory lock keeps them from overlapping.
 
-- **Drop it.** Claiming becomes a plain `FOR UPDATE SKIP LOCKED` over due
-  deliveries; a scheduled delivery holds nothing back. Needs: every
-  consumer checked for order tolerance, and the fuzzers made to shuffle
-  delivery order to prove it. Changes the shared `messaging.md`, so it is
-  the user's call.
-- **Keep it, fix the blocking.** Scheduled work (§3.1) stops sitting in
-  the ordered queue, so a delivery due tomorrow cannot hold back one due
-  now.
+What it did cost: a delivery scheduled for later held back every later one
+for its pair (§3.1), and a delivery that raised held back everything
+behind it.
 
-## 3. To design (one design: the parts depend on each other)
+The shared `messaging.md` line "Ordering holds per aggregate, never
+globally" becomes, once this is built: "No ordering: every consumer takes
+facts in any order, late and twice (a state that only moves forward, or a
+re-check under the row lock). Fuzzers deliver in random order to prove
+it."
 
-### 3.1 Scheduled deliveries block later ones
+## 3. Design (for review; nothing built)
 
-A delivery with `not_before` in the future (a poll's next turn, a session
-expiry) is the oldest for its consumer and aggregate, so every later
-delivery for that pair waits behind it. Storing many is cheap; the
-blocking is the problem. It was worked around once by giving
-`payment_events_wanted` its own consumer (comment in
-`consumers_for`, `src/mor/messaging/routing.py`). Options: scheduled work
-in its own table that appends the fact when due, or the ordering dropped
-(§2).
+### 3.1 Claiming without order
 
-### 3.2 The lock is on the fact's aggregate, not what the consumer changes
+- `find_candidates` returns due, unhandled deliveries oldest first, with
+  no `DISTINCT ON`. `_open_delivery` loses the `not_next` check and
+  `Skipped("not_next")`. `next_retry_at` becomes the earliest future
+  `not_before` of any unhandled delivery.
+- Scheduled deliveries stay where they are (`not_before` in the future);
+  with nothing waiting behind them they block nothing, so no separate
+  table. `payment_events_wanted` keeps its own consumer only if the code
+  needs it; otherwise it folds back into `psp_payment_poll` (its comment
+  in `consumers_for` goes either way).
+- Claiming stays read, then lock: the session advisory lock (effect) and
+  the delivery's row lock taken by `_open_delivery` with `FOR UPDATE SKIP
+  LOCKED`, so a second worker gets `busy` at once instead of waiting
+  behind the first's transaction. A crashed holder frees it with its
+  connection. The old index for the ordered query is replaced by one on
+  `not_before` (`migrations/0024_unordered_deliveries.sql`).
+- Fuzzers: they already draw a candidate from `find_candidates`; with
+  every due delivery in that list they shuffle order with no change. The
+  probe fuzzer's "crash holding the aggregate's lock" became "crash
+  holding a delivery's row lock"; tests that took the advisory lock
+  before a local step no longer do.
+  Reach checks (`tests/flow/reach.py`) show whether the new orders get
+  covered. Expect fuzzer findings: they are the point.
 
-`run_one` (`src/mor/messaging/worker.py`) takes a session advisory
-lock on the fact's aggregate. For an effect consumer (vendor call
-between two commits) that is the shared rule's lock for work spanning
-commits. But the aggregate is the fact's,
-not what the consumer writes: `settlement_line_book` runs on
-`order_paid` and books settlement lines. A local consumer runs in one
-transaction and locks its rows anyway, so the advisory lock adds nothing
-there. Together with `aggregate_of` this is the part the user found most
-confusing. To design: what each consumer locks, stated next to it.
+### 3.2 Which lock, stated per kind
 
-### 3.3 One dispatch per effect consumer
+- **Effect consumer**: the worker holds the session advisory lock on the
+  fact's aggregate from `prepare` to `complete`. That is the shared rule's
+  "work spanning commits": without it a second worker's `prepare` sees a
+  request marked `sent`, takes it for a dead run and asks or sends again
+  while the first call is still in flight. For every effect consumer
+  today the fact's aggregate is the row its `prepare` locks (attempt,
+  duty lookup, shipping price lookup, PSP account's settlement cursor,
+  echo job or account). `aggregate_of` keeps its name (it also records
+  every fact's aggregate in `outbox`); its docstring says what the
+  aggregate is used for: "the thing the fact is about; an effect consumer
+  holds its lock across the vendor call", in place of "its order is
+  kept per aggregate".
+- **Local consumer**: no advisory lock. One transaction; it locks the
+  rows it changes (`lock_attempt`, `lock_session`, the settlement line),
+  and the delivery's row lock plus the inbox stop a second run.
+- What this changes: today a local consumer on attempt X waits while an
+  effect on X is mid-call (a webhook's `payment_event_apply` while the
+  capture call is out). Afterwards it runs, as a web handler already can
+  (`pay_another_way`). Each effect's `complete` already re-locks the row
+  and checks the state, because a handler can move it.
+  `test_a_webhook_is_applied_while_the_capture_call_is_out`
+  (`tests/flow/test_concurrent_workers.py`) applies the PSP's `captured`
+  webhook while our capture call is out, then completes the capture: one
+  charge, order and entry. It failed on the old worker (`busy`).
+- `outbox_delivery.aggregate_type`/`aggregate_id` stay (the worker names
+  the lock from them without decoding the fact); no migration.
 
-Following an effect consumer means three dispatches: `prepare`
-dispatches on the consumer name, `call` and `complete` on the call or
-answer type (`src/mor/messaging/consumers.py`), then
-`payment_flow.complete` matches the answer again, and each step re-reads
-the attempt id from the fact. Wanted: one place per consumer where its
-prepare, call and complete are visible together, keeping the answer
-types narrow. Measure the line count of any shared machinery before
-proposing it (shared conventions, Duplication).
+### 3.3 One place per effect consumer
 
-### 3.4 Smaller items
+Today `prepare` dispatches on the consumer name, `call` and `complete`
+on the call and answer types (`src/mor/messaging/consumers.py`), then
+`payment_flow.complete` matches the answer again and each step re-reads
+the id from the fact.
+
+Proposed: each effect consumer is one function that reads top to bottom,
+owning its transactions, and the worker calls it by one `match` on the
+consumer name:
+
+```python
+async def run_capture(conn, http, environment, delivery, fact, now) -> EffectEnd:
+    attempt_id = _authorised_id(fact)
+    while True:
+        async with conn.transaction():
+            prepared = await prepare_capture(conn, attempt_id, now)
+            if isinstance(prepared, NoCall):
+                return await finish_delivery(conn, delivery, prepared.outcome, now)
+        result = await registry.capture(http, environment, ...)  # no transaction
+        async with conn.transaction():
+            step = await complete_capture(conn, attempt_id, prepared, result, now)
+            match step:
+                case Done(outcome=outcome):
+                    return await finish_delivery(conn, delivery, outcome, now)
+                case RetryLater(reason=reason):
+                    return await defer_delivery(conn, delivery, reason, now)
+                case Again():
+                    pass
+```
+
+- Gone: `consumers.prepare/call/complete`, the `EffectCall`/`EffectAnswer`
+  unions, the `*Answer` records (the result is passed directly), the
+  worker's `prepare_delivery`, `complete_delivery`, `run_effect` and
+  `Prepared`, and `payment_flow.complete`'s second match.
+- Kept: the worker's advisory lock around the call to `run_*`, and
+  `finish_delivery`/`defer_delivery` (today `_finish_delivery`,
+  `_defer`) as plain functions the consumer calls in its last
+  transaction, so the effect and `handled_at` still commit together.
+- Risks: the transaction boundaries are written in each consumer, so one
+  could call a vendor inside a transaction; and a consumer could forget
+  `finish_delivery`. Against the first, `registry` calls go through a
+  check that the worker's connection has no open transaction; against
+  the second, `EffectEnd` is `Handled | Deferred`, records only those two
+  functions return.
+- Size (shared conventions, Duplication): the dispatch and driver code
+  that goes is about 230 lines (consumers.py 80, worker 75, payment
+  call/complete 55, answer records); 11 drivers of about 20 lines each
+  come in. About even; the gain is that one function shows a consumer's
+  whole run. Converted first: `duty_rate_ask`, measured, then the rest;
+  the echo consumers are transitional and go last (or with the echo
+  flow).
+
+### 3.4 Order of work
+
+1. §3.1 and §3.2 together (worker, `aggregate_of`'s docstring, the
+   `messaging.md` line, the worker loop in `plan-architecture.md` §5
+   step 3, the concurrent case), then a soak run.
+2. §3.3 on `duty_rate_ask`, line count compared, then the rest.
+
+### 3.5 Smaller items
 
 - **The message's own uuid.** `outbox.id` identifies the message (one
   probe has two facts), but `outbox.seq` already does. Dropping `id`

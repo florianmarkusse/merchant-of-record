@@ -85,7 +85,12 @@ from mor.psp.port import (
 )
 from mor.quote.groups import PartKind
 from mor.quote.shipping import NotOfferedReason
-from mor.settlement.records import ExceptionKind, LineState
+from mor.settlement.records import (
+    ExceptionKind,
+    LineState,
+    ReadPhase,
+    Reconciliation,
+)
 
 
 DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
@@ -142,6 +147,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("psp_operation", PspOperation),
     ("psp_provider", PspProvider),
     ("psp_settlement_mode", SettlementMode),
+    ("psp_settlement_read_phase", ReadPhase),
     ("psp_status_mode", StatusMode),
     ("quote_part_kind", PartKind),
     ("quote_state", QuoteState),
@@ -153,6 +159,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("settlement_exception_kind", ExceptionKind),
     ("settlement_line_state", LineState),
     ("settlement_line_type", LineType),
+    ("settlement_reconciliation", Reconciliation),
     ("shipping_price_state", PriceState),
     ("surcharge_basis", SurchargeBasis),
     ("surcharge_trigger", SurchargeTrigger),

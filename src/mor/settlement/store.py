@@ -1,16 +1,20 @@
-"""Settlement in the database (docs/plan-payments.md §7.1): stored reports
-decoded into batches and lines, each once by the PSP's id; each line booked
-against its capture; each batch's payout booked on its way to our bank;
-what does not fit kept for a person.
+"""Settlement in the database (docs/plan-payments.md §7.1,
+docs/plan-settlement-reconciliation.md §4): stored documents decoded into
+payouts and lines, each once by the PSP's id and in any order; each line
+booked against its capture; each payout booked on its way to our bank as
+reported; each payout reconciled against whatever lines have arrived; what
+does not fit kept for a person.
 
-    psp_inbox_decode (per account) ─▶ record_document: batch and lines,
-        one settlement_line_received per new line, and on a batch's last
-        page settlement_batch_received
+    psp_inbox_decode (per account) ─▶ record_document: a payout, lines or
+        both; settlement_payout_reported per new payout,
+        settlement_line_received per new line
     settlement_line_book (per line, and per attempt on order_paid or a
         payment's end): under the attempt's lock, every line of the attempt
         not settled yet, earliest first: book the fee, wait for the order,
         or record an exception
-    settlement_payout_book (per batch): the payout, checked exactly
+    settlement_payout_book (per payout): its net as reported
+    settlement_payout_reconcile (on a payout or any of its lines): under
+        the payout's lock, its net against the lines arrived so far
 
 Persistence functions take the connection first and never commit.
 """
@@ -19,6 +23,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
+from typing import LiteralString
 
 from psycopg.rows import class_row
 
@@ -35,8 +40,8 @@ from mor.messaging.facts import (
     PaymentEventsWantedV1,
     PaymentExpiredV1,
     PaymentNeedsPersonV1,
-    SettlementBatchReceivedV1,
     SettlementLineReceivedV1,
+    SettlementPayoutReportedV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
 from mor.messaging.routing import WrongFact
@@ -47,27 +52,27 @@ from mor.orders.posting import capture_key
 from mor.payments.attempts import Attempt, attempt_of_account, lock_attempt
 from mor.payments.transitions import OPEN_STATES, AttemptState
 from mor.psp import registry
-from mor.psp.port import (
-    LineType,
-    PspAccount,
-    SettlementMode,
-)
+from mor.psp.port import LineType, PspAccount
+from mor.psp.registry import SettlementInbound
 from mor.settlement.entries import (
     ROUNDING,
+    AddedUp,
     LineAmounts,
     NetDiffers,
     check_net,
     line_entry,
     payout_entry,
+    rounding_entry,
     to_minor,
 )
-from mor.settlement.records import ExceptionKind, LineState
+from mor.settlement.records import ExceptionKind, LineState, Reconciliation
 from mor.vendor_failures import UndecodableBody
 
 
 DECODER = Actor(ActorKind.SYSTEM, "psp_inbox_decode")
 LINE_BOOKER = Actor(ActorKind.SYSTEM, "settlement_line_book")
 PAYOUT_BOOKER = Actor(ActorKind.SYSTEM, "settlement_payout_book")
+RECONCILER = Actor(ActorKind.SYSTEM, "settlement_payout_reconcile")
 
 ENDED_OTHERWISE = (
     AttemptState.DECLINED,
@@ -84,66 +89,79 @@ async def record_document(
     conn: Connection,
     account: PspAccount,
     inbox_id: uuid.UUID,
-    mode: SettlementMode,
+    mode: SettlementInbound,
     body: bytes,
+    request_ref: str | None,
     now: datetime,
 ) -> UndecodableBody | None:
-    """The batch and its lines, each inserted once by the PSP's own id; a
-    fact for each line new here, and for the batch once its last page is
-    in. A page decoded twice adds nothing."""
-    document = registry.decode_settlement(account, mode, body)
+    """The payout and the lines a document holds, each inserted once by the
+    PSP's own id, with a fact for each one new here. Nothing waits for
+    another document: a line can come before its payout, and pages in any
+    order. A document decoded twice adds nothing."""
+    document = registry.decode_settlement(account, mode, body, request_ref)
     if isinstance(document, UndecodableBody):
         return document
-    batch = document.batch
-    cur = await conn.execute(
-        """
-        INSERT INTO settlement_batch
-          (id, account_id, vendor_batch_id, currency, net_numerator,
-           net_denominator, net_minor, paid_out_at, inbox_id, recorded_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (account_id, vendor_batch_id) DO NOTHING
-        """,
-        (
-            uuid.uuid7(),
-            account.id,
-            batch.vendor_batch_id,
-            batch.currency.value,
-            batch.net.numerator,
-            batch.net.denominator,
-            to_minor(batch.net),
-            batch.paid_out_at,
-            inbox_id,
-            now,
-        ),
-    )
-    batch_id = await one_value(
-        conn,
-        "SELECT id FROM settlement_batch"
-        " WHERE account_id = %s AND vendor_batch_id = %s",
-        (account.id, batch.vendor_batch_id),
-        uuid.UUID,
-    )
+    payout = document.payout
+    if payout is not None:
+        cur = await conn.execute(
+            """
+            INSERT INTO settlement_payout
+              (id, account_id, vendor_payout_id, currency, net_numerator,
+               net_denominator, net_minor, paid_out_at, inbox_id, recorded_at,
+               reconciliation, difference_numerator, difference_denominator,
+               rounding_minor, rounding_entries)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0)
+            ON CONFLICT (account_id, vendor_payout_id) DO NOTHING
+            RETURNING id
+            """,
+            (
+                uuid.uuid7(),
+                account.id,
+                payout.vendor_payout_id,
+                payout.currency.value,
+                payout.net.numerator,
+                payout.net.denominator,
+                to_minor(payout.net),
+                payout.paid_out_at,
+                inbox_id,
+                now,
+                Reconciliation.OPEN,
+                payout.net.numerator,
+                payout.net.denominator,
+            ),
+        )
+        inserted = await cur.fetchone()
+        if inserted is not None:
+            await append_fact(
+                conn,
+                SettlementPayoutReportedV1(
+                    settlement_payout_id=inserted[0], psp_account_id=account.id
+                ),
+                DECODER,
+                now,
+            )
     for line in document.lines:
         # The attempt a reference names never changes: kept from the start,
-        # so an attempt's lines are booked in the order the PSP sent them.
+        # so an attempt's lines are booked in the order they were stored.
         attempt_id: uuid.UUID | None = None
         if line.line_type == LineType.CAPTURE:
             attempt_id = await attempt_of_account(conn, account.id, line.reference)
         cur = await conn.execute(
             """
             INSERT INTO settlement_line
-              (id, batch_id, account_id, vendor_line_id, type, vendor_type,
-               provider_payment_id, our_reference, currency, gross_numerator,
-               gross_denominator, gross_minor, fee_numerator, fee_denominator,
-               fee_minor, rounding, attempt_id, state, recorded_at, updated_at)
+              (id, vendor_payout_id, account_id, vendor_line_id, type,
+               vendor_type, provider_payment_id, our_reference, currency,
+               gross_numerator, gross_denominator, gross_minor, fee_numerator,
+               fee_denominator, fee_minor, rounding, attempt_id, state,
+               settled_at, recorded_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s, %s)
             ON CONFLICT (account_id, vendor_line_id) DO NOTHING
             RETURNING id
             """,
             (
                 uuid.uuid7(),
-                batch_id,
+                line.vendor_payout_id,
                 account.id,
                 line.vendor_line_id,
                 line.line_type.value,
@@ -160,6 +178,7 @@ async def record_document(
                 ROUNDING.value,
                 attempt_id,
                 LineState.RECEIVED,
+                line.settled_at,
                 now,
                 now,
             ),
@@ -174,15 +193,6 @@ async def record_document(
                 DECODER,
                 now,
             )
-    if document.last:
-        await append_fact(
-            conn,
-            SettlementBatchReceivedV1(
-                settlement_batch_id=batch_id, psp_account_id=account.id
-            ),
-            DECODER,
-            now,
-        )
     return None
 
 
@@ -192,7 +202,6 @@ async def record_document(
 @dataclass(frozen=True)
 class _Line:
     id: uuid.UUID
-    batch_id: uuid.UUID
     account_id: uuid.UUID
     vendor_line_id: str
     type: LineType
@@ -204,16 +213,15 @@ class _Line:
     gross_denominator: int
     fee_minor: int
     state: LineState
-    batch_currency: Currency
-    paid_out_at: datetime
+    settled_at: datetime
 
 
 _LINE_SELECT = """
-    SELECT l.id, l.batch_id, l.account_id, l.vendor_line_id, l.type,
-           l.vendor_type, l.provider_payment_id, l.our_reference,
-           l.currency, l.gross_numerator, l.gross_denominator, l.fee_minor,
-           l.state, b.currency AS batch_currency, b.paid_out_at
-    FROM settlement_line l JOIN settlement_batch b ON b.id = l.batch_id
+    SELECT l.id, l.account_id, l.vendor_line_id, l.type, l.vendor_type,
+           l.provider_payment_id, l.our_reference, l.currency,
+           l.gross_numerator, l.gross_denominator, l.fee_minor, l.state,
+           l.settled_at
+    FROM settlement_line l
 """
 
 
@@ -292,13 +300,12 @@ async def _settle(
         )
         return
     currency = attempt.amount.currency
-    if line.currency != currency or line.batch_currency != currency:
+    if line.currency != currency:
         await _exception(
             conn,
             line,
             ExceptionKind.CURRENCY_DIFFERS,
-            f"line in {line.currency}, batch in {line.batch_currency},"
-            f" payment in {currency.value}",
+            f"line in {line.currency}, payment in {currency.value}",
             now,
         )
         return
@@ -364,7 +371,7 @@ async def _settle(
         line.vendor_line_id,
         estimate,
         Money(line.fee_minor, currency),
-        line.paid_out_at,
+        line.settled_at,
         LINE_BOOKER,
         now,
     )
@@ -398,22 +405,32 @@ async def _book_received(
     line = await _lock_line(conn, line_id)
     if line.state != LineState.RECEIVED:
         return Stale()
-    if line.type == LineType.UNKNOWN:
-        await _exception(
-            conn,
-            line,
-            ExceptionKind.UNKNOWN_TYPE,
-            f"a {line.vendor_type!r} line is not booked",
-            now,
-        )
-    else:
-        await _exception(
-            conn,
-            line,
-            ExceptionKind.UNKNOWN_REFERENCE,
-            f"no payment of this account has reference {line.our_reference!r}",
-            now,
-        )
+    match line.type:
+        case LineType.BALANCE_TRANSFER:
+            # Money moved between the PSP's batches: nothing to book, its
+            # payout's reconciliation counts it.
+            await conn.execute(
+                "UPDATE settlement_line SET state = %s, updated_at = %s WHERE id = %s",
+                (LineState.COUNTED, now, line.id),
+            )
+        case LineType.UNKNOWN:
+            await _exception(
+                conn,
+                line,
+                ExceptionKind.UNKNOWN_TYPE,
+                f"a {line.vendor_type!r} line is not booked",
+                now,
+            )
+        case LineType.CAPTURE:
+            # Its attempt was looked up when it was stored, and none had
+            # its reference.
+            await _exception(
+                conn,
+                line,
+                ExceptionKind.UNKNOWN_REFERENCE,
+                f"no payment of this account has reference {line.our_reference!r}",
+                now,
+            )
     return Applied()
 
 
@@ -458,18 +475,171 @@ async def book_lines(conn: Connection, fact: Fact, now: datetime) -> ConsumerOut
             raise WrongFact(f"settlement_line_book got {fact!r}")
 
 
-# --- booking a payout ---------------------------------------------------------------
+# --- booking and reconciling a payout -----------------------------------------
 
 
 @dataclass(frozen=True)
-class _BatchRow:
+class _PayoutRow:
+    id: uuid.UUID
     account_id: uuid.UUID
-    vendor_batch_id: str
+    vendor_payout_id: str
     currency: Currency
     net_numerator: int
     net_denominator: int
     paid_out_at: datetime
     booked_at: datetime | None
+    rounding_minor: int
+    rounding_entries: int
+
+
+_PAYOUT_SELECT = """
+    SELECT id, account_id, vendor_payout_id, currency, net_numerator,
+           net_denominator, paid_out_at, booked_at, rounding_minor,
+           rounding_entries
+    FROM settlement_payout
+"""
+
+
+async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
+    """Consumer `settlement_payout_book`: the net the PSP says it paid, on
+    its way to our bank, as reported and once, under the payout's lock.
+    Whether its lines add up is the reconciliation's."""
+    match fact:
+        case SettlementPayoutReportedV1(settlement_payout_id=payout_id):
+            pass
+        case _:
+            raise WrongFact(f"settlement_payout_book got {fact!r}")
+    async with conn.cursor(row_factory=class_row(_PayoutRow)) as cur:
+        await cur.execute(_PAYOUT_SELECT + " WHERE id = %s FOR UPDATE", (payout_id,))
+        payout = await one_row(cur, f"settlement payout {payout_id}")
+    if payout.booked_at is not None:
+        return Stale()
+    net = Fraction(payout.net_numerator, payout.net_denominator)
+    entry = payout_entry(
+        payout.account_id,
+        payout.vendor_payout_id,
+        Money(to_minor(net), payout.currency),
+        payout.paid_out_at,
+        PAYOUT_BOOKER,
+        now,
+    )
+    if entry is not None:
+        await record_entry(conn, entry)
+    await conn.execute(
+        "UPDATE settlement_payout SET booked_at = %s WHERE id = %s", (now, payout.id)
+    )
+    return Applied()
+
+
+@dataclass(frozen=True)
+class _PayoutKey:
+    account_id: uuid.UUID
+    vendor_payout_id: str
+
+
+async def _payout_key(conn: Connection, fact: Fact) -> _PayoutKey:
+    """Which payout a fact is about, by the PSP's id: a line names it before
+    the payout may be stored."""
+    match fact:
+        case SettlementLineReceivedV1(settlement_line_id=line_id):
+            query: LiteralString = (
+                "SELECT account_id, vendor_payout_id FROM settlement_line WHERE id = %s"
+            )
+            row_id = line_id
+        case SettlementPayoutReportedV1(settlement_payout_id=payout_id):
+            query = (
+                "SELECT account_id, vendor_payout_id FROM settlement_payout"
+                " WHERE id = %s"
+            )
+            row_id = payout_id
+        case _:
+            raise WrongFact(f"settlement_payout_reconcile got {fact!r}")
+    async with conn.cursor(row_factory=class_row(_PayoutKey)) as cur:
+        await cur.execute(query, (row_id,))
+        return await one_row(cur, f"settlement row {row_id}")
+
+
+async def reconcile_payout(
+    conn: Connection, fact: Fact, now: datetime
+) -> ConsumerOutcome:
+    """Consumer `settlement_payout_reconcile`, on a payout and on each of its
+    lines: under the payout's lock, does its net add up to the lines arrived
+    so far? Every stored line sends its fact after its commit, so the last
+    run sees them all, whatever the order (plan-settlement-reconciliation
+    §4.2). The booked rounding follows: a new entry for each change, never
+    an edit."""
+    key = await _payout_key(conn, fact)
+    async with conn.cursor(row_factory=class_row(_PayoutRow)) as cur:
+        await cur.execute(
+            _PAYOUT_SELECT
+            + " WHERE account_id = %s AND vendor_payout_id = %s FOR UPDATE",
+            (key.account_id, key.vendor_payout_id),
+        )
+        payout = await cur.fetchone()
+    if payout is None:
+        return Stale()  # a line first: its payout's own fact runs this again
+    async with conn.cursor(row_factory=class_row(_LineAmountsRow)) as cur:
+        await cur.execute(
+            """
+            SELECT gross_numerator, gross_denominator, fee_numerator,
+                   fee_denominator
+            FROM settlement_line
+            WHERE account_id = %s AND vendor_payout_id = %s AND currency = %s
+            """,
+            (payout.account_id, payout.vendor_payout_id, payout.currency),
+        )
+        line_rows = await cur.fetchall()
+    amounts: list[LineAmounts] = []
+    exact = Fraction(0)
+    for line_row in line_rows:
+        gross = Fraction(line_row.gross_numerator, line_row.gross_denominator)
+        fee = Fraction(line_row.fee_numerator, line_row.fee_denominator)
+        amounts.append(LineAmounts(gross=gross, fee=fee))
+        exact += gross - fee
+    reported = Fraction(payout.net_numerator, payout.net_denominator)
+    reconciliation = Reconciliation.OPEN
+    target = 0
+    match check_net(reported, amounts):
+        case AddedUp(rounding=rounding):
+            reconciliation = Reconciliation.BALANCED
+            target = rounding
+        case NetDiffers():
+            pass
+    rounding_entries = payout.rounding_entries
+    change = target - payout.rounding_minor
+    if change != 0:
+        rounding_entries += 1
+        entry = rounding_entry(
+            payout.account_id,
+            payout.vendor_payout_id,
+            rounding_entries,
+            Money(change, payout.currency),
+            payout.paid_out_at,
+            RECONCILER,
+            now,
+        )
+        assert entry is not None  # a change is never zero here
+        await record_entry(conn, entry)
+    difference = reported - exact
+    await conn.execute(
+        """
+        UPDATE settlement_payout
+        SET reconciliation = %s, difference_numerator = %s,
+            difference_denominator = %s, rounding_minor = %s,
+            rounding_entries = %s, reconciled_at = %s
+        WHERE id = %s
+        """,
+        (
+            reconciliation,
+            difference.numerator,
+            difference.denominator,
+            target,
+            rounding_entries,
+            now,
+            payout.id,
+        ),
+    )
+    return Applied()
 
 
 @dataclass(frozen=True)
@@ -478,81 +648,3 @@ class _LineAmountsRow:
     gross_denominator: int
     fee_numerator: int
     fee_denominator: int
-
-
-async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
-    """Consumer `settlement_payout_book`: the net the PSP says it paid, on
-    its way to our bank, once per batch under the batch's lock."""
-    match fact:
-        case SettlementBatchReceivedV1(settlement_batch_id=batch_id):
-            pass
-        case _:
-            raise WrongFact(f"settlement_payout_book got {fact!r}")
-    async with conn.cursor(row_factory=class_row(_BatchRow)) as cur:
-        await cur.execute(
-            """
-            SELECT account_id, vendor_batch_id, currency, net_numerator,
-                   net_denominator, paid_out_at, booked_at
-            FROM settlement_batch WHERE id = %s FOR UPDATE
-            """,
-            (batch_id,),
-        )
-        batch = await one_row(cur, f"settlement batch {batch_id}")
-    if batch.booked_at is not None:
-        return Stale()
-    account_id = batch.account_id
-    currency = batch.currency
-    async with conn.cursor(row_factory=class_row(_LineAmountsRow)) as cur:
-        await cur.execute(
-            """
-            SELECT gross_numerator, gross_denominator, fee_numerator,
-                   fee_denominator
-            FROM settlement_line WHERE batch_id = %s AND currency = %s
-            """,
-            (batch_id, currency),
-        )
-        line_rows = await cur.fetchall()
-    amounts: list[LineAmounts] = []
-    for line_row in line_rows:
-        amounts.append(
-            LineAmounts(
-                gross=Fraction(line_row.gross_numerator, line_row.gross_denominator),
-                fee=Fraction(line_row.fee_numerator, line_row.fee_denominator),
-            )
-        )
-    reported = Fraction(batch.net_numerator, batch.net_denominator)
-    check = check_net(reported, amounts)
-    entry = payout_entry(
-        account_id=account_id,
-        vendor_batch_id=batch.vendor_batch_id,
-        currency=currency,
-        net=to_minor(reported),
-        check=check,
-        effective_at=batch.paid_out_at,
-        actor=PAYOUT_BOOKER,
-        now=now,
-    )
-    if entry is not None:
-        await record_entry(conn, entry)
-    if isinstance(check, NetDiffers):
-        await conn.execute(
-            """
-            INSERT INTO settlement_exception
-              (id, account_id, batch_id, kind, detail, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (batch_id) DO NOTHING
-            """,
-            (
-                uuid.uuid7(),
-                account_id,
-                batch_id,
-                ExceptionKind.NET_DIFFERS,
-                f"net {check.reported} {currency} minor, its lines add up to"
-                f" {check.expected}",
-                now,
-            ),
-        )
-    await conn.execute(
-        "UPDATE settlement_batch SET booked_at = %s WHERE id = %s", (now, batch_id)
-    )
-    return Applied()

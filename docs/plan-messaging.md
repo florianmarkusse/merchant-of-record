@@ -178,7 +178,8 @@ migrations would then not match.
 ## 7. Rules this applies
 
 Transactional outbox (facts and state commit together); facts in the past
-tense with a schema version; ordering per aggregate; idempotent consumers
+tense with a schema version; ordering per aggregate (dropped 23-Nov-2026,
+`plan-messaging-rework.md` §2); idempotent consumers
 through a unique key and a row lock; a lock guards, time only triggers
 (`not_before`, the idle sleep); a session advisory lock for the worker's
 claim, freed when its connection dies; one explicit table for routing and

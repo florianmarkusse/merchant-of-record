@@ -430,7 +430,10 @@ Open:
 ## 7. Settlement (5c)
 
 The sketch agreed with §1 was replaced by §7.1; what 5c-1 built is in
-§7.2.
+§7.2. `plan-settlement-reconciliation.md` (23-Nov-2026, for review)
+reworks it from what Stripe, Adyen and Xendit really send: lines and
+payouts in any order, the net reconciled per payout. Where they differ,
+it wins once agreed.
 
 ### 7.1 5c in detail (agreed 20-Nov-2026)
 

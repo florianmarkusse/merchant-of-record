@@ -7,9 +7,12 @@ The run starts deep: one to three sessions of one shop, each paid by card
 and approved at the PSP; for each the run draws whether our books have
 caught up (the order made) or not, so settlement can get ahead of them.
 The account's wiring and its settlement mode (report file or API) are
-drawn; a first batch is cut (with faults, maybe) and read, and, as drawn,
-booked as far as it goes (a line for a payment our books have not caught
-up with then waits) or left for the actions, with the payments' own news.
+drawn; a first batch is cut (with faults, maybe), fetched whole and its
+documents decoded in a drawn order (a page before its payout, an older
+page before a newer one), and, as drawn, booked as each is decoded (a
+payout reconciled against some of its lines; a line for a payment our
+books have not caught up with waits) or left for the actions, with the
+payments' own news.
 Actions: run one delivery; the worker catches up; crash inside a local
 step before its commit (a settlement step's above all, while one is due),
 or around an effect's call (a settlement read among them); a handled fact
@@ -26,6 +29,7 @@ for, with `psp_clearing` holding exactly what the fake has not paid out.
 
 import asyncio
 import os
+import random
 import uuid
 from collections import Counter
 from collections.abc import Coroutine
@@ -78,6 +82,7 @@ READ_FAULTS = ("fail_500", "fail_500_after_work", "timeout_after_work")
 SETTLEMENT_STEPS = (
     ConsumerName.SETTLEMENT_LINE_BOOK,
     ConsumerName.SETTLEMENT_PAYOUT_BOOK,
+    ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
 )
 
 MILESTONES = (
@@ -87,16 +92,25 @@ MILESTONES = (
     "several lines booked",
     "crash in settlement_line_book",
     "crash in settlement_payout_book",
+    "crash in settlement_payout_reconcile",
     "crash in psp_inbox_decode",
     "crash around a settlement read",
     "met again: settlement_line_book",
     "met again: settlement_payout_book",
+    "met again: settlement_payout_reconcile",
     "met again: psp_inbox_decode",
     "exception: unknown_reference",
     "exception: amount_differs",
     "exception: settled_twice",
     "exception: unknown_type",
-    "exception: net_differs",
+    # The orders plan-settlement-reconciliation §4.2 must take, seen while
+    # they last, and what reconciling ends in.
+    "a line stored before its payout",
+    "an older page stored before a newer one",
+    "a payout open while its lines arrive",
+    "a payout balanced",
+    "a payout open: its net is off",
+    "a balance transfer counted",
 )
 TALLY: Counter[str] = Counter()
 
@@ -140,6 +154,7 @@ class SettlementFlow(RuleBasedStateMachine):
         booked=st.lists(st.booleans(), min_size=1, max_size=3),
         first_cut=st.lists(st.sampled_from(CUT_FAULTS), max_size=2, unique=True),
         book_first_cut=st.booleans(),
+        decode_order=st.randoms(use_true_random=False),
     )
     def approved_payments(
         self,
@@ -150,10 +165,14 @@ class SettlementFlow(RuleBasedStateMachine):
         booked: list[bool],
         first_cut: list[CutFault],
         book_first_cut: bool,
+        decode_order: random.Random,
     ) -> None:
         """A session per entry of `booked`, each approved at the PSP, and
         caught up in our books where its entry says so; then a first cut,
-        read and stored, and booked if drawn so."""
+        fetched whole and decoded in a drawn order, and booked as it is
+        decoded if drawn so: the orders a payout and its pages arrive in
+        come from the start, not from luck in the actions
+        (plan-settlement-reconciliation §5)."""
         self.guard = guard
 
         async def step() -> None:
@@ -200,9 +219,8 @@ class SettlementFlow(RuleBasedStateMachine):
                 self.sessions.append(session_id)
             await self._cut(first_cut)
             self.now += self.settlement_interval
-            await self._read_settlement()
-            if book_first_cut:
-                await self._book_settlement()
+            await self._fetch_settlement()
+            await self._decode_in_order(decode_order, book_first_cut)
 
         self.run(step())
 
@@ -311,6 +329,12 @@ class SettlementFlow(RuleBasedStateMachine):
         if self.run(self._lines_waiting()):
             self.met.add("a line waited for its order")
 
+    @invariant()
+    def note_arrival_orders(self) -> None:
+        """Not a rule: the orders lines and payouts arrive in, seen while
+        they last."""
+        self.met |= self.run(self._arrival_orders())
+
     # --- helpers ---------------------------------------------------------
 
     def _draw(
@@ -330,14 +354,13 @@ class SettlementFlow(RuleBasedStateMachine):
         self.now += timedelta(minutes=1)
         await catch_up(self.worker, self.http, self.now)
 
-    async def _read_settlement(self) -> None:
-        """Only the reading: looks and decoding, until nothing of them is
-        due. Booking is left to the actions."""
-        reading = (ConsumerName.PSP_SETTLEMENT_FETCH, ConsumerName.PSP_INBOX_DECODE)
+    async def _fetch_settlement(self) -> None:
+        """Only the looks, until none is due: every document stored, none
+        decoded."""
         for _ in range(50):
             ran = False
             for candidate in await find_candidates(self.worker, self.now, 50):
-                if candidate.consumer in reading:
+                if candidate.consumer == ConsumerName.PSP_SETTLEMENT_FETCH:
                     result = await run_one(
                         self.worker, self.http, ENV, candidate, self.now
                     )
@@ -346,6 +369,25 @@ class SettlementFlow(RuleBasedStateMachine):
             if not ran:
                 return
         raise AssertionError("the reading never finished")
+
+    async def _decode_in_order(self, order: random.Random, book: bool) -> None:
+        """Each stored document decoded in the drawn order; with `book`, the
+        settlement steps it leads to run before the next is decoded, so a
+        payout is reconciled against some of its lines."""
+        for _ in range(50):
+            decodes: list[Candidate] = []
+            for candidate in await find_candidates(self.worker, self.now, 50):
+                if candidate.consumer == ConsumerName.PSP_INBOX_DECODE:
+                    decodes.append(candidate)
+            if not decodes:
+                return
+            chosen = order.choice(decodes)
+            result = await run_one(self.worker, self.http, ENV, chosen, self.now)
+            assert not isinstance(result, Failed), result
+            if book:
+                await self._book_settlement()
+            self.met |= await self._arrival_orders()
+        raise AssertionError("the decoding never finished")
 
     async def _book_settlement(self) -> None:
         """The settlement steps due now, once each: nothing else runs, so a
@@ -390,23 +432,82 @@ class SettlementFlow(RuleBasedStateMachine):
         )
         return await cur.fetchone() is not None
 
+    async def _arrival_orders(self) -> set[str]:
+        seen: set[str] = set()
+        cur = await self.worker.execute(
+            """
+            SELECT
+              EXISTS (SELECT 1 FROM settlement_line l WHERE NOT EXISTS (
+                SELECT 1 FROM settlement_payout p
+                WHERE p.account_id = l.account_id
+                  AND p.vendor_payout_id = l.vendor_payout_id)),
+              -- Pages come newest first: an older line stored first came on
+              -- a later page decoded before an earlier one.
+              EXISTS (SELECT 1
+                FROM settlement_line older
+                JOIN fake_vendor.psp_fake_settlement_line fo
+                  ON fo.id = older.vendor_line_id
+                JOIN settlement_line newer
+                  ON newer.account_id = older.account_id
+                 AND newer.vendor_payout_id = older.vendor_payout_id
+                JOIN fake_vendor.psp_fake_settlement_line fn
+                  ON fn.id = newer.vendor_line_id
+                JOIN psp_account a ON a.id = older.account_id
+                WHERE a.settlement_mode = 'api'
+                  AND fo.seq < fn.seq AND older.id < newer.id),
+              EXISTS (SELECT 1 FROM settlement_payout p
+                JOIN fake_vendor.psp_fake_settlement_batch f
+                  ON f.id = p.vendor_payout_id
+                WHERE p.reconciliation = 'open' AND f.fault IS NULL
+                  AND (SELECT count(*) FROM settlement_line l
+                       WHERE l.account_id = p.account_id
+                         AND l.vendor_payout_id = p.vendor_payout_id)
+                    < (SELECT count(*) FROM fake_vendor.psp_fake_settlement_line fl
+                       WHERE fl.batch_id = f.id))
+            """
+        )
+        row = await cur.fetchone()
+        assert row is not None
+        line_first, older_page_first, open_while_arriving = row
+        if line_first:
+            seen.add("a line stored before its payout")
+        if older_page_first:
+            seen.add("an older page stored before a newer one")
+        if open_while_arriving:
+            seen.add("a payout open while its lines arrive")
+        return seen
+
     async def _reached(self) -> set[str]:
         reached = set(self.met & set(MILESTONES))
         cur = await self.worker.execute(
             """
             SELECT
               (SELECT count(*) FROM settlement_line WHERE state = 'booked'),
-              EXISTS (SELECT 1 FROM settlement_batch WHERE booked_at IS NOT NULL)
+              EXISTS (SELECT 1 FROM settlement_payout WHERE booked_at IS NOT NULL),
+              EXISTS (SELECT 1 FROM settlement_payout
+                      WHERE reconciliation = 'balanced'),
+              EXISTS (SELECT 1 FROM settlement_payout p
+                      JOIN fake_vendor.psp_fake_settlement_batch f
+                        ON f.id = p.vendor_payout_id
+                      WHERE p.reconciliation = 'open' AND f.fault = 'net_differs'),
+              EXISTS (SELECT 1 FROM settlement_line WHERE state = 'counted')
             """
         )
         row = await cur.fetchone()
         assert row is not None
-        if row[0] >= 1:
+        booked_lines, payout_booked, balanced, net_off, counted = row
+        if booked_lines >= 1:
             reached.add("a settled line booked")
-        if row[0] >= 2:
+        if booked_lines >= 2:
             reached.add("several lines booked")
-        if row[1]:
+        if payout_booked:
             reached.add("a payout booked")
+        if balanced:
+            reached.add("a payout balanced")
+        if net_off:
+            reached.add("a payout open: its net is off")
+        if counted:
+            reached.add("a balance transfer counted")
         cur = await self.worker.execute(
             "SELECT DISTINCT kind::text FROM settlement_exception"
         )

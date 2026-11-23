@@ -1,6 +1,7 @@
 """Layer 3 (plan-architecture.md §10): real workers on their own connections
-against the same rows, at once (probes, echo jobs, invoice numbers). Not
-shrunk; it checks that the locks do what the serial fuzzer assumes."""
+against the same rows, at once (probes, echo jobs, invoice numbers, a
+webhook racing a capture). Not shrunk; it checks that the locks do what the
+serial fuzzer assumes."""
 
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -13,16 +14,40 @@ from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.port import EchoProvider
 from mor.fakes.echo import make_app
 from mor.fakes.hang import hang_a_minute
-from mor.messaging.worker import Failed, Ran, RunResult, Skipped, drain_once
+from mor.messaging import consumers
+from mor.messaging.guard import DuplicateGuard
+from mor.messaging.routing import ConsumerName
+from mor.messaging.worker import (
+    Failed,
+    Prepared,
+    Ran,
+    RunResult,
+    Skipped,
+    complete_delivery,
+    drain_once,
+    find_candidates,
+    prepare_delivery,
+    run_one,
+    try_lock_aggregate,
+    unlock_aggregate,
+)
+from mor.payments.transitions import AttemptState
 from mor.probe.flow import start_probe
-from tests.helpers import ENV, NO_HTTP, advisory_locks_held
+from mor.psp.port import CaptureMode, StatusMode
+from tests.helpers import ENV, NO_HTTP, advisory_locks_held, effect_consumer
 from tests.payments.support import (
     FAT_SALE_KEYED,
     SGD_PRICE,
     Setup,
+    Wiring,
     approve_at_the_psp,
+    attempts_of,
+    count_rows,
+    drain,
     drain_all_but_invoices,
+    pay_on_page,
     quoted_session,
+    release,
     with_setup,
 )
 
@@ -211,3 +236,93 @@ def test_many_workers_number_invoices_without_a_gap(database_url: str) -> None:
         assert await advisory_locks_held(setup.url) == 0
 
     asyncio.run(with_setup(database_url, FAT_SALE_KEYED, body))
+
+
+def test_a_webhook_is_applied_while_the_capture_call_is_out(
+    database_url: str,
+) -> None:
+    """A local consumer does not wait for an effect's advisory lock
+    (plan-messaging-rework.md §3.2): the PSP's `captured` webhook is applied
+    while our capture call is still out, and the capture's `complete` then
+    finds the attempt captured and changes nothing more."""
+    wiring = Wiring(
+        StatusMode.PUSH_FAT,
+        CaptureMode.AUTHORISE_CAPTURE,
+        DuplicateGuard.VENDOR_CONSTRAINT,
+    )
+
+    async def body(setup: Setup) -> None:
+        await pay_on_page(setup)
+        await drain(setup)
+        (attempt,) = await attempts_of(setup)
+        await release(setup, attempt, "paid")
+        now = setup.clock[0]
+        other = await connect(setup.url, autocommit=True)
+        # Everything up to the capture: the authorised webhook.
+        capture = None
+        for _ in range(20):
+            for found in await find_candidates(other, now, 50):
+                if found.consumer == ConsumerName.PSP_PAYMENT_CAPTURE:
+                    capture = found
+                else:
+                    result = await run_one(other, setup.wired.http, ENV, found, now)
+                    assert not isinstance(result, Failed), result
+            if capture is not None:
+                break
+        assert capture is not None
+        capturing = await connect(setup.url, autocommit=True)
+        try:
+            async with other:
+                # The capture: prepared, the call made (the fake pushes the
+                # `captured` webhook during it), no `complete` yet.
+                assert await try_lock_aggregate(capturing, capture)
+                async with capturing.transaction():
+                    prepared = await prepare_delivery(
+                        capturing, capture, effect_consumer(capture), now
+                    )
+                assert isinstance(prepared, Prepared)
+                answer = await consumers.call(setup.wired.http, ENV, prepared.call)
+
+                # Meanwhile another worker applies the webhook on the same
+                # attempt, which used to wait as "busy".
+                applied = False
+                for _ in range(10):
+                    for found in await find_candidates(other, now, 50):
+                        if found == capture:
+                            continue
+                        result = await run_one(other, setup.wired.http, ENV, found, now)
+                        assert not isinstance(result, Failed), result
+                        if found.consumer == ConsumerName.PAYMENT_EVENT_APPLY:
+                            assert isinstance(result, Ran), result
+                            applied = True
+                assert applied
+                (attempt,) = await attempts_of(setup)
+                assert attempt.state == AttemptState.CAPTURED
+
+            async with capturing.transaction():
+                completed = await complete_delivery(
+                    capturing, capture, prepared.fact, answer, now
+                )
+            assert isinstance(completed, Ran), completed
+        finally:
+            await unlock_aggregate(capturing, capture)
+            await capturing.close()
+        await drain(setup)
+
+        (attempt,) = await attempts_of(setup)
+        assert attempt.state == AttemptState.CAPTURED
+        charges = "SELECT count(*) FROM fake_vendor.psp_fake_charge"
+        assert await count_rows(setup.url, charges) == 1
+        assert await count_rows(setup.url, "SELECT count(*) FROM order_") == 1
+        assert await count_rows(setup.url, "SELECT count(*) FROM journal_entry") == 1
+        # Nothing due is left open (the session's expiry is due tomorrow).
+        async with await connect(setup.url) as conn:
+            cur = await conn.execute(
+                "SELECT consumer FROM outbox_delivery"
+                " WHERE handled_at IS NULL AND not_before <= %s",
+                (setup.clock[0],),
+            )
+            assert await cur.fetchall() == []
+        assert await advisory_locks_held(setup.url) == 0
+
+    asyncio.run(with_setup(database_url, wiring, body))
