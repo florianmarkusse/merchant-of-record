@@ -103,19 +103,19 @@ async def create_session(
         deliver_at=expires_at,
     )
     return CheckoutSession(
-        session_id,
-        merchant_id,
-        SessionState.OPEN,
-        draft.lines,
-        draft.parcel,
-        draft.merchant_reference,
-        draft.return_url,
-        draft.cancel_url,
-        draft.after_payment,
-        now,
-        expires_at,
-        None,
-        None,
+        id=session_id,
+        merchant_id=merchant_id,
+        state=SessionState.OPEN,
+        lines=draft.lines,
+        parcel=draft.parcel,
+        merchant_reference=draft.merchant_reference,
+        return_url=draft.return_url,
+        cancel_url=draft.cancel_url,
+        after_payment=draft.after_payment,
+        created_at=now,
+        expires_at=expires_at,
+        address_id=None,
+        quote_id=None,
     )
 
 
@@ -170,33 +170,38 @@ async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession
     for line in line_rows:
         lines.append(
             SoldLine(
-                line.name,
-                line.quantity,
-                Money(line.unit_price_minor, line.currency),
-                line.category,
-                line.merchant_sku,
-                Customs(
-                    line.customs_description,
-                    line.origin_country,
-                    line.weight_g,
-                    line.hs_code,
+                name=line.name,
+                quantity=line.quantity,
+                unit_price=Money(line.unit_price_minor, line.currency),
+                category=line.category,
+                merchant_sku=line.merchant_sku,
+                customs=Customs(
+                    description=line.customs_description,
+                    origin_country=line.origin_country,
+                    weight_g=line.weight_g,
+                    hs_code=line.hs_code,
                 ),
             )
         )
     return CheckoutSession(
-        row.id,
-        row.merchant_id,
-        row.state,
-        tuple(lines),
-        Parcel(row.weight_g, row.length_mm, row.width_mm, row.height_mm),
-        row.merchant_reference,
-        row.return_url,
-        row.cancel_url,
-        row.after_payment,
-        row.created_at,
-        row.expires_at,
-        row.address_id,
-        row.quote_id,
+        id=row.id,
+        merchant_id=row.merchant_id,
+        state=row.state,
+        lines=tuple(lines),
+        parcel=Parcel(
+            weight_g=row.weight_g,
+            length_mm=row.length_mm,
+            width_mm=row.width_mm,
+            height_mm=row.height_mm,
+        ),
+        merchant_reference=row.merchant_reference,
+        return_url=row.return_url,
+        cancel_url=row.cancel_url,
+        after_payment=row.after_payment,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        address_id=row.address_id,
+        quote_id=row.quote_id,
     )
 
 

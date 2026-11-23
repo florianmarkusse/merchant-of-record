@@ -228,7 +228,11 @@ def routes_to(market: MarketSet, destination: str) -> list[ShippingRoute]:
 
 def price_question(service: Service, destination: str, parcel: Parcel) -> PriceQuestion:
     return PriceQuestion(
-        service.provider, service.code, service.origin, destination, parcel
+        carrier=service.provider,
+        service=service.code,
+        origin=service.origin,
+        destination=destination,
+        parcel=parcel,
     )
 
 
@@ -251,11 +255,11 @@ def own_card_price(
             codes.append(card.code)
     for code in sorted(codes):
         route = ShippingRoute(
-            Scope(destination, None),
-            service_code,
-            code,
-            PriceSource.OWN_TABLE,
-            Standing.PLACEHOLDER,
+            scope=Scope(destination, None),
+            service=service_code,
+            rate_card=code,
+            source=PriceSource.OWN_TABLE,
+            standing=Standing.PLACEHOLDER,
         )
         offer = _offer(
             market,
@@ -349,7 +353,11 @@ def _offer(
     how = f"zone {zone.zone}, {_kg(rate.weight_kg)} kg"
     if chargeable > Fraction(parcel.weight_g, GRAMS_PER_KG):
         how += f" (volumetric {_kg(chargeable)} kg)"
-    parts: list[ShipPart] = [ShipPart(PartKind.FREIGHT, "freight", freight, how, None)]
+    parts: list[ShipPart] = [
+        ShipPart(
+            kind=PartKind.FREIGHT, name="freight", exact=freight, how=how, line_no=None
+        )
+    ]
     fuel_base = freight
     fuel_names: list[str] = []
     fuel_row: Surcharge | None = None
@@ -392,7 +400,15 @@ def _offer(
             detail = f"{row.name} has no amount (surcharges.csv line {row.line_no})"
             return NotOffered(code, "surcharge_not_confirmed", detail)
         exact, taken = priced
-        parts.append(ShipPart(PartKind.SURCHARGE, row.name, exact, taken, row.line_no))
+        parts.append(
+            ShipPart(
+                kind=PartKind.SURCHARGE,
+                name=row.name,
+                exact=exact,
+                how=taken,
+                line_no=row.line_no,
+            )
+        )
         if row.fuel_applies == FuelApplies.YES:
             fuel_base += exact
             fuel_names.append(row.name)
@@ -408,24 +424,24 @@ def _offer(
         on_what = " + ".join(["freight", *fuel_names])
         parts.append(
             ShipPart(
-                PartKind.FUEL,
-                FUEL,
-                fuel_base * fuel,
-                f"{percent_text(fuel_row.rate)} of {on_what}",
-                fuel_row.line_no,
+                kind=PartKind.FUEL,
+                name=FUEL,
+                exact=fuel_base * fuel,
+                how=f"{percent_text(fuel_row.rate)} of {on_what}",
+                line_no=fuel_row.line_no,
             )
         )
     return Offer(
-        route,
-        service,
-        FromCard(card, zone),
-        chargeable,
-        rate.weight_kg,
-        tuple(parts),
-        tuple(duty_paid_rows),
-        fuel,
-        stale,
-        _transit(market, service.code, destination),
+        route=route,
+        service=service,
+        priced_by=FromCard(card, zone),
+        chargeable_kg=chargeable,
+        billed_kg=rate.weight_kg,
+        parts=tuple(parts),
+        duty_paid_rows=tuple(duty_paid_rows),
+        fuel_rate=fuel,
+        fuel_stale_since=stale,
+        transit=_transit(market, service.code, destination),
     )
 
 
@@ -502,7 +518,9 @@ def _from_carrier(
                 kind = PartKind.FUEL
             case PricePartKind.SURCHARGE:
                 kind = PartKind.SURCHARGE
-        parts.append(ShipPart(kind, part.name, exact, asked, None))
+        parts.append(
+            ShipPart(kind=kind, name=part.name, exact=exact, how=asked, line_no=None)
+        )
     duty_paid_rows: list[Surcharge] = []
     fuel_row: Surcharge | None = None
     for row in surcharges_for(market, service.code, None, destination):
@@ -522,22 +540,22 @@ def _from_carrier(
     ):
         fuel_rate = fuel_row.rate
     return Offer(
-        route,
-        service,
-        FromCarrier(
-            latest.id,
-            latest.finished_at,
-            latest.usable_until,
-            latest.price.total,
-            latest.price.own,
+        route=route,
+        service=service,
+        priced_by=FromCarrier(
+            lookup_id=latest.id,
+            finished_at=latest.finished_at,
+            usable_until=latest.usable_until,
+            carrier_total=latest.price.total,
+            own=latest.price.own,
         ),
-        chargeable,
-        chargeable,
-        tuple(parts),
-        tuple(duty_paid_rows),
-        fuel_rate,
-        None,
-        _transit(market, service.code, destination),
+        chargeable_kg=chargeable,
+        billed_kg=chargeable,
+        parts=tuple(parts),
+        duty_paid_rows=tuple(duty_paid_rows),
+        fuel_rate=fuel_rate,
+        fuel_stale_since=None,
+        transit=_transit(market, service.code, destination),
     )
 
 
@@ -581,7 +599,13 @@ def duty_paid_parts(
             return NotOffered(code, "surcharge_not_confirmed", detail)
         exact, taken = priced
         parts.append(
-            ShipPart(PartKind.DUTY_PAID_FEE, row.name, exact, taken, row.line_no)
+            ShipPart(
+                kind=PartKind.DUTY_PAID_FEE,
+                name=row.name,
+                exact=exact,
+                how=taken,
+                line_no=row.line_no,
+            )
         )
         if row.fuel_applies == FuelApplies.YES and offer.fuel_rate is None:
             detail = f"no usable fuel row for {offer.service.code}"
@@ -589,11 +613,11 @@ def duty_paid_parts(
         if row.fuel_applies == FuelApplies.YES and offer.fuel_rate:
             parts.append(
                 ShipPart(
-                    PartKind.FUEL,
-                    f"{FUEL} on {row.name}",
-                    exact * offer.fuel_rate,
-                    f"{percent_text(offer.fuel_rate)} of {row.name}",
-                    row.line_no,
+                    kind=PartKind.FUEL,
+                    name=f"{FUEL} on {row.name}",
+                    exact=exact * offer.fuel_rate,
+                    how=f"{percent_text(offer.fuel_rate)} of {row.name}",
+                    line_no=row.line_no,
                 )
             )
     return parts

@@ -161,7 +161,14 @@ def read_order(fields: dict[str, str]) -> OrderForm | dict[str, str] | None:
     if errors or isinstance(goods, InvalidAmount):
         return errors
     category = fields.get("category", "apparel")
-    check = OrderCheck(country, category, goods, None, hs_code, origin)
+    check = OrderCheck(
+        country=country,
+        category=category,
+        goods=goods,
+        freight=None,
+        hs_code=hs_code,
+        origin=origin,
+    )
     return OrderForm(check, parcel)
 
 
@@ -198,7 +205,9 @@ def _parcel(fields: dict[str, str], errors: dict[str, str]) -> Parcel | None:
             errors[where] = "Whole numbers above zero."
             return None
         sizes.append(int(text))
-    return Parcel(sizes[0], sizes[1], sizes[2], sizes[3])
+    return Parcel(
+        weight_g=sizes[0], length_mm=sizes[1], width_mm=sizes[2], height_mm=sizes[3]
+    )
 
 
 def _researched(market: MarketSet | None) -> list[Country]:
@@ -264,20 +273,20 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
     if market is not None:
         origins = sorted(market.countries, key=lambda country: country.name)
     view = QuoteView(
-        _researched(market),
-        origins,
-        categories,
-        fields,
-        errors,
-        on,
-        market is not None,
-        quote,
-        why,
-        ask,
-        "asked" in request.query_params or "priced" in request.query_params,
-        back,
-        references,
-        frozenset(no_account),
+        countries=_researched(market),
+        origins=origins,
+        categories=categories,
+        fields=fields,
+        errors=errors,
+        on=on,
+        loaded=market is not None,
+        quote=quote,
+        why=why,
+        ask=ask,
+        asked="asked" in request.query_params or "priced" in request.query_params,
+        back=back,
+        references=references,
+        carriers_without_account=frozenset(no_account),
     )
     return HTMLResponse(render_quote_page(view))
 
@@ -302,7 +311,9 @@ async def data_page(request: Request, database_url: str, now: datetime) -> Respo
         if len(loads) > 1 and market is not None:
             previous = await read_market(conn, loads[1].id)
             changes = describe_changes(previous, market)
-    view = DataView(loads, market, changes, category, on)
+    view = DataView(
+        loads=loads, market=market, changes=changes, category=category, on=on
+    )
     return HTMLResponse(render_data_page(view))
 
 
@@ -345,8 +356,16 @@ def _quote(
     prices: dict[PriceQuestion, PriceHeld],
 ) -> QuoteResult:
     """The order as one line of one item, quoted."""
-    line = QuoteLine(order.category, order.hs_code, order.origin, 1, order.goods)
-    request = QuoteRequest(order.country, (line,), parcel, on, now)
+    line = QuoteLine(
+        category=order.category,
+        hs_code=order.hs_code,
+        origin=order.origin,
+        quantity=1,
+        unit_price=order.goods,
+    )
+    request = QuoteRequest(
+        destination=order.country, lines=(line,), parcel=parcel, on=on, now=now
+    )
     lookups: dict[RateQuestion, VendorLookup] = {}
     if lookup is not None and order.hs_code is not None:
         lookups[RateQuestion(order.country, order.origin, order.hs_code)] = lookup
@@ -430,7 +449,9 @@ async def ask_carrier(request: Request, database_url: str, now: datetime) -> Res
         if not text.isdigit() or int(text) == 0:
             return Response("parcel: whole numbers above zero", status_code=400)
         sizes.append(int(text))
-    parcel = Parcel(sizes[0], sizes[1], sizes[2], sizes[3])
+    parcel = Parcel(
+        weight_g=sizes[0], length_mm=sizes[1], width_mm=sizes[2], height_mm=sizes[3]
+    )
     country = form.country.strip().upper()
     async with await connect(database_url) as conn:
         market = await market_in_force(conn)

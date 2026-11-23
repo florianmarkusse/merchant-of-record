@@ -160,6 +160,11 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
   closed sets are `StrEnum` or `Literal`; results are unions of records
   matched with `match` and `assert_never`. A payment that can be
   `captured` or `refunded` is a closed set of states, not booleans.
+- A record of 4 or more fields is built with keyword arguments, and a
+  query of several columns is read with `class_row` into a row record
+  named after its columns, never unpacked from a tuple (decided
+  23-Nov-2026: pyright sees tuple rows as `Any`, and two positional ints
+  can swap unnoticed).
 - Errors as values covers declined card, tax rule missing, PSP timeout.
 - Never shadow domain names (`payment`, `merchant`, `invoice`, `ledger`)
   with local variables.

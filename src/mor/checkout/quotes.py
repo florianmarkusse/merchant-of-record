@@ -101,32 +101,32 @@ def stored_from(
             parts.append(_in_quote_currency(part, quote.currency))
         options.append(
             StoredOption(
-                option.key,
-                option.service,
-                option.service_name,
-                option.tier,
-                option.transit_days,
-                option.total.amount_minor,
-                option.standing,
-                tuple(parts),
+                key=option.key,
+                service=option.service,
+                service_name=option.service_name,
+                tier=option.tier,
+                transit=option.transit_days,
+                total_minor=option.total.amount_minor,
+                standing=option.standing,
+                parts=tuple(parts),
             )
         )
     not_offered: list[tuple[str, str]] = []
     for refused in quote.not_offered:
         not_offered.append((refused.key, refused.reason))
     return MadeQuote(
-        quote_id,
-        session_id,
-        address_id,
-        load_id,
-        made_at,
-        valid_until,
-        quote.currency,
-        tuple(goods),
-        tuple(options),
-        quote.placeholders,
-        tuple(not_offered),
-        inputs,
+        id=quote_id,
+        session_id=session_id,
+        address_id=address_id,
+        load_id=load_id,
+        made_at=made_at,
+        valid_until=valid_until,
+        currency=quote.currency,
+        goods=tuple(goods),
+        options=tuple(options),
+        placeholders=quote.placeholders,
+        not_offered=tuple(not_offered),
+        inputs=inputs,
     )
 
 
@@ -324,14 +324,14 @@ def _refusal_code(text: str) -> RefusalCode:
 
 def _part(row: _PartRow, currency: Currency) -> Part:
     return Part(
-        row.kind,
-        row.label,
-        row.line,
-        Fraction(int(row.exact_numerator), int(row.exact_denominator)),
-        Money(row.amount_minor, currency),
-        row.rounding,
-        row.collector,
-        row.source,
+        kind=row.kind,
+        label=row.label,
+        line=row.line,
+        exact=Fraction(int(row.exact_numerator), int(row.exact_denominator)),
+        amount=Money(row.amount_minor, currency),
+        mode=row.rounding,
+        collector=row.collector,
+        source=row.source,
     )
 
 
@@ -352,13 +352,13 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
     if row.state == "refused":
         assert row.refusal_code is not None and row.refusal_message is not None
         return RefusedQuote(
-            row.id,
-            row.session_id,
-            row.address_id,
-            row.market_load_id,
-            row.made_at,
-            _refusal_code(row.refusal_code),
-            row.refusal_message,
+            id=row.id,
+            session_id=row.session_id,
+            address_id=row.address_id,
+            load_id=row.market_load_id,
+            made_at=row.made_at,
+            code=_refusal_code(row.refusal_code),
+            message=row.refusal_message,
         )
     assert row.currency is not None and row.valid_until is not None
     async with conn.cursor(row_factory=class_row(_PartRow)) as cur:
@@ -398,14 +398,14 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
             transit = (option_row.transit_min, option_row.transit_max)
         options.append(
             StoredOption(
-                option_row.key,
-                option_row.service,
-                option_row.service_name,
-                option_row.tier,
-                transit,
-                option_row.total_minor,
-                option_row.standing,
-                tuple(by_option.get(option_row.option_no, [])),
+                key=option_row.key,
+                service=option_row.service,
+                service_name=option_row.service_name,
+                tier=option_row.tier,
+                transit=transit,
+                total_minor=option_row.total_minor,
+                standing=option_row.standing,
+                parts=tuple(by_option.get(option_row.option_no, [])),
             )
         )
     cur = await conn.execute(
@@ -440,18 +440,18 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
         else:
             price_lookups.append(price_lookup_id)
     return MadeQuote(
-        row.id,
-        row.session_id,
-        row.address_id,
-        row.market_load_id,
-        row.made_at,
-        row.valid_until,
-        row.currency,
-        tuple(goods),
-        tuple(options),
-        tuple(placeholders),
-        tuple(not_offered),
-        QuoteInputs(tuple(duty_lookups), tuple(price_lookups)),
+        id=row.id,
+        session_id=row.session_id,
+        address_id=row.address_id,
+        load_id=row.market_load_id,
+        made_at=row.made_at,
+        valid_until=row.valid_until,
+        currency=row.currency,
+        goods=tuple(goods),
+        options=tuple(options),
+        placeholders=tuple(placeholders),
+        not_offered=tuple(not_offered),
+        inputs=QuoteInputs(tuple(duty_lookups), tuple(price_lookups)),
     )
 
 

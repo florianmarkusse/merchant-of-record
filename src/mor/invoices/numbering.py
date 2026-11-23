@@ -17,7 +17,9 @@ from mor.invoices.records import Series
 
 
 SERIES: dict[str, Series] = {
-    "INV": Series("INV", "placeholder", "INV", True, 6),
+    "INV": Series(
+        code="INV", entity="placeholder", prefix="INV", with_year=True, pad_width=6
+    ),
 }
 
 # Each entity's default series, by `SellingEntity.code`.

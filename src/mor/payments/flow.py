@@ -389,7 +389,12 @@ async def _new_request(
         """,
         (request_id, attempt_id, operation, number, key, now),
     )
-    return _Request(request_id, number, key, VendorRequestState.NOT_SENT)
+    return _Request(
+        id=request_id,
+        number=number,
+        idempotency_key=key,
+        state=VendorRequestState.NOT_SENT,
+    )
 
 
 async def _mark_sent(conn: Connection, request_id: uuid.UUID) -> None:
@@ -520,11 +525,11 @@ async def prepare_create(
         account,
         request.id,
         PaymentRequest(
-            str(attempt.id),
-            attempt.amount,
-            attempt.method,
-            attempt.return_url,
-            request.idempotency_key,
+            reference=str(attempt.id),
+            amount=attempt.amount,
+            method=attempt.method,
+            return_url=attempt.return_url,
+            idempotency_key=request.idempotency_key,
         ),
     )
 
@@ -633,11 +638,11 @@ async def prepare_capture(
         )
     await _mark_sent(conn, request.id)
     return CaptureCall(
-        account,
-        request.id,
-        attempt.provider_payment_id,
-        attempt.amount,
-        request.idempotency_key,
+        account=account,
+        request_id=request.id,
+        provider_payment_id=attempt.provider_payment_id,
+        amount=attempt.amount,
+        key=request.idempotency_key,
     )
 
 

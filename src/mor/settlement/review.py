@@ -86,12 +86,12 @@ async def account_summaries(conn: Connection) -> list[AccountSummary]:
     for row in rows:
         found.append(
             AccountSummary(
-                row.id,
-                row.name,
-                row.settlement_mode,
-                row.last_read,
-                await _balances(conn, row.id),
-                row.open_exceptions,
+                id=row.id,
+                name=row.name,
+                settlement_mode=row.settlement_mode,
+                last_read=row.last_read,
+                balances=await _balances(conn, row.id),
+                open_exceptions=row.open_exceptions,
             )
         )
     return found

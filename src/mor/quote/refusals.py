@@ -53,11 +53,11 @@ class Refusal:
 
 
 def _order(code: RefusalCode, message: str, param: str | None = None) -> Refusal:
-    return Refusal(code, message, param, False)
+    return Refusal(code=code, message=message, param=param, ours=False)
 
 
 def _ours(message: str) -> Refusal:
-    return Refusal("pricing_unavailable", message, None, True)
+    return Refusal(code="pricing_unavailable", message=message, param=None, ours=True)
 
 
 NO_SERVICE = _order(

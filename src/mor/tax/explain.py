@@ -238,13 +238,13 @@ def explain(
                 rows.append(_row_text(row))
                 charges.append(
                     ChargeRow(
-                        Charge.DUTY,
-                        collected,
-                        value_text(row.amount),
-                        "the country's flat amount",
-                        None,
-                        None,
-                        (),
+                        charge=Charge.DUTY,
+                        collected=collected,
+                        rate=value_text(row.amount),
+                        says="the country's flat amount",
+                        own=None,
+                        problem=None,
+                        missed=(),
                     )
                 )
         case NotDue():
@@ -253,13 +253,13 @@ def explain(
         rows.append(_row_text(row))
         charges.append(
             ChargeRow(
-                row.charge,
-                f"at the border, {_band_text(row)}",
-                value_text(row.amount),
-                "the country's rule",
-                None,
-                None,
-                (),
+                charge=row.charge,
+                collected=f"at the border, {_band_text(row)}",
+                rate=value_text(row.amount),
+                says="the country's rule",
+                own=None,
+                problem=None,
+                missed=(),
             )
         )
     summary: list[str] = []
@@ -288,15 +288,25 @@ def explain(
                 " data differs from the vendor's."
             )
     ask = asks[0] if asks else None
-    return Explained(tuple(summary), tuple(charges), tuple(rows), ask)
+    return Explained(
+        summary=tuple(summary), charges=tuple(charges), rows=tuple(rows), ask_vendor=ask
+    )
 
 
 def _only(sentence: str) -> Explained:
-    return Explained((sentence,), (), (), None)
+    return Explained(summary=(sentence,), charges=(), rows=(), ask_vendor=None)
 
 
 def _not_due(charge: Charge, why: str) -> ChargeRow:
-    return ChargeRow(charge, why, None, None, None, None, ())
+    return ChargeRow(
+        charge=charge,
+        collected=why,
+        rate=None,
+        says=None,
+        own=None,
+        problem=None,
+        missed=(),
+    )
 
 
 def _country_name(market: MarketSet, iso2: str) -> str:
@@ -383,23 +393,23 @@ def _charge(
                         )
                     )
                     return ChargeRow(
-                        charge,
-                        collected,
-                        rate_text,
-                        f"our own row for HS {row.hs_prefix}",
-                        None,
-                        None,
-                        missed_text,
+                        charge=charge,
+                        collected=collected,
+                        rate=rate_text,
+                        says=f"our own row for HS {row.hs_prefix}",
+                        own=None,
+                        problem=None,
+                        missed=missed_text,
                     )
                 case FromBandRow():
                     return ChargeRow(
-                        charge,
-                        collected,
-                        rate_text,
-                        "the country's standard rate",
-                        None,
-                        None,
-                        missed_text,
+                        charge=charge,
+                        collected=collected,
+                        rate=rate_text,
+                        says="the country's standard rate",
+                        own=None,
+                        problem=None,
+                        missed=missed_text,
                     )
                 case FromVendor(vendor=vendor, answer=answer):
                     rows.append(
@@ -412,13 +422,13 @@ def _charge(
                     )
                     own = _own_data(answer.rate, answer.own_rate, answer.own_line_no)
                     return ChargeRow(
-                        charge,
-                        collected,
-                        rate_text,
-                        f"{vendor}, for {product}",
-                        own,
-                        None,
-                        missed_text,
+                        charge=charge,
+                        collected=collected,
+                        rate=rate_text,
+                        says=f"{vendor}, for {product}",
+                        own=own,
+                        problem=None,
+                        missed=missed_text,
                     )
         case RateNeeded(reason=reason):
             if reason == "no_hs_code":
@@ -464,7 +474,15 @@ def _charge(
 
 
 def _no_rate(charge: Charge, collected: str, base: str, problem: str) -> ChargeRow:
-    return ChargeRow(charge, collected, f"? of {base}", None, None, problem, ())
+    return ChargeRow(
+        charge=charge,
+        collected=collected,
+        rate=f"? of {base}",
+        says=None,
+        own=None,
+        problem=problem,
+        missed=(),
+    )
 
 
 def _missed_text(

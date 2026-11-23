@@ -86,7 +86,9 @@ async def read_migrations(directory: Path) -> list[MigrationFile] | MigrationRef
             return MigrationRefused("duplicate_version", file_name)
         seen.add(version)
         sha256 = hashlib.sha256(sql.encode("utf-8")).hexdigest()
-        files.append(MigrationFile(version, file_name, sql, sha256))
+        files.append(
+            MigrationFile(version=version, name=file_name, sql=sql, sha256=sha256)
+        )
     files.sort(key=lambda f: f.version)
     return files
 

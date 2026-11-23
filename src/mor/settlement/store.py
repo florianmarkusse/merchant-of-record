@@ -470,6 +470,25 @@ async def book_lines(conn: Connection, fact: Fact, now: datetime) -> ConsumerOut
 # --- booking a payout ---------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _BatchRow:
+    account_id: uuid.UUID
+    vendor_batch_id: str
+    currency: Currency
+    net_numerator: int
+    net_denominator: int
+    paid_out_at: datetime
+    booked_at: datetime | None
+
+
+@dataclass(frozen=True)
+class _LineAmountsRow:
+    gross_numerator: int
+    gross_denominator: int
+    fee_numerator: int
+    fee_denominator: int
+
+
 async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
     """Consumer `settlement_payout_book`: the net the PSP says it paid, on
     its way to our bank, once per batch under the batch's lock."""
@@ -478,41 +497,50 @@ async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
             pass
         case _:
             raise WrongFact(f"settlement_payout_book got {fact!r}")
-    cur = await conn.execute(
-        """
-        SELECT account_id, vendor_batch_id, currency::text, net_numerator,
-               net_denominator, paid_out_at, booked_at
-        FROM settlement_batch WHERE id = %s FOR UPDATE
-        """,
-        (batch_id,),
-    )
-    row = await cur.fetchone()
-    assert row is not None, f"no settlement batch {batch_id}"
-    account_id, vendor_batch_id, code, numerator, denominator, paid_out_at, booked = row
-    if booked is not None:
+    async with conn.cursor(row_factory=class_row(_BatchRow)) as cur:
+        await cur.execute(
+            """
+            SELECT account_id, vendor_batch_id, currency, net_numerator,
+                   net_denominator, paid_out_at, booked_at
+            FROM settlement_batch WHERE id = %s FOR UPDATE
+            """,
+            (batch_id,),
+        )
+        batch = await cur.fetchone()
+    assert batch is not None, f"no settlement batch {batch_id}"
+    if batch.booked_at is not None:
         return Stale()
-    currency = Currency(code)
-    cur = await conn.execute(
-        """
-        SELECT gross_numerator, gross_denominator, fee_numerator, fee_denominator
-        FROM settlement_line WHERE batch_id = %s AND currency = %s
-        """,
-        (batch_id, code),
-    )
+    account_id = batch.account_id
+    currency = batch.currency
+    async with conn.cursor(row_factory=class_row(_LineAmountsRow)) as cur:
+        await cur.execute(
+            """
+            SELECT gross_numerator, gross_denominator, fee_numerator,
+                   fee_denominator
+            FROM settlement_line WHERE batch_id = %s AND currency = %s
+            """,
+            (batch_id, currency),
+        )
+        line_rows = await cur.fetchall()
     amounts: list[LineAmounts] = []
-    for gross_n, gross_d, fee_n, fee_d in await cur.fetchall():
-        amounts.append(LineAmounts(Fraction(gross_n, gross_d), Fraction(fee_n, fee_d)))
-    reported = Fraction(numerator, denominator)
+    for line_row in line_rows:
+        amounts.append(
+            LineAmounts(
+                gross=Fraction(line_row.gross_numerator, line_row.gross_denominator),
+                fee=Fraction(line_row.fee_numerator, line_row.fee_denominator),
+            )
+        )
+    reported = Fraction(batch.net_numerator, batch.net_denominator)
     check = check_net(reported, amounts)
     entry = payout_entry(
-        account_id,
-        vendor_batch_id,
-        currency,
-        to_minor(reported),
-        check,
-        paid_out_at,
-        PAYOUT_BOOKER,
-        now,
+        account_id=account_id,
+        vendor_batch_id=batch.vendor_batch_id,
+        currency=currency,
+        net=to_minor(reported),
+        check=check,
+        effective_at=batch.paid_out_at,
+        actor=PAYOUT_BOOKER,
+        now=now,
     )
     if entry is not None:
         await record_entry(conn, entry)
@@ -528,7 +556,7 @@ async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
                 uuid.uuid7(),
                 account_id,
                 batch_id,
-                f"net {check.reported} {code} minor, its lines add up to"
+                f"net {check.reported} {currency} minor, its lines add up to"
                 f" {check.expected}",
                 now,
             ),

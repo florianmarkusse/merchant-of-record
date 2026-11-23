@@ -157,12 +157,12 @@ async def vendor_account(
     if row is None:
         return None
     return DutyVendorAccount(
-        row.id,
-        row.vendor_name,
-        row.provider,
-        row.kind,
-        row.base_url,
-        timedelta(milliseconds=row.timeout_ms),
+        id=row.id,
+        vendor_name=row.vendor_name,
+        provider=row.provider,
+        kind=row.kind,
+        base_url=row.base_url,
+        timeout=timedelta(milliseconds=row.timeout_ms),
     )
 
 
@@ -250,22 +250,24 @@ async def _with_answers(conn: Connection, row: _LookupRow) -> VendorLookup:
         for answer in await cur.fetchall():
             answers.append(
                 StoredAnswer(
-                    answer.charge,
-                    answer.formula,
-                    _fraction(answer.rate_numerator, answer.rate_denominator),
-                    answer.note,
-                    answer.hs_code_used,
-                    _fraction(answer.own_rate_numerator, answer.own_rate_denominator),
-                    answer.own_line_no,
+                    charge=answer.charge,
+                    formula=answer.formula,
+                    rate=_fraction(answer.rate_numerator, answer.rate_denominator),
+                    note=answer.note,
+                    hs_code_used=answer.hs_code_used,
+                    own_rate=_fraction(
+                        answer.own_rate_numerator, answer.own_rate_denominator
+                    ),
+                    own_line_no=answer.own_line_no,
                 )
             )
     return VendorLookup(
-        row.id,
-        row.vendor_name,
-        row.state,
-        row.calls,
-        row.detail,
-        tuple(answers),
+        id=row.id,
+        vendor=row.vendor_name,
+        state=row.state,
+        calls=row.calls,
+        detail=row.detail,
+        answers=tuple(answers),
     )
 
 
@@ -459,40 +461,27 @@ class Agreement:
 
 
 async def agreement(conn: Connection) -> list[Agreement]:
-    cur = await conn.execute(
-        """
-        SELECT l.destination, a.charge::text,
-          count(*) FILTER (WHERE a.rate_numerator IS NOT NULL
-            AND a.own_rate_numerator IS NOT NULL
-            AND a.rate_numerator * a.own_rate_denominator
-              = a.own_rate_numerator * a.rate_denominator),
-          count(*) FILTER (WHERE a.rate_numerator IS NOT NULL
-            AND a.own_rate_numerator IS NOT NULL
-            AND a.rate_numerator * a.own_rate_denominator
-              <> a.own_rate_numerator * a.rate_denominator),
-          count(*) FILTER (WHERE a.rate_numerator IS NOT NULL
-            AND a.own_rate_numerator IS NULL),
-          count(*) FILTER (WHERE a.rate_numerator IS NULL)
-        FROM duty_answer a JOIN duty_lookup l ON l.id = a.lookup_id
-        GROUP BY l.destination, a.charge
-        ORDER BY l.destination, a.charge
-        """
-    )
-    rows: list[Agreement] = []
-    for (
-        destination,
-        charge,
-        matched,
-        differed,
-        own_none,
-        not_a_rate,
-    ) in await cur.fetchall():
-        rows.append(
-            Agreement(
-                destination, Charge(charge), matched, differed, own_none, not_a_rate
-            )
+    async with conn.cursor(row_factory=class_row(Agreement)) as cur:
+        await cur.execute(
+            """
+            SELECT l.destination, a.charge,
+              count(*) FILTER (WHERE a.rate_numerator IS NOT NULL
+                AND a.own_rate_numerator IS NOT NULL
+                AND a.rate_numerator * a.own_rate_denominator
+                  = a.own_rate_numerator * a.rate_denominator) AS matched,
+              count(*) FILTER (WHERE a.rate_numerator IS NOT NULL
+                AND a.own_rate_numerator IS NOT NULL
+                AND a.rate_numerator * a.own_rate_denominator
+                  <> a.own_rate_numerator * a.rate_denominator) AS differed,
+              count(*) FILTER (WHERE a.rate_numerator IS NOT NULL
+                AND a.own_rate_numerator IS NULL) AS own_none,
+              count(*) FILTER (WHERE a.rate_numerator IS NULL) AS not_a_rate
+            FROM duty_answer a JOIN duty_lookup l ON l.id = a.lookup_id
+            GROUP BY l.destination, a.charge
+            ORDER BY l.destination, a.charge
+            """
         )
-    return rows
+        return await cur.fetchall()
 
 
 type Comparison = Literal["differs", "not_a_rate", "own_none", "agrees"]
@@ -515,66 +504,68 @@ class AnswerRow:
     answered_at: datetime
 
 
+@dataclass(frozen=True)
+class _VendorAnswerRow:
+    vendor_name: str
+    destination: str
+    origin: str
+    hs_code: str
+    charge: Charge
+    formula: str
+    note: str | None
+    own_rate_numerator: int | None
+    own_rate_denominator: int | None
+    own_line_no: int | None
+    answered_at: datetime
+    comparison: str
+
+
 async def vendor_answers(conn: Connection, limit: int) -> list[AnswerRow]:
     """The answers, differences first, then those that are not a plain
     rate, those we had no row for, and agreements; newest first in each."""
-    cur = await conn.execute(
-        """
-        SELECT l.vendor_name, l.destination, l.origin, l.hs_code, a.charge::text,
-          a.formula, a.note, a.own_rate_numerator, a.own_rate_denominator,
-          a.own_line_no, a.answered_at,
-          CASE
-            WHEN a.rate_numerator IS NULL THEN 'not_a_rate'
-            WHEN a.own_rate_numerator IS NULL THEN 'own_none'
-            WHEN a.rate_numerator * a.own_rate_denominator
-              = a.own_rate_numerator * a.rate_denominator THEN 'agrees'
-            ELSE 'differs'
-          END AS comparison
-        FROM duty_answer a JOIN duty_lookup l ON l.id = a.lookup_id
-        ORDER BY
-          CASE
-            WHEN a.rate_numerator IS NULL THEN 1
-            WHEN a.own_rate_numerator IS NULL THEN 2
-            WHEN a.rate_numerator * a.own_rate_denominator
-              = a.own_rate_numerator * a.rate_denominator THEN 3
-            ELSE 0
-          END,
-          a.answered_at DESC, l.destination, a.charge
-        LIMIT %s
-        """,
-        (limit,),
-    )
+    async with conn.cursor(row_factory=class_row(_VendorAnswerRow)) as cur:
+        await cur.execute(
+            """
+            SELECT l.vendor_name, l.destination, l.origin, l.hs_code, a.charge,
+              a.formula, a.note, a.own_rate_numerator, a.own_rate_denominator,
+              a.own_line_no, a.answered_at,
+              CASE
+                WHEN a.rate_numerator IS NULL THEN 'not_a_rate'
+                WHEN a.own_rate_numerator IS NULL THEN 'own_none'
+                WHEN a.rate_numerator * a.own_rate_denominator
+                  = a.own_rate_numerator * a.rate_denominator THEN 'agrees'
+                ELSE 'differs'
+              END AS comparison
+            FROM duty_answer a JOIN duty_lookup l ON l.id = a.lookup_id
+            ORDER BY
+              CASE
+                WHEN a.rate_numerator IS NULL THEN 1
+                WHEN a.own_rate_numerator IS NULL THEN 2
+                WHEN a.rate_numerator * a.own_rate_denominator
+                  = a.own_rate_numerator * a.rate_denominator THEN 3
+                ELSE 0
+              END,
+              a.answered_at DESC, l.destination, a.charge
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        found = await cur.fetchall()
     rows: list[AnswerRow] = []
-    for (
-        vendor,
-        destination,
-        origin,
-        hs_code,
-        charge,
-        formula,
-        note,
-        own_numerator,
-        own_denominator,
-        own_line_no,
-        answered_at,
-        comparison,
-    ) in await cur.fetchall():
-        own_rate: Fraction | None = None
-        if own_numerator is not None and own_denominator is not None:
-            own_rate = Fraction(own_numerator, own_denominator)
+    for row in found:
         rows.append(
             AnswerRow(
-                vendor,
-                destination,
-                origin,
-                hs_code,
-                Charge(charge),
-                formula,
-                note,
-                own_rate,
-                own_line_no,
-                _comparison(comparison),
-                answered_at,
+                vendor=row.vendor_name,
+                destination=row.destination,
+                origin=row.origin,
+                hs_code=row.hs_code,
+                charge=row.charge,
+                formula=row.formula,
+                note=row.note,
+                own_rate=_fraction(row.own_rate_numerator, row.own_rate_denominator),
+                own_line_no=row.own_line_no,
+                comparison=_comparison(row.comparison),
+                answered_at=row.answered_at,
             )
         )
     return rows

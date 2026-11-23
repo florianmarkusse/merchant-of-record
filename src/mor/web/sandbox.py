@@ -158,7 +158,13 @@ async def read_view(conn: Connection, note: str | None) -> View:
             " FROM psp_account WHERE kind = 'fake' ORDER BY name"
         )
         psp_accounts = await cur.fetchall()
-    return View(accounts, jobs, events, psp_accounts, note)
+    return View(
+        accounts=accounts,
+        jobs=jobs,
+        events=events,
+        psp_accounts=psp_accounts,
+        note=note,
+    )
 
 
 def _button(action: str, label: str, fields: dict[str, str]) -> htpy.Element:

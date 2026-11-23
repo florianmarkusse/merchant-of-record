@@ -140,7 +140,13 @@ async def _seed_account(
     )
     row = await cur.fetchone()
     if row is not None:
-        return SeededAccount(row[0], url, mode, row[1], created=False)
+        return SeededAccount(
+            account_id=row[0],
+            base_url=url,
+            event_mode=mode,
+            webhook_secret=row[1],
+            created=False,
+        )
     secret = secrets.token_hex(16)
     account_id = await create_echo_account(
         conn,
@@ -153,7 +159,13 @@ async def _seed_account(
     )
     if mode == EventMode.FILE:
         await start_report_schedule(conn, account_id, SEEDER, now)
-    return SeededAccount(account_id, url, mode, secret, created=True)
+    return SeededAccount(
+        account_id=account_id,
+        base_url=url,
+        event_mode=mode,
+        webhook_secret=secret,
+        created=True,
+    )
 
 
 async def seed_accounts(

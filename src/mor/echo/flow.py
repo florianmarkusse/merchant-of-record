@@ -224,11 +224,11 @@ async def _account(conn: Connection, account_id: uuid.UUID) -> EchoAccount:
         row = await cur.fetchone()
     assert row is not None, f"no echo account {account_id}"
     return EchoAccount(
-        row.id,
-        row.provider,
-        row.kind,
-        row.base_url,
-        timedelta(milliseconds=row.timeout_ms),
+        id=row.id,
+        provider=row.provider,
+        kind=row.kind,
+        base_url=row.base_url,
+        timeout=timedelta(milliseconds=row.timeout_ms),
     )
 
 
@@ -268,7 +268,12 @@ async def _new_request(
         (request_id, job_id, operation, number, key, target_echo_id, now),
     )
     return _RequestRow(
-        request_id, number, key, VendorRequestState.NOT_SENT, 0, target_echo_id
+        id=request_id,
+        number=number,
+        idempotency_key=key,
+        state=VendorRequestState.NOT_SENT,
+        sends=0,
+        target_echo_id=target_echo_id,
     )
 
 

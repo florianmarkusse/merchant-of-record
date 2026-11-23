@@ -51,4 +51,6 @@ def carrier_price(
         summed += part.amount_minor
     if summed != total_minor:
         return UndecodableBody(f"parts sum to {summed}, the total is {total_minor}")
-    return CarrierPrice(currency, total_minor, parts, valid_until)
+    return CarrierPrice(
+        currency=currency, total_minor=total_minor, parts=parts, valid_until=valid_until
+    )

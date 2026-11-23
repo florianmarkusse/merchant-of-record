@@ -178,14 +178,14 @@ async def courier_account(conn: Connection, carrier: str) -> CourierAccount | No
     if row is None:
         return None
     return CourierAccount(
-        row.id,
-        row.carrier,
-        row.provider,
-        row.kind,
-        row.base_url,
-        timedelta(milliseconds=row.timeout_ms),
-        timedelta(seconds=row.price_valid_for_s),
-        row.price_expiry,
+        id=row.id,
+        carrier=row.carrier,
+        provider=row.provider,
+        kind=row.kind,
+        base_url=row.base_url,
+        timeout=timedelta(milliseconds=row.timeout_ms),
+        price_valid_for=timedelta(seconds=row.price_valid_for_s),
+        price_expiry=row.price_expiry,
     )
 
 
@@ -332,24 +332,24 @@ async def _finished(
                 Money(row.own_total_minor, row.own_currency),
             )
         price = StoredPrice(
-            Money(row.total_minor, row.currency),
-            tuple(parts),
-            row.carrier_valid_until,
-            own,
+            total=Money(row.total_minor, row.currency),
+            parts=tuple(parts),
+            carrier_valid_until=row.carrier_valid_until,
+            own=own,
         )
     return FinishedLookup(
-        row.id,
-        row.state,
-        row.calls,
-        row.detail,
-        row.finished_at,
-        usable_until(
+        id=row.id,
+        state=row.state,
+        calls=row.calls,
+        detail=row.detail,
+        finished_at=row.finished_at,
+        usable_until=usable_until(
             row.finished_at,
             row.carrier_valid_until,
             account.price_valid_for,
             account.price_expiry,
         ),
-        price,
+        price=price,
     )
 
 
@@ -381,11 +381,16 @@ def _lookup_id(fact: Fact) -> uuid.UUID:
 
 def _question(row: _LookupRow) -> PriceQuestion:
     return PriceQuestion(
-        row.carrier,
-        row.service,
-        row.origin,
-        row.destination,
-        Parcel(row.weight_g, row.length_mm, row.width_mm, row.height_mm),
+        carrier=row.carrier,
+        service=row.service,
+        origin=row.origin,
+        destination=row.destination,
+        parcel=Parcel(
+            weight_g=row.weight_g,
+            length_mm=row.length_mm,
+            width_mm=row.width_mm,
+            height_mm=row.height_mm,
+        ),
     )
 
 
@@ -592,15 +597,15 @@ async def live_prices(conn: Connection, limit: int) -> list[LivePriceRow]:
             own = finished.price.own
         result.append(
             LivePriceRow(
-                row.id,
-                _question(row),
-                row.state,
-                row.calls,
-                row.detail,
-                row.finished_at,
-                None if finished is None else finished.usable_until,
-                total,
-                own,
+                lookup_id=row.id,
+                question=_question(row),
+                state=row.state,
+                calls=row.calls,
+                detail=row.detail,
+                finished_at=row.finished_at,
+                usable_until=None if finished is None else finished.usable_until,
+                total=total,
+                own=own,
             )
         )
     return result

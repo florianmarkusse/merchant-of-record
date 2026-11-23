@@ -356,18 +356,21 @@ def build_quote(
         options.append(option)
     if asks or waiting or price_asks or price_waiting:
         return InputsMissing(
-            tuple(asks), tuple(waiting), tuple(price_asks), tuple(price_waiting)
+            asks=tuple(asks),
+            waiting=tuple(waiting),
+            price_asks=tuple(price_asks),
+            price_waiting=tuple(price_waiting),
         )
     if not options:
         return NoServiceForLane(tuple(not_offered))
     options.sort(key=lambda option: (option.total.amount_minor, option.key))
     return Quote(
-        destination,
-        currency,
-        tuple(goods_parts),
-        tuple(options),
-        tuple(not_offered),
-        tuple(placeholders),
+        destination=destination,
+        currency=currency,
+        goods=tuple(goods_parts),
+        options=tuple(options),
+        not_offered=tuple(not_offered),
+        placeholders=tuple(placeholders),
     )
 
 
@@ -435,17 +438,17 @@ def _option(
     if offer.transit is not None:
         transit = (offer.transit.days_min, offer.transit.days_max)
     return ShippingOption(
-        key,
-        offer.route.rate_card,
-        live,
-        offer.service.code,
-        offer.service.name,
-        offer.service.tier,
-        transit,
-        tuple(parts),
-        Money(total, currency),
-        offer.fuel_stale_since,
-        offer.route.standing,
+        key=key,
+        rate_card=offer.route.rate_card,
+        live=live,
+        service=offer.service.code,
+        service_name=offer.service.name,
+        tier=offer.service.tier,
+        transit_days=transit,
+        parts=tuple(parts),
+        total=Money(total, currency),
+        fuel_stale_since=offer.fuel_stale_since,
+        standing=offer.route.standing,
     )
 
 
@@ -667,7 +670,16 @@ def _part(
     source: str,
 ) -> Part:
     amount = Money(round_fraction(exact, mode), currency)
-    return Part(kind, label, line, exact, amount, mode, collector, source)
+    return Part(
+        kind=kind,
+        label=label,
+        line=line,
+        exact=exact,
+        amount=amount,
+        mode=mode,
+        collector=collector,
+        source=source,
+    )
 
 
 def _rounded(parts: list[Part]) -> list[int]:

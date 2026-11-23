@@ -31,12 +31,48 @@ class AddressRule:
 # digits are not confirmed and rarely written, so it is optional there.
 # A country is offered only with a row here and open in the market data.
 ADDRESS_RULES = (
-    AddressRule("SG", "+65", re.compile(r"^\d{6}$"), True, False),
-    AddressRule("MY", "+60", re.compile(r"^\d{5}$"), True, True),
-    AddressRule("TH", "+66", re.compile(r"^\d{5}$"), True, True),
-    AddressRule("ID", "+62", re.compile(r"^\d{5}$"), True, True),
-    AddressRule("PH", "+63", re.compile(r"^\d{4}$"), True, True),
-    AddressRule("VN", "+84", re.compile(r"^\d{6}$"), False, True),
+    AddressRule(
+        country="SG",
+        dial_code="+65",
+        postcode=re.compile(r"^\d{6}$"),
+        postcode_required=True,
+        region_required=False,
+    ),
+    AddressRule(
+        country="MY",
+        dial_code="+60",
+        postcode=re.compile(r"^\d{5}$"),
+        postcode_required=True,
+        region_required=True,
+    ),
+    AddressRule(
+        country="TH",
+        dial_code="+66",
+        postcode=re.compile(r"^\d{5}$"),
+        postcode_required=True,
+        region_required=True,
+    ),
+    AddressRule(
+        country="ID",
+        dial_code="+62",
+        postcode=re.compile(r"^\d{5}$"),
+        postcode_required=True,
+        region_required=True,
+    ),
+    AddressRule(
+        country="PH",
+        dial_code="+63",
+        postcode=re.compile(r"^\d{4}$"),
+        postcode_required=True,
+        region_required=True,
+    ),
+    AddressRule(
+        country="VN",
+        dial_code="+84",
+        postcode=re.compile(r"^\d{6}$"),
+        postcode_required=False,
+        region_required=True,
+    ),
 )
 
 
@@ -140,14 +176,14 @@ def parse_address(
     if errors:
         return errors
     return Address(
-        texts[NAME],
-        email,
-        dial_code,
-        number,
-        texts[LINE1],
-        texts[LINE2] or None,
-        texts[CITY],
-        region,
-        postcode,
-        country,
+        name=texts[NAME],
+        email=email,
+        phone_dial_code=dial_code,
+        phone_number=number,
+        line1=texts[LINE1],
+        line2=texts[LINE2] or None,
+        city=texts[CITY],
+        region=region,
+        postcode=postcode,
+        country=country,
     )

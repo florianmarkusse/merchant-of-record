@@ -186,10 +186,10 @@ def decode_full_webhook(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBod
     for event in webhook.events:
         events.append(
             VendorEvent(
-                event.id,
-                event.reference,
-                EventKind(event.kind),
-                to_utc(event.occurred_at),
+                vendor_event_id=event.id,
+                reference=event.reference,
+                kind=EventKind(event.kind),
+                occurred_at=to_utc(event.occurred_at),
             )
         )
     return tuple(events)
@@ -281,5 +281,12 @@ def decode_report(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBody:
         moment = parse_instant(occurred_at)
         if moment is None:
             return UndecodableBody(f"row {number}: no time with a zone {occurred_at!r}")
-        events.append(VendorEvent(event_id, reference, EventKind(kind), moment))
+        events.append(
+            VendorEvent(
+                vendor_event_id=event_id,
+                reference=reference,
+                kind=EventKind(kind),
+                occurred_at=moment,
+            )
+        )
     return tuple(events)

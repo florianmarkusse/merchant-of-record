@@ -149,21 +149,21 @@ async def _view(
                 values = address_values(address)
     attempt = await _latest_attempt(conn, session.id)
     return BuyerView(
-        session,
-        f"{SESSION_PREFIX}{session.id.hex}",
-        merchant.display_name,
-        _country_names(market, countries_for(market, session, now)),
-        values,
-        errors or {},
-        notice,
-        quote,
-        refused,
-        option_key,
-        now,
-        attempt,
-        methods,
-        merchant.kyb_state == KybState.APPROVED,
-        status_text(session, attempt),
+        session=session,
+        public_id=f"{SESSION_PREFIX}{session.id.hex}",
+        merchant_name=merchant.display_name,
+        countries=_country_names(market, countries_for(market, session, now)),
+        values=values,
+        errors=errors or {},
+        notice=notice,
+        quote=quote,
+        refused=refused,
+        option_key=option_key,
+        now=now,
+        attempt=attempt,
+        methods=methods,
+        takes_payments=merchant.kyb_state == KybState.APPROVED,
+        status=status_text(session, attempt),
     )
 
 

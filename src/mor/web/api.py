@@ -79,13 +79,16 @@ ESTIMATE_RETRY_S = 2
 MAX_IDEMPOTENCY_KEY = 255
 
 AUTH_FAILED = ApiError(
-    401,
-    ErrorType.AUTHENTICATION,
-    "authentication_failed",
-    "send a valid API key as `Authorization: Bearer sk_…`",
+    status=401,
+    type=ErrorType.AUTHENTICATION,
+    code="authentication_failed",
+    message="send a valid API key as `Authorization: Bearer sk_…`",
 )
 NO_MARKET = ApiError(
-    503, ErrorType.UNAVAILABLE, "no_market_data", "pricing is not available yet"
+    status=503,
+    type=ErrorType.UNAVAILABLE,
+    code="no_market_data",
+    message="pricing is not available yet",
 )
 
 
@@ -108,10 +111,10 @@ async def create_checkout_session(
         if not key or len(key) > MAX_IDEMPOTENCY_KEY:
             return error_response(
                 ApiError(
-                    400,
-                    ErrorType.INVALID_REQUEST,
-                    "idempotency_key_missing",
-                    "send an Idempotency-Key header of 1 to 255 characters",
+                    status=400,
+                    type=ErrorType.INVALID_REQUEST,
+                    code="idempotency_key_missing",
+                    message="send an Idempotency-Key header of 1 to 255 characters",
                 )
             )
         decoded = decode(await request.body(), SessionIn)
@@ -129,10 +132,10 @@ async def create_checkout_session(
                 await conn.rollback()
                 return error_response(
                     ApiError(
-                        409,
-                        ErrorType.IDEMPOTENCY,
-                        "idempotency_key_reused",
-                        "this Idempotency-Key was used for a different request",
+                        status=409,
+                        type=ErrorType.IDEMPOTENCY,
+                        code="idempotency_key_reused",
+                        message="this Idempotency-Key was used for a different request",
                     )
                 )
             case Claimed():
@@ -155,7 +158,11 @@ async def create_checkout_session(
 
 async def get_checkout_session(request: Request, settings: Settings) -> Response:
     not_found = ApiError(
-        404, ErrorType.NOT_FOUND, "not_found", "no such checkout session", "id"
+        status=404,
+        type=ErrorType.NOT_FOUND,
+        code="not_found",
+        message="no such checkout session",
+        param="id",
     )
     async with await connect(settings.database_url) as conn:
         auth = await _authenticated(conn, request, settings)
@@ -185,7 +192,13 @@ async def get_checkout_session(request: Request, settings: Settings) -> Response
 async def get_order(request: Request, settings: Settings) -> Response:
     """The merchant's own order, with the full address for fulfilment
     (docs/plan-payments.md §6.1); another merchant's is a 404."""
-    not_found = ApiError(404, ErrorType.NOT_FOUND, "not_found", "no such order", "id")
+    not_found = ApiError(
+        status=404,
+        type=ErrorType.NOT_FOUND,
+        code="not_found",
+        message="no such order",
+        param="id",
+    )
     async with await connect(settings.database_url) as conn:
         auth = await _authenticated(conn, request, settings)
         if auth is None:
@@ -266,19 +279,19 @@ async def create_estimate(
         for line in lines:
             quote_lines.append(
                 QuoteLine(
-                    line.category,
-                    line.customs.hs_code,
-                    line.customs.origin_country,
-                    line.quantity,
-                    line.unit_price,
+                    category=line.category,
+                    hs_code=line.customs.hs_code,
+                    origin=line.customs.origin_country,
+                    quantity=line.quantity,
+                    unit_price=line.unit_price,
                 )
             )
         quote_request = QuoteRequest(
-            decoded.country,
-            tuple(quote_lines),
-            parcel_of(decoded.parcel),
-            now.date(),
-            now,
+            destination=decoded.country,
+            lines=tuple(quote_lines),
+            parcel=parcel_of(decoded.parcel),
+            on=now.date(),
+            now=now,
         )
         lookups = await held_lookups(conn, market, quote_request)
         prices = await held_prices(
@@ -306,10 +319,10 @@ async def _ask(
     lookups, and answer `estimate_pending`; or `rate_limited` with nothing
     asked. Commits what it asked."""
     pending = ApiError(
-        503,
-        ErrorType.PENDING,
-        "estimate_pending",
-        "prices are being fetched: send the same request again shortly",
+        status=503,
+        type=ErrorType.PENDING,
+        code="estimate_pending",
+        message="prices are being fetched: send the same request again shortly",
         retry_after_s=ESTIMATE_RETRY_S,
     )
     count = new_asks(missing)
@@ -321,10 +334,10 @@ async def _ask(
     ):
         await conn.rollback()
         return ApiError(
-            429,
-            ErrorType.RATE_LIMITED,
-            "rate_limited",
-            "today's limit of new duty and carrier lookups is reached",
+            status=429,
+            type=ErrorType.RATE_LIMITED,
+            code="rate_limited",
+            message="today's limit of new duty and carrier lookups is reached",
             retry_after_s=_next_utc_midnight_s(now),
         )
     actor = Actor(ActorKind.MERCHANT_API_KEY, auth.key_id)
@@ -332,10 +345,10 @@ async def _ask(
     if isinstance(asked, NoAccount):
         await conn.rollback()
         return ApiError(
-            503,
-            ErrorType.UNAVAILABLE,
-            "pricing_unavailable",
-            f"pricing through {asked.name} is not set up here",
+            status=503,
+            type=ErrorType.UNAVAILABLE,
+            code="pricing_unavailable",
+            message=f"pricing through {asked.name} is not set up here",
         )
     await conn.commit()
     return pending

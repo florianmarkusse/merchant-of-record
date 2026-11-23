@@ -48,11 +48,14 @@ def _rate(charge: Charge, lines: list[_Line]) -> VendorRate:
     """One charge from the vendor's lines: none is a zero rate, one is read
     as it is, several are kept as text for a person."""
     if not lines:
-        return VendorRate(charge, "none", Fraction(0), None)
+        return VendorRate(charge=charge, formula="none", rate=Fraction(0), note=None)
     if len(lines) == 1:
         line = lines[0]
         return VendorRate(
-            charge, line.formula, percent_formula(line.formula), line.note
+            charge=charge,
+            formula=line.formula,
+            rate=percent_formula(line.formula),
+            note=line.note,
         )
     formulas: list[str] = []
     notes: list[str] = []
@@ -60,7 +63,12 @@ def _rate(charge: Charge, lines: list[_Line]) -> VendorRate:
         formulas.append(line.formula)
         if line.note:
             notes.append(line.note)
-    return VendorRate(charge, " + ".join(formulas), None, "; ".join(notes) or None)
+    return VendorRate(
+        charge=charge,
+        formula=" + ".join(formulas),
+        rate=None,
+        note="; ".join(notes) or None,
+    )
 
 
 async def ask_rates(

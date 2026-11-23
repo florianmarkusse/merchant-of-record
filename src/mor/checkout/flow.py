@@ -142,14 +142,20 @@ def _quote_request(
     for line in session.lines:
         lines.append(
             QuoteLine(
-                line.category,
-                line.customs.hs_code,
-                line.customs.origin_country,
-                line.quantity,
-                line.unit_price,
+                category=line.category,
+                hs_code=line.customs.hs_code,
+                origin=line.customs.origin_country,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
             )
         )
-    return QuoteRequest(country, tuple(lines), session.parcel, now.date(), now)
+    return QuoteRequest(
+        destination=country,
+        lines=tuple(lines),
+        parcel=session.parcel,
+        on=now.date(),
+        now=now,
+    )
 
 
 async def _refuse(
@@ -165,13 +171,13 @@ async def _refuse(
     await store_refused(
         conn,
         RefusedQuote(
-            quote_id,
-            session.id,
-            address_id,
-            load_id,
-            now,
-            refusal.code,
-            refusal.message,
+            id=quote_id,
+            session_id=session.id,
+            address_id=address_id,
+            load_id=load_id,
+            made_at=now,
+            code=refusal.code,
+            message=refusal.message,
         ),
     )
     await set_session_state(
@@ -280,10 +286,10 @@ async def _attempt(
                 asked = await ask_missing(conn, result, actor, now)
                 if isinstance(asked, NoAccount):
                     refusal = Refusal(
-                        "pricing_unavailable",
-                        f"pricing through {asked.name} is not set up here",
-                        None,
-                        True,
+                        code="pricing_unavailable",
+                        message=f"pricing through {asked.name} is not set up here",
+                        param=None,
+                        ours=True,
                     )
                     return await _refuse(
                         conn, session, address_id, loaded.load_id, refusal, actor, now

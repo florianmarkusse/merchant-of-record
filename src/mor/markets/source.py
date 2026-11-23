@@ -142,23 +142,23 @@ def parse(texts: Mapping[str, str]) -> MarketSet | list[SourceError]:
     for country in countries:
         country_codes.add(country.iso2)
     market = MarketSet(
-        tuple(_categories(texts["categories"], errors)),
-        tuple(countries),
-        tuple(_groups(texts["groups"], errors)),
-        tuple(_landed_rates(texts["landed_rates"], country_codes, errors)),
-        tuple(_registrations(texts["registrations"], errors)),
-        tuple(_fx_rates(texts["fx_rates"], errors)),
-        tuple(_hs_rates(texts["hs_rates"], country_codes, errors)),
-        tuple(_duty_sources(texts["duty_sources"], errors)),
-        tuple(_services(texts["services"], errors)),
-        tuple(_rate_cards(texts["rate_cards"], errors)),
-        tuple(_zones(texts["zones"], errors)),
-        tuple(_card_rates(texts["rates"], errors)),
-        tuple(_surcharges(texts["surcharges"], errors)),
-        tuple(_transit(texts["transit"], country_codes, errors)),
-        tuple(_restrictions(texts["service_restrictions"], errors)),
-        tuple(_routes(texts["shipping_routes"], country_codes, errors)),
-        tuple(_fees(texts["fees"], country_codes, errors)),
+        categories=tuple(_categories(texts["categories"], errors)),
+        countries=tuple(countries),
+        groups=tuple(_groups(texts["groups"], errors)),
+        landed_rates=tuple(_landed_rates(texts["landed_rates"], country_codes, errors)),
+        registrations=tuple(_registrations(texts["registrations"], errors)),
+        fx_rates=tuple(_fx_rates(texts["fx_rates"], errors)),
+        hs_rates=tuple(_hs_rates(texts["hs_rates"], country_codes, errors)),
+        duty_sources=tuple(_duty_sources(texts["duty_sources"], errors)),
+        services=tuple(_services(texts["services"], errors)),
+        rate_cards=tuple(_rate_cards(texts["rate_cards"], errors)),
+        zones=tuple(_zones(texts["zones"], errors)),
+        rates=tuple(_card_rates(texts["rates"], errors)),
+        surcharges=tuple(_surcharges(texts["surcharges"], errors)),
+        transit=tuple(_transit(texts["transit"], country_codes, errors)),
+        restrictions=tuple(_restrictions(texts["service_restrictions"], errors)),
+        routes=tuple(_routes(texts["shipping_routes"], country_codes, errors)),
+        fees=tuple(_fees(texts["fees"], country_codes, errors)),
     )
     _check_references(market, errors)
     if errors:
@@ -296,7 +296,15 @@ def _countries(text: str, errors: list[SourceError]) -> list[Country]:
             and isinstance(status, MarketStatus)
             and isinstance(note, str)
         ):
-            parsed.append(Country(iso2, name, currency or None, status, note))
+            parsed.append(
+                Country(
+                    iso2=iso2,
+                    name=name,
+                    currency=currency or None,
+                    status=status,
+                    status_note=note,
+                )
+            )
     return parsed
 
 
@@ -314,7 +322,14 @@ def _groups(text: str, errors: list[SourceError]) -> list[Group]:
             and isinstance(members, str)
         ):
             # Member order means nothing; sorted, as the database returns it.
-            parsed.append(Group(code, label, kind, tuple(sorted(members.split()))))
+            parsed.append(
+                Group(
+                    code=code,
+                    label=label,
+                    kind=kind,
+                    members=tuple(sorted(members.split())),
+                )
+            )
     return parsed
 
 
@@ -358,18 +373,18 @@ def _landed_rates(
             scope = Scope(None, place)
         parsed.append(
             LandedRate(
-                at.line_no,
-                scope,
-                category or None,
-                charge,
-                collector,
-                band,
-                limit,
-                amount,
-                effective_from,
-                status,
-                source,
-                source_url,
+                line_no=at.line_no,
+                scope=scope,
+                category=category or None,
+                charge=charge,
+                collector=collector,
+                band=band,
+                limit=limit,
+                amount=amount,
+                effective_from=effective_from,
+                status=status,
+                source=source,
+                source_url=source_url,
             )
         )
     return parsed
@@ -438,7 +453,14 @@ def _registrations(text: str, errors: list[SourceError]) -> list[Registration]:
             and isinstance(number, str)
             and isinstance(effective_from, date)
         ):
-            parsed.append(Registration(country, scheme, number, effective_from))
+            parsed.append(
+                Registration(
+                    country=country,
+                    scheme=scheme,
+                    number=number,
+                    effective_from=effective_from,
+                )
+            )
     return parsed
 
 
@@ -462,7 +484,16 @@ def _fx_rates(text: str, errors: list[SourceError]) -> list[FxRate]:
             and isinstance(status, ResearchStatus)
             and isinstance(source, str)
         ):
-            parsed.append(FxRate(base, quote, rate, as_of, status, source))
+            parsed.append(
+                FxRate(
+                    base=base,
+                    quote=quote,
+                    rate=rate,
+                    as_of=as_of,
+                    status=status,
+                    source=source,
+                )
+            )
     return parsed
 
 
@@ -507,17 +538,17 @@ def _hs_rates(
             scope = Scope(None, place)
         parsed.append(
             HsRate(
-                at.line_no,
-                scope,
-                prefix,
-                charge,
-                origin,
-                preference,
-                rate / 100,
-                effective_from,
-                status,
-                source,
-                source_url,
+                line_no=at.line_no,
+                scope=scope,
+                hs_prefix=prefix,
+                charge=charge,
+                origin=origin,
+                preference=preference,
+                rate=rate / 100,
+                effective_from=effective_from,
+                status=status,
+                source=source,
+                source_url=source_url,
             )
         )
     return parsed
@@ -636,15 +667,15 @@ def _services(text: str, errors: list[SourceError]) -> list[Service]:
         ):
             parsed.append(
                 Service(
-                    code,
-                    provider,
-                    name,
-                    origin,
-                    tier,
-                    duties_paid,
-                    divisor,
-                    max_weight,
-                    status,
+                    code=code,
+                    provider=provider,
+                    name=name,
+                    origin=origin,
+                    tier=tier,
+                    duties_paid=duties_paid,
+                    volumetric_divisor=divisor,
+                    max_weight_kg=max_weight,
+                    status=status,
                 )
             )
     return parsed
@@ -673,14 +704,14 @@ def _rate_cards(text: str, errors: list[SourceError]) -> list[RateCard]:
         ):
             parsed.append(
                 RateCard(
-                    code,
-                    service,
-                    currency,
-                    effective_from,
-                    effective_to,
-                    fuel,
-                    status,
-                    source,
+                    code=code,
+                    service=service,
+                    currency=currency,
+                    effective_from=effective_from,
+                    effective_to=effective_to,
+                    fuel=fuel,
+                    status=status,
+                    source=source,
                 )
             )
     return parsed
@@ -699,7 +730,11 @@ def _zones(text: str, errors: list[SourceError]) -> list[CardZone]:
             and isinstance(zone, str)
             and isinstance(status, ResearchStatus)
         ):
-            parsed.append(CardZone(card, destination, zone, status))
+            parsed.append(
+                CardZone(
+                    rate_card=card, destination=destination, zone=zone, status=status
+                )
+            )
     return parsed
 
 
@@ -721,7 +756,15 @@ def _card_rates(text: str, errors: list[SourceError]) -> list[CardRate]:
             and isinstance(amount, int)
             and not isinstance(amount_max, Unparsed)
         ):
-            parsed.append(CardRate(card, zone, weight, amount, amount_max))
+            parsed.append(
+                CardRate(
+                    rate_card=card,
+                    zone=zone,
+                    weight_kg=weight,
+                    amount_minor=amount,
+                    amount_max_minor=amount_max,
+                )
+            )
     return parsed
 
 
@@ -762,21 +805,21 @@ def _surcharges(text: str, errors: list[SourceError]) -> list[Surcharge]:
         rate = percent / 100 if percent is not None else None
         parsed.append(
             Surcharge(
-                at.line_no,
-                service,
-                card or None,
-                name,
-                basis,
-                rate,
-                amount,
-                minimum,
-                currency,
-                trigger,
-                tuple(destinations.split()),
-                fuel_applies,
-                valid_until,
-                status,
-                source,
+                line_no=at.line_no,
+                service=service,
+                rate_card=card or None,
+                name=name,
+                basis=basis,
+                rate=rate,
+                amount_minor=amount,
+                min_amount_minor=minimum,
+                currency=currency,
+                trigger=trigger,
+                destinations=tuple(destinations.split()),
+                fuel_applies=fuel_applies,
+                valid_until=valid_until,
+                status=status,
+                source=source,
             )
         )
     return parsed
@@ -802,7 +845,15 @@ def _transit(
             if days_min > days_max:
                 _fail(errors, at, "days_min is above days_max")
                 continue
-            parsed.append(Transit(service, scope, days_min, days_max, status))
+            parsed.append(
+                Transit(
+                    service=service,
+                    scope=scope,
+                    days_min=days_min,
+                    days_max=days_max,
+                    status=status,
+                )
+            )
     return parsed
 
 
@@ -819,7 +870,11 @@ def _restrictions(text: str, errors: list[SourceError]) -> list[ServiceRestricti
             and isinstance(rule, RestrictionRule)
             and isinstance(status, ResearchStatus)
         ):
-            parsed.append(ServiceRestriction(service, category, rule, status))
+            parsed.append(
+                ServiceRestriction(
+                    service=service, category=category, rule=rule, status=status
+                )
+            )
     return parsed
 
 
@@ -849,7 +904,15 @@ def _routes(
             and isinstance(source, PriceSource)
             and isinstance(standing, Standing)
         ):
-            parsed.append(ShippingRoute(scope, service, card, source, standing))
+            parsed.append(
+                ShippingRoute(
+                    scope=scope,
+                    service=service,
+                    rate_card=card,
+                    source=source,
+                    standing=standing,
+                )
+            )
     return parsed
 
 
@@ -884,14 +947,14 @@ def _fees(
         ):
             parsed.append(
                 FeeRule(
-                    at.line_no,
-                    component,
-                    scope,
-                    percent / 100,
-                    fixed,
-                    effective_from,
-                    standing,
-                    source,
+                    line_no=at.line_no,
+                    component=component,
+                    scope=scope,
+                    rate=percent / 100,
+                    fixed=fixed,
+                    effective_from=effective_from,
+                    standing=standing,
+                    source=source,
                 )
             )
     return parsed

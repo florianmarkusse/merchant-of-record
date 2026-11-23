@@ -71,11 +71,11 @@ class EstimateOut(msgspec.Struct, frozen=True):
 
 def _part(part: Part) -> PartOut:
     return PartOut(
-        group_of(part.kind),
-        part.kind.value,
-        part.line,
-        money_out(part.amount),
-        collected_by(part.collector),
+        group=group_of(part.kind),
+        kind=part.kind.value,
+        line=part.line,
+        amount=money_out(part.amount),
+        collected_by=collected_by(part.collector),
     )
 
 
@@ -95,25 +95,25 @@ def estimate_out(quote: Quote) -> bytes:
             transit = TransitOut(option.transit_days[0], option.transit_days[1])
         options.append(
             OptionOut(
-                option.key,
-                option.service,
-                option.service_name,
-                option.tier.value,
-                transit,
-                money_out(option.total),
-                parts,
+                key=option.key,
+                service=option.service,
+                name=option.service_name,
+                tier=option.tier.value,
+                transit=transit,
+                total=money_out(option.total),
+                parts=parts,
             )
         )
     not_offered: list[NotOfferedOut] = []
     for refused in quote.not_offered:
         not_offered.append(NotOfferedOut(refused.key, refused.reason))
     out = EstimateOut(
-        "estimate",
-        quote.destination,
-        quote.currency.value,
-        options,
-        not_offered,
-        list(quote.placeholders),
+        object="estimate",
+        country=quote.destination,
+        currency=quote.currency.value,
+        options=options,
+        not_offered=not_offered,
+        placeholders=list(quote.placeholders),
     )
     return msgspec.json.encode(out)
 
@@ -121,8 +121,16 @@ def estimate_out(quote: Quote) -> bytes:
 def refusal_error(refusal: Refusal) -> ApiError:
     if refusal.ours:
         return ApiError(
-            503, ErrorType.UNAVAILABLE, refusal.code, refusal.message, refusal.param
+            status=503,
+            type=ErrorType.UNAVAILABLE,
+            code=refusal.code,
+            message=refusal.message,
+            param=refusal.param,
         )
     return ApiError(
-        422, ErrorType.QUOTE_REFUSED, refusal.code, refusal.message, refusal.param
+        status=422,
+        type=ErrorType.QUOTE_REFUSED,
+        code=refusal.code,
+        message=refusal.message,
+        param=refusal.param,
     )

@@ -165,7 +165,11 @@ def _payment(raw: _Payment) -> ProviderPayment | UndecodableBody:
             None if expires_at is None else to_utc(expires_at),
         )
     return ProviderPayment(
-        raw.id, raw.reference, amount, PaymentStatus(raw.status), action
+        provider_payment_id=raw.id,
+        reference=raw.reference,
+        amount=amount,
+        status=PaymentStatus(raw.status),
+        action=action,
     )
 
 
@@ -354,12 +358,12 @@ def decode_events(body: bytes) -> tuple[PspEvent, ...] | UndecodableBody:
             return amount
         events.append(
             PspEvent(
-                raw.id,
-                raw.payment_id,
-                raw.reference,
-                raw.kind,
-                amount,
-                to_utc(raw.occurred_at),
+                vendor_event_id=raw.id,
+                provider_payment_id=raw.payment_id,
+                reference=raw.reference,
+                kind=raw.kind,
+                amount=amount,
+                occurred_at=to_utc(raw.occurred_at),
             )
         )
     return tuple(events)
@@ -522,7 +526,10 @@ def decode_settlement_file(body: bytes) -> SettlementDocument | UndecodableBody:
                     f"paid_out_at {row[9]!r} is no moment with an offset"
                 )
             batch = SettlementBatch(
-                row_id, currency, exact_amount(net, currency), paid_out_at
+                vendor_batch_id=row_id,
+                currency=currency,
+                net=exact_amount(net, currency),
+                paid_out_at=paid_out_at,
             )
         elif record == "line":
             if batch is None:
@@ -535,14 +542,16 @@ def decode_settlement_file(body: bytes) -> SettlementDocument | UndecodableBody:
                 return fee
             lines.append(
                 SettledLine(
-                    row_id,
-                    LineType.CAPTURE if line_type == "capture" else LineType.UNKNOWN,
-                    line_type,
-                    payment_id,
-                    reference,
-                    currency,
-                    exact_amount(gross, currency),
-                    exact_amount(fee, currency),
+                    vendor_line_id=row_id,
+                    line_type=LineType.CAPTURE
+                    if line_type == "capture"
+                    else LineType.UNKNOWN,
+                    vendor_type=line_type,
+                    provider_payment_id=payment_id,
+                    reference=reference,
+                    currency=currency,
+                    gross=exact_amount(gross, currency),
+                    fee=exact_amount(fee, currency),
                 )
             )
         else:
@@ -562,23 +571,25 @@ def decode_settlement_page(body: bytes) -> SettlementDocument | UndecodableBody:
     if isinstance(currency, UndecodableBody):
         return currency
     batch = SettlementBatch(
-        page.batch.id,
-        currency,
-        exact_amount(page.batch.net_minor, currency),
-        to_utc(page.batch.paid_out_at),
+        vendor_batch_id=page.batch.id,
+        currency=currency,
+        net=exact_amount(page.batch.net_minor, currency),
+        paid_out_at=to_utc(page.batch.paid_out_at),
     )
     lines: list[SettledLine] = []
     for raw in page.lines:
         lines.append(
             SettledLine(
-                raw.id,
-                LineType.CAPTURE if raw.type == "capture" else LineType.UNKNOWN,
-                raw.type,
-                raw.payment_id,
-                raw.reference,
-                currency,
-                exact_amount(raw.gross_minor, currency),
-                exact_amount(raw.fee_minor, currency),
+                vendor_line_id=raw.id,
+                line_type=LineType.CAPTURE
+                if raw.type == "capture"
+                else LineType.UNKNOWN,
+                vendor_type=raw.type,
+                provider_payment_id=raw.payment_id,
+                reference=raw.reference,
+                currency=currency,
+                gross=exact_amount(raw.gross_minor, currency),
+                fee=exact_amount(raw.fee_minor, currency),
             )
         )
     return SettlementDocument(batch, tuple(lines), page.next_page is None)

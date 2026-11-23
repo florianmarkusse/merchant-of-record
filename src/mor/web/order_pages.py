@@ -53,16 +53,16 @@ async def order_page(request: Request, settings: Settings) -> Response:
         invoice = await invoice_for_order(conn, order.id)
     number = None if invoice is None else invoice.number_text
     view = OrderView(
-        order.buyer_token,
-        merchant.display_name,
-        merchant.support_email,
-        session.return_url,
-        session.lines,
-        quote.options[order.option_no],
-        quote.currency,
-        address,
-        number,
-        order_status(number),
+        token=order.buyer_token,
+        merchant_name=merchant.display_name,
+        merchant_support_email=merchant.support_email,
+        return_url=session.return_url,
+        lines=session.lines,
+        option=quote.options[order.option_no],
+        currency=quote.currency,
+        address=address,
+        invoice_number=number,
+        status=order_status(number),
     )
     return HTMLResponse(render_order_page(view), headers=PRIVATE)
 

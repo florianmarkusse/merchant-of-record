@@ -61,12 +61,12 @@ def invoice_lines(
     for line, share in zip(sold, shares, strict=True):
         lines.append(
             InvoiceLine(
-                InvoiceSection.GOODS,
-                line.name,
-                line.quantity,
-                share.amount_minor,
-                None,
-                None,
+                section=InvoiceSection.GOODS,
+                description=line.name,
+                quantity=line.quantity,
+                amount_minor=share.amount_minor,
+                rule_text=None,
+                source=None,
             )
         )
     shipping = 0
@@ -81,24 +81,24 @@ def invoice_lines(
                     words = f"{words}: {sold[part.line].name}"
                 charges.append(
                     InvoiceLine(
-                        _section(part.collector),
-                        words,
-                        None,
-                        part.amount.amount_minor,
-                        part.label,
-                        part.source,
+                        section=_section(part.collector),
+                        description=words,
+                        quantity=None,
+                        amount_minor=part.amount.amount_minor,
+                        rule_text=part.label,
+                        source=part.source,
                     )
                 )
             case "goods" | "fees":
                 raise AssertionError(f"an option holds a {part.kind} part")
     lines.append(
         InvoiceLine(
-            InvoiceSection.SHIPPING,
-            f"Shipping: {option.service_name}",
-            None,
-            shipping,
-            None,
-            None,
+            section=InvoiceSection.SHIPPING,
+            description=f"Shipping: {option.service_name}",
+            quantity=None,
+            amount_minor=shipping,
+            rule_text=None,
+            source=None,
         )
     )
     for section in (InvoiceSection.TAX, InvoiceSection.BORDER):

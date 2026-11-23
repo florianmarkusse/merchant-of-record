@@ -77,14 +77,14 @@ async def create_merchant(
         ),
     )
     return Merchant(
-        merchant_id,
-        legal_name,
-        display_name,
-        country,
-        daily_vendor_asks,
-        now,
-        KybState.PENDING,
-        None,
+        id=merchant_id,
+        legal_name=legal_name,
+        display_name=display_name,
+        country=country,
+        daily_vendor_asks=daily_vendor_asks,
+        created_at=now,
+        kyb_state=KybState.PENDING,
+        support_email=None,
     )
 
 

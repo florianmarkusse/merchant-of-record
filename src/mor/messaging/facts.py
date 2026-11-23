@@ -674,7 +674,12 @@ def decode(
     """Bytes from the outbox back into the record they were written from.
     Every type has only version 1 so far."""
     if schema_version != 1:
-        return UndecodableFact(message_type, schema_version, "unknown_version", "")
+        return UndecodableFact(
+            message_type=message_type,
+            schema_version=schema_version,
+            reason="unknown_version",
+            detail="",
+        )
     decoded: Fact | str
     match message_type:
         case MessageType.PROBE_STARTED:
@@ -776,5 +781,10 @@ def decode(
         case _:
             assert_never(message_type)
     if isinstance(decoded, str):
-        return UndecodableFact(message_type, schema_version, "invalid_payload", decoded)
+        return UndecodableFact(
+            message_type=message_type,
+            schema_version=schema_version,
+            reason="invalid_payload",
+            detail=decoded,
+        )
     return decoded

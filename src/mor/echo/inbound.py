@@ -111,17 +111,17 @@ async def inbound_account(
     if row is None:
         return None
     account = EchoAccount(
-        row.id,
-        row.provider,
-        row.kind,
-        row.base_url,
-        timedelta(milliseconds=row.timeout_ms),
+        id=row.id,
+        provider=row.provider,
+        kind=row.kind,
+        base_url=row.base_url,
+        timeout=timedelta(milliseconds=row.timeout_ms),
     )
     return InboundAccount(
-        account,
-        row.event_mode,
-        row.webhook_secret,
-        timedelta(seconds=row.poll_interval_s),
+        account=account,
+        event_mode=row.event_mode,
+        webhook_secret=row.webhook_secret,
+        poll_interval=timedelta(seconds=row.poll_interval_s),
     )
 
 
