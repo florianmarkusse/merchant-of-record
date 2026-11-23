@@ -71,7 +71,14 @@ class FakeRate:
     valid_until: datetime | None
 
 
-DEFAULT_RATE = FakeRate("VND", 300_000, 150_000, 3_000, 20_000, None)
+DEFAULT_RATE = FakeRate(
+    currency="VND",
+    base_minor=300_000,
+    per_kg_minor=150_000,
+    fuel_bp=3_000,
+    surcharge_minor=20_000,
+    valid_until=None,
+)
 
 
 class AskBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -140,7 +147,14 @@ async def _rate(conn: FakeConnection, service: str, destination: str) -> FakeRat
     row = await cur.fetchone()
     if row is None:
         return DEFAULT_RATE
-    return FakeRate(row[0], row[1], row[2], row[3], row[4], row[5])
+    return FakeRate(
+        currency=row[0],
+        base_minor=row[1],
+        per_kg_minor=row[2],
+        fuel_bp=row[3],
+        surcharge_minor=row[4],
+        valid_until=row[5],
+    )
 
 
 def billed_half_kilos(body: AskBody) -> int:
@@ -161,120 +175,133 @@ def _parts(rate: FakeRate, half_kilos: int) -> list[tuple[str, str, int]]:
     return parts
 
 
-def make_app(database_url: str, hang: Hang) -> Starlette:
-    async def ask(request: Request) -> Response:
-        try:
-            body = msgspec.json.decode(await request.body(), type=AskBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            fault = await _take_fault(conn)
-            if fault == "fail_500":
-                await conn.commit()
-                return _error(500, "internal_error")
-            await conn.execute(
-                """
-                INSERT INTO courier_call
-                  (account, service, origin, destination, weight_g, length_mm,
-                   width_mm, height_mm, called_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    request.path_params["account"],
-                    body.service,
-                    body.origin,
-                    body.destination,
-                    body.weight_g,
-                    body.length_mm,
-                    body.width_mm,
-                    body.height_mm,
-                    datetime.now(UTC),
-                ),
-            )
-            rate = await _rate(conn, body.service, body.destination)
+async def handle_ask(request: Request, database_url: str, hang: Hang) -> Response:
+    try:
+        body = msgspec.json.decode(await request.body(), type=AskBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        fault = await _take_fault(conn)
+        if fault == "fail_500":
             await conn.commit()
-        currency = rate.currency
-        parts = _parts(rate, billed_half_kilos(body))
-        valid_until = rate.valid_until
-        match fault:
-            case "timeout_after_work":
-                await hang()
-            case "not_served":
-                return _error(404, "not_served", f"no {body.service} to here")
-            case "undecodable":
-                return Response(b"<html>maintenance</html>", status_code=200)
-            case "other_currency":
-                currency = "USD"
-                converted: list[tuple[str, str, int]] = []
-                for kind, name, amount in parts:
-                    converted.append((kind, name, amount // VND_PER_US_CENT))
-                parts = converted
-            case "already_expired":
-                valid_until = LONG_PAST
-            case "parts_mismatch" | None:
-                pass
-        total = 0
-        for _kind, _name, amount in parts:
-            total += amount
-        if fault == "parts_mismatch":
-            total += 1
-        rendered: list[dict[str, str | int]] = []
-        for kind, name, amount in parts:
-            rendered.append({"kind": kind, "name": name, "amount_minor": amount})
-        return JSONResponse(
-            {
-                "currency": currency,
-                "total_minor": total,
-                "parts": rendered,
-                "valid_until": None if valid_until is None else valid_until.isoformat(),
-            }
+            return _error(500, "internal_error")
+        await conn.execute(
+            """
+            INSERT INTO courier_call
+              (account, service, origin, destination, weight_g, length_mm,
+               width_mm, height_mm, called_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                request.path_params["account"],
+                body.service,
+                body.origin,
+                body.destination,
+                body.weight_g,
+                body.length_mm,
+                body.width_mm,
+                body.height_mm,
+                datetime.now(UTC),
+            ),
         )
+        rate = await _rate(conn, body.service, body.destination)
+        await conn.commit()
+    currency = rate.currency
+    parts = _parts(rate, billed_half_kilos(body))
+    valid_until = rate.valid_until
+    match fault:
+        case "timeout_after_work":
+            await hang()
+        case "not_served":
+            return _error(404, "not_served", f"no {body.service} to here")
+        case "undecodable":
+            return Response(b"<html>maintenance</html>", status_code=200)
+        case "other_currency":
+            currency = "USD"
+            converted: list[tuple[str, str, int]] = []
+            for kind, name, amount in parts:
+                converted.append((kind, name, amount // VND_PER_US_CENT))
+            parts = converted
+        case "already_expired":
+            valid_until = LONG_PAST
+        case "parts_mismatch" | None:
+            pass
+    total = 0
+    for _kind, _name, amount in parts:
+        total += amount
+    if fault == "parts_mismatch":
+        total += 1
+    rendered: list[dict[str, str | int]] = []
+    for kind, name, amount in parts:
+        rendered.append({"kind": kind, "name": name, "amount_minor": amount})
+    return JSONResponse(
+        {
+            "currency": currency,
+            "total_minor": total,
+            "parts": rendered,
+            "valid_until": None if valid_until is None else valid_until.isoformat(),
+        }
+    )
+
+
+async def handle_set_rate(request: Request, database_url: str) -> Response:
+    try:
+        body = msgspec.json.decode(await request.body(), type=RateBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        await conn.execute(
+            """
+            INSERT INTO courier_rate
+              (service, destination, currency, base_minor, per_kg_minor,
+               fuel_bp, surcharge_minor, valid_until)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (service, destination)
+            DO UPDATE SET currency = excluded.currency,
+                          base_minor = excluded.base_minor,
+                          per_kg_minor = excluded.per_kg_minor,
+                          fuel_bp = excluded.fuel_bp,
+                          surcharge_minor = excluded.surcharge_minor,
+                          valid_until = excluded.valid_until
+            """,
+            (
+                body.service,
+                body.destination,
+                body.currency,
+                body.base_minor,
+                body.per_kg_minor,
+                body.fuel_bp,
+                body.surcharge_minor,
+                body.valid_until,
+            ),
+        )
+        await conn.commit()
+    return Response(status_code=204)
+
+
+async def handle_script_fault(request: Request, database_url: str) -> Response:
+    try:
+        body = msgspec.json.decode(await request.body(), type=FaultBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        await conn.execute(
+            "INSERT INTO courier_fault (fault) VALUES (%s)", (body.fault,)
+        )
+        await conn.commit()
+    return Response(status_code=204)
+
+
+def make_app(database_url: str, hang: Hang) -> Starlette:
+
+    async def ask(request: Request) -> Response:
+        return await handle_ask(request, database_url, hang)
 
     async def set_rate(request: Request) -> Response:
-        try:
-            body = msgspec.json.decode(await request.body(), type=RateBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            await conn.execute(
-                """
-                INSERT INTO courier_rate
-                  (service, destination, currency, base_minor, per_kg_minor,
-                   fuel_bp, surcharge_minor, valid_until)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (service, destination)
-                DO UPDATE SET currency = excluded.currency,
-                              base_minor = excluded.base_minor,
-                              per_kg_minor = excluded.per_kg_minor,
-                              fuel_bp = excluded.fuel_bp,
-                              surcharge_minor = excluded.surcharge_minor,
-                              valid_until = excluded.valid_until
-                """,
-                (
-                    body.service,
-                    body.destination,
-                    body.currency,
-                    body.base_minor,
-                    body.per_kg_minor,
-                    body.fuel_bp,
-                    body.surcharge_minor,
-                    body.valid_until,
-                ),
-            )
-            await conn.commit()
-        return Response(status_code=204)
+        return await handle_set_rate(request, database_url)
 
     async def script_fault(request: Request) -> Response:
-        try:
-            body = msgspec.json.decode(await request.body(), type=FaultBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            await conn.execute(
-                "INSERT INTO courier_fault (fault) VALUES (%s)", (body.fault,)
-            )
-            await conn.commit()
-        return Response(status_code=204)
+        return await handle_script_fault(request, database_url)
 
     return Starlette(
         routes=[

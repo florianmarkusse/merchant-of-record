@@ -116,86 +116,97 @@ async def _formulas(
     return row[0], row[1]
 
 
-def make_app(database_url: str, hang: Hang) -> Starlette:
-    async def ask(request: Request) -> Response:
-        try:
-            body = msgspec.json.decode(await request.body(), type=AskBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            fault = await _take_fault(conn)
-            if fault == "fail_500":
-                await conn.commit()
-                return _error(500, "internal_error")
-            await conn.execute(
-                """
-                INSERT INTO duty_call
-                  (account, destination, origin, hs_code, called_at)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (
-                    request.path_params["account"],
-                    body.destination,
-                    body.origin,
-                    body.hs_code,
-                    datetime.now(UTC),
-                ),
-            )
-            duty, tax = await _formulas(conn, body.destination, body.hs_code)
+async def handle_ask(request: Request, database_url: str, hang: Hang) -> Response:
+    try:
+        body = msgspec.json.decode(await request.body(), type=AskBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        fault = await _take_fault(conn)
+        if fault == "fail_500":
             await conn.commit()
-        match fault:
-            case "timeout_after_work":
-                await hang()
-            case "unknown_code":
-                return _error(404, "unknown_code")
-            case "undecodable":
-                return Response(b"<html>maintenance</html>", status_code=200)
-            case "specific_duty":
-                duty = "2.00 USD/kg"
-            case "preference_note" | None:
-                pass
-        duty_line: dict[str, str] = {"formula": duty}
-        if fault == "preference_note":
-            duty_line["note"] = "ATIGA preferential rate applied"
-        return JSONResponse(
-            {
-                "hs_code_used": body.hs_code,
-                "duties": [duty_line],
-                "taxes": [{"formula": tax}],
-            }
+            return _error(500, "internal_error")
+        await conn.execute(
+            """
+            INSERT INTO duty_call
+              (account, destination, origin, hs_code, called_at)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                request.path_params["account"],
+                body.destination,
+                body.origin,
+                body.hs_code,
+                datetime.now(UTC),
+            ),
         )
+        duty, tax = await _formulas(conn, body.destination, body.hs_code)
+        await conn.commit()
+    match fault:
+        case "timeout_after_work":
+            await hang()
+        case "unknown_code":
+            return _error(404, "unknown_code")
+        case "undecodable":
+            return Response(b"<html>maintenance</html>", status_code=200)
+        case "specific_duty":
+            duty = "2.00 USD/kg"
+        case "preference_note" | None:
+            pass
+    duty_line: dict[str, str] = {"formula": duty}
+    if fault == "preference_note":
+        duty_line["note"] = "ATIGA preferential rate applied"
+    return JSONResponse(
+        {
+            "hs_code_used": body.hs_code,
+            "duties": [duty_line],
+            "taxes": [{"formula": tax}],
+        }
+    )
+
+
+async def handle_set_rate(request: Request, database_url: str) -> Response:
+    try:
+        body = msgspec.json.decode(await request.body(), type=RateBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        await conn.execute(
+            """
+            INSERT INTO duty_rate
+              (destination, hs_prefix, duty_formula, tax_formula)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (destination, hs_prefix)
+            DO UPDATE SET duty_formula = excluded.duty_formula,
+                          tax_formula = excluded.tax_formula
+            """,
+            (body.destination, body.hs_prefix, body.duty, body.tax),
+        )
+        await conn.commit()
+    return Response(status_code=204)
+
+
+async def handle_script_fault(request: Request, database_url: str) -> Response:
+    try:
+        body = msgspec.json.decode(await request.body(), type=FaultBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        await conn.execute("INSERT INTO duty_fault (fault) VALUES (%s)", (body.fault,))
+        await conn.commit()
+    return Response(status_code=204)
+
+
+def make_app(database_url: str, hang: Hang) -> Starlette:
+
+    async def ask(request: Request) -> Response:
+        return await handle_ask(request, database_url, hang)
 
     async def set_rate(request: Request) -> Response:
-        try:
-            body = msgspec.json.decode(await request.body(), type=RateBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            await conn.execute(
-                """
-                INSERT INTO duty_rate
-                  (destination, hs_prefix, duty_formula, tax_formula)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (destination, hs_prefix)
-                DO UPDATE SET duty_formula = excluded.duty_formula,
-                              tax_formula = excluded.tax_formula
-                """,
-                (body.destination, body.hs_prefix, body.duty, body.tax),
-            )
-            await conn.commit()
-        return Response(status_code=204)
+        return await handle_set_rate(request, database_url)
 
     async def script_fault(request: Request) -> Response:
-        try:
-            body = msgspec.json.decode(await request.body(), type=FaultBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            await conn.execute(
-                "INSERT INTO duty_fault (fault) VALUES (%s)", (body.fault,)
-            )
-            await conn.commit()
-        return Response(status_code=204)
+        return await handle_script_fault(request, database_url)
 
     return Starlette(
         routes=[

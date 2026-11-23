@@ -31,13 +31,14 @@ same machinery (slice 5), unless it serves something else by then.
 import hashlib
 import hmac
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, LiteralString
 
 import httpx2
 import msgspec
 import psycopg
-from psycopg.rows import TupleRow
+from psycopg.rows import TupleRow, class_row
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -160,414 +161,510 @@ async def _known_key(conn: FakeConnection, flavour: Flavour, key: str | None) ->
     return await cur.fetchone() is not None
 
 
-def make_app(database_url: str, outgoing: httpx2.AsyncClient, hang: Hang) -> Starlette:
-    """`outgoing` carries the fake's webhooks: a real client in dev, our app
-    in-process in tests."""
+async def handle_send(request: Request, database_url: str, hang: Hang) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    account = request.path_params["account"]
+    try:
+        body = msgspec.json.decode(await request.body(), type=SendBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    key = request.headers.get("idempotency-key")
 
-    async def send(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        account = request.path_params["account"]
-        try:
-            body = msgspec.json.decode(await request.body(), type=SendBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        key = request.headers.get("idempotency-key")
-
-        async with await _connect(database_url) as conn:
-            fault = await _take_fault(conn, flavour, "send")
-            if fault == "fail_500":
-                await conn.commit()
-                return _error(500, "internal_error")
-            if fault == "refuse" and not await _known_key(conn, flavour, key):
-                # A known key is replayed, never refused: that is the keyed
-                # flavour's promise.
-                await conn.commit()
-                return _error(422, "message_rejected")
-
-            # Insert first; for `keyed`, a conflict on the key means it was
-            # seen before, and the first echo is the answer.
-            cur = await conn.execute(
-                """
-                INSERT INTO echo
-                  (id, flavour, vendor_account, reference, idempotency_key,
-                   message, state, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'live', %s)
-                ON CONFLICT (idempotency_key) WHERE flavour = 'keyed' DO NOTHING
-                RETURNING id, reference, message, state::text
-                """,
-                (
-                    f"echo_{uuid.uuid4().hex}",
-                    flavour,
-                    account,
-                    body.reference,
-                    key if flavour == "keyed" else None,
-                    body.message,
-                    datetime.now(UTC),
-                ),
-            )
-            row = await cur.fetchone()
-            status = 201
-            if row is None:
-                cur = await conn.execute(
-                    """
-                    SELECT id, reference, message, state::text FROM echo
-                    WHERE flavour = 'keyed' AND idempotency_key = %s
-                    """,
-                    (key,),
-                )
-                row = await cur.fetchone()
-                status = 200
-            assert row is not None
+    async with await _connect(database_url) as conn:
+        fault = await _take_fault(conn, flavour, "send")
+        if fault == "fail_500":
             await conn.commit()
-
-        if fault == "fail_500_after_work":
             return _error(500, "internal_error")
-        if fault == "timeout_after_work":
-            await hang()
-        return JSONResponse(_echo_json(row), status_code=status)
+        if fault == "refuse" and not await _known_key(conn, flavour, key):
+            # A known key is replayed, never refused: that is the keyed
+            # flavour's promise.
+            await conn.commit()
+            return _error(422, "message_rejected")
 
-    async def find(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        reference = request.query_params.get("reference")
-        if reference is None:
-            return _error(400, "reference_required")
-        async with await _connect(database_url) as conn:
+        # Insert first; for `keyed`, a conflict on the key means it was
+        # seen before, and the first echo is the answer.
+        cur = await conn.execute(
+            """
+            INSERT INTO echo
+              (id, flavour, vendor_account, reference, idempotency_key,
+               message, state, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, 'live', %s)
+            ON CONFLICT (idempotency_key) WHERE flavour = 'keyed' DO NOTHING
+            RETURNING id, reference, message, state::text
+            """,
+            (
+                f"echo_{uuid.uuid4().hex}",
+                flavour,
+                account,
+                body.reference,
+                key if flavour == "keyed" else None,
+                body.message,
+                datetime.now(UTC),
+            ),
+        )
+        row = await cur.fetchone()
+        status = 201
+        if row is None:
             cur = await conn.execute(
                 """
                 SELECT id, reference, message, state::text FROM echo
-                WHERE flavour = %s AND vendor_account = %s AND reference = %s
-                ORDER BY created_at, id
+                WHERE flavour = 'keyed' AND idempotency_key = %s
                 """,
-                (flavour, request.path_params["account"], reference),
-            )
-            rows = await cur.fetchall()
-        echoes: list[dict[str, object]] = []
-        for row in rows:
-            echoes.append(_echo_json(row))
-        return JSONResponse({"echoes": echoes})
-
-    async def cancel(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour != "cancellable":
-            return _error(404, "not_supported")
-        async with await _connect(database_url) as conn:
-            cur = await conn.execute(
-                """
-                UPDATE echo SET state = 'cancelled'
-                WHERE flavour = 'cancellable' AND vendor_account = %s AND id = %s
-                RETURNING id, reference, message, state::text
-                """,
-                (request.path_params["account"], request.path_params["echo_id"]),
+                (key,),
             )
             row = await cur.fetchone()
-            await conn.commit()
-        if row is None:
-            return _error(404, "unknown_echo")
-        return JSONResponse(_echo_json(row))
+            status = 200
+        assert row is not None
+        await conn.commit()
 
-    async def subscribe(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        try:
-            body = msgspec.json.decode(await request.body(), type=WebhookBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            await conn.execute(
-                """
-                INSERT INTO echo_webhook (flavour, vendor_account, url, secret, payload)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (flavour, vendor_account) DO UPDATE
-                SET url = excluded.url, secret = excluded.secret,
-                    payload = excluded.payload
-                """,
-                (
-                    flavour,
-                    request.path_params["account"],
-                    body.url,
-                    body.secret,
-                    body.payload,
-                ),
-            )
-            await conn.commit()
-        return Response(status_code=204)
+    if fault == "fail_500_after_work":
+        return _error(500, "internal_error")
+    if fault == "timeout_after_work":
+        await hang()
+    return JSONResponse(_echo_json(row), status_code=status)
 
-    async def _push(
-        conn: FakeConnection,
-        flavour: Flavour,
-        account: str,
-        event: _Event,
-        how: PushHow,
-    ) -> Literal["not_subscribed", "delivered", "failed"]:
+
+async def handle_find(request: Request, database_url: str) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    reference = request.query_params.get("reference")
+    if reference is None:
+        return _error(400, "reference_required")
+    async with await _connect(database_url) as conn:
         cur = await conn.execute(
+            """
+            SELECT id, reference, message, state::text FROM echo
+            WHERE flavour = %s AND vendor_account = %s AND reference = %s
+            ORDER BY created_at, id
+            """,
+            (flavour, request.path_params["account"], reference),
+        )
+        rows = await cur.fetchall()
+    echoes: list[dict[str, object]] = []
+    for row in rows:
+        echoes.append(_echo_json(row))
+    return JSONResponse({"echoes": echoes})
+
+
+async def handle_cancel(request: Request, database_url: str) -> Response:
+    flavour = _flavour(request)
+    if flavour != "cancellable":
+        return _error(404, "not_supported")
+    async with await _connect(database_url) as conn:
+        cur = await conn.execute(
+            """
+            UPDATE echo SET state = 'cancelled'
+            WHERE flavour = 'cancellable' AND vendor_account = %s AND id = %s
+            RETURNING id, reference, message, state::text
+            """,
+            (request.path_params["account"], request.path_params["echo_id"]),
+        )
+        row = await cur.fetchone()
+        await conn.commit()
+    if row is None:
+        return _error(404, "unknown_echo")
+    return JSONResponse(_echo_json(row))
+
+
+async def handle_subscribe(request: Request, database_url: str) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    try:
+        body = msgspec.json.decode(await request.body(), type=WebhookBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        await conn.execute(
+            """
+            INSERT INTO echo_webhook (flavour, vendor_account, url, secret, payload)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (flavour, vendor_account) DO UPDATE
+            SET url = excluded.url, secret = excluded.secret,
+                payload = excluded.payload
+            """,
+            (
+                flavour,
+                request.path_params["account"],
+                body.url,
+                body.secret,
+                body.payload,
+            ),
+        )
+        await conn.commit()
+    return Response(status_code=204)
+
+
+@dataclass(frozen=True)
+class _WebhookRow:
+    url: str
+    secret: str
+    payload: str
+
+
+@dataclass(frozen=True)
+class _EventRow:
+    id: str
+    echo_id: str
+    reference: str
+    kind: str
+    occurred_at: datetime
+
+
+async def _event_rows(
+    conn: FakeConnection, query: LiteralString, params: tuple[object, ...]
+) -> list[_EventRow]:
+    """A query whose columns are a released event's."""
+    async with conn.cursor(row_factory=class_row(_EventRow)) as cur:
+        await cur.execute(query, params)
+        return await cur.fetchall()
+
+
+def _event(row: _EventRow) -> _Event:
+    match row.kind:
+        case "confirmed" | "archived":
+            kind: EventKind = row.kind
+        case _:
+            raise AssertionError(f"unknown event kind {row.kind!r}")
+    return _Event(
+        id=row.id,
+        echo_id=row.echo_id,
+        reference=row.reference,
+        kind=kind,
+        occurred_at=row.occurred_at,
+    )
+
+
+@dataclass(frozen=True)
+class _ReleaseRow:
+    reference: str
+    released: list[str]
+
+
+async def _push(
+    conn: FakeConnection,
+    flavour: Flavour,
+    account: str,
+    event: _Event,
+    how: PushHow,
+    outgoing: httpx2.AsyncClient,
+) -> Literal["not_subscribed", "delivered", "failed"]:
+    async with conn.cursor(row_factory=class_row(_WebhookRow)) as cur:
+        await cur.execute(
             """
             SELECT url, secret, payload::text FROM echo_webhook
             WHERE flavour = %s AND vendor_account = %s
             """,
             (flavour, account),
         )
-        row = await cur.fetchone()
-        if row is None:
-            return "not_subscribed"
-        url, secret, payload = row
-        assert isinstance(url, str) and isinstance(secret, str)
-        if payload == "thin":
-            body = msgspec.json.encode(
-                _ThinWebhook(
-                    id=event.id, echo_id=event.echo_id, reference=event.reference
-                )
-            )
-        else:
-            body = msgspec.json.encode(_FullWebhook(events=[event]))
-        signature = sign(secret, body)
-        if how == "bad_signature":
-            signature = sign(secret + "-wrong", body)
-        times = 2 if how == "twice" else 1
-        delivered = True
-        for _ in range(times):
-            try:
-                response = await outgoing.post(
-                    url,
-                    content=body,
-                    headers={
-                        SIGNATURE_HEADER: signature,
-                        "Content-Type": "application/json",
-                    },
-                )
-                if response.status_code != 200:
-                    delivered = False
-            except httpx2.TransportError:
-                delivered = False
-        return "delivered" if delivered else "failed"
-
-    async def release(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        account = request.path_params["account"]
-        echo_id = request.path_params["echo_id"]
-        raw = await request.body()
+        webhook = await cur.fetchone()
+    if webhook is None:
+        return "not_subscribed"
+    url = webhook.url
+    secret = webhook.secret
+    if webhook.payload == "thin":
+        body = msgspec.json.encode(
+            _ThinWebhook(id=event.id, echo_id=event.echo_id, reference=event.reference)
+        )
+    else:
+        body = msgspec.json.encode(_FullWebhook(events=[event]))
+    signature = sign(secret, body)
+    if how == "bad_signature":
+        signature = sign(secret + "-wrong", body)
+    times = 2 if how == "twice" else 1
+    delivered = True
+    for _ in range(times):
         try:
-            body = msgspec.json.decode(raw or b"{}", type=ReleaseBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            cur = await conn.execute(
+            response = await outgoing.post(
+                url,
+                content=body,
+                headers={
+                    SIGNATURE_HEADER: signature,
+                    "Content-Type": "application/json",
+                },
+            )
+            if response.status_code != 200:
+                delivered = False
+        except httpx2.TransportError:
+            delivered = False
+    return "delivered" if delivered else "failed"
+
+
+async def handle_release(
+    request: Request, database_url: str, outgoing: httpx2.AsyncClient
+) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    account = request.path_params["account"]
+    echo_id = request.path_params["echo_id"]
+    raw = await request.body()
+    try:
+        body = msgspec.json.decode(raw or b"{}", type=ReleaseBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        async with conn.cursor(row_factory=class_row(_ReleaseRow)) as cur:
+            await cur.execute(
                 """
                 SELECT e.reference,
                        array(SELECT kind::text FROM echo_event WHERE echo_id = e.id)
+                         AS released
                 FROM echo e
                 WHERE e.flavour = %s AND e.vendor_account = %s AND e.id = %s
                 """,
                 (flavour, account, echo_id),
             )
             row = await cur.fetchone()
-            if row is None:
-                return _error(404, "unknown_echo")
-            reference, released = row
-            assert isinstance(reference, str) and isinstance(released, list)
-            kind: EventKind | None = body.kind
-            if kind is None:
-                kind = "confirmed" if "confirmed" not in released else "archived"
-            if kind in released:
-                return _error(409, "already_released")
-            event = _Event(
-                id=f"evt_{uuid.uuid4().hex}",
-                echo_id=echo_id,
-                reference=reference,
-                kind=kind,
-                occurred_at=datetime.now(UTC),
-            )
-            push = await _push(conn, flavour, account, event, body.push)
+        if row is None:
+            return _error(404, "unknown_echo")
+        reference = row.reference
+        released = row.released
+        kind: EventKind | None = body.kind
+        if kind is None:
+            kind = "confirmed" if "confirmed" not in released else "archived"
+        if kind in released:
+            return _error(409, "already_released")
+        event = _Event(
+            id=f"evt_{uuid.uuid4().hex}",
+            echo_id=echo_id,
+            reference=reference,
+            kind=kind,
+            occurred_at=datetime.now(UTC),
+        )
+        push = await _push(conn, flavour, account, event, body.push, outgoing)
+        await conn.execute(
+            """
+            INSERT INTO echo_event (id, echo_id, kind, occurred_at, push)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (event.id, echo_id, kind, event.occurred_at, push),
+        )
+        await conn.commit()
+    return JSONResponse({"id": event.id, "kind": kind, "push": push})
+
+
+async def handle_redeliver(
+    request: Request, database_url: str, outgoing: httpx2.AsyncClient
+) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    account = request.path_params["account"]
+    async with await _connect(database_url) as conn:
+        rows = await _event_rows(
+            conn,
+            """
+            SELECT v.id, v.echo_id, e.reference, v.kind::text AS kind,
+                   v.occurred_at
+            FROM echo_event v JOIN echo e ON e.id = v.echo_id
+            WHERE e.flavour = %s AND e.vendor_account = %s AND v.push = 'failed'
+            ORDER BY v.seq
+            """,
+            (flavour, account),
+        )
+        delivered = 0
+        for row in rows:
+            event = _event(row)
+            push = await _push(conn, flavour, account, event, "once", outgoing)
             await conn.execute(
-                """
-                INSERT INTO echo_event (id, echo_id, kind, occurred_at, push)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (event.id, echo_id, kind, event.occurred_at, push),
+                "UPDATE echo_event SET push = %s WHERE id = %s", (push, event.id)
             )
-            await conn.commit()
-        return JSONResponse({"id": event.id, "kind": kind, "push": push})
+            if push == "delivered":
+                delivered += 1
+        await conn.commit()
+    return JSONResponse({"redelivered": delivered})
+
+
+async def handle_events(request: Request, database_url: str, hang: Hang) -> Response:
+    """Every event released so far for the echoes with a reference, in
+    release order: the poll page, and what a thin webhook points at.
+    `refuse` does not apply to a read; the other faults do."""
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    reference = request.query_params.get("reference")
+    if reference is None:
+        return _error(400, "reference_required")
+    async with await _connect(database_url) as conn:
+        fault = await _take_fault(conn, flavour, "events")
+        await conn.commit()
+        if fault in ("fail_500", "fail_500_after_work"):
+            return _error(500, "internal_error")
+        rows = await _event_rows(
+            conn,
+            """
+            SELECT v.id, v.echo_id, e.reference, v.kind::text AS kind,
+                   v.occurred_at
+            FROM echo_event v JOIN echo e ON e.id = v.echo_id
+            WHERE e.flavour = %s AND e.vendor_account = %s AND e.reference = %s
+            ORDER BY v.seq
+            """,
+            (flavour, request.path_params["account"], reference),
+        )
+    released: list[_Event] = []
+    for row in rows:
+        released.append(_event(row))
+    if fault == "timeout_after_work":
+        await hang()
+    return Response(
+        msgspec.json.encode(_FullWebhook(events=released)),
+        media_type="application/json",
+    )
+
+
+async def handle_cut_report(request: Request, database_url: str) -> Response:
+    """Cut a report: every event of the account released since its
+    previous report, as CSV. Empty reports are cut too, as a vendor's
+    daily file can be."""
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    account = request.path_params["account"]
+    name = f"r{uuid.uuid7().hex}"
+    async with await _connect(database_url) as conn:
+        rows = await _event_rows(
+            conn,
+            """
+            SELECT v.id, v.echo_id, e.reference, v.kind::text AS kind,
+                   v.occurred_at
+            FROM echo_event v JOIN echo e ON e.id = v.echo_id
+            WHERE e.flavour = %s AND e.vendor_account = %s AND v.report IS NULL
+            ORDER BY v.seq
+            FOR UPDATE OF v
+            """,
+            (flavour, account),
+        )
+        lines = ["event_id,echo_id,reference,kind,occurred_at"]
+        for row in rows:
+            stamp = row.occurred_at.isoformat()
+            lines.append(f"{row.id},{row.echo_id},{row.reference},{row.kind},{stamp}")
+        await conn.execute(
+            """
+            INSERT INTO echo_report (name, flavour, vendor_account, body, cut_at)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (name, flavour, account, "\n".join(lines) + "\n", datetime.now(UTC)),
+        )
+        for row in rows:
+            await conn.execute(
+                "UPDATE echo_event SET report = %s WHERE id = %s", (name, row.id)
+            )
+        await conn.commit()
+    return JSONResponse({"name": name, "events": len(rows)})
+
+
+async def handle_list_reports(
+    request: Request, database_url: str, hang: Hang
+) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    after = request.query_params.get("after", "")
+    async with await _connect(database_url) as conn:
+        fault = await _take_fault(conn, flavour, "events")
+        await conn.commit()
+        if fault in ("fail_500", "fail_500_after_work"):
+            return _error(500, "internal_error")
+        cur = await conn.execute(
+            """
+            SELECT name FROM echo_report
+            WHERE flavour = %s AND vendor_account = %s AND name > %s
+            ORDER BY name
+            """,
+            (flavour, request.path_params["account"], after),
+        )
+        rows = await cur.fetchall()
+    if fault == "timeout_after_work":
+        await hang()
+    names: list[str] = []
+    for (name,) in rows:
+        assert isinstance(name, str)
+        names.append(name)
+    return JSONResponse({"reports": names})
+
+
+async def handle_get_report(
+    request: Request, database_url: str, hang: Hang
+) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    async with await _connect(database_url) as conn:
+        fault = await _take_fault(conn, flavour, "events")
+        await conn.commit()
+        if fault in ("fail_500", "fail_500_after_work"):
+            return _error(500, "internal_error")
+        cur = await conn.execute(
+            """
+            SELECT body FROM echo_report
+            WHERE flavour = %s AND vendor_account = %s AND name = %s
+            """,
+            (flavour, request.path_params["account"], request.path_params["name"]),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        return _error(404, "unknown_report")
+    if fault == "timeout_after_work":
+        await hang()
+    body = row[0]
+    assert isinstance(body, str)
+    return Response(body, media_type="text/csv")
+
+
+async def handle_script_fault(request: Request, database_url: str) -> Response:
+    try:
+        body = msgspec.json.decode(await request.body(), type=FaultBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        await conn.execute(
+            "INSERT INTO echo_fault (flavour, fault, operation) VALUES (%s, %s, %s)",
+            (body.flavour, body.fault, body.operation),
+        )
+        await conn.commit()
+    return Response(status_code=204)
+
+
+def make_app(database_url: str, outgoing: httpx2.AsyncClient, hang: Hang) -> Starlette:
+    """`outgoing` carries the fake's webhooks: a real client in dev, our app
+    in-process in tests."""
+
+    async def send(request: Request) -> Response:
+        return await handle_send(request, database_url, hang)
+
+    async def find(request: Request) -> Response:
+        return await handle_find(request, database_url)
+
+    async def cancel(request: Request) -> Response:
+        return await handle_cancel(request, database_url)
+
+    async def subscribe(request: Request) -> Response:
+        return await handle_subscribe(request, database_url)
+
+    async def release(request: Request) -> Response:
+        return await handle_release(request, database_url, outgoing)
 
     async def redeliver(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        account = request.path_params["account"]
-        async with await _connect(database_url) as conn:
-            cur = await conn.execute(
-                """
-                SELECT v.id, v.echo_id, e.reference, v.kind::text, v.occurred_at
-                FROM echo_event v JOIN echo e ON e.id = v.echo_id
-                WHERE e.flavour = %s AND e.vendor_account = %s AND v.push = 'failed'
-                ORDER BY v.seq
-                """,
-                (flavour, account),
-            )
-            rows = await cur.fetchall()
-            delivered = 0
-            for event_id, echo_id, reference, kind, occurred_at in rows:
-                assert isinstance(event_id, str) and isinstance(echo_id, str)
-                assert isinstance(reference, str) and isinstance(occurred_at, datetime)
-                assert kind == "confirmed" or kind == "archived"
-                event = _Event(event_id, echo_id, reference, kind, occurred_at)
-                push = await _push(conn, flavour, account, event, "once")
-                await conn.execute(
-                    "UPDATE echo_event SET push = %s WHERE id = %s", (push, event_id)
-                )
-                if push == "delivered":
-                    delivered += 1
-            await conn.commit()
-        return JSONResponse({"redelivered": delivered})
+        return await handle_redeliver(request, database_url, outgoing)
 
     async def events(request: Request) -> Response:
-        """Every event released so far for the echoes with a reference, in
-        release order: the poll page, and what a thin webhook points at.
-        `refuse` does not apply to a read; the other faults do."""
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        reference = request.query_params.get("reference")
-        if reference is None:
-            return _error(400, "reference_required")
-        async with await _connect(database_url) as conn:
-            fault = await _take_fault(conn, flavour, "events")
-            await conn.commit()
-            if fault in ("fail_500", "fail_500_after_work"):
-                return _error(500, "internal_error")
-            cur = await conn.execute(
-                """
-                SELECT v.id, v.echo_id, e.reference, v.kind::text, v.occurred_at
-                FROM echo_event v JOIN echo e ON e.id = v.echo_id
-                WHERE e.flavour = %s AND e.vendor_account = %s AND e.reference = %s
-                ORDER BY v.seq
-                """,
-                (flavour, request.path_params["account"], reference),
-            )
-            rows = await cur.fetchall()
-        released: list[_Event] = []
-        for event_id, echo_id, ref, kind, occurred_at in rows:
-            assert isinstance(event_id, str) and isinstance(echo_id, str)
-            assert isinstance(ref, str) and isinstance(occurred_at, datetime)
-            assert kind == "confirmed" or kind == "archived"
-            released.append(_Event(event_id, echo_id, ref, kind, occurred_at))
-        if fault == "timeout_after_work":
-            await hang()
-        return Response(
-            msgspec.json.encode(_FullWebhook(events=released)),
-            media_type="application/json",
-        )
+        return await handle_events(request, database_url, hang)
 
     async def cut_report(request: Request) -> Response:
-        """Cut a report: every event of the account released since its
-        previous report, as CSV. Empty reports are cut too, as a vendor's
-        daily file can be."""
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        account = request.path_params["account"]
-        name = f"r{uuid.uuid7().hex}"
-        async with await _connect(database_url) as conn:
-            cur = await conn.execute(
-                """
-                SELECT v.id, v.echo_id, e.reference, v.kind::text, v.occurred_at
-                FROM echo_event v JOIN echo e ON e.id = v.echo_id
-                WHERE e.flavour = %s AND e.vendor_account = %s AND v.report IS NULL
-                ORDER BY v.seq
-                FOR UPDATE OF v
-                """,
-                (flavour, account),
-            )
-            rows = await cur.fetchall()
-            lines = ["event_id,echo_id,reference,kind,occurred_at"]
-            for event_id, echo_id, reference, kind, occurred_at in rows:
-                assert isinstance(occurred_at, datetime)
-                stamp = occurred_at.isoformat()
-                lines.append(f"{event_id},{echo_id},{reference},{kind},{stamp}")
-            await conn.execute(
-                """
-                INSERT INTO echo_report (name, flavour, vendor_account, body, cut_at)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (name, flavour, account, "\n".join(lines) + "\n", datetime.now(UTC)),
-            )
-            for row in rows:
-                await conn.execute(
-                    "UPDATE echo_event SET report = %s WHERE id = %s", (name, row[0])
-                )
-            await conn.commit()
-        return JSONResponse({"name": name, "events": len(rows)})
+        return await handle_cut_report(request, database_url)
 
     async def list_reports(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        after = request.query_params.get("after", "")
-        async with await _connect(database_url) as conn:
-            fault = await _take_fault(conn, flavour, "events")
-            await conn.commit()
-            if fault in ("fail_500", "fail_500_after_work"):
-                return _error(500, "internal_error")
-            cur = await conn.execute(
-                """
-                SELECT name FROM echo_report
-                WHERE flavour = %s AND vendor_account = %s AND name > %s
-                ORDER BY name
-                """,
-                (flavour, request.path_params["account"], after),
-            )
-            rows = await cur.fetchall()
-        if fault == "timeout_after_work":
-            await hang()
-        names: list[str] = []
-        for (name,) in rows:
-            assert isinstance(name, str)
-            names.append(name)
-        return JSONResponse({"reports": names})
+        return await handle_list_reports(request, database_url, hang)
 
     async def get_report(request: Request) -> Response:
-        flavour = _flavour(request)
-        if flavour is None:
-            return _error(404, "unknown_flavour")
-        async with await _connect(database_url) as conn:
-            fault = await _take_fault(conn, flavour, "events")
-            await conn.commit()
-            if fault in ("fail_500", "fail_500_after_work"):
-                return _error(500, "internal_error")
-            cur = await conn.execute(
-                """
-                SELECT body FROM echo_report
-                WHERE flavour = %s AND vendor_account = %s AND name = %s
-                """,
-                (flavour, request.path_params["account"], request.path_params["name"]),
-            )
-            row = await cur.fetchone()
-        if row is None:
-            return _error(404, "unknown_report")
-        if fault == "timeout_after_work":
-            await hang()
-        body = row[0]
-        assert isinstance(body, str)
-        return Response(body, media_type="text/csv")
+        return await handle_get_report(request, database_url, hang)
 
     async def script_fault(request: Request) -> Response:
-        try:
-            body = msgspec.json.decode(await request.body(), type=FaultBody)
-        except msgspec.DecodeError:
-            return _error(400, "invalid_body")
-        async with await _connect(database_url) as conn:
-            await conn.execute(
-                "INSERT INTO echo_fault (flavour, fault, operation)"
-                " VALUES (%s, %s, %s)",
-                (body.flavour, body.fault, body.operation),
-            )
-            await conn.commit()
-        return Response(status_code=204)
+        return await handle_script_fault(request, database_url)
 
     account_path = "/_fake/echo/{flavour}/{account}"
     return Starlette(
