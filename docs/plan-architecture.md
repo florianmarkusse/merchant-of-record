@@ -1002,14 +1002,35 @@ far it is:
 | Settlement as vendors send it (amends 5c-1) | `plan-settlement-reconciliation.md` |
 | Rules to check, not only write down (survey) | `plan-codified-rules.md` |
 
-Next: 5c-2, the bank statement import that moves a PSP payout from
-`payout_in_transit` to `bank`, to be designed (`plan-payments.md` §7.1);
-then 5c-3, card fields and the Playwright suite. The echo vendor stays
-until the shipment slice.
+Next, in this order (agreed 23-Nov-2026). The reasoning: guards before
+the changes they protect, refactor before building on what is
+refactored, clean up code once it has stopped moving.
 
-Also open (23-Nov-2026): the messaging rework from a code review of the
-foundation, starting with one decision for the user
-(`plan-messaging-rework.md` §2).
+1. The cheap guards (`plan-codified-rules.md` §2.3 and §2.1): the ruff
+   settings (all of `DTZ`, banned imports) and the fact-schema snapshot,
+   which makes sure the refactor below cannot change a stored fact's
+   shape unnoticed.
+2. The messaging refactor: `plan-messaging-rework.md` §3.3 with §3.3b,
+   one design for the user to review, then built on `duty_rate_ask`
+   first, measured, then the rest. Before any new feature: 5c-2 adds an
+   effect consumer, which should be written in the final shape.
+3. The rest of the codifying (`plan-codified-rules.md` §2.2 and §2.4):
+   `kw_only` records and the ast-grep rules, after the refactor because
+   it deletes or reshapes much of what they would touch. Decide the
+   shadowing and two-column-row rules first (§2.4).
+4. The ledger's typed account scopes (`plan-messaging-rework.md` §5),
+   just before 5c-2, which adds `bank:{entity}`.
+5. 5c-2, the bank statement import that moves a PSP payout from
+   `payout_in_transit` to `bank` (`plan-payments.md` §7.1), on the new
+   consumer shape and under the new checks; it brings the "flagged"
+   state for a payout whose bank credit arrived but whose lines do not
+   add up (`plan-settlement-reconciliation.md` §4.3). Then 5c-3, card
+   fields and the Playwright suite.
+
+When they are needed, not before: `plan-messaging-rework.md` §3.5 (the
+message's own uuid, version draining, replay) and the markets source
+decoded with msgspec (§5). The echo vendor stays until the shipment
+slice.
 
 Read, in this order:
 
