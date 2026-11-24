@@ -48,11 +48,6 @@ from mor.echo.inbound import record_manual_event
 from mor.echo.port import EchoProvider, EventKind, EventMode
 from mor.echo.records import EchoJobState
 from mor.echo.reports import start_report_schedule
-from mor.messaging import consumers
-from mor.messaging.consumers import (
-    Prepared,
-    prepare_delivery,
-)
 from mor.messaging.delivery import (
     Candidate,
     Skipped,
@@ -64,13 +59,13 @@ from mor.messaging.worker import (
     find_candidates,
     handle_delivery,
     run_one,
-    try_lock_aggregate,
 )
 from tests.helpers import (
     ENV,
     TEST_URL,
     VENDOR_TIMEOUT,
     crash,
+    crash_around_a_call,
     empty_tables,
     wire,
 )
@@ -244,14 +239,10 @@ class EchoFlow(RuleBasedStateMachine):
                         # One transaction: run it, die before COMMIT.
                         await crashing.execute("BEGIN")
                         await handle_delivery(crashing, candidate, local, ENV, self.now)
-                    case Effect(consumer=effect):
-                        assert await try_lock_aggregate(crashing, candidate)
-                        async with crashing.transaction():
-                            prepared = await prepare_delivery(
-                                crashing, candidate, effect, self.now
-                            )
-                        if with_call and isinstance(prepared, Prepared):
-                            await consumers.call(self.http, ENV, prepared.call)
+                    case Effect():
+                        await crash_around_a_call(
+                            candidate, with_call, self.http, self.network, self.now
+                        )
             finally:
                 await crash(crashing)
 

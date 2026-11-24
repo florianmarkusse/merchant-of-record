@@ -38,9 +38,8 @@ from mor.echo.port import (
     Page,
     ReportList,
 )
-from mor.messaging.facts import EchoReportDueV1, Fact
+from mor.messaging.facts import EchoReportDueV1
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.vendor_failures import OutcomeUnknown, Unavailable
 
@@ -98,14 +97,6 @@ async def start_report_schedule(
     await append_fact(conn, EchoReportDueV1(account_id=account_id), actor, now)
 
 
-def _account_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case EchoReportDueV1(account_id=account_id):
-            return account_id
-        case _:
-            raise WrongFact(f"echo_report_fetch got {fact!r}")
-
-
 async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
     await conn.execute(
         "INSERT INTO echo_report_cursor (account_id) VALUES (%s)"
@@ -122,9 +113,8 @@ async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
 
 
 async def prepare_reports(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, account_id: uuid.UUID, now: datetime
 ) -> NoCall | ReportCall:
-    account_id = _account_id(fact)
     inbound = await inbound_account(conn, account_id)
     assert inbound is not None, f"no echo account {account_id}"
     if inbound.event_mode != EventMode.FILE:
@@ -148,9 +138,13 @@ async def call_reports(
 
 
 async def complete_reports(
-    conn: Connection, fact: Fact, answer: ReportAnswer, now: datetime
+    conn: Connection,
+    account_id: uuid.UUID,
+    report_call: ReportCall,
+    answer: ReportAnswer,
+    now: datetime,
 ) -> Done | RetryLater | Again:
-    account_id = _account_id(fact)
+    """`report_call` is the call as one union; each answer holds it typed."""
     await _lock_cursor(conn, account_id)
     match answer:
         case ListReportsAnswer():

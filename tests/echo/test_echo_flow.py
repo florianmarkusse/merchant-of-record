@@ -22,10 +22,6 @@ from mor.echo.port import EchoProvider
 from mor.echo.records import EchoJobState
 from mor.fakes.echo import make_app
 from mor.fakes.hang import hang_a_minute
-from mor.messaging.consumers import (
-    Prepared,
-    prepare_delivery,
-)
 from mor.messaging.delivery import (
     Deferred,
     Ran,
@@ -35,9 +31,13 @@ from mor.messaging.worker import (
     Failed,
     drain_once,
     find_candidates,
-    try_lock_aggregate,
 )
-from tests.helpers import ENV, NO_HTTP, RefusingTransport, crash, effect_consumer
+from tests.helpers import (
+    ENV,
+    NO_HTTP,
+    RefusingTransport,
+    crash_around_a_call,
+)
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -130,16 +130,11 @@ async def _drain(setup: Setup, now: datetime) -> list[object]:
 
 async def _crash_after_prepare(setup: Setup) -> None:
     """A worker that commits `prepare` and dies before calling."""
-    crashing = await connect(setup.url, autocommit=True)
-    candidates = await find_candidates(crashing, NOW, 10)
+    candidates = await find_candidates(setup.worker, NOW, 10)
     assert len(candidates) == 1
-    assert await try_lock_aggregate(crashing, candidates[0])
-    async with crashing.transaction():
-        prepared = await prepare_delivery(
-            crashing, candidates[0], effect_consumer(candidates[0]), NOW
-        )
-    assert isinstance(prepared, Prepared)
-    await crash(crashing)
+    assert await crash_around_a_call(
+        candidates[0], False, setup.http, setup.network, NOW
+    )
 
 
 def test_each_provider_echoes_a_job_once(database_url: str) -> None:

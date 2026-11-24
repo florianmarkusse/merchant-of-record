@@ -2,8 +2,8 @@
 
 Status: 24-Nov-2026: §1, §3.1 and §3.2 built (commit 83a9a04). §3.3,
 the one table for every consumer, agreed 24-Nov-2026: the test seam and
-every effect consumer but echo's built 24-Nov-2026 (§1); next, the local
-consumers' locks into the table.
+every effect consumer built and the old effect driver gone 24-Nov-2026
+(§1); next, the local consumers' locks into the table.
 Amends `plan-messaging.md` and the worker loop in
 `plan-architecture.md` §5.
 
@@ -61,6 +61,20 @@ when following a fact through the code.
   (`test_quote_concurrency`, `test_concurrent_workers`) now call the
   consumer's own steps. Left on the old driver: the three echo
   consumers.
+- 24-Nov-2026, §3.3 continued: the echo consumers run through
+  `run_steps` (their answer records stay, as settlement's do; `echo_poll`
+  is narrowed to `EchoPollDueV1 | EchoEventsWantedV1`, since only a poll
+  schedules the next), and the old effect driver is gone: no
+  `consumers.prepare`/`call`/`complete`, `EffectCall`, `EffectAnswer`,
+  `Prepared`, `prepare_delivery` or `complete_delivery`. Measured against
+  2340eea: `worker.py` 502 to 289 lines, `consumers.py` 189 to 274, the
+  new `delivery.py` 228; messaging about 100 lines more in all, most of
+  it the eleven `run_steps` calls the formatter writes one argument per
+  line (about 12 lines each). Then the five arguments every run shares
+  went into one record, `EffectRun`: `consumers.py` 274 to 234 lines,
+  `delivery.py` 228 to 240. Found for the local stage: a settlement
+  line's `attempt_id` is set at insert and never updated, so the table
+  may read it unlocked to choose which row to lock.
 
 ## 2. Decided: drop ordering per consumer and aggregate
 

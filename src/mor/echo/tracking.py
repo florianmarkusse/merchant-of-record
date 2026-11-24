@@ -110,20 +110,16 @@ async def start_tracking(
     return Applied()
 
 
-def _job_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case EchoPollDueV1(echo_job_id=job_id) | EchoEventsWantedV1(echo_job_id=job_id):
-            return job_id
-        case _:
-            raise WrongFact(f"echo_poll got {fact!r}")
+# The consumer echo_poll gets either fact; only a poll schedules the next.
+type PollWanted = EchoPollDueV1 | EchoEventsWantedV1
 
 
 async def prepare_poll(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, wanted: PollWanted, now: datetime
 ) -> NoCall | FetchEventsCall:
     """Under the job's lock: is a fetch still wanted? Not once the status is
     final, whatever started it."""
-    job_id = _job_id(fact)
+    job_id = wanted.echo_job_id
     job = await _lock_job(conn, job_id)
     if job.vendor_status == FINAL:
         return NoCall(Stale())
@@ -142,9 +138,13 @@ async def call_poll(
 
 
 async def complete_poll(
-    conn: Connection, fact: Fact, answer: FetchEventsAnswer, now: datetime
+    conn: Connection,
+    wanted: PollWanted,
+    fetch: FetchEventsCall,
+    answer: FetchEventsAnswer,
+    now: datetime,
 ) -> Done | RetryLater:
-    job_id = _job_id(fact)
+    job_id = wanted.echo_job_id
     job = await _lock_job(conn, job_id)
     match answer.result:
         case Page(body=body):
@@ -152,7 +152,7 @@ async def complete_poll(
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             # A read: trying again later is always safe.
             return RetryLater(f"poll: {detail}")
-    match fact:
+    match wanted:
         case EchoPollDueV1():
             # The page just stored is not applied yet, so a final status in
             # it is seen by the next poll, which then stops.
@@ -166,6 +166,6 @@ async def complete_poll(
                     now,
                     deliver_at=now + inbound.poll_interval,
                 )
-        case _:
+        case EchoEventsWantedV1():
             pass  # a thin webhook's fetch schedules nothing
     return Done(Applied())

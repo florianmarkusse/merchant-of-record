@@ -186,13 +186,22 @@ def backoff(attempts: int) -> timedelta:
     return min(timedelta(seconds=2 ** min(attempts, 20)), MAX_BACKOFF)
 
 
+@dataclass(frozen=True, kw_only=True)
+class EffectRun:
+    """What every effect consumer's run shares: the worker's connection
+    and HTTP client, the environment, the delivery and the moment. Built
+    once by the table, handed to `run_steps`."""
+
+    conn: Connection
+    http: httpx2.AsyncClient
+    environment: Environment
+    candidate: Candidate
+    now: datetime
+
+
 async def run_steps[S, C, R](
-    conn: Connection,
-    http: httpx2.AsyncClient,
-    environment: Environment,
-    candidate: Candidate,
+    run: EffectRun,
     subject: S,
-    now: datetime,
     *,
     prepare: Callable[[Connection, S, datetime], Awaitable[NoCall | C]],
     call: Callable[[httpx2.AsyncClient, Environment, C], Awaitable[R]],
@@ -207,13 +216,16 @@ async def run_steps[S, C, R](
     `subject` is what the fact is about (an id), narrowed by the table.
     The caller holds the aggregate's advisory lock, which keeps every
     other worker off this delivery across the commits."""
+    conn = run.conn
+    candidate = run.candidate
+    now = run.now
     for _ in range(MAX_EFFECT_STEPS):
         async with conn.transaction():
             prepared = await prepare(conn, subject, now)
             if isinstance(prepared, NoCall):
                 await finish_delivery(conn, candidate, now)
                 return Ran(prepared.outcome)
-        result = await call(http, environment, prepared)
+        result = await call(run.http, run.environment, prepared)
         async with conn.transaction():
             step = await complete(conn, subject, prepared, result, now)
             match step:

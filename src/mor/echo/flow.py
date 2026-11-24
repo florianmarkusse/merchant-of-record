@@ -48,11 +48,9 @@ from mor.messaging.facts import (
     EchoJobNeedsPersonV1,
     EchoJobRefusedV1,
     EchoJobRequestedV1,
-    Fact,
 )
 from mor.messaging.guard import DuplicateGuard, VendorRequestState
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import OutcomeUnknown, Unavailable
@@ -341,19 +339,14 @@ async def _set_job(
     )
 
 
-def _job_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case EchoJobRequestedV1(echo_job_id=job_id):
-            return job_id
-        case _:
-            raise WrongFact(f"echo_send got {fact!r}")
+# --- the consumer echo_send: prepare, call, complete, run by
+# mor.messaging.delivery.run_steps -------------------------------------------
 
 
-# --- prepare --------------------------------------------------------------
-
-
-async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | EchoCall:
-    job = await _lock_job(conn, _job_id(fact))
+async def prepare(
+    conn: Connection, job_id: uuid.UUID, now: datetime
+) -> NoCall | EchoCall:
+    job = await _lock_job(conn, job_id)
     account = await _account(conn, job.account_id)
     match job.state:
         case EchoJobState.ECHOED | EchoJobState.REFUSED | EchoJobState.NEEDS_PERSON:
@@ -425,9 +418,14 @@ async def call(
 
 
 async def complete(
-    conn: Connection, fact: Fact, answer: EchoAnswer, now: datetime
+    conn: Connection,
+    job_id: uuid.UUID,
+    echo_call: EchoCall,
+    answer: EchoAnswer,
+    now: datetime,
 ) -> Done | RetryLater | Again:
-    job = await _lock_job(conn, _job_id(fact))
+    """`echo_call` is the call as one union; each answer holds it typed."""
+    job = await _lock_job(conn, job_id)
     state = job.state
     match answer:
         case SendAnswer():
