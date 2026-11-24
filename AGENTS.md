@@ -178,13 +178,24 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
   assert. A check that a state cannot occur is a `match` with one case
   per state and a comment on why the impossible ones are impossible.
 - A record of 4 or more fields is built with keyword arguments, and a
-  query of several columns is read with `class_row` into a row record
-  named after its columns, never unpacked from a tuple (decided
-  23-Nov-2026: pyright sees tuple rows as `Any`, and two positional ints
-  can swap unnoticed).
+  query of two or more columns is read with `class_row` into a row record
+  named after its columns, never unpacked from a tuple, also not a
+  two-column row in a `for` (decided 23-Nov-2026, the two-column case
+  24-Nov-2026: pyright sees tuple rows as `Any`, and two positional ints
+  can swap unnoticed). A single column is read with `one_value`.
 - Errors as values covers declined card, tax rule missing, PSP timeout.
-- Never shadow domain names (`payment`, `merchant`, `invoice`, `ledger`)
-  with local variables.
+- No shadowing (decided 24-Nov-2026: one name meaning two things is
+  confusing): no local or parameter named after a domain name
+  (`payment`, `merchant`, `invoice`, `ledger`), a package or module, or
+  a builtin. Name the value by its role (`seller`, `paid_invoice`), not
+  with a `_row` or `_record` suffix.
+- No import aliases, project or third-party, with no exceptions
+  (decided 24-Nov-2026): `from hypothesis import strategies`, then
+  `strategies.integers()`, not `as st`. Where two modules or names
+  clash (the many `flow` modules in `mor.messaging.consumers`), import
+  the module by its dotted path (`import mor.payments.flow`, its
+  functions called through that full path), as the shared conventions
+  show.
 - Timestamps: local time only at the edge, for display and for
   tax-point rules that name a local date. Inside the process every moment
   is aware UTC (decided 20-Nov-2026): a vendor's timestamp is decoded as

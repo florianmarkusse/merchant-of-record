@@ -2,7 +2,9 @@
 
 Status: survey, 23-Nov-2026. Nothing built. To be picked up in a later
 session; items 1 to 3 are small and were recommended to do first, item 4
-needs the existing violations fixed and one rule decided first.
+needs the existing violations fixed. The open rules in §2.4 were decided
+on 24-Nov-2026 (shadowing, import aliases, two-column rows), and
+`AGENTS.md` Code Style says them.
 
 Why: a rule in prose is easy to forget, and several already are broken in
 places (counts below). A check in the tools that run after every change
@@ -65,6 +67,16 @@ fails on a record of 4 or more fields without `kw_only`, so a new one
 cannot be added without it. Adding `kw_only` will make pyright list the
 positional builds to fix.
 
+Measured 24-Nov-2026 in a throwaway worktree: `kw_only=True` on the 134
+dataclasses (msgspec structs not counted) gives 90 pyright errors, all
+positional builds. 89 are in tests, most in the quote tests
+(`tests/quote/`, `tests/checkout/test_quote_*`, the quote and shipping
+fuzzers), and 1 is in `src/mor/quote/build.py`. The messaging refactor
+does not touch these, so waiting for it saves nothing. Doing this first
+means the refactor writes its new records under the check. So it
+belongs with the cheap guards, before the refactor
+(`plan-architecture.md` §16).
+
 ### 2.3 Ruff settings not used yet (config only)
 
 `pyproject.toml` selects `E, F, I, UP, B, DTZ005, DTZ011`.
@@ -85,6 +97,9 @@ positional builds to fix.
     (`migrations/0022_convention_fixes.sql`), and turns them into a
     `Fraction` at once. Allow it by a per-file ignore with that reason.
   None of these is used today except the allowed `Decimal`.
+- **All of `A`** (a local, parameter or import named after a builtin;
+  part of the no-shadowing rule decided 24-Nov-2026). No violations
+  today: `uv run ruff check --select A src tests`.
 
 ### 2.4 An ast-grep rule set for what ruff cannot say
 
@@ -94,9 +109,9 @@ current cases fixed first. Counts in `src/` unless noted.
 
 | Rule (source) | Cases | Find them |
 |---|---|---|
-| No aliased project imports (conventions, Imports) | 23, `src/` and `tests/` | `rg -n '^(from mor\S* )?import mor\S* as \|^from mor\S* import .* as ' src tests` |
-| Never shadow `payment`, `merchant`, `invoice`, `ledger` with a local (AGENTS.md, Code Style) | 32 | `rg -n '^\s+(payment\|merchant\|invoice\|ledger)\s*(:[^=]+)?=' src` |
-| A query of several columns is read with `class_row`, never unpacked from a tuple (AGENTS.md, decided 23-Nov-2026) | 8 | `rg -n 'for \w+, \w+.* in await cur\.fetchall\(\)\|^\s+\w+, \w+(, \w+)* = row$' src` |
+| No import aliases at all, project or third-party (AGENTS.md, decided 24-Nov-2026) | 23 project, 20 `strategies as st`, `src/` and `tests/` | `rg -n '^\s*(from \S+ )?import .* as ' src tests` |
+| No local or parameter named after a domain name or a package or module (AGENTS.md, decided 24-Nov-2026; builtins are ruff's `A`, §2.3) | 32 domain names; module names not counted yet | `rg -n '^\s+(payment\|merchant\|invoice\|ledger)\s*(:[^=]+)?=' src` |
+| A query of two or more columns is read with `class_row`, never unpacked from a tuple, also in a `for` (AGENTS.md, decided 23-Nov-2026, two columns 24-Nov-2026) | 8 | `rg -n 'for \w+, \w+.* in await cur\.fetchall\(\)\|^\s+\w+, \w+(, \w+)* = row$' src` |
 | A row that must exist is read with `mor.db.fetch` (`one_row`, `one_value`), not `fetchone()` and an assert (AGENTS.md) | 4 | `rg -n -A2 'fetchone\(\)' src \| rg 'assert .* is not None'` |
 | No reflection (conventions, Explicit over clever) | 1 | `rg -n 'getattr\(\|setattr\(\|importlib' src` |
 | A provider is picked by name in one place, its registry (conventions, External Services) | 1 | `rg -n 'match .*\.provider\b' src \| rg -v registry.py` |
@@ -113,21 +128,22 @@ What the cases are:
   fields` (`src/mor/web/buyer_html.py`), `from mor.markets.fx import rate
   as fx_rate` (`src/mor/web/staff_markets.py`), `Stale as StaleEvent`
   (`src/mor/payments/inbound.py`), and `addresses as f` in three tests.
-  Most exist because two modules give the same name; the conventions'
-  answer is distinct names per layer, so some of these are renames.
+  Most exist because two modules give the same name (the many `flow`
+  modules imported into `src/mor/messaging/consumers.py`); the fix is a
+  dotted import (`import mor.payments.flow`), as the conventions show.
+  The 20 `from hypothesis import strategies as st` become `from
+  hypothesis import strategies`: no exceptions, decided 24-Nov-2026.
 - **Shadowed domain names**: mostly `merchant = await read_merchant(...)`
   and `invoice = await invoice_for_order(...)` in web handlers
   (`order_pages.py`, `staff_markets.py`, `api.py`, …) and `payment` in
-  the fake PSP (12). **Decide the rule first**: a local `merchant` in a
-  page handler reads well, and what the rule guards against is a local
-  hiding a module or package of the same name. A narrower rule ("no
-  local named after an imported module") may be the right one; then
-  most of the 32 are fine.
+  the fake PSP (12). Decided 24-Nov-2026: all of them go, since one
+  name meaning two things is confusing; the new name says the value's
+  role (`seller`, `paid_invoice`), not `_row` or `_record`.
 - **Tuple-unpacked rows**: in real code `src/mor/checkout/sessions.py`,
   `src/mor/checkout/quotes.py`, `src/mor/psp/accounts.py`,
   `src/mor/echo/fake_client.py`; the rest in the fakes. Two-column rows
-  read in a `for` are the common case; decide whether the rule covers
-  them (it says "several columns").
+  read in a `for` are the common case; decided 24-Nov-2026 that the
+  rule covers them, each with its own small row record.
 - **`fetchone()` and an assert**: both inbox decoders
   (`src/mor/payments/inbound.py`, `src/mor/echo/inbound.py`),
   `src/mor/seed.py`, `src/mor/fakes/echo.py`.
@@ -163,7 +179,7 @@ What the cases are:
 ## 4. Order of work (recommended)
 
 1. §2.3 (config only), then §2.1 and §2.2, each with its check clean.
-2. Decide the shadowing and tuple-row rules (§2.4), then fix the cases
-   and add the ast-grep rules, one rule per change, so each lands clean.
+2. Fix the cases of each rule in §2.4 (decided 24-Nov-2026) and add
+   the ast-grep rules, one rule per change, so each lands clean.
 3. Add the ast-grep scan to `AGENTS.md`'s checks list, as vulture and
    `npx tsc` are.

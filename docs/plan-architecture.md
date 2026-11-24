@@ -1006,18 +1006,23 @@ Next, in this order (agreed 23-Nov-2026). The reasoning: guards before
 the changes they protect, refactor before building on what is
 refactored, clean up code once it has stopped moving.
 
-1. The cheap guards (`plan-codified-rules.md` §2.3 and §2.1): the ruff
-   settings (all of `DTZ`, banned imports) and the fact-schema snapshot,
-   which makes sure the refactor below cannot change a stored fact's
-   shape unnoticed.
+1. The cheap guards (`plan-codified-rules.md` §2.3, §2.1 and §2.2): the
+   ruff settings (all of `DTZ` and `A`, banned imports), the fact-schema
+   snapshot, which makes sure the refactor below cannot change a stored
+   fact's shape unnoticed, and `kw_only` records (moved here
+   24-Nov-2026: its 90 fixes are in the quote tests, which the
+   refactor does not touch, and the refactor's new records then come
+   under the check).
 2. The messaging refactor: `plan-messaging-rework.md` §3.3 with §3.3b,
    one design for the user to review, then built on `duty_rate_ask`
    first, measured, then the rest. Before any new feature: 5c-2 adds an
    effect consumer, which should be written in the final shape.
-3. The rest of the codifying (`plan-codified-rules.md` §2.2 and §2.4):
-   `kw_only` records and the ast-grep rules, after the refactor because
-   it deletes or reshapes much of what they would touch. Decide the
-   shadowing and two-column-row rules first (§2.4).
+3. The rest of the codifying (`plan-codified-rules.md` §2.4): the
+   ast-grep rules, after the refactor because it deletes or reshapes
+   much of what they would touch (most import aliases are in
+   `mor.messaging.consumers`). The shadowing, import-alias and
+   two-column-row rules were decided 24-Nov-2026 (`AGENTS.md`, Code
+   Style).
 4. The ledger's typed account scopes (`plan-messaging-rework.md` §5),
    just before 5c-2, which adds `bank:{entity}`.
 5. 5c-2, the bank statement import that moves a PSP payout from
