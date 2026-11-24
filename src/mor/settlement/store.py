@@ -33,23 +33,16 @@ from mor.db.fetch import one_row, one_value
 from mor.ledger.account import AccountKind
 from mor.ledger.store import record_entry
 from mor.messaging.facts import (
-    Fact,
-    OrderPaidV1,
-    PaymentCancelledV1,
-    PaymentDeclinedV1,
     PaymentEventsWantedV1,
-    PaymentExpiredV1,
-    PaymentNeedsPersonV1,
     SettlementLineReceivedV1,
     SettlementPayoutReportedV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.orders.posting import capture_key
-from mor.payments.attempts import Attempt, attempt_of_account, lock_attempt
+from mor.payments.attempts import Attempt, attempt_of_account
 from mor.payments.transitions import OPEN_STATES, AttemptState
 from mor.psp import registry
 from mor.psp.port import LineType, PspAccount
@@ -200,7 +193,7 @@ async def record_document(
 
 
 @dataclass(frozen=True, kw_only=True)
-class _Line:
+class LockedLine:
     id: uuid.UUID
     account_id: uuid.UUID
     vendor_line_id: str
@@ -225,16 +218,18 @@ _LINE_SELECT = """
 """
 
 
-async def _lock_line(conn: Connection, line_id: uuid.UUID) -> _Line:
-    async with conn.cursor(row_factory=class_row(_Line)) as cur:
+async def lock_line(conn: Connection, line_id: uuid.UUID) -> LockedLine:
+    async with conn.cursor(row_factory=class_row(LockedLine)) as cur:
         await cur.execute(_LINE_SELECT + " WHERE l.id = %s FOR UPDATE OF l", (line_id,))
         return await one_row(cur, f"settlement line {line_id}")
 
 
-async def _lock_pending_lines(conn: Connection, attempt_id: uuid.UUID) -> list[_Line]:
+async def _lock_pending_lines(
+    conn: Connection, attempt_id: uuid.UUID
+) -> list[LockedLine]:
     """An attempt's lines not settled yet, in the order they were stored,
     which is the order the PSP published them."""
-    async with conn.cursor(row_factory=class_row(_Line)) as cur:
+    async with conn.cursor(row_factory=class_row(LockedLine)) as cur:
         await cur.execute(
             _LINE_SELECT + " WHERE l.attempt_id = %s"
             " AND l.state IN ('received', 'waiting')"
@@ -246,7 +241,7 @@ async def _lock_pending_lines(conn: Connection, attempt_id: uuid.UUID) -> list[_
 
 async def _exception(
     conn: Connection,
-    line: _Line,
+    line: LockedLine,
     kind: ExceptionKind,
     detail: str,
     now: datetime,
@@ -285,7 +280,7 @@ async def _estimate(
 
 
 async def _settle(
-    conn: Connection, line: _Line, attempt: Attempt, now: datetime
+    conn: Connection, line: LockedLine, attempt: Attempt, now: datetime
 ) -> None:
     """One capture line against its attempt, both locked: book it, wait for
     the order, or record why not."""
@@ -389,9 +384,32 @@ class _LineStateRow:
     state: LineState
 
 
-async def _book_received(
-    conn: Connection, line_id: uuid.UUID, now: datetime
-) -> ConsumerOutcome:
+@dataclass(frozen=True)
+class AlreadyBooked:
+    """The line moved past `received` already: nothing to book."""
+
+
+@dataclass(frozen=True)
+class PendingFor:
+    """The line names its attempt: book it with the attempt's other
+    pending lines, under the attempt's lock."""
+
+    attempt_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class Unmatched:
+    """The line names no attempt: book it alone, under its own lock."""
+
+
+type LineBooking = AlreadyBooked | PendingFor | Unmatched
+
+
+async def line_booking(conn: Connection, line_id: uuid.UUID) -> LineBooking:
+    """What booking a received line needs locked, for the table to lock it.
+    Read without a lock: a line's attempt is set when it is stored and
+    never updated, and its state only moves forward, which the locked step
+    checks again."""
     async with conn.cursor(row_factory=class_row(_LineStateRow)) as cur:
         await cur.execute(
             "SELECT attempt_id, state FROM settlement_line WHERE id = %s",
@@ -399,10 +417,24 @@ async def _book_received(
         )
         found = await one_row(cur, f"settlement line {line_id}")
     if found.state != LineState.RECEIVED:
-        return Stale()
+        return AlreadyBooked()
     if found.attempt_id is not None:
-        return await _settle_pending(conn, found.attempt_id, now)
-    line = await _lock_line(conn, line_id)
+        return PendingFor(found.attempt_id)
+    return Unmatched()
+
+
+async def order_attempt(conn: Connection, order_id: uuid.UUID) -> uuid.UUID:
+    """The order's attempt, which never changes."""
+    return await one_value(
+        conn, "SELECT attempt_id FROM order_ WHERE id = %s", (order_id,), uuid.UUID
+    )
+
+
+async def book_unmatched_line(
+    conn: Connection, line: LockedLine, now: datetime
+) -> ConsumerOutcome:
+    """Consumer `settlement_line_book`, for a line that names no attempt,
+    the line locked."""
     if line.state != LineState.RECEIVED:
         return Stale()
     match line.type:
@@ -434,15 +466,16 @@ async def _book_received(
     return Applied()
 
 
-async def _settle_pending(
-    conn: Connection, attempt_id: uuid.UUID, now: datetime
+async def settle_pending(
+    conn: Connection, attempt: Attempt, now: datetime
 ) -> ConsumerOutcome:
     """Every line of the attempt not settled yet, the earliest first, under
     the attempt's lock: whichever delivery comes first, a payment the PSP
     settled twice keeps its first line and the later one is the exception
-    (found by the order fuzzer, 20-Nov-2026)."""
-    attempt = await lock_attempt(conn, attempt_id)
-    lines = await _lock_pending_lines(conn, attempt_id)
+    (found by the order fuzzer, 20-Nov-2026). Consumer
+    `settlement_line_book`, the attempt locked; it locks the lines it
+    books."""
+    lines = await _lock_pending_lines(conn, attempt.id)
     if not lines:
         return Stale()
     for line in lines:
@@ -450,36 +483,11 @@ async def _settle_pending(
     return Applied()
 
 
-async def book_lines(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
-    """Consumer `settlement_line_book`: a line as it arrives, or the lines
-    that waited for their payment once it has its order or has ended."""
-    match fact:
-        case SettlementLineReceivedV1(settlement_line_id=line_id):
-            return await _book_received(conn, line_id, now)
-        case OrderPaidV1(order_id=order_id):
-            attempt_id = await one_value(
-                conn,
-                "SELECT attempt_id FROM order_ WHERE id = %s",
-                (order_id,),
-                uuid.UUID,
-            )
-            return await _settle_pending(conn, attempt_id, now)
-        case (
-            PaymentDeclinedV1(payment_attempt_id=attempt_id)
-            | PaymentExpiredV1(payment_attempt_id=attempt_id)
-            | PaymentCancelledV1(payment_attempt_id=attempt_id)
-            | PaymentNeedsPersonV1(payment_attempt_id=attempt_id)
-        ):
-            return await _settle_pending(conn, attempt_id, now)
-        case _:
-            raise WrongFact(f"settlement_line_book got {fact!r}")
-
-
 # --- booking and reconciling a payout -----------------------------------------
 
 
 @dataclass(frozen=True, kw_only=True)
-class _PayoutRow:
+class LockedPayout:
     id: uuid.UUID
     account_id: uuid.UUID
     vendor_payout_id: str
@@ -500,18 +508,18 @@ _PAYOUT_SELECT = """
 """
 
 
-async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
+async def lock_payout(conn: Connection, payout_id: uuid.UUID) -> LockedPayout:
+    async with conn.cursor(row_factory=class_row(LockedPayout)) as cur:
+        await cur.execute(_PAYOUT_SELECT + " WHERE id = %s FOR UPDATE", (payout_id,))
+        return await one_row(cur, f"settlement payout {payout_id}")
+
+
+async def book_payout(
+    conn: Connection, payout: LockedPayout, now: datetime
+) -> ConsumerOutcome:
     """Consumer `settlement_payout_book`: the net the PSP says it paid, on
     its way to our bank, as reported and once, under the payout's lock.
     Whether its lines add up is the reconciliation's."""
-    match fact:
-        case SettlementPayoutReportedV1(settlement_payout_id=payout_id):
-            pass
-        case _:
-            raise WrongFact(f"settlement_payout_book got {fact!r}")
-    async with conn.cursor(row_factory=class_row(_PayoutRow)) as cur:
-        await cur.execute(_PAYOUT_SELECT + " WHERE id = %s FOR UPDATE", (payout_id,))
-        payout = await one_row(cur, f"settlement payout {payout_id}")
     if payout.booked_at is not None:
         return Stale()
     net = Fraction(payout.net_numerator, payout.net_denominator)
@@ -532,12 +540,14 @@ async def book_payout(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
 
 
 @dataclass(frozen=True)
-class _PayoutKey:
+class PayoutKey:
     account_id: uuid.UUID
     vendor_payout_id: str
 
 
-async def _payout_key(conn: Connection, fact: Fact) -> _PayoutKey:
+async def payout_key(
+    conn: Connection, fact: SettlementLineReceivedV1 | SettlementPayoutReportedV1
+) -> PayoutKey:
     """Which payout a fact is about, by the PSP's id: a line names it before
     the payout may be stored."""
     match fact:
@@ -552,30 +562,31 @@ async def _payout_key(conn: Connection, fact: Fact) -> _PayoutKey:
                 " WHERE id = %s"
             )
             row_id = payout_id
-        case _:
-            raise WrongFact(f"settlement_payout_reconcile got {fact!r}")
-    async with conn.cursor(row_factory=class_row(_PayoutKey)) as cur:
+    async with conn.cursor(row_factory=class_row(PayoutKey)) as cur:
         await cur.execute(query, (row_id,))
         return await one_row(cur, f"settlement row {row_id}")
 
 
+async def lock_payout_by_key(conn: Connection, key: PayoutKey) -> LockedPayout | None:
+    """The payout a key names, under its lock, if it is stored yet."""
+    async with conn.cursor(row_factory=class_row(LockedPayout)) as cur:
+        await cur.execute(
+            _PAYOUT_SELECT
+            + " WHERE account_id = %s AND vendor_payout_id = %s FOR UPDATE",
+            (key.account_id, key.vendor_payout_id),
+        )
+        return await cur.fetchone()
+
+
 async def reconcile_payout(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, payout: LockedPayout | None, now: datetime
 ) -> ConsumerOutcome:
     """Consumer `settlement_payout_reconcile`, on a payout and on each of its
     lines: under the payout's lock, does its net add up to the lines arrived
     so far? Every stored line sends its fact after its commit, so the last
     run sees them all, whatever the order (plan-settlement-reconciliation
     §4.2). The booked rounding follows: a new entry for each change, never
-    an edit."""
-    key = await _payout_key(conn, fact)
-    async with conn.cursor(row_factory=class_row(_PayoutRow)) as cur:
-        await cur.execute(
-            _PAYOUT_SELECT
-            + " WHERE account_id = %s AND vendor_payout_id = %s FOR UPDATE",
-            (key.account_id, key.vendor_payout_id),
-        )
-        payout = await cur.fetchone()
+    an edit. The payout locked, or None if a line came first."""
     if payout is None:
         return Stale()  # a line first: its payout's own fact runs this again
     async with conn.cursor(row_factory=class_row(_LineAmountsRow)) as cur:

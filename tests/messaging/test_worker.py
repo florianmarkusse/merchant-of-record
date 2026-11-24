@@ -158,7 +158,7 @@ def test_a_failing_consumer_is_retried_later_and_holds_only_its_aggregate(
             assert len(results) == 2
             failed = results[0]
             assert isinstance(failed, Failed)
-            assert "does not exist" in failed.error
+            assert str(broken) in failed.error
             assert failed.not_before == NOW + timedelta(seconds=2)
             assert results[1] == Ran(Applied())
             assert await _state(database_url, healthy) == ProbeState.ECHOED

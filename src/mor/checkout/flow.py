@@ -51,10 +51,6 @@ from mor.messaging.facts import (
     DutyRateFoundV1,
     DutyRateNeedsPersonV1,
     DutyRateUnknownCodeV1,
-    Fact,
-    PaymentCancelledV1,
-    PaymentDeclinedV1,
-    PaymentExpiredV1,
     QuoteInputsArrivedV1,
     QuoteMadeV1,
     QuoteRefusedV1,
@@ -64,7 +60,6 @@ from mor.messaging.facts import (
     ShippingPriceNotServedV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.quote.build import InputsMissing, Quote, QuoteLine, QuoteRequest, build_quote
 from mor.quote.inputs import (
@@ -376,12 +371,24 @@ async def refresh_quote(
     )
 
 
+# The facts `quote_wait_notify` gets: a lookup's outcome.
+type LookupFinished = (
+    DutyRateFoundV1
+    | DutyRateUnknownCodeV1
+    | DutyRateNeedsPersonV1
+    | ShippingPriceFoundV1
+    | ShippingPriceNotServedV1
+    | ShippingPriceNeedsPersonV1
+)
+
+
 async def notify_waiting(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, finished: LookupFinished, now: datetime
 ) -> ConsumerOutcome:
     """Consumer `quote_wait_notify`, on a lookup's outcome: tell each
-    session waiting on it. Locks no session."""
-    match fact:
+    session waiting on it. Locks nothing: it only appends facts, and a
+    session decides under its own lock when the fact arrives."""
+    match finished:
         case (
             DutyRateFoundV1(duty_lookup_id=lookup_id)
             | DutyRateUnknownCodeV1(duty_lookup_id=lookup_id)
@@ -406,8 +413,6 @@ async def notify_waiting(
                 """,
                 (lookup_id,),
             )
-        case _:
-            raise WrongFact(f"quote_wait_notify got {fact!r}")
     waiting = await cur.fetchall()
     for session_id, address_id in waiting:
         await append_fact(
@@ -422,20 +427,17 @@ async def notify_waiting(
 
 
 async def build_waiting(
-    conn: Connection, fact: Fact, environment: Environment, now: datetime
+    conn: Connection,
+    session: CheckoutSession | None,
+    arrived: QuoteInputsArrivedV1,
+    environment: Environment,
+    now: datetime,
 ) -> ConsumerOutcome:
-    """Consumer `quote_build`: build again for a session still quoting the
-    address the fact names. Anything else (a new address since, already
-    quoted, expired) makes it a no-op, so a late or repeated fact is
-    harmless."""
-    match fact:
-        case QuoteInputsArrivedV1(
-            checkout_session_id=session_id, address_id=address_id
-        ):
-            pass
-        case _:
-            raise WrongFact(f"quote_build got {fact!r}")
-    session = await lock_session(conn, session_id)
+    """Consumer `quote_build`, the session locked: build again for a
+    session still quoting the address the fact names. Anything else (a new
+    address since, already quoted, expired) makes it a no-op, so a late or
+    repeated fact is harmless."""
+    address_id = arrived.address_id
     if (
         session is None
         or session.state != SessionState.QUOTING
@@ -450,22 +452,19 @@ async def build_waiting(
 
 
 async def expire_session(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection,
+    session: CheckoutSession | None,
+    due: CheckoutSessionExpiryDueV1,
+    now: datetime,
 ) -> ConsumerOutcome:
     """Consumer `checkout_session_expire`, delivered at `expires_at`: expire
     the session if it is still live and its time has come, decided under
     its lock."""
-    match fact:
-        case CheckoutSessionExpiryDueV1(checkout_session_id=session_id):
-            pass
-        case _:
-            raise WrongFact(f"checkout_session_expire got {fact!r}")
-    session = await lock_session(conn, session_id)
     if session is None or session.state not in LIVE_STATES:
         return Stale()
     if now < session.expires_at:
         # Delivered early (a clock behind): try again at the time.
-        await append_fact(conn, fact, FLOW, now, deliver_at=session.expires_at)
+        await append_fact(conn, due, FLOW, now, deliver_at=session.expires_at)
         return Stale()
     await set_session_state(
         conn, session.id, SessionState.EXPIRED, session.address_id, session.quote_id
@@ -476,24 +475,18 @@ async def expire_session(
     return Applied()
 
 
-async def end_payment(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
+async def end_payment(
+    conn: Connection,
+    session: CheckoutSession | None,
+    ended: uuid.UUID,
+    now: datetime,
+) -> ConsumerOutcome:
     """Consumer `session_payment_ended`: an attempt ended without money
     taken, so the buyer may pay another way, or the session expires now if
     its time passed while it was paying. Decided under the session's
     lock, and only for the session's newest attempt: an earlier one's end,
-    met again, must not end the payment open now."""
-    match fact:
-        case (
-            PaymentDeclinedV1(checkout_session_id=session_id, payment_attempt_id=ended)
-            | PaymentExpiredV1(checkout_session_id=session_id, payment_attempt_id=ended)
-            | PaymentCancelledV1(
-                checkout_session_id=session_id, payment_attempt_id=ended
-            )
-        ):
-            pass
-        case _:
-            raise WrongFact(f"session_payment_ended got {fact!r}")
-    session = await lock_session(conn, session_id)
+    met again, must not end the payment open now. `ended` is the attempt
+    that ended."""
     if session is None or session.state != SessionState.PAYING:
         return Stale()
     # Attempts are only made under this lock (`pay`), so the newest cannot
@@ -501,7 +494,7 @@ async def end_payment(conn: Connection, fact: Fact, now: datetime) -> ConsumerOu
     newest = await one_value(
         conn,
         "SELECT id FROM payment_attempt WHERE session_id = %s ORDER BY id DESC LIMIT 1",
-        (session_id,),
+        (session.id,),
         uuid.UUID,
     )
     if newest != ended:

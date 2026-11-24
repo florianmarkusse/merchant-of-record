@@ -10,9 +10,9 @@ import uuid
 from mor.audit import ActorKind
 from mor.checkout.records import SESSION_LIFETIME, AfterPayment
 from mor.db.connect import connect
-from mor.invoices.store import issue_invoice
 from mor.merchants.records import KeyEnv, KybState
 from mor.merchants.store import create_api_key, create_merchant, set_kyb_state
+from mor.messaging.consumers import run_local
 from mor.messaging.facts import OrderPaidV1
 from mor.messaging.outcome import Stale
 from mor.messaging.routing import ConsumerName
@@ -138,13 +138,15 @@ def test_invoice_numbers_run_on_across_orders_and_a_redelivery_takes_none(
             order = await order_by_session(conn, setup.session_id)
             assert order is not None
             # `order_paid` delivered again: the invoice is there already.
-            again = await issue_invoice(
+            again = await run_local(
                 conn,
+                ConsumerName.INVOICE_ISSUE,
                 OrderPaidV1(
                     order_id=order.id,
                     checkout_session_id=order.session_id,
                     merchant_id=order.merchant_id,
                 ),
+                ENV,
                 setup.clock[0],
             )
             assert isinstance(again, Stale)

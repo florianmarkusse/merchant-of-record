@@ -1014,10 +1014,10 @@ refactored, clean up code once it has stopped moving.
    24-Nov-2026: its 90 fixes are in the quote tests, which the
    refactor does not touch, and the refactor's new records then come
    under the check).
-2. The messaging refactor: `plan-messaging-rework.md` §3.3 with §3.3b,
-   one design for the user to review, then built on `duty_rate_ask`
-   first, measured, then the rest. Before any new feature: 5c-2 adds an
-   effect consumer, which should be written in the final shape.
+2. The messaging refactor: `plan-messaging-rework.md` §3.3 (built
+   24-Nov-2026). A new consumer is a case in `mor.messaging.consumers`:
+   narrow the fact, lock (a local consumer), run; an effect is three
+   steps through `run_steps`.
 3. The rest of the codifying (`plan-codified-rules.md` §2.4): the
    ast-grep rules, after the refactor because it deletes or reshapes
    much of what they would touch (most import aliases are in

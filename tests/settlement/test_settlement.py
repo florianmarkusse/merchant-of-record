@@ -15,6 +15,7 @@ from mor.db.connect import connect
 from mor.fakes.psp import HELD_BACK_MINOR
 from mor.ledger.account import Account, AccountKind
 from mor.ledger.store import balance
+from mor.messaging.consumers import run_local
 from mor.messaging.facts import SettlementLineReceivedV1, SettlementPayoutReportedV1
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.outcome import Stale
@@ -25,7 +26,6 @@ from mor.money.currency import Currency
 from mor.payments.inbound import store_inbox
 from mor.psp.port import CaptureMode, InboundMode, SettlementMode, StatusMode
 from mor.settlement.fetch import start_settlement_reading
-from mor.settlement.store import book_lines, book_payout, reconcile_payout
 from tests.helpers import ENV
 from tests.payments.support import (
     ACTOR,
@@ -572,11 +572,15 @@ def test_a_line_and_a_payout_met_again_book_nothing_more(database_url: str) -> N
             payout_fact = SettlementPayoutReportedV1(
                 settlement_payout_id=payout_row[0], psp_account_id=account_id
             )
-            assert await book_lines(conn, line_fact, setup.clock[0]) == Stale()
-            assert await book_payout(conn, payout_fact, setup.clock[0]) == Stale()
+            now = setup.clock[0]
+            book_line = ConsumerName.SETTLEMENT_LINE_BOOK
+            book = ConsumerName.SETTLEMENT_PAYOUT_BOOK
+            assert await run_local(conn, book_line, line_fact, ENV, now) == Stale()
+            assert await run_local(conn, book, payout_fact, ENV, now) == Stale()
             # Reconciled again from the same lines: the same answer, no entry.
+            reconcile = ConsumerName.SETTLEMENT_PAYOUT_RECONCILE
             for fact in (line_fact, payout_fact):
-                await reconcile_payout(conn, fact, setup.clock[0])
+                await run_local(conn, reconcile, fact, ENV, now)
             await conn.commit()
         assert await _reconciliations(setup) == ["balanced"]
         assert await count_rows(setup.url, "SELECT count(*) FROM journal_entry") == (

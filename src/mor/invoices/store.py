@@ -32,12 +32,11 @@ from mor.invoices.records import (
     Series,
 )
 from mor.merchants.store import read_merchant
-from mor.messaging.facts import Fact, InvoiceIssuedV1, OrderPaidV1
+from mor.messaging.facts import InvoiceIssuedV1
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.currency import Currency
-from mor.orders.store import lock_order
+from mor.orders.store import Order
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "invoice_issue")
@@ -68,14 +67,10 @@ async def _take_number(conn: Connection, code: str) -> tuple[Series, int]:
     return series, number
 
 
-async def issue_invoice(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
-    match fact:
-        case OrderPaidV1(order_id=order_id):
-            pass
-        case _:
-            raise WrongFact(f"invoice_issue got {fact!r}")
-    order = await lock_order(conn, order_id)
-    assert order is not None, f"no order {order_id}"
+async def issue_invoice(
+    conn: Connection, order: Order, now: datetime
+) -> ConsumerOutcome:
+    """Consumer `invoice_issue`, on order_paid, the order locked."""
     cur = await conn.execute("SELECT 1 FROM invoice WHERE order_id = %s", (order.id,))
     if await cur.fetchone() is not None:
         return Stale()  # issued already

@@ -24,17 +24,15 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
 from mor.messaging.facts import (
-    Fact,
     PaymentEventsWantedV1,
     PspEventReceivedV1,
     PspInboxStoredV1,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
-from mor.payments.attempts import attempt_of_account, lock_attempt, move
+from mor.payments.attempts import Attempt, attempt_of_account, move
 from mor.payments.transitions import Stale as StaleEvent
 from mor.payments.transitions import after_event
 from mor.psp import registry
@@ -122,15 +120,14 @@ class _InboxRow:
     request_ref: str | None
 
 
-async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
+async def decode_inbox(
+    conn: Connection, stored_fact: PspInboxStoredV1, now: datetime
+) -> ConsumerOutcome:
     """Consumer `psp_inbox_decode`, per account: the stored bytes into one
     fact per event, each for its own attempt (one step locks one
-    aggregate)."""
-    match fact:
-        case PspInboxStoredV1(psp_account_id=account_id, inbox_id=inbox_id):
-            pass
-        case _:
-            raise WrongFact(f"psp_inbox_decode got {fact!r}")
+    aggregate). Locks nothing: an inbox row never changes."""
+    account_id = stored_fact.psp_account_id
+    inbox_id = stored_fact.inbox_id
     async with conn.cursor(row_factory=class_row(_InboxRow)) as cur:
         await cur.execute(
             "SELECT mode, body, request_ref FROM psp_inbox WHERE id = %s", (inbox_id,)
@@ -196,15 +193,12 @@ async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerO
     return Applied()
 
 
-async def apply_event(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
-    """Consumer `payment_event_apply`, per attempt: record the event once,
-    and move the attempt as the transition table says."""
-    match fact:
-        case PspEventReceivedV1() as event:
-            pass
-        case _:
-            raise WrongFact(f"payment_event_apply got {fact!r}")
-    attempt = await lock_attempt(conn, event.payment_attempt_id)
+async def apply_event(
+    conn: Connection, attempt: Attempt, event: PspEventReceivedV1, now: datetime
+) -> ConsumerOutcome:
+    """Consumer `payment_event_apply`, per attempt, the attempt locked:
+    record the event once, and move the attempt as the transition table
+    says."""
     cur = await conn.execute(
         """
         INSERT INTO payment_event

@@ -117,7 +117,7 @@ async def handle_delivery(
     fact = await open_delivery(conn, candidate, now)
     if isinstance(fact, Skipped):
         return fact
-    outcome = await consumers.handle(conn, consumer, fact, environment, now)
+    outcome = await consumers.run_local(conn, consumer, fact, environment, now)
     await finish_delivery(conn, candidate, now)
     return Ran(outcome)
 

@@ -440,6 +440,6 @@ async def meet_again(chosen: Handled, now: datetime) -> None:
     conn = await connect(TEST_URL, autocommit=True)
     try:
         async with conn.transaction():
-            await consumers.handle(conn, local_consumer(candidate), fact, ENV, now)
+            await consumers.run_local(conn, local_consumer(candidate), fact, ENV, now)
     finally:
         await crash(conn)

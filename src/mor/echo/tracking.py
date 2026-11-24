@@ -35,9 +35,7 @@ from mor.echo.port import (
 )
 from mor.messaging.facts import (
     EchoEventsWantedV1,
-    EchoJobEchoedV1,
     EchoPollDueV1,
-    Fact,
 )
 from mor.messaging.outcome import (
     Applied,
@@ -47,7 +45,6 @@ from mor.messaging.outcome import (
     RetryLater,
     Stale,
 )
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.vendor_failures import OutcomeUnknown, Unavailable
 
@@ -74,15 +71,19 @@ class FetchEventsAnswer:
 
 
 @dataclass(frozen=True)
-class _Job:
+class TrackedJob:
+    """An echo job's tracking columns, read under its row lock."""
+
+    id: uuid.UUID
     account_id: uuid.UUID
     vendor_status: VendorStatus
 
 
-async def _lock_job(conn: Connection, job_id: uuid.UUID) -> _Job:
-    async with conn.cursor(row_factory=class_row(_Job)) as cur:
+async def lock_tracked_job(conn: Connection, job_id: uuid.UUID) -> TrackedJob:
+    async with conn.cursor(row_factory=class_row(TrackedJob)) as cur:
         await cur.execute(
-            "SELECT account_id, vendor_status FROM echo_job WHERE id = %s FOR UPDATE",
+            "SELECT id, account_id, vendor_status FROM echo_job"
+            " WHERE id = %s FOR UPDATE",
             (job_id,),
         )
         job = await cur.fetchone()
@@ -92,16 +93,12 @@ async def _lock_job(conn: Connection, job_id: uuid.UUID) -> _Job:
 
 
 async def start_tracking(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, job: TrackedJob, now: datetime
 ) -> ConsumerOutcome:
-    """Consumer `echo_tracking_start`, on echo_job_echoed: a `poll` account
-    gets its first poll now; other modes wait for the vendor or a person."""
-    match fact:
-        case EchoJobEchoedV1(echo_job_id=job_id):
-            pass
-        case _:
-            raise WrongFact(f"echo_tracking_start got {fact!r}")
-    job = await _lock_job(conn, job_id)
+    """Consumer `echo_tracking_start`, on echo_job_echoed, the job locked: a
+    `poll` account gets its first poll now; other modes wait for the
+    vendor or a person."""
+    job_id = job.id
     inbound = await inbound_account(conn, job.account_id)
     assert inbound is not None
     if inbound.event_mode != EventMode.POLL:
@@ -120,7 +117,7 @@ async def prepare_poll(
     """Under the job's lock: is a fetch still wanted? Not once the status is
     final, whatever started it."""
     job_id = wanted.echo_job_id
-    job = await _lock_job(conn, job_id)
+    job = await lock_tracked_job(conn, job_id)
     if job.vendor_status == FINAL:
         return NoCall(Stale())
     inbound = await inbound_account(conn, job.account_id)
@@ -145,7 +142,7 @@ async def complete_poll(
     now: datetime,
 ) -> Done | RetryLater:
     job_id = wanted.echo_job_id
-    job = await _lock_job(conn, job_id)
+    job = await lock_tracked_job(conn, job_id)
     match answer.result:
         case Page(body=body):
             await store_inbox(conn, answer.call.account_id, EventMode.POLL, body, now)

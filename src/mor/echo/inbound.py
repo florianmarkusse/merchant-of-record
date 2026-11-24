@@ -20,6 +20,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
+from mor.db.fetch import one_value
 from mor.echo import registry
 from mor.echo.events import VendorStatus, derive_status, rank
 from mor.echo.port import (
@@ -38,7 +39,6 @@ from mor.messaging.facts import (
     Fact,
 )
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import UndecodableBody
@@ -167,14 +167,14 @@ class _InboxRow:
     body: bytes
 
 
-async def decode_inbox(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
+async def decode_inbox(
+    conn: Connection, stored_fact: EchoInboxStoredV1, now: datetime
+) -> ConsumerOutcome:
     """Consumer `echo_inbox_decode`, per account: the stored bytes into one
-    fact per event, each for its own job (one step locks one aggregate)."""
-    match fact:
-        case EchoInboxStoredV1(account_id=account_id, inbox_id=inbox_id):
-            pass
-        case _:
-            raise WrongFact(f"echo_inbox_decode got {fact!r}")
+    fact per event, each for its own job (one step locks one aggregate).
+    Locks nothing: an inbox row never changes."""
+    account_id = stored_fact.account_id
+    inbox_id = stored_fact.inbox_id
     async with conn.cursor(row_factory=class_row(_InboxRow)) as cur:
         await cur.execute(
             "SELECT mode, body FROM echo_inbox WHERE id = %s", (inbox_id,)
@@ -264,23 +264,26 @@ async def record_manual_event(
     )
 
 
-async def apply_event(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
-    """Consumer `echo_event_apply`, per job: record the event once, derive
-    the status from every event the job has, and emit each milestone the
-    first time it is reached."""
-    match fact:
-        case EchoVendorEventReceivedV1() as event:
-            pass
-        case _:
-            raise WrongFact(f"echo_event_apply got {fact!r}")
-    cur = await conn.execute(
+async def lock_job_status(conn: Connection, job_id: uuid.UUID) -> VendorStatus:
+    """An echo job's vendor status, under the job's row lock."""
+    return await one_value(
+        conn,
         "SELECT vendor_status FROM echo_job WHERE id = %s FOR UPDATE",
-        (event.echo_job_id,),
+        (job_id,),
+        VendorStatus,
     )
-    row = await cur.fetchone()
-    if row is None:
-        raise LookupError(f"echo job {event.echo_job_id} does not exist")
-    current: VendorStatus = row[0]
+
+
+async def apply_event(
+    conn: Connection,
+    current: VendorStatus,
+    event: EchoVendorEventReceivedV1,
+    now: datetime,
+) -> ConsumerOutcome:
+    """Consumer `echo_event_apply`, per job, the job locked (`current` is
+    its status then): record the event once, derive the status from every
+    event the job has, and emit each milestone the first time it is
+    reached."""
 
     cur = await conn.execute(
         """

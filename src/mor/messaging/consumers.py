@@ -11,19 +11,23 @@ from datetime import datetime
 
 import httpx2
 
+import mor.checkout.flow
 import mor.couriers.prices
 import mor.duties.lookups
 import mor.echo.flow
+import mor.echo.inbound
 import mor.echo.reports
 import mor.echo.tracking
+import mor.invoices.store
+import mor.orders.flow
 import mor.payments.flow
+import mor.payments.inbound
+import mor.probe.flow
 import mor.settlement.fetch
-from mor.checkout import flow as checkout_flow
+import mor.settlement.store
+from mor.checkout.sessions import lock_session
 from mor.config import Environment
 from mor.db.connect import Connection
-from mor.echo import inbound as echo_inbound
-from mor.echo import tracking as echo_tracking
-from mor.invoices import store as invoice_store
 from mor.messaging.delivery import (
     Candidate,
     Deferred,
@@ -33,22 +37,46 @@ from mor.messaging.delivery import (
     run_steps,
 )
 from mor.messaging.facts import (
+    CheckoutSessionExpiryDueV1,
+    DutyRateFoundV1,
     DutyRateNeededV1,
+    DutyRateNeedsPersonV1,
+    DutyRateUnknownCodeV1,
     EchoEventsWantedV1,
+    EchoInboxStoredV1,
+    EchoJobEchoedV1,
     EchoJobRequestedV1,
     EchoPollDueV1,
     EchoReportDueV1,
+    EchoVendorEventReceivedV1,
     Fact,
+    OrderPaidV1,
     PaymentAttemptCreatedV1,
     PaymentAuthorisedV1,
+    PaymentCancelledV1,
     PaymentCancelWantedV1,
+    PaymentCapturedV1,
+    PaymentDeclinedV1,
     PaymentEventsWantedV1,
+    PaymentExpiredV1,
+    PaymentNeedsPersonV1,
     PaymentPollDueV1,
+    ProbeEchoedV1,
+    ProbeStartedV1,
+    PspEventReceivedV1,
+    PspInboxStoredV1,
     PspSettlementDueV1,
+    QuoteInputsArrivedV1,
+    SettlementLineReceivedV1,
+    SettlementPayoutReportedV1,
+    ShippingPriceFoundV1,
     ShippingPriceNeededV1,
+    ShippingPriceNeedsPersonV1,
+    ShippingPriceNotServedV1,
 )
 from mor.messaging.outcome import (
     ConsumerOutcome,
+    Stale,
 )
 from mor.messaging.routing import (
     ConsumerName,
@@ -56,10 +84,9 @@ from mor.messaging.routing import (
     LocalConsumer,
     WrongFact,
 )
-from mor.orders import flow as order_flow
-from mor.payments import inbound as payment_inbound
-from mor.probe import flow as probe_flow
-from mor.settlement import store as settlement_store
+from mor.orders.store import lock_order
+from mor.payments.attempts import lock_attempt
+from mor.settlement.store import AlreadyBooked, PendingFor, Unmatched
 
 
 def expect[F](fact: Fact, record: type[F]) -> F:
@@ -191,44 +218,137 @@ async def run_effect(
             )
 
 
-async def handle(
+async def run_local(
     conn: Connection,
     consumer: LocalConsumer,
     fact: Fact,
     environment: Environment,
     now: datetime,
 ) -> ConsumerOutcome:
-    """A local consumer, in the worker's transaction. Never commits."""
+    """A local consumer, in the worker's transaction, under the delivery's
+    row lock. Each case locks the row the consumer changes before any of
+    its code runs and hands it over (plan-messaging-rework.md §3.3), or
+    says why it locks nothing. Never commits."""
     match consumer:
         case ConsumerName.PROBE_ECHO:
-            return await probe_flow.echo(conn, fact, now)
+            probe_id = expect(fact, ProbeStartedV1).probe_id
+            probe = await mor.probe.flow.lock_probe(conn, probe_id)
+            return await mor.probe.flow.echo(conn, probe, now)
         case ConsumerName.PROBE_FINISH:
-            return await probe_flow.finish(conn, fact, now)
+            probe_id = expect(fact, ProbeEchoedV1).probe_id
+            probe = await mor.probe.flow.lock_probe(conn, probe_id)
+            return await mor.probe.flow.finish(conn, probe, now)
         case ConsumerName.ECHO_INBOX_DECODE:
-            return await echo_inbound.decode_inbox(conn, fact, now)
+            # Locks nothing: reads its inbox row, which never changes; each
+            # event's fact goes to a consumer that locks its job.
+            stored_echo = expect(fact, EchoInboxStoredV1)
+            return await mor.echo.inbound.decode_inbox(conn, stored_echo, now)
         case ConsumerName.ECHO_EVENT_APPLY:
-            return await echo_inbound.apply_event(conn, fact, now)
+            echo_event = expect(fact, EchoVendorEventReceivedV1)
+            status = await mor.echo.inbound.lock_job_status(
+                conn, echo_event.echo_job_id
+            )
+            return await mor.echo.inbound.apply_event(conn, status, echo_event, now)
         case ConsumerName.ECHO_TRACKING_START:
-            return await echo_tracking.start_tracking(conn, fact, now)
+            job_id = expect(fact, EchoJobEchoedV1).echo_job_id
+            job = await mor.echo.tracking.lock_tracked_job(conn, job_id)
+            return await mor.echo.tracking.start_tracking(conn, job, now)
         case ConsumerName.QUOTE_WAIT_NOTIFY:
-            return await checkout_flow.notify_waiting(conn, fact, now)
+            # Locks nothing: it only appends a fact per waiting session,
+            # which that session's own consumer decides under its lock.
+            match fact:
+                case (
+                    DutyRateFoundV1()
+                    | DutyRateUnknownCodeV1()
+                    | DutyRateNeedsPersonV1()
+                    | ShippingPriceFoundV1()
+                    | ShippingPriceNotServedV1()
+                    | ShippingPriceNeedsPersonV1()
+                ):
+                    return await mor.checkout.flow.notify_waiting(conn, fact, now)
+                case _:
+                    raise WrongFact(f"quote_wait_notify got {fact!r}")
         case ConsumerName.QUOTE_BUILD:
-            return await checkout_flow.build_waiting(conn, fact, environment, now)
+            arrived = expect(fact, QuoteInputsArrivedV1)
+            session = await lock_session(conn, arrived.checkout_session_id)
+            return await mor.checkout.flow.build_waiting(
+                conn, session, arrived, environment, now
+            )
         case ConsumerName.CHECKOUT_SESSION_EXPIRE:
-            return await checkout_flow.expire_session(conn, fact, now)
+            due = expect(fact, CheckoutSessionExpiryDueV1)
+            session = await lock_session(conn, due.checkout_session_id)
+            return await mor.checkout.flow.expire_session(conn, session, due, now)
         case ConsumerName.PSP_INBOX_DECODE:
-            return await payment_inbound.decode_inbox(conn, fact, now)
+            # Locks nothing: reads its inbox row, which never changes; each
+            # event's fact goes to a consumer that locks its attempt.
+            stored_psp = expect(fact, PspInboxStoredV1)
+            return await mor.payments.inbound.decode_inbox(conn, stored_psp, now)
         case ConsumerName.PAYMENT_EVENT_APPLY:
-            return await payment_inbound.apply_event(conn, fact, now)
+            psp_event = expect(fact, PspEventReceivedV1)
+            attempt = await lock_attempt(conn, psp_event.payment_attempt_id)
+            return await mor.payments.inbound.apply_event(conn, attempt, psp_event, now)
         case ConsumerName.ORDER_CREATE:
-            return await order_flow.create_order(conn, fact, now)
+            captured = expect(fact, PaymentCapturedV1)
+            session = await lock_session(conn, captured.checkout_session_id)
+            assert session is not None, f"no session for {captured!r}"
+            return await mor.orders.flow.create_order(conn, session, captured, now)
         case ConsumerName.INVOICE_ISSUE:
-            return await invoice_store.issue_invoice(conn, fact, now)
+            order_id = expect(fact, OrderPaidV1).order_id
+            paid_order = await lock_order(conn, order_id)
+            assert paid_order is not None, f"no order {order_id}"
+            return await mor.invoices.store.issue_invoice(conn, paid_order, now)
         case ConsumerName.SESSION_PAYMENT_ENDED:
-            return await checkout_flow.end_payment(conn, fact, now)
+            match fact:
+                case PaymentDeclinedV1() | PaymentExpiredV1() | PaymentCancelledV1():
+                    session = await lock_session(conn, fact.checkout_session_id)
+                    return await mor.checkout.flow.end_payment(
+                        conn, session, fact.payment_attempt_id, now
+                    )
+                case _:
+                    raise WrongFact(f"session_payment_ended got {fact!r}")
         case ConsumerName.SETTLEMENT_LINE_BOOK:
-            return await settlement_store.book_lines(conn, fact, now)
+            # A line with its attempt, the lines waiting for an order, or
+            # the lines of a payment that ended: under the attempt's lock.
+            # A line that names no attempt: under its own.
+            match fact:
+                case SettlementLineReceivedV1(settlement_line_id=line_id):
+                    booking = await mor.settlement.store.line_booking(conn, line_id)
+                    match booking:
+                        case AlreadyBooked():
+                            return Stale()
+                        case Unmatched():
+                            line = await mor.settlement.store.lock_line(conn, line_id)
+                            return await mor.settlement.store.book_unmatched_line(
+                                conn, line, now
+                            )
+                        case PendingFor(attempt_id=attempt_id):
+                            pass
+                case OrderPaidV1(order_id=order_id):
+                    attempt_id = await mor.settlement.store.order_attempt(
+                        conn, order_id
+                    )
+                case (
+                    PaymentDeclinedV1(payment_attempt_id=attempt_id)
+                    | PaymentExpiredV1(payment_attempt_id=attempt_id)
+                    | PaymentCancelledV1(payment_attempt_id=attempt_id)
+                    | PaymentNeedsPersonV1(payment_attempt_id=attempt_id)
+                ):
+                    pass
+                case _:
+                    raise WrongFact(f"settlement_line_book got {fact!r}")
+            attempt = await lock_attempt(conn, attempt_id)
+            return await mor.settlement.store.settle_pending(conn, attempt, now)
         case ConsumerName.SETTLEMENT_PAYOUT_BOOK:
-            return await settlement_store.book_payout(conn, fact, now)
+            payout_id = expect(fact, SettlementPayoutReportedV1).settlement_payout_id
+            payout = await mor.settlement.store.lock_payout(conn, payout_id)
+            return await mor.settlement.store.book_payout(conn, payout, now)
         case ConsumerName.SETTLEMENT_PAYOUT_RECONCILE:
-            return await settlement_store.reconcile_payout(conn, fact, now)
+            # A line names its payout by the PSP's id, which never changes;
+            # the payout may not be stored yet.
+            match fact:
+                case SettlementLineReceivedV1() | SettlementPayoutReportedV1():
+                    key = await mor.settlement.store.payout_key(conn, fact)
+                case _:
+                    raise WrongFact(f"settlement_payout_reconcile got {fact!r}")
+            payout = await mor.settlement.store.lock_payout_by_key(conn, key)
+            return await mor.settlement.store.reconcile_payout(conn, payout, now)

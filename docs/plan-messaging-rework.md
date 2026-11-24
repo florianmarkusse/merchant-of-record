@@ -2,8 +2,8 @@
 
 Status: 24-Nov-2026: §1, §3.1 and §3.2 built (commit 83a9a04). §3.3,
 the one table for every consumer, agreed 24-Nov-2026: the test seam and
-every effect consumer built and the old effect driver gone 24-Nov-2026
-(§1); next, the local consumers' locks into the table.
+built 24-Nov-2026 (§1): every consumer is narrowed, locked and run by
+the table. Open: §3.3's question of a type of its own for a locked row.
 Amends `plan-messaging.md` and the worker loop in
 `plan-architecture.md` §5.
 
@@ -75,6 +75,23 @@ when following a fact through the code.
   `delivery.py` 228 to 240. Found for the local stage: a settlement
   line's `attempt_id` is set at insert and never updated, so the table
   may read it unlocked to choose which row to lock.
+
+- 24-Nov-2026, §3.3 finished: the 16 local consumers. `run_local`
+  (was `handle`) narrows each fact, takes the consumer's lock and hands
+  the locked row over: `lock_probe`, `lock_session`, `lock_attempt`,
+  `lock_order`, `lock_tracked_job`, `lock_job_status`, `lock_payout`,
+  `lock_payout_by_key`. Four lock nothing and say why in their case (the
+  two inbox decoders, `quote_wait_notify`; `settlement_line_book`'s
+  attempt path locks its lines itself, under the attempt). No consumer
+  module takes a bare `Fact` or raises `WrongFact` any more.
+  `settlement_line_book` asks `line_booking` which row to lock: the
+  attempt the line names (set at insert, never updated), the line
+  itself, or none when it is booked already, read unlocked as before and
+  checked again under the lock. Tests that called a consumer with a fact
+  (`test_orders_and_invoices`, `test_settlement`) go through
+  `run_local`. The table, `consumers.py`, is the one file that says per
+  consumer what it gets, locks and runs; the consumer modules no longer
+  import `routing`.
 
 ## 2. Decided: drop ordering per consumer and aggregate
 

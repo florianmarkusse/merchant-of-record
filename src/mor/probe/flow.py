@@ -9,13 +9,16 @@ after a deploy), and it is the flow the messaging fuzzer drives.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
+
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
-from mor.messaging.facts import Fact, ProbeEchoedV1, ProbeStartedV1
+from mor.db.fetch import one_row
+from mor.messaging.facts import ProbeEchoedV1, ProbeStartedV1
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.probe.records import ProbeState
 
@@ -57,25 +60,26 @@ async def probe_state(conn: Connection, probe_id: uuid.UUID) -> ProbeState | Non
     return ProbeState(row[0])
 
 
-async def _lock(conn: Connection, probe_id: uuid.UUID) -> ProbeState:
-    cur = await conn.execute(
-        "SELECT state FROM probe WHERE id = %s FOR UPDATE", (probe_id,)
-    )
-    row = await cur.fetchone()
-    if row is None:
-        raise LookupError(f"probe {probe_id} does not exist")
-    return ProbeState(row[0])
+@dataclass(frozen=True)
+class LockedProbe:
+    """A probe's row, read under its row lock."""
+
+    id: uuid.UUID
+    state: ProbeState
 
 
-async def echo(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
-    """Consumer `probe_echo`, on probe_started."""
-    match fact:
-        case ProbeStartedV1(probe_id=probe_id):
-            pass
-        case _:
-            raise WrongFact(f"probe_echo got {fact!r}")
-    state = await _lock(conn, probe_id)
-    match after_echo(state):
+async def lock_probe(conn: Connection, probe_id: uuid.UUID) -> LockedProbe:
+    async with conn.cursor(row_factory=class_row(LockedProbe)) as cur:
+        await cur.execute(
+            "SELECT id, state FROM probe WHERE id = %s FOR UPDATE", (probe_id,)
+        )
+        return await one_row(cur, f"probe {probe_id}")
+
+
+async def echo(conn: Connection, probe: LockedProbe, now: datetime) -> ConsumerOutcome:
+    """Consumer `probe_echo`, on probe_started, the probe locked."""
+    probe_id = probe.id
+    match after_echo(probe.state):
         case Stale() as stale:
             return stale
         case new_state:
@@ -92,15 +96,12 @@ async def echo(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
             return Applied()
 
 
-async def finish(conn: Connection, fact: Fact, now: datetime) -> ConsumerOutcome:
-    """Consumer `probe_finish`, on probe_echoed."""
-    match fact:
-        case ProbeEchoedV1(probe_id=probe_id):
-            pass
-        case _:
-            raise WrongFact(f"probe_finish got {fact!r}")
-    state = await _lock(conn, probe_id)
-    match after_finish(state):
+async def finish(
+    conn: Connection, probe: LockedProbe, now: datetime
+) -> ConsumerOutcome:
+    """Consumer `probe_finish`, on probe_echoed, the probe locked."""
+    probe_id = probe.id
+    match after_finish(probe.state):
         case Stale() as stale:
             return stale
         case new_state:
