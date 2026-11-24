@@ -1,15 +1,12 @@
-# Slice 4: markets, the tax path, prices and the quote
+# Markets, the tax path, prices, the quote and the checkout (slice 4)
 
-Status: built (4a 17-Nov-2026, 4b and 4c-1 18-Nov-2026, 4c-2 and 4d
-19-Nov-2026); confirmed 17-Nov-2026, answers in §6. Implements
-plan-architecture.md §8 and §14 step 4, with the tax path rule of
-plan-logistics.md §4 and the checkout records of plan-merchant-surfaces.md
-§3–5. Where those differ, plan-architecture wins. Payment is slice 5: this
-slice ends at a quote the buyer could pay.
+Status: built (17-Nov to 19-Nov-2026). Applies `plan-architecture.md` §8
+with the tax path rule of `plan-logistics.md` §4: market data in the
+database, duty rates and carrier prices from switchable sources,
+`build_quote`, merchants and the API, and the buyer's checkout up to a
+quote it can pay (the pay step is `plan-payments.md` §4).
 
 ## 1. Steps
-
-Built and confirmed one at a time, each with its checks, tests and fuzzing:
 
 | Step | What | Ends with |
 |---|---|---|
@@ -69,28 +66,22 @@ Built and confirmed one at a time, each with its checks, tests and fuzzing:
   code branches on a particular category. Sets that change only with the
   code stay enums: market status, charge, band, collector, research
   status. `load` refuses a row naming an unknown category.
-- Only `verified` and `secondary` values are used (Q1).
-- **Built 17-Nov-2026** (`src/mor/markets/`): `source` parses the files
-  into typed records or errors naming file, line and column; `store`
-  writes and reads loads under a transaction-level lock; `changes`
-  writes the report (only the fields that changed, as people read them);
+- Only `verified` and `secondary` values are used (§6).
+- **Code** (`src/mor/markets/`): `source` parses the files into typed
+  records or errors naming file, line and column; `store` writes and
+  reads loads under a transaction-level lock; `changes` writes the report
+  (only the fields that changed, as people read them);
   `rules.country_rules` answers open or closed (not listed, its market
   status with the reason, or a rate weaker than secondary) and lists the
   rates in force per charge, most specific first. A newer row with the
   same place, category, charge, collector and band replaces the older
   from its date, whether its rate or its limit changed: that is how a law
   change is entered. `EU` and other groups are told apart from countries
-  by the countries file, not by their shape. Seven currencies were added
-  (GBP, AUD, NZD, CAD, CHF, JPY, KRW) for limits and FX rates. The ECB
-  rates moved from `scripts/markets.py` into `fx_rates.csv`, which both
-  read; the generated page is unchanged.
+  by the countries file, not by their shape.
 - **No import tax row means closed, not tax-free** (decided 18-Nov-2026,
-  following Q1: fail closed). An open country needs at least one
+  following §6: fail closed). An open country needs at least one
   `import_tax` row for the category; a country that truly charges none
-  gets an explicit 0% row with its source. Seen on the staff page: CA and
-  CH were "open" with no rates at all. With today's data, apparel can be
-  quoted to SG and TH only; the rest are closed with the reason shown
-  (rates missing, a rate not confirmed, or the market status). Missing
+  gets an explicit 0% row with its source. Missing
   duty rows are not the same: duty comes per HS code from the duty source
   (4b), and a missing rate there starts a lookup.
 - The staff page (§5b) shows this for step 4a: `/staff/markets`. A country whose
@@ -109,9 +100,9 @@ Built and confirmed one at a time, each with its checks, tests and fuzzing:
 
 ## 3. The tax path and duty (4b)
 
-Decided 18-Nov-2026. Built in two parts: 4b-1 the rule, the rates per HS
-code and the staff form (pure logic and data); 4b-2 the duty vendor flow
-(fake vendor, `duty_rate_needed`, the worker that asks once, its fuzzer).
+Decided 18-Nov-2026: the rule, the rates per HS code and the staff form
+(4b-1, `src/mor/tax/`), and the duty vendor flow (4b-2,
+`src/mor/duties/`).
 
 - `tax_paths(rules, order, registrations, fx, on)`, pure. VAT/GST and duty
   are decided independently, so any combination occurs (VAT collected by
@@ -154,9 +145,7 @@ code and the staff form (pure logic and data); 4b-2 the duty vendor flow
   registration made up inside the test; real registrations go into the
   registrations table and apply from their date, with no code change.
 - Duty and VAT rates per (destination, origin, HS code) come from our
-  own rows, a vendor, or both, by a mode per country: see 4b-2 below,
-  which replaces the first idea here (a plain `own_table` or `vendor`
-  switch).
+  own rows, a vendor, or both, by a mode per country (4b-2 below).
 - **VND** (decided 18-Nov-2026): the State Bank of Vietnam's daily
   reference rate replaces the research estimate, as the ECB rates do for
   other currencies (25,600 per US$ on 10-Nov-2026, as reported by
@@ -165,17 +154,13 @@ code and the staff form (pure logic and data); 4b-2 the duty vendor flow
   currency, freight, HS code, origin and date; it shows both paths, the
   row that decided each and why, and the rates found or missing.
 
-**4b-1 built 18-Nov-2026** (`src/mor/tax/`, `mor.markets.fx`,
-`0009_hs_rates.sql`, `docs/markets/hs_rates.csv`, `duty_sources.csv`):
-`tax.paths.tax_paths` decides both paths; `tax.line_rates.line_rate` the
-rate per HS code with agreements and conditions; `tax.explain` puts a
-decision into words for the staff page's order check. Exchange rates are
-found through the shortest chain of confirmed rates (VND to SGD runs
-VND-USD-EUR-SGD), exact. A planted bug (the limit itself outside its
-`up_to` band) slipped past a test that checked only "not due" and not
-why; the tests now check the reason, and the limit is pinned as an
-example. HS rates are seeded for SG apparel (0%) and TH HS 6109 (30%, and
-ATIGA 0% marked unverified, so reported but not applied).
+**Code**: `tax.paths.tax_paths` decides both paths; `tax.line_rates.line_rate`
+the rate per HS code with agreements and conditions; `tax.explain` puts a
+decision into words for the staff page. Exchange rates are found through
+the shortest chain of confirmed rates (VND to SGD runs VND-USD-EUR-SGD),
+exact. The tests check why a path was chosen, not only which: a limit
+outside its own `up_to` band once passed a test that checked only "not
+due".
 
 ### 4b-2: duty and VAT rates from vendors (decided 18-Nov-2026)
 
@@ -250,8 +235,8 @@ everywhere.
   formula is not a percentage, note, hs_code_used, and what our own table
   said at the time: load_id, own rate and line, or none), append-only by
   trigger, `UNIQUE (lookup_id, charge)`.
-- `duty_source` changes shape: `mode` and `vendor_name` replace `kind`
-  (the table is empty, so the migration alters it).
+- `duty_source (load_id, iso2, mode, vendor_name)`, a vendor named
+  unless the mode is `own_only`.
 
 **Messages** (aggregate `duty_lookup`, version 1):
 
@@ -262,17 +247,17 @@ everywhere.
   own table's rate beside it, under the lock, and appends:
 - `duty_rate_found`, `duty_rate_unknown_code`, or `duty_rate_needs_person`
   (an undecodable answer); plus `duty_rate_disagreed` per charge where our
-  own row says something else. No consumers yet: in 4d the quote flow
-  resumes a waiting quote on them.
+  own row says something else. The quote flow resumes a waiting quote on
+  them (§5).
 - Unavailable and OutcomeUnknown are retried with the worker's backoff.
   A lookup is a read, so asking again changes nothing at the vendor and
   needs no duplicate guard; the cost is one more counted call.
 
 **Who asks**: `request_duty_rate`, which inserts the lookup with
 `ON CONFLICT DO NOTHING` and appends `duty_rate_needed` only when it
-inserted. For now from the staff page's order check (outside prod: an
-"Ask the vendor" POST with the same-origin check); in 4d from the quote
-flow, when a buyer opens a checkout for a combination not yet asked.
+inserted: from the quote flow, when a checkout needs a combination not
+yet asked, and from the staff page's order check (outside prod: an "Ask
+the vendor" POST with the same-origin check).
 
 **The fake vendor** at `/_fake/duty/`, in the `fake_vendor` schema: rates
 per (destination, HS prefix), a default for any other code, a call log
@@ -284,7 +269,9 @@ preference note.
 **The staff page**: the order check shows each rate's source (our row or
 the vendor's answer, with the comparison), the lookup's state, and the
 button; a table of agreement per country (answers compared, matched,
-differed, our table had none).
+differed, our table had none), and a list of each answer (country,
+origin, HS code, charge, what the vendor said, our row and its line),
+differences first.
 
 **Fuzzer** (a Hypothesis state machine): request a combination (also one
 already asked), run a delivery, the worker catches up, a crash after
@@ -296,25 +283,14 @@ first per lookup has a cause (a fault, a refused connection or a crash);
 a lookup ends unanswered only after a fault that ends it. After draining
 with faults off: no lookup is `requested`.
 
-**4b-2 built 18-Nov-2026** (`src/mor/duties/`, `mor.fakes.duty`,
-`0010_duty_vendors.sql`, fake `0005_duty.sql`, the modes in
-`tax.line_rates`): every open and conditional country is listed as
-`vendor` with `zonos`; the seed gives each vendor the market data names
-an account at the fake. The fuzzer was checked by planting bugs: a second
-request emitting `duty_rate_needed` again, a call counted only after it
-was made, a lost answer ending the lookup as unknown, and a refused
-connection ending it as needing a person. At first only the first was
-caught at the dev budget: faults piled up unused, and the checks counted
-faults scripted rather than used. The fuzzer now starts with one
-combination asked, keeps at most two faults and two refusals waiting,
-and bounds its checks by what the vendor and the network actually took;
-all four are caught. Removing `prepare`'s state check is not caught, and
-cannot be: `complete` and finishing the delivery commit together, so
-`prepare` never meets an answered lookup; the check is a second guard.
-Still to do (asked 18-Nov-2026): the staff page's agreement table shows
-counts only; add a list of each answer (country, origin, HS code, charge,
-what the vendor said, our row and its line), differences first, so a
-person can see which rates differ and by how much. Done in 4c-1.
+Every open and conditional country is listed as `vendor` with `zonos`;
+the seed gives each vendor the market data names an account at the fake.
+The fuzzer starts with one combination asked, keeps at most two faults
+and two refusals waiting, and bounds its checks by what the vendor and
+the network actually took, so a fault scripted but never used cannot
+hide a bug. `prepare`'s state check is a second guard no test can reach:
+`complete` and finishing the delivery commit together, so `prepare` never
+meets an answered lookup.
 
 ## 4. Prices and the quote (4c)
 
@@ -348,8 +324,8 @@ stored with its expiry, like the duty lookups.
    or group. Until a carrier contract exists the routes are DHL Express
    Worldwide and FedEx International Priority from their published cards
    and FedEx International Connect Plus from its promotional card, all
-   `placeholder`, so prod refuses to quote on them (as Q5).
-3. **An unconfirmed cost leaves the option out** (as Q1): a service,
+   `placeholder`, so prod refuses to quote on them (§6).
+3. **An unconfirmed cost leaves the option out** (§6): a service,
    card, zone, weight break or charged surcharge that is not verified or
    secondary, a price given as a range, or a category the service does
    not confirm it carries. The reason is shown on the staff page; with no
@@ -367,30 +343,24 @@ stored with its expiry, like the duty lookups.
    fixed amount), never of the buyer's total, which would be circular:
    the fee raises the goods value, which raises the tax. The defaults are
    in `fees.csv` (`psp_fee` 3.5% and `mor_margin` 5% as placeholders,
-   `fx` 0% as decided in Q4); per merchant overrides come in 4d.
+   `fx` 0%, §6); fee overrides per merchant come with the admin pages
+   that enter them.
 7. **Currency and rounding**: the buyer pays in the country's currency.
    The merchant's price is converted rounding up (the merchant is never
    short), shipping parts round up (we never under-collect the carrier),
    fees, duties and taxes round half to even. Each part keeps its exact
-   value: the difference is the remainder, booked when the order is paid
-   (slice 5).
+   value, its rounded amount and its mode; the ledger books the rounded
+   amounts and the remainder stays on the part (`plan-payments.md` §5).
 
-**4c-1 built 18-Nov-2026** (`mor.quote.shipping`, `mor.quote.fees`,
-`mor.quote.build`, `0011_shipping.sql`): the shipping files, routes and
-fee rules load with the market set. One parcel per order for now (packed
-weight and box). Freight from our tables matches `scripts/markets.py`'s
-all-in freight exactly for its XS, M and L scenarios into SG, TH, JP, DE
-and US on both priced cards. The Hypothesis properties (parts sum to each
-total, every part is its exact value rounded by its named mode, the
-merchant is never short, duties and taxes are never negative, the
-duty-paid fee only with something at the border, cheapest first) run on
-the synthetic set and on the research files; five planted bugs (goods
-rounded half to even, the duty-paid fee left out of the total, the fee
-charged with nothing at the border, options unsorted, a part rounded by
-another mode than it names) were all caught. Not built yet: a product
-gate per country and category (no data for it beyond the services'
-restrictions), several parcels per order, and prod's refusal of
-placeholders, which belongs to the quote flow (4d).
+**Code**: `mor.quote.shipping`, `mor.quote.fees`, `mor.quote.build`. One
+parcel per order for now (packed weight and box). Freight from our tables
+matches `scripts/markets.py`'s all-in freight exactly for its reference
+parcels. Hypothesis properties, on synthetic data and on the research
+files: parts sum to each total, every part is its exact value rounded by
+its named mode, the merchant is never short, duties and taxes are never
+negative, the duty-paid fee only with something at the border, cheapest
+first. Not built yet: a product gate per country and category (no data
+for it beyond the services' restrictions) and several parcels per order.
 
 ### 4c-2: live carrier prices (decided 19-Nov-2026)
 
@@ -419,12 +389,8 @@ does not allow (`mor.provider_accounts`).
 
 **Which price a route uses**: `price_source` gains `carrier_api`. A route
 names a service, plus a rate card only when the source is `own_table`.
-Migration 0012 adds `shipping_route.service`, fills it from the card on
-existing rows, and lets `rate_card` be NULL only for `carrier_api`. The
-fill needs the append-only trigger switched off for that one UPDATE. That
-is safe because no prod database exists yet, and each local one gets the
-same fill. One source per service and lane: a buyer never sees the same
-service twice.
+One source per service and lane: a buyer never sees the same service
+twice.
 
 The account is found from the service's carrier
 (`shipping_service.provider`, e.g. `dhl_express`). Each environment's
@@ -447,7 +413,7 @@ Customs counts their sum as the freight.
   price_expiry). Slice 6 adds credentials and the billing currency.
 - `shipping_price_lookup` (id, carrier, service, origin, destination,
   weight_g, length_mm, width_mm, height_mm, state `requested | answered |
-  not_served | needs_person`, calls, detail, answered_at,
+  not_served | needs_person`, calls, detail, finished_at,
   carrier_valid_until, timestamps).
 - `shipping_price_part` (lookup_id, line_no, kind, name, amount_minor,
   currency), append-only. The total and the carrier's currency are on the
@@ -470,18 +436,21 @@ extra read, and nothing else.
 **How long a price is used is a setting per account, not stored on the
 answer** (decided 19-Nov-2026: reusing a price the carrier calls expired
 may be fine for some carriers, so it must be a switch, not impossible).
-The lookup stores what happened: `answered_at` and the carrier's
+The lookup stores what happened: `finished_at` and the carrier's
 `carrier_valid_until` (or none). `courier_account` holds the rule:
 `price_valid_for_s` (24 hours by default) and `price_expiry`, a
 `price_expiry` enum:
 
 - `carrier_first`: usable until the earlier of the carrier's own validity
-  and `answered_at + price_valid_for_s` (the default).
-- `own_period`: usable until `answered_at + price_valid_for_s`, whatever
+  and `finished_at + price_valid_for_s` (the default).
+- `own_period`: usable until `finished_at + price_valid_for_s`, whatever
   the carrier said.
 
-One pure function, `usable_until(lookup, account)`, decides, and both
-`request_shipping_price` and `build_quote` call it. Switching an account's
+A lookup that ends `not_served` or `needs_person` is held for the same
+period, or every request in the meantime would ask again. One pure
+function, `usable_until(lookup, account)`, decides, applied where a
+lookup is read (`read_price`); `build_quote` compares it with
+`QuoteRequest.now`. Switching an account's
 rule therefore applies at once to prices already stored, and no stored row
 changes. This is time as a promise: it is compared at `now` and never
 takes over a request. A price used after the carrier's own validity can
@@ -495,8 +464,7 @@ act only on `requested`, count the call before it is made, and store the
 answer under the lock. `complete` then appends `shipping_price_found`,
 `shipping_price_not_served` or `shipping_price_needs_person`.
 `Unavailable` and `OutcomeUnknown` are retried with the worker's backoff.
-There are no consumers of the results yet: in 4d they resume a waiting
-quote.
+The quote flow resumes a waiting quote on them (§5).
 
 **`build_quote`** stays pure. It gains the stored prices,
 `dict[PriceQuestion, PriceLookup]`, and `QuoteRequest` gains `now`
@@ -505,8 +473,14 @@ quote.
 - a valid answer becomes an `Offer`;
 - a missing or expired one adds to `InputsMissing` (`price_asks`, or
   `price_waiting` for a request already open);
-- `not_served` or `needs_person` leaves the option out, with new
+- `not_served` or `needs_person` leaves the option out, with
   `NotOffered` reasons `carrier_not_served` and `carrier_needs_person`.
+
+`InputsMissing` gathers what every option lacks, duty rates and carrier
+prices alike, instead of stopping at the first. A carrier's price is
+converted part by part and rounded up, as from our own tables. A
+duty-paid fee with fuel on it uses our fuel row for the service; without
+a usable one the option is left out (`fuel_unknown`).
 
 An option is keyed by its route (the card, or `live:<service>`), not by
 its card alone.
@@ -523,8 +497,11 @@ carrier named on a live route an account at the fake.
 01-Jan-2027 14:35 UTC, valid until …" and our card's price beside it when
 one exists. Without a usable price it shows a greyed row ("waiting for
 the carrier", "not served") with an "Ask the carrier" POST (outside prod,
-same-origin check), like "Ask the vendor". The answers page gets a table
-of live prices against our cards, differences first.
+same-origin check), like "Ask the vendor", or says that the carrier has
+no account in this environment. Our card's price for comparison comes
+from the first card of the service that can price the parcel, whether
+routed or not, with no goods value. The answers page has a table of live
+prices against our cards, differences first.
 
 **Tests and fuzzer**:
 
@@ -543,84 +520,32 @@ of live prices against our cards, differences first.
   catch: a second request while one is open, using an expired answer, a
   call counted after it is made, and parts that don't sum accepted.
 
-**Answered 19-Nov-2026**:
-
-1. DHL Express Worldwide goes to OCEANIA through `carrier_api`, marked
-   placeholder, so the test setup and the staff page exercise it. Every
-   other lane stays on our cards.
-2. A price is usable for 24 hours by default, per account, with
-   `price_expiry` as above.
-3. Each live price is stored and shown beside our card's price for the
-   same service and lane, with no `shipping_price_disagreed` fact until
-   something consumes it.
-
-**4c-2 built 19-Nov-2026** (`src/mor/couriers/`, `mor.fakes.courier`,
-`0012_carrier_prices.sql`, fake `0006_courier.sql`). As designed, with
-these changes made while building:
-
-- A lookup that ends `not_served` or `needs_person` is held for the
-  account's period too (from `finished_at`, which replaced `answered_at`),
-  or every request in the meantime would ask again.
-- `usable_until` is worked out where a lookup is read (`read_price`), by
-  the account's rule at that moment, and `build_quote` compares it with
-  `QuoteRequest.now`.
-- `InputsMissing` gathers what every option lacks, duty rates and carrier
-  prices alike, instead of stopping at the first.
-- A carrier's price is converted part by part and rounded up, as from our
-  own tables. A duty-paid fee with fuel on it uses our fuel row for the
-  service; without a usable one the option is left out (`fuel_unknown`).
-- Our card's price for comparison comes from the first card of the service
-  that can price the parcel (by code), whether routed or not, with no
-  goods value: a surcharge on value counts as zero there.
-- The staff page says when a live route's carrier has no account in this
-  environment, instead of offering a button that cannot work.
-
-The fuzzer was checked by planting bugs: an expired price reused, a call
-counted only after it was made, parts that do not sum accepted, and a
-second request while one is open. All four were caught; the last by the
-partial unique index itself, which is the guard. The quote property
-catches a carrier part left out of the quote. Checked end to end on a
-scratch database with DHL routed live into SEA: the page asks, the worker
-asks the fake, and the quote shows the live option beside our card's
-price.
-
-Open: no research country in OCEANIA quotes today (AU's rules are not
-confirmed; NZ has no import tax recorded), so the live route there is not
-seen on the staff page until one opens.
+**Decided 19-Nov-2026**: DHL Express Worldwide goes to OCEANIA through
+`carrier_api`, marked placeholder, so the test setup and the staff page
+exercise it (no research country there quotes yet: AU's rules are not
+confirmed, NZ has no import tax recorded); every other lane stays on our
+cards. A live price is stored and shown beside our card's price, with no
+`shipping_price_disagreed` fact until something consumes it.
 
 ## 5. Session, API and pages (4d)
 
-- `Merchant` (a minimal row now; KYB is a later slice), API keys stored
-  hashed and shown once, created by a CLI until there is a dashboard.
-- `POST /v1/checkout_sessions`, `POST /v1/estimates`, `GET` a session:
-  JSON decoded with msgspec at the edge, `Idempotency-Key` required and
-  unique per merchant, one error shape.
-- Quote flow as plan-architecture §8: when every input is stored the
-  handler quotes in its transaction; otherwise `quote_requested`, workers
-  fetch what is missing, and the page refreshes until `quote_made` or
-  `quote_refused`. No handler calls a vendor.
-- Buyer pages `/c/{session}` (cart, address, quote), server-rendered,
-  English first, with the merchant's name. The pay step is slice 5.
-
-Split 19-Nov-2026 into **4d-1** (merchants, API keys, the API with
-idempotency: sessions are created and read, estimates priced) and
-**4d-2** (the stored quote and its waiting flow, the buyer pages, the
-staff view of sessions and quotes; ends with the slice's check).
+Built in two steps: **4d-1** merchants, API keys and the API with
+idempotency (sessions created and read, estimates priced); **4d-2** the
+stored quote, its waiting flow, the buyer pages and the staff view of
+sessions and quotes. The quote flow is `plan-architecture.md` §8: when
+every input is stored the handler quotes in its transaction; otherwise
+`quote_requested`, workers fetch what is missing, and the page waits
+until `quote_made` or `quote_refused`. No handler calls a vendor.
 
 ### 4d-1: merchants, API keys, sessions and estimates (decided 19-Nov-2026)
 
-Applies plan-merchant-surfaces §3 and §4 and plan-architecture §4 and
-§8. Where they differ, the architecture wins: idempotency keys are kept
-for good, not 7 days.
+Applies `plan-architecture.md` §4 and §8.
 
-**Merchant.** A minimal row: `id` (uuid7), `legal_name`,
-`display_name` (what buyers see), `country` (VN for now),
-`daily_vendor_asks` (answer 3), `created_at`.
-Created with `python -m mor.merchants create`, which prints the id.
-There is no KYB state yet: until the KYB slice we create every merchant
-ourselves, and prod does not open before staff sign-in anyway. (Compliance
-touchpoint: before a merchant takes a live payment, KYB must say
-`approved`; slice 5 checks it.)
+**Merchant.** `id` (uuid7), `legal_name`, `display_name` (what buyers
+see), `country` (VN for now), `daily_vendor_asks` (below), `created_at`,
+and the KYB state and settings of `plan-payments.md` §6. Created with
+`python -m mor.merchants create`, which prints the id; we create every
+merchant ourselves until the dashboard exists.
 
 **API keys.**
 - Form: `sk_<env>_<id>_<secret>`. `<env>` is `dev`, `test` or `live`,
@@ -661,10 +586,15 @@ touchpoint: before a merchant takes a live payment, KYB must say
 **Errors.** One shape, `{"error": {"type", "code", "message", "param"}}`.
 - `type` is a closed set: `invalid_request`, `authentication`,
   `idempotency`, `not_found`, `quote_refused`, `pending`,
-  `rate_limited`.
+  `rate_limited`, `unavailable`. A refusal that is ours to fix (no market
+  data, no fee rule, no exchange rate, no account for a vendor, a
+  placeholder in prod) is `unavailable` with status 503, not a 422
+  `quote_refused`, which the merchant's request caused.
 - `code` is a closed set as well, documented with the API.
 - msgspec's decode errors map onto `invalid_request` and name the field
   (`param`).
+- Every machine-read time is RFC 3339 in UTC with the offset written, to
+  the second (`2026-11-18T09:30:00Z`), through `mor.dates.format_instant`.
 
 **Ids in the API.** The prefix plus the uuid7 in hex: `cs_…` for sessions
 and `mer_…` for merchants. The database keeps the uuid. The ids sort by
@@ -673,7 +603,7 @@ bits).
 
 **`POST /v1/checkout_sessions`.**
 - Body: `lines`, `parcel`, `merchant_reference?`, `return_url`,
-  `cancel_url`.
+  `cancel_url`, `after_payment?` (`plan-payments.md` §6).
 - Each line: `name`, `quantity`, `unit_price {amount_minor, currency}`,
   `category`, `merchant_sku?`, and `customs {description, origin_country,
   weight_g, hs_code?}`.
@@ -683,12 +613,10 @@ bits).
 - Stored: a `checkout_session` row (`state` = `open`, `expires_at` 24 h
   after creation, the parcel, the URLs, the merchant reference) and one
   `checkout_session_line` row per line, a snapshot that is never changed.
-- The fact `checkout_session_created` v1 goes into the outbox. Nothing
-  consumes it yet.
-- Response: 201 `{id, state, url, expires_at, lines, …}`. `url` is
-  `/c/{id}`, which answers 404 until 4d-2.
-- Expiry is stored only: the step that expires a session, decided under
-  its lock, comes with 4d-2.
+- The fact `checkout_session_created` v1 goes into the outbox, with
+  `checkout_session_expiry_due` scheduled at `expires_at`.
+- Response: 201 `{id, state, url, expires_at, lines, …}`; `url` is
+  `/c/{id}`, the buyer's page.
 
 **`GET /v1/checkout_sessions/{id}`** returns the same shape, for that
 merchant's sessions only. Another merchant's id gets 404, as if it did
@@ -715,17 +643,18 @@ not exist.
   not offered.
 
 **Where it lives.**
-- `src/mor/merchants/` holds the records, the store, the keys and the CLI.
-- `src/mor/api/` holds the decoding at the edge, the errors, the
-  idempotency and the handlers.
+- `src/mor/merchants/` holds the records, the store, the keys and the CLI;
+  the public id helpers live in `mor.public_ids`, so the CLI imports
+  nothing from `web/`.
+- `src/mor/web/api.py` and `api_wire.py` hold the decoding at the edge,
+  the errors, the idempotency and the handlers.
 - The routes go in `main.py` in every environment: the API is the product,
   and each environment has its own keys.
 - Seed: a "Sandbox Shop" merchant if there is none, and one key printed
   the first time.
-- New migration: `merchant`, `api_key`, `api_idempotency`,
-  `checkout_session`, `checkout_session_line`, `merchant_vendor_asks`
-  (a merchant's count per UTC day); enum values for the aggregate and
-  the fact.
+- Tables: `merchant`, `api_key`, `api_idempotency`, `checkout_session`,
+  `checkout_session_line`, `merchant_vendor_asks` (a merchant's count per
+  UTC day).
 
 **Tests and fuzzing.**
 - Requests in, responses and rows out:
@@ -749,58 +678,30 @@ not exist.
 - The new property files join a target in `deploy/soak.sh`, as
   `tests/test_soak_targets.py` requires.
 
-**Questions** (my recommendation first):
+**Decided 19-Nov-2026:**
 
-1. **The parcel.** Should the merchant send it (weight and box) on every
-   session and estimate? Recommended: yes, required. Our prices depend on
-   the volumetric weight, and a box we guessed would misprice. The
-   line's `weight_g` stays required for customs. The alternative is to
-   sum the line weights and assume a standard box.
-2. **Category per line.** Should each line name one of our categories
-   (`docs/markets/categories.csv`), with an unknown one refused?
-   Recommended: yes. The tax path and service restrictions are per
-   category, and suggesting one from the description is a later
-   feature. The HS code stays optional.
-3. **Estimates.** No `Idempotency-Key` (an estimate changes nothing but
-   deduplicated asks), and `estimate_pending` with `Retry-After` while
-   inputs are fetched. Recommended: yes. Note that a merchant's estimates
-   can make us pay a vendor for each new combination of HS code and
-   country. Each combination is asked only once, but a request limit per
-   merchant may be needed before prod.
-4. **Fee overrides per merchant** (§4 said 4d). Recommended: later, with
-   the admin pages that enter them. Until then every merchant gets the
-   market's fee rows.
-
-**Answered 19-Nov-2026:**
-
-1. **The parcel is required**, and lines will also come by reference.
-   - A product sent before, or one from a catalog we may build for the
-     merchant later, can be named by its id instead of being sent in full
-     (plan-merchant-surfaces §3, "inline or by reference").
-   - 4d-1 takes inline lines only, and its line shape leaves room for
-     `{product_id, quantity}` as a later, additive v1 change.
-   - Once products exist, a product can carry its own packaging, so an
-     order of one product needs no parcel.
-2. **Category required; classification is ours.**
-   - Correct HS classification is the importer of record's legal
-     responsibility, and neither DDP nor a broker moves it off them. As
-     merchant of record that is our side. Checked 19-Nov-2026 in trade
-     guidance (DSV on DDP; importer-of-record guides), not in law: which
-     party is importer of record per country is a compliance question for
-     an adviser.
-   - So a merchant's HS code is a hint, not the answer:
-     - each line requires a category from our closed list;
-     - a merchant's `hs_code` is accepted and stored as the merchant's,
-       and used for now;
-     - our own classification per `merchant_sku`, by a vendor or a
-       person, comes later and is stored once per SKU, so the merchant's
-       code can be checked and later replaced.
-   - Until that exists, a line with no HS code is priced where our rows
-     need none (a rate per category, or import tax from the band row). A
-     country whose duty mode needs the code refuses it with 422
-     `classification_needed`.
-3. **Estimates: yes, with limits.** Two layers:
-   - **What costs money: vendor asks.** Each merchant has a daily cap
+1. **The parcel is required** on every session and estimate: prices
+   depend on the volumetric weight, and a box we guessed would misprice.
+   The line's `weight_g` stays required for customs. Lines will also
+   come by reference (`plan-merchant-surfaces.md` §3): the line shape
+   leaves room for `{product_id, quantity}` as a later, additive v1
+   change, and a product can carry its own packaging, so an order of one
+   product will need no parcel.
+2. **Category required; classification is ours.** Correct HS
+   classification is the importer of record's legal responsibility, and
+   neither DDP nor a broker moves it off them; as merchant of record that
+   is our side (checked 19-Nov-2026 in trade guidance, not in law: which
+   party is importer of record per country is an adviser question). So a
+   merchant's HS code is a hint: each line requires a category from our
+   closed list; a merchant's `hs_code` is stored as the merchant's and
+   used for now; our own classification per `merchant_sku`, by a vendor
+   or a person, comes later, stored once per SKU. A line with no HS code
+   is priced where our rows need none; a country whose duty mode needs
+   the code refuses it with 422 `classification_needed`.
+3. **Estimates take no `Idempotency-Key`** (they change nothing but
+   deduplicated asks) and answer `estimate_pending` with `Retry-After`
+   while inputs are fetched. Two limits:
+   - **Vendor asks, which cost money**: each merchant has a daily cap
      (`merchant.daily_vendor_asks`, default 100) on asks that are new.
      Asks the existing guards deduplicate are not new, so they don't
      count. The count is a row per merchant and UTC day, read and raised
@@ -809,64 +710,23 @@ not exist.
      and the answer is 429 `rate_limited` with `Retry-After` set to the
      next UTC midnight. The day is a business rule compared under the
      lock, not a lease.
-   - **Plain request volume:** a limit per IP address and per key in
+   - **Plain request volume**: a limit per IP address and per key in
      nginx, set in the deploy slice. In-process counters would break the
      no-clocks, no-memory rule and would not survive several processes.
-4. **Fee overrides per merchant: later**, with the admin pages.
 
-**4d-1 built 19-Nov-2026.**
-
-Changed while building:
-- **Errors on our side get their own type.** A refusal that is ours to
-  fix (no market data, no fee rule, no exchange rate, no account for a
-  vendor, a placeholder in prod) is type `unavailable` with status 503.
-  It is not a 422 `quote_refused`, which the merchant's request caused.
-- **API times are always in UTC, with the offset written.** A session
-  read back from the database came out in the connection's time zone
-  (+01:00 on the laptop); the test that compares a read with the create
-  caught it. Every machine-read time now goes through
-  `mor.dates.format_instant`: RFC 3339, UTC, to the second
-  (`2026-11-18T09:30:00Z`). This is a shared convention now.
-- **Merchants take no import from the web layer.** The public id helpers
-  live in `mor.public_ids`, so the command line does not import from
-  `web/`.
-
-How it was checked:
-- Six planted bugs were each caught by a test:
-  - the idempotency check ignoring the request;
-  - a refusal after the key's claim not rolled back, which would have
-    committed a key with no response, because psycopg commits on a clean
-    exit;
-  - the estimate dropping the fee parts;
-  - the daily cap ignored;
-  - a session read without its merchant;
-  - the decoder letting an exception out.
-- A seventh plant (validation errors folded into `invalid_body`) is not a
-  bug the properties can see, since msgspec's `ValidationError` is a
-  `DecodeError`. The unit test that checks each error's `param` caught it.
-- End to end on the sandbox over HTTP:
-  - a session was created, replayed byte for byte, refused with 409 for
-    another body under the same key, and read back;
-  - a request without a key got 401;
-  - an SG estimate answered from our tables, with each option's parts
-    summing to its total;
-  - a TH estimate answered `estimate_pending` until the worker had asked
-    the fake duty vendor, then 200, with one new lookup counted for the
-    day;
-  - a DE estimate got 422 `country_closed`, with the reason.
+Six planted bugs were each caught by a test, including a refusal after
+the key's claim not rolled back: psycopg commits on a clean exit, which
+would have committed a key with no response.
 
 ### 4d-2: the stored quote, its waiting flow and the buyer pages (decided 19-Nov-2026)
 
-Applies plan-architecture §2 (stage 2), §4 and §8 ("Waiting"), and
-plan-merchant-surfaces §5 (the address and quote steps; the pay step is
-slice 5). It ends with the slice's check: a merchant creates a session, a
-buyer enters an address and sees an all-in price, on the sandbox.
+Applies `plan-architecture.md` §2 (stage 2), §4 and §8 ("Waiting").
 
 **The session as a state machine.** `checkout_session` is the aggregate.
 Every change takes its row lock, and facts carry the steps.
 
 ```
-open ──address──▶ quoting ──inputs held──▶ quoted ──(slice 5: paying …)
+open ──address──▶ quoting ──inputs held──▶ quoted ──pay──▶ paying ──▶ completed
   ▲                  │  └──refused──▶ refused
   └─── a new address from any of these makes a new quote ───┘
 any state but completed ──expiry due, under the lock──▶ expired
@@ -878,13 +738,12 @@ any state but completed ──expiry due, under the lock──▶ expired
   refusal.
 - `expired`: the buyer page sends the buyer to `cancel_url`, and the API
   shows `expired`.
-- New enum values `quoting`, `quoted` and `refused`. `paying` and
-  `completed` come with slice 5.
+- `paying` and `completed` are `plan-payments.md` §4.
 
 **The buyer's address** is a new row, `checkout_address`, one per address
 given. They are never changed, and the session points at the newest.
 - Fields: name, email, phone, address lines, city, region, postcode,
-  country (question 1).
+  country (below).
 - This is personal data. It is never logged, only synthetic in tests and
   the seed, and kept only in the database. Retention and data residency
   are compliance touchpoints for an adviser, not answered here.
@@ -895,7 +754,7 @@ given. They are never changed, and the session points at the newest.
 input's source and version").
 - Tables:
   - `quote`: session, address, `market_load_id`, currency, made at and
-    `valid_until` (question 2), placeholders, and state `made` or
+    `valid_until` (30 minutes, §6), placeholders, and state `made` or
     `refused`;
   - `quote_option`: key, service, tier, transit and total per option;
   - `quote_part`: kind, line, exact value as numerator and denominator,
@@ -930,18 +789,25 @@ input's source and version").
    refusal, or new asks and waits (a second round is possible, say a
    duty rate after a carrier price). Otherwise it does nothing, so a
    duplicate or late fact is harmless.
-4. While the session is `quoting`, the page refreshes itself every 2 s
-   with `<meta http-equiv="refresh">` and says it is working out
-   shipping and duties. No JavaScript is needed.
+4. While the session is `quoting`, the page says it is working out
+   shipping and duties and waits as every waiting page does
+   (`plan-payments.md` §4).
 
-The asks a buyer starts don't count against the merchant's daily cap.
-They are bounded per session instead (question 3).
+`still_open` reads each lookup waited on with `FOR SHARE`: a completion
+that commits between the build and the wait would otherwise announce its
+outcome to no one, and the buyer would wait for ever
+(`tests/checkout/test_quote_concurrency.py` fails without it).
+
+The asks a buyer starts don't count against the merchant's daily cap,
+or a buyer could use up a merchant's cap and block real checkouts. They
+are bounded per session instead: at most 10 addresses per session, so a
+buyer can try a few while a script can't sweep countries.
 
 **Quote validity and session expiry.** Time only triggers; the decision
 is taken under the lock.
 - A quote is valid until `valid_until`. Past it the page shows the old
   price as expired, with a "Get the current price" button (a POST that
-  quotes the same address again). The pay step (slice 5) compares
+  quotes the same address again). The pay step compares
   `valid_until` under the lock.
 - Expiry: creating a session also appends `checkout_session_expiry_due`
   with `deliver_at = expires_at`. Its consumer locks the session and
@@ -958,15 +824,16 @@ legal input; a placeholder until then).
   - waiting, refreshing itself;
   - the quote: one row per shipping option (name, delivery days, total;
     the cheapest chosen, others a plain link `?option=`), then the
-    four lines plan-architecture §8 decided (items with our fee inside,
-    shipping, duties and taxes, total), the time it is valid until (in
-    the `01-Jan-2027 14:35 UTC` format), and a disabled "Pay" saying
-    payment comes next (slice 5);
+    four lines `plan-architecture.md` §8 decided (items with our fee
+    inside, shipping, duties and taxes, total), the time it is valid
+    until (in the `01-Jan-2027 14:35 UTC` format), and the pay step;
   - refused: the reason in buyer words, with the address form to try
     another;
   - expired: a 303 to the merchant's `cancel_url`.
 - POSTs use plain forms, the same-origin check, and no cookies: the
-  session link is its own bearer token for that cart only.
+  session link is its own bearer token for that cart only. The referrer
+  policy is `same-origin`: `no-referrer` makes browsers send
+  `Origin: null` on the page's own POST, which the check refuses.
 - Prod refuses a quote standing on a placeholder, as estimates do.
 
 **The API.** `GET /v1/checkout_sessions/{id}` gains:
@@ -975,9 +842,8 @@ legal input; a placeholder until then).
 - `quote`: id, `valid_until`, currency, and per option its key and
   total, the same shape as an estimate's options.
 
-The full address is not returned. The merchant needs it for fulfilment
-from slice 5 on, and the order's endpoints carry it then. A v1-additive
-change.
+The full address is not returned here; the order's endpoint carries it
+for fulfilment (`plan-payments.md` §6).
 
 **The staff page** gains **Sessions** (`/staff/markets/sessions`):
 - one row per session: merchant, state, country, the quote's total, the
@@ -1014,30 +880,12 @@ lookup outcome facts, `quote_build`, and `checkout_session_expire`.
     - no lookup was asked twice.
 - The new fuzzer joins a soak target.
 
-**Questions** (my recommendation first):
-
-1. **Which address fields, now.** Recommended: name, email, phone, two
-   address lines, city, region, postcode and country, all now. The
-   buyer enters them once. The label (slice 9) and the order page's
-   magic link (slice 5) need them, and the quote may use the postcode
-   later (remote-area surcharges). Per-country forms (KR's customs code,
-   no postcode in some countries) come when those countries open. The
-   other choice is the country only now and the rest at the pay step.
-   That's less to store before a sale, but it makes a second form.
-2. **How long a quote holds.** Recommended: 30 minutes (the surfaces
-   plan's example), then "Get the current price".
-3. **Bounding what buyers make us ask.** Recommended: at most 10
-   addresses per session (a buyer can still try a few, while a script
-   can't sweep countries), and none of it counted against the merchant's
-   daily cap, which is for its own estimates. The other choice is to
-   count buyer asks too, but then a buyer could use up a merchant's cap
-   and block real checkouts.
-
-**Answered 19-Nov-2026:** the design is agreed, with 30 minutes per
-quote and at most 10 addresses per session. For the address fields,
-fruggals was the model (`~/Desktop/fruggals/src/addresses.py`): a pure
-parser, the phone's dial code kept apart from its number, and a postcode
-checked strictly where its format is fixed. What changes here:
+**The address form** (decided 19-Nov-2026): name, email, phone, two
+address lines, city, region, postcode and country, all at once, so the
+buyer enters them once. Fruggals was the model
+(`~/Desktop/fruggals/src/addresses.py`): a pure parser, the phone's dial
+code kept apart from its number, and a postcode checked strictly where
+its format is fixed. Here:
 
 - **Rules per country, as data.** fruggals relaxes every country but
   the Netherlands. Here a table per country says whether a postcode is
@@ -1051,7 +899,7 @@ checked strictly where its format is fixed. What changes here:
   the region.
 - **Email and phone are required.** DHL's shipping guide asks for the
   receiver's contact number, email and full address with postcode. The
-  order page's link (slice 5) also goes to the email. Checked
+  order page's link also goes to the email. Checked
   19-Nov-2026 in DHL's guide and its MyDHL field guidelines, not in its
   API reference: confirm when the courier slice books labels.
 - **No address book**: buyers have no accounts. One address per quote.
@@ -1065,65 +913,22 @@ checked strictly where its format is fixed. What changes here:
   later behind a port with a mode per country, as duty rates have, once
   failed deliveries show it is worth paying for.
 
-**4d-2 built 19-Nov-2026.**
-
-Changed while building:
-- **A share lock on each lookup waited on.** `still_open` reads a
-  lookup's state with `FOR SHARE`. A completion that commits between the
-  build and the wait would otherwise announce its outcome to no one, and
-  the buyer would wait for ever. The foreign key from the wait row locks
-  the lookup too, but only after the state was read. A test with real
-  concurrent connections (`tests/checkout/test_quote_concurrency.py`)
-  fails without the lock.
-- **The referrer policy is `same-origin`.** `no-referrer` made browsers
-  send `Origin: null` on the page's own POST, so the same-origin check
-  refused every address. The tests, which set the header themselves, could
-  not see this; the sandbox in a real browser did.
-- **An unknown country gives no phone error.** It is only checked once
-  the country, and so its dial code, is known.
-
-How it was checked:
-- Planted bugs, each caught:
-  - no share lock;
-  - a finished lookup telling nobody;
-  - waits not recorded;
-  - only open sessions expiring;
-  - goods parts not stored;
-  - one address too many allowed;
-  - a late rebuild bringing back a replaced address. The fuzzer's first
-    run missed this one, and the check "a session points at its newest
-    address" was added.
-- End to end on the sandbox in a headless browser at phone width:
-  - a wrong SG postcode was shown back on its field, with the other values
-    kept;
-  - SG quoted at once, with two options and the four lines;
-  - a TH cart with an HS code not asked about yet showed the waiting page
-    until the worker had the duty vendor's answer, then the price;
-  - the API and the staff Sessions pages showed both.
-
 Open:
-- SG's quotes carry no GST. `registrations.csv` says we are not
+- SG's quotes carry no GST: `registrations.csv` says we are not
   registered there yet, so the tax path charges none (correct for the
   data). Selling into SG before registering is a compliance decision, not
   a code one.
 - The "Sold and invoiced by" line names `[our company]` until the
   company and the legal wording exist.
-- Waiting without full reloads (a meta refresh inside `<noscript>`, a
-  script in `ts/` polling a status route) was built in slice 5a, for
-  quotes and QR payments alike.
 
 ## 5b. The staff page
 
 A staff page, `/staff/markets`, shows what each step decides, and grows
-with every step of this slice (decided 17-Nov-2026): 4a the loads and each
-country's answer (open, or closed with the reason, and the rates in
-force); 4b a form for country, category and order value showing the tax
-paths and the duty decision; 4c the full price breakdown; 4d the sessions
-and quotes made. It is a staff tool, not a sandbox one: after this slice
-it becomes the admin page that edits market data. It is plain forms,
-read-only until then.
-
-Reworked 18-Nov-2026 (it had grown into one long unstyled page): three
+(decided 17-Nov-2026): the loads and each country's answer (open, or
+closed with the reason, and the rates in force), the tax paths and the
+duty decision for an order, the full price breakdown, and the sessions
+and quotes made. It is a staff tool, not a sandbox one: it becomes the
+admin page that edits market data, and is read-only until then. Three
 pages under one menu. **Quote** (`/staff/markets`) is the order form
 with a parcel, then every shipping option on one line of a table
 (type, delivery, warning tags, total), then how the chosen option's price
@@ -1136,15 +941,13 @@ are greyed rows of the same table, with why. Below, always shown, "Duties
 and taxes": a summary (what is charged at the border and what that rules
 out, who sets the rates, any rate our own data disputes), one row per
 charge (collected where, rate, who says so, what our own data says), and
-the data rows that decided it. (Cards per option were tried first and dropped the same
-day: they compared options but did not explain one price.)
+the data rows that decided it.
 **Vendor answers** (`/staff/markets/answers`) and **Market data**
 (`/staff/markets/data`) hold the rest. Scripts improve it (the quote
 follows the form as you type; tables filter), and it works without them.
 Amounts show in USD and EUR beside the quote's own currency, converted at
-the load's exchange rates for reading only. The freight field of 4b's
-check is gone: with a parcel the explanation uses the chosen option's
-freight.
+the load's exchange rates for reading only. **Sessions**
+(`/staff/markets/sessions`) lists sessions and their quotes (§5).
 
 Until staff sign-in exists it is mounted only outside prod, reached on
 loopback like the sandbox page. Staff sign-in (staff accounts, password
@@ -1153,42 +956,38 @@ check on every POST, the person recorded as actor) is a slice of its own,
 before the first prod deploy (decided 17-Nov-2026); the page is mounted in
 prod behind it, unchanged.
 
-## 6. Questions, answered 17-Nov-2026
+## 6. Decisions of 17-Nov-2026
 
-Q1. **Which research statuses may a quote rely on?** Answer: `verified`
-and `secondary`, and updates must be painless (§2). As proposed: a country whose quoting values include
-`unverified`, `estimate`, `to_fetch` or `awaiting_answer` is closed at
-checkout ("rules not confirmed yet"), failing closed rather than charging
-a buyer on a guess. Today that would close PH (border limit awaiting an
-answer) and LA and KH (sources conflict) until answered.
+1. **A quote relies on `verified` and `secondary` values only.** A
+   country whose quoting values include `unverified`, `estimate`,
+   `to_fetch` or `awaiting_answer` is closed at checkout ("rules not
+   confirmed yet"), failing closed rather than charging a buyer on a
+   guess; updates must be painless (§2).
 
-Q2. **Who edits market data after launch?** Answer: the CSVs for now;
-after slice 4 the database becomes the single place to edit, through an
-admin page that writes new rows, and the CSV and spreadsheet views are
-generated from it. The loader then runs once, as the import.
+2. **Who edits market data**: the CSVs for now; then the database
+   becomes the single place to edit, through an admin page that writes
+   new rows, and the CSV and spreadsheet views are generated from it. The
+   loader then runs once, as the import.
 
-Q3. **Product category on each line.** Answer: the merchant tells us both
-the category (from our closed list: product gate, tax rate, border rule)
-and the HS code (duty rate). Where a merchant cannot, staff classify the
-merchant's stored product by hand, recorded as a staff action; nothing is
-guessed automatically for now. A line missing what its quote needs is
-refused with `classification_needed`; the HS code only where the duty
-depends on it.
+3. **Product category on each line**: the merchant tells us the
+   category (from our closed list: product gate, tax rate, border rule)
+   and the HS code (duty rate); classification stays ours (§5). Where a
+   merchant cannot, staff classify the merchant's stored product by
+   hand, recorded as a staff action; nothing is guessed automatically.
 
-Q4. **FX.** Answer: as proposed. The buyer pays in their currency, so
-every quote needs a rate; which source is a PSP question (slice 5). For
-now: an `fx_rate`
-table filled by hand or the loader (ECB reference rates where they exist,
-as plan-markets-data already uses), behind the same switchable-source
-shape, and the `fx` fee component at 0% until you decide a margin.
+4. **FX**: the buyer pays in their currency, so every quote needs a
+   rate. For now an `fx_rate` table filled by the loader (ECB reference
+   rates where they exist, the State Bank of Vietnam's for VND), behind
+   the same switchable-source shape, and the `fx` fee component at 0%
+   until a margin is decided. Which source in prod is a PSP question.
 
-Q5. **Placeholder numbers.** Answer: as proposed. The default
-`mor_margin` percentage and the `psp_fee` estimates per country are
-placeholders until the PSP contract and pricing exist: seed them as data marked placeholder, and
-refuse to open prod checkout while any placeholder row is in force.
+5. **Placeholder numbers**: the default `mor_margin` percentage and the
+   `psp_fee` estimates per country are placeholders until the PSP
+   contract and pricing exist: data marked placeholder, and prod refuses
+   to quote while a placeholder row is in force.
 
-Q6. **Quote validity.** Answer: as proposed, 30 minutes (plan-merchant-surfaces §3),
-after which the page makes a fresh quote and shows if the total changed.
+6. **A quote holds for 30 minutes**, after which the page makes a fresh
+   quote and shows if the total changed.
 
 ## 7. Rules this applies
 

@@ -1,11 +1,10 @@
-# Slice 3: the test setup
+# The test setup
 
-Status: confirmed and built 17-Nov-2026; the deploy waits for a VPS (§1).
-Implements plan-architecture.md §6 ("the test
-setup") and §14 step 3: a running copy with `ENVIRONMENT=test`, web (with
-the fakes under `/_fake/`) and worker, its own database with synthetic
-data only, where the echo flow can be walked by hand in every mode and the
-long fuzz runs happen.
+Status: built 17-Nov-2026 (slice 3) on the laptop; the deploy waits for a
+VPS (§1). A running copy with `ENVIRONMENT=test`: web (with the fakes
+under `/_fake/`) and worker, its own database with synthetic data only,
+where every flow can be walked by hand in every mode and the long fuzz
+runs happen (`plan-architecture.md` §6).
 
 ## 1. Where it runs
 
@@ -39,20 +38,24 @@ long fuzz runs happen.
 
 ## 3. Seed
 
-`python -m mor.seed`, refused in prod: one echo account per provider and
-mode, the push accounts' webhooks subscribed at the fake, the report
-schedule started for `file` accounts. Synthetic data only. Running it again
-changes nothing: insert, and a conflict means it was done.
+`python -m mor.seed`, refused in prod, with the server running: one echo
+account per provider and event mode (push accounts subscribe their
+webhooks at the fake), an account at the fake duty vendor and the fake
+courier for every vendor the market data names, one fake PSP account per
+wiring with a default route, and the Sandbox Shop merchant with its API
+key. Synthetic data only. Running it again changes nothing: insert, and a
+conflict means it was done.
 
 ## 4. The page
 
 One HTML page under `/_fake/`, built with htpy, working without
-JavaScript. Per account (provider, mode) its jobs, each job's state,
-vendor status and recorded events, with form buttons:
+JavaScript. Per echo account (provider, mode) its jobs, each job's state,
+vendor status and recorded events, and per PSP account a settlement cut,
+with form buttons:
 
 - vendor side (under `/_fake/`): release the next event, release twice,
   release with a bad signature, redeliver failed webhooks, cut a report,
-  script a fault;
+  cut a settlement with a chosen fault, script a fault;
 - our side: create a job, record an event by hand (as a staff actor).
 
 Every POST is guarded against cross-site forgery: its `Origin` must name
@@ -78,14 +81,17 @@ may be while it is in use):
   the pure properties. Each gets an example budget (`SOAK_EXAMPLES`,
   read by the soak profile) sized from a measured run (the script's
   comment has the figures), stops at its first failure, and has a time
-  limit only as a guard against a hang. The targets are read from the
-  tested commit's copy of the script, not from the working tree's, which
-  is what the timer runs (20-Nov-2026: targets the working tree named for
-  uncommitted test files broke two targets against `main`).
+  limit only as a guard against a hang. Ending a target by its time
+  limit instead lost failures pytest had already found, and a Ctrl-C did
+  not reliably stop the fuzzers.
+- The targets are read from the tested commit's copy of the script, not
+  from the working tree's, so a target for an uncommitted test file
+  cannot break a run against `main`.
 - Every test file that uses Hypothesis is in a target, checked by
-  `tests/test_soak_targets.py` (19-Nov-2026: the duty and shipping-price
-  fuzzers and four property files had been added since the soak without
-  joining it).
+  `tests/test_soak_targets.py`.
+- A fuzzer's "no advisory lock left held" check counts only the test's
+  own database (`tests/test_helpers.py` pins it): other databases on the
+  cluster (the sandbox's worker) hold locks of their own.
 - A target is judged by its log: a `FAILED` line is a failure, else exit 0
   is a pass, else the run broke. Failures and broken runs send one
   Telegram message to `TELEGRAM_CHAT_ID_ALERTS` (token and chat id from
@@ -95,23 +101,9 @@ may be while it is in use):
   `SOAK_DRY_ALERT=1` and `SOAK_REF=<commit>` are for checking the soak
   itself.
 
-What building it showed:
+## 6. Still to build, when a VPS exists
 
-- Ending targets by a time limit was wrong twice over. A limit that cut
-  pytest off lost failures it had already found (a planted money bug
-  showed four `F`s and counted as a pass), and a Ctrl-C at the limit did
-  not reliably stop the fuzzers. Hence example budgets.
-- The fuzzers' "no advisory lock left held" checks counted locks on the
-  whole PostgreSQL cluster, so a lock the sandbox's worker held in its
-  own database failed the probe fuzzer by chance. They now count only the
-  test's own database; `tests/test_helpers.py` pins it.
-
-## 6. Build order
-
-1. Serve, `SELF_URL`, seed; checked with the two processes running.
-2. The page.
-3. The soak timer and its Telegram alert.
-4. When a VPS exists: `deploy/`, nginx, TLS, login, heartbeat.
+`deploy/`, nginx, TLS, a login for the page, the heartbeat (§1).
 
 ## 7. Rules this applies
 
