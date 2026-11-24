@@ -402,8 +402,8 @@ class EchoFlow(RuleBasedStateMachine):
     async def _evidence(self, job_id: uuid.UUID) -> str:
         """What the vendor released and pushed for a job, what reached us,
         and what the job recorded: enough to explain a wrong status from a
-        failure message alone (one was seen once and not reproduced,
-        17-Nov-2026; plan-messaging §13)."""
+        failure message alone (one, a thin webhook's events lost, led to
+        the rule that the vendor's id is the guard: plan-messaging.md §7)."""
         parts = [f"mode {self.job_mode[job_id]}, provider {self.jobs[job_id]}"]
         queries: list[tuple[str, LiteralString]] = [
             (

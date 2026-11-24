@@ -23,10 +23,12 @@ and wins where the two differ.
   layers built or vetted by hand. Rust stays the alternative if Python's
   lack of runtime type checks ever becomes the bottleneck).
 
-- Where to start: `docs/plan-architecture.md` is the confirmed design for
-  the whole flow and wins over the earlier plans where they differ. Its
-  §16 says what is built, what comes next and what to read. Each slice
-  plan's Status line says how far that slice is.
+- Where to start: `docs/README.md` says what is built, what comes next
+  and which document holds what. `docs/plan-architecture.md` is the design
+  for the whole flow. A plan describes the design as it is now: a change
+  rewrites the plan it changes and updates the decisions it overturns;
+  there are no amendment pages, and what comes next lives only in the
+  README.
 - Decided 19-Nov-2026: the test setup may route chosen merchants to a
   real vendor's sandbox next to the fakes, once that vendor's module
   exists; every provider account is `fake`, `sandbox` or `live`, and the
@@ -41,7 +43,7 @@ and wins where the two differ.
   role (`postgresql:///mor_dev`), no dedicated role locally. Ids are
   uuid7, made in code (`uuid.uuid7()`), so they sort by time and code
   knows an id before inserting.
-- Decided 15-Nov-2026, with the reasons in `docs/plan-architecture.md` §15
+- Decided 15-Nov-2026, with the reasons in `docs/plan-architecture.md`
   (locks and constraints guard, time only triggers, as in the shared
   conventions):
   - After a vendor call with no answer, the operation's duplicate guard
