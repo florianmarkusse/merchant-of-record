@@ -4,8 +4,8 @@
 
 Being reworked (plan-messaging-rework.md §3.3): each case narrows the
 fact to what the consumer needs (`expect`), and an effect consumer's three
-steps run through `run_steps`. Converted so far: `duty_rate_ask`. The
-others still go through `prepare`, `call` and `complete` below, where
+steps run through `run_steps` (the cases of `run_effect`). The others
+still go through `prepare`, `call` and `complete` below, where
 `call` returns an answer record holding the call and what the vendor said
 to it, so `complete` is picked by the answer alone."""
 
@@ -14,10 +14,12 @@ from datetime import datetime
 
 import httpx2
 
+import mor.couriers.prices
 import mor.duties.lookups
+import mor.payments.flow
+import mor.settlement.fetch
 from mor.checkout import flow as checkout_flow
 from mor.config import Environment
-from mor.couriers import prices as courier_prices
 from mor.db.connect import Connection
 from mor.echo import flow as echo_flow
 from mor.echo import inbound as echo_inbound
@@ -35,7 +37,17 @@ from mor.messaging.delivery import (
     open_delivery,
     run_steps,
 )
-from mor.messaging.facts import DutyRateNeededV1, Fact
+from mor.messaging.facts import (
+    DutyRateNeededV1,
+    Fact,
+    PaymentAttemptCreatedV1,
+    PaymentAuthorisedV1,
+    PaymentCancelWantedV1,
+    PaymentEventsWantedV1,
+    PaymentPollDueV1,
+    PspSettlementDueV1,
+    ShippingPriceNeededV1,
+)
 from mor.messaging.outcome import (
     Again,
     ConsumerOutcome,
@@ -51,28 +63,16 @@ from mor.messaging.routing import (
     WrongFact,
 )
 from mor.orders import flow as order_flow
-from mor.payments import flow as payment_flow
 from mor.payments import inbound as payment_inbound
 from mor.probe import flow as probe_flow
-from mor.settlement import fetch as settlement_fetch
 from mor.settlement import store as settlement_store
 
 
 type EffectCall = (
-    echo_flow.EchoCall
-    | echo_tracking.FetchEventsCall
-    | echo_reports.ReportCall
-    | courier_prices.PriceCall
-    | payment_flow.PaymentCall
-    | settlement_fetch.SettlementCall
+    echo_flow.EchoCall | echo_tracking.FetchEventsCall | echo_reports.ReportCall
 )
 type EffectAnswer = (
-    echo_flow.EchoAnswer
-    | echo_tracking.FetchEventsAnswer
-    | echo_reports.ReportAnswer
-    | courier_prices.PriceAnswer
-    | payment_flow.PaymentAnswer
-    | settlement_fetch.SettlementAnswer
+    echo_flow.EchoAnswer | echo_tracking.FetchEventsAnswer | echo_reports.ReportAnswer
 )
 
 
@@ -108,6 +108,97 @@ async def run_effect(
                 prepare=mor.duties.lookups.prepare_ask,
                 call=mor.duties.lookups.ask,
                 complete=mor.duties.lookups.complete_ask,
+            )
+        case ConsumerName.SHIPPING_PRICE_ASK:
+            lookup_id = expect(fact, ShippingPriceNeededV1).shipping_price_lookup_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                lookup_id,
+                now,
+                prepare=mor.couriers.prices.prepare_rate,
+                call=mor.couriers.prices.ask_rate,
+                complete=mor.couriers.prices.complete_rate,
+            )
+        case ConsumerName.PSP_PAYMENT_CREATE:
+            attempt_id = expect(fact, PaymentAttemptCreatedV1).payment_attempt_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                attempt_id,
+                now,
+                prepare=mor.payments.flow.prepare_create,
+                call=mor.payments.flow.send_create,
+                complete=mor.payments.flow.complete_create,
+            )
+        case ConsumerName.PSP_PAYMENT_CAPTURE:
+            attempt_id = expect(fact, PaymentAuthorisedV1).payment_attempt_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                attempt_id,
+                now,
+                prepare=mor.payments.flow.prepare_capture,
+                call=mor.payments.flow.send_capture,
+                complete=mor.payments.flow.complete_capture,
+            )
+        case ConsumerName.PSP_PAYMENT_CANCEL:
+            attempt_id = expect(fact, PaymentCancelWantedV1).payment_attempt_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                attempt_id,
+                now,
+                prepare=mor.payments.flow.prepare_cancel,
+                call=mor.payments.flow.send_cancel,
+                complete=mor.payments.flow.complete_cancel,
+            )
+        case ConsumerName.PSP_PAYMENT_POLL:
+            attempt_id = expect(fact, PaymentPollDueV1).payment_attempt_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                attempt_id,
+                now,
+                prepare=mor.payments.flow.prepare_poll,
+                call=mor.payments.flow.fetch_events,
+                complete=mor.payments.flow.complete_poll,
+            )
+        case ConsumerName.PSP_PAYMENT_FETCH:
+            attempt_id = expect(fact, PaymentEventsWantedV1).payment_attempt_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                attempt_id,
+                now,
+                prepare=mor.payments.flow.prepare_poll,
+                call=mor.payments.flow.fetch_events,
+                complete=mor.payments.flow.complete_fetch,
+            )
+        case ConsumerName.PSP_SETTLEMENT_FETCH:
+            account_id = expect(fact, PspSettlementDueV1).psp_account_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                account_id,
+                now,
+                prepare=mor.settlement.fetch.prepare_fetch,
+                call=mor.settlement.fetch.read_settlement,
+                complete=mor.settlement.fetch.complete_fetch,
             )
         # Transitional: the consumers not converted to run_steps yet. Goes
         # once they all are (plan-messaging-rework.md §3.3); no prod data
@@ -175,17 +266,17 @@ async def prepare(
         case ConsumerName.DUTY_RATE_ASK:
             raise AssertionError("duty_rate_ask runs through run_steps")
         case ConsumerName.SHIPPING_PRICE_ASK:
-            return await courier_prices.prepare(conn, fact, now)
-        case ConsumerName.PSP_PAYMENT_CREATE:
-            return await payment_flow.prepare_create(conn, fact, now)
-        case ConsumerName.PSP_PAYMENT_CAPTURE:
-            return await payment_flow.prepare_capture(conn, fact, now)
-        case ConsumerName.PSP_PAYMENT_CANCEL:
-            return await payment_flow.prepare_cancel(conn, fact, now)
-        case ConsumerName.PSP_PAYMENT_POLL | ConsumerName.PSP_PAYMENT_FETCH:
-            return await payment_flow.prepare_poll(conn, fact, now)
+            raise AssertionError("shipping_price_ask runs through run_steps")
+        case (
+            ConsumerName.PSP_PAYMENT_CREATE
+            | ConsumerName.PSP_PAYMENT_CAPTURE
+            | ConsumerName.PSP_PAYMENT_CANCEL
+            | ConsumerName.PSP_PAYMENT_POLL
+            | ConsumerName.PSP_PAYMENT_FETCH
+        ):
+            raise AssertionError(f"{consumer} runs through run_steps")
         case ConsumerName.PSP_SETTLEMENT_FETCH:
-            return await settlement_fetch.prepare_fetch(conn, fact, now)
+            raise AssertionError("psp_settlement_fetch runs through run_steps")
 
 
 async def call(
@@ -200,23 +291,6 @@ async def call(
             return await echo_tracking.call_poll(http, environment, effect_call)
         case echo_reports.ListReportsCall() | echo_reports.FetchReportCall():
             return await echo_reports.call_reports(http, environment, effect_call)
-        case courier_prices.PriceCall():
-            return await courier_prices.call(http, environment, effect_call)
-        case (
-            payment_flow.CreateCall()
-            | payment_flow.FindCall()
-            | payment_flow.CaptureCall()
-            | payment_flow.CancelCall()
-            | payment_flow.PollCall()
-        ):
-            return await payment_flow.call(http, environment, effect_call)
-        case (
-            settlement_fetch.ListCall()
-            | settlement_fetch.FileCall()
-            | settlement_fetch.PayoutCall()
-            | settlement_fetch.LinesCall()
-        ):
-            return await settlement_fetch.call_fetch(http, environment, effect_call)
 
 
 async def complete(
@@ -231,23 +305,6 @@ async def complete(
             return await echo_tracking.complete_poll(conn, fact, answer, now)
         case echo_reports.ListReportsAnswer() | echo_reports.FetchReportAnswer():
             return await echo_reports.complete_reports(conn, fact, answer, now)
-        case courier_prices.PriceAnswer():
-            return await courier_prices.complete(conn, fact, answer, now)
-        case (
-            payment_flow.CreateAnswer()
-            | payment_flow.FindAnswer()
-            | payment_flow.CaptureAnswer()
-            | payment_flow.CancelAnswer()
-            | payment_flow.PollAnswer()
-        ):
-            return await payment_flow.complete(conn, fact, answer, now)
-        case (
-            settlement_fetch.ListAnswer()
-            | settlement_fetch.FileAnswer()
-            | settlement_fetch.PayoutAnswer()
-            | settlement_fetch.LinesAnswer()
-        ):
-            return await settlement_fetch.complete_fetch(conn, fact, answer, now)
 
 
 # --- transitional: the effect driver for consumers not on run_steps yet ----

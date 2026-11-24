@@ -14,22 +14,18 @@ import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import mor.couriers.prices
 from mor.audit import Actor, ActorKind
 from mor.checkout.addresses import Address
 from mor.checkout.flow import Waiting, submit_address
 from mor.checkout.records import AfterPayment, Customs, SessionDraft, SoldLine
 from mor.checkout.sessions import create_session, session_by_id
-from mor.couriers.prices import create_courier_account
+from mor.couriers.prices import PriceCall, create_courier_account
 from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import connect
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
-from mor.messaging import consumers
-from mor.messaging.consumers import (
-    Prepared,
-    complete_delivery,
-    prepare_delivery,
-)
+from mor.messaging.delivery import finish_delivery
 from mor.messaging.routing import ConsumerName
 from mor.messaging.worker import (
     drain_once,
@@ -40,7 +36,7 @@ from mor.messaging.worker import (
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
-from tests.helpers import ENV, effect_consumer, wire
+from tests.helpers import ENV, wire
 from tests.quote.fixtures import live_market
 
 
@@ -132,13 +128,17 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
                 if found.consumer == ConsumerName.SHIPPING_PRICE_ASK
             ]
             assert await try_lock_aggregate(worker, candidate)
+            lookup_id = candidate.aggregate_id
             async with worker.transaction():
-                prepared = await prepare_delivery(
-                    worker, candidate, effect_consumer(candidate), NOW
+                prepared = await mor.couriers.prices.prepare_rate(
+                    worker, lookup_id, NOW
                 )
-            assert isinstance(prepared, Prepared)
-            answer = await consumers.call(wired.http, ENV, prepared.call)
-            await complete_delivery(completer, candidate, prepared.fact, answer, NOW)
+            assert isinstance(prepared, PriceCall)
+            result = await mor.couriers.prices.ask_rate(wired.http, ENV, prepared)
+            await mor.couriers.prices.complete_rate(
+                completer, lookup_id, prepared, result, NOW
+            )
+            await finish_delivery(completer, candidate, NOW)
 
             # The second buyer's step builds while the price still reads as
             # open, then commits only after the price's completion has been

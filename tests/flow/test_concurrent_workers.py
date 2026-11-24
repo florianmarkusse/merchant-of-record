@@ -8,23 +8,20 @@ from datetime import UTC, datetime, timedelta
 
 import httpx2
 
+import mor.payments.flow
 from mor.audit import Actor, ActorKind
 from mor.db.connect import connect
 from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.port import EchoProvider
 from mor.fakes.echo import make_app
 from mor.fakes.hang import hang_a_minute
-from mor.messaging import consumers
-from mor.messaging.consumers import (
-    Prepared,
-    complete_delivery,
-    prepare_delivery,
-)
 from mor.messaging.delivery import (
     Ran,
     Skipped,
+    finish_delivery,
 )
 from mor.messaging.guard import DuplicateGuard
+from mor.messaging.outcome import Done
 from mor.messaging.routing import ConsumerName
 from mor.messaging.worker import (
     Failed,
@@ -35,10 +32,11 @@ from mor.messaging.worker import (
     try_lock_aggregate,
     unlock_aggregate,
 )
+from mor.payments.flow import CaptureCall
 from mor.payments.transitions import AttemptState
 from mor.probe.flow import start_probe
 from mor.psp.port import CaptureMode, StatusMode
-from tests.helpers import ENV, NO_HTTP, advisory_locks_held, effect_consumer
+from tests.helpers import ENV, NO_HTTP, advisory_locks_held
 from tests.payments.support import (
     FAT_SALE_KEYED,
     SGD_PRICE,
@@ -285,12 +283,15 @@ def test_a_webhook_is_applied_while_the_capture_call_is_out(
                 # The capture: prepared, the call made (the fake pushes the
                 # `captured` webhook during it), no `complete` yet.
                 assert await try_lock_aggregate(capturing, capture)
+                attempt_id = capture.aggregate_id
                 async with capturing.transaction():
-                    prepared = await prepare_delivery(
-                        capturing, capture, effect_consumer(capture), now
+                    prepared = await mor.payments.flow.prepare_capture(
+                        capturing, attempt_id, now
                     )
-                assert isinstance(prepared, Prepared)
-                answer = await consumers.call(setup.wired.http, ENV, prepared.call)
+                assert isinstance(prepared, CaptureCall)
+                answer = await mor.payments.flow.send_capture(
+                    setup.wired.http, ENV, prepared
+                )
 
                 # Meanwhile another worker applies the webhook on the same
                 # attempt, which used to wait as "busy".
@@ -309,10 +310,11 @@ def test_a_webhook_is_applied_while_the_capture_call_is_out(
                 assert attempt.state == AttemptState.CAPTURED
 
             async with capturing.transaction():
-                completed = await complete_delivery(
-                    capturing, capture, prepared.fact, answer, now
+                completed = await mor.payments.flow.complete_capture(
+                    capturing, attempt_id, prepared, answer, now
                 )
-            assert isinstance(completed, Ran), completed
+                assert isinstance(completed, Done), completed
+                await finish_delivery(capturing, capture, now)
         finally:
             await unlock_aggregate(capturing, capture)
             await capturing.close()

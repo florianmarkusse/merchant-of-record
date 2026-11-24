@@ -14,8 +14,10 @@ After a `sent` request with no answer the operation's guard decides:
 payment up, and a payment the PSP does not show goes to a person. A
 cancel and a fetch move no money and are always safe to send again.
 
-`prepare` and `complete` run in the worker's transactions under the
-attempt's row lock and never commit; `call` runs with no transaction open.
+Each consumer is three steps, run by `mor.messaging.delivery.run_steps`:
+`prepare_*` and `complete_*` in its transactions under the attempt's row
+lock (they never commit), and the call between them with no transaction
+open and no connection.
 """
 
 import uuid
@@ -35,16 +37,10 @@ from mor.db.connect import Connection
 from mor.merchants.records import KybState
 from mor.merchants.store import kyb_state_for_pay
 from mor.messaging.facts import (
-    Fact,
-    PaymentAttemptCreatedV1,
-    PaymentAuthorisedV1,
-    PaymentCancelWantedV1,
-    PaymentEventsWantedV1,
     PaymentPollDueV1,
 )
 from mor.messaging.guard import DuplicateGuard, VendorRequestState
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.payments.attempts import (
@@ -251,96 +247,38 @@ class PollCall:
     provider_payment_id: str
 
 
-type PaymentCall = CreateCall | FindCall | CaptureCall | CancelCall | PollCall
-
-
-# --- answers: a call and what the PSP said, from call to complete ---------
+# --- what a create or a capture call did: sent it, or only looked ------------
 
 
 @dataclass(frozen=True)
-class CreateAnswer:
-    call: CreateCall
+class CreateSent:
+    """The create was sent; what the PSP said."""
+
     result: CreateResult
 
 
 @dataclass(frozen=True)
-class FindAnswer:
-    call: FindCall
-    result: FindResult
+class CaptureSent:
+    """The capture was sent; what the PSP said."""
 
-
-@dataclass(frozen=True)
-class CaptureAnswer:
-    call: CaptureCall
     result: CaptureResult
 
 
 @dataclass(frozen=True)
-class CancelAnswer:
-    call: CancelCall
-    result: CancelResult
+class Looked:
+    """Guard `none` after a lost answer: the payment looked up, nothing
+    sent."""
+
+    result: FindResult
 
 
-@dataclass(frozen=True)
-class PollAnswer:
-    call: PollCall
-    result: FetchResult
-
-
-type PaymentAnswer = (
-    CreateAnswer | FindAnswer | CaptureAnswer | CancelAnswer | PollAnswer
-)
-
-
-async def call(
-    http: httpx2.AsyncClient, environment: Environment, payment_call: PaymentCall
-) -> PaymentAnswer:
-    match payment_call:
-        case CreateCall(account=account, request=request):
-            created = await registry.create_payment(http, environment, account, request)
-            return CreateAnswer(payment_call, created)
-        case FindCall(account=account, reference=reference):
-            found = await registry.find_payments(http, environment, account, reference)
-            return FindAnswer(payment_call, found)
-        case CaptureCall(
-            account=account, provider_payment_id=payment_id, amount=amount, key=key
-        ):
-            captured = await registry.capture(
-                http, environment, account, payment_id, amount, key
-            )
-            return CaptureAnswer(payment_call, captured)
-        case CancelCall(account=account, provider_payment_id=payment_id):
-            cancelled = await registry.cancel(http, environment, account, payment_id)
-            return CancelAnswer(payment_call, cancelled)
-        case PollCall(account=account, provider_payment_id=payment_id):
-            page = await registry.fetch_events(http, environment, account, payment_id)
-            return PollAnswer(payment_call, page)
-
-
-async def complete(
-    conn: Connection, fact: Fact, answer: PaymentAnswer, now: datetime
-) -> Done | RetryLater:
-    """Every payment consumer's last step: the answer says which call it
-    was, and each step checks the fact is the one its consumer gets."""
-    match answer:
-        case CreateAnswer():
-            return await _complete_create(conn, fact, answer.call, answer.result, now)
-        case FindAnswer():
-            match answer.call.operation:
-                case PspOperation.CREATE:
-                    return await _complete_create_lookup(
-                        conn, fact, answer.call, answer.result, now
-                    )
-                case PspOperation.CAPTURE:
-                    return await _complete_capture_lookup(
-                        conn, fact, answer.call, answer.result, now
-                    )
-        case CaptureAnswer():
-            return await _complete_capture(conn, fact, answer.call, answer.result, now)
-        case CancelAnswer():
-            return await _complete_cancel(conn, fact, answer.call, answer.result, now)
-        case PollAnswer():
-            return await _complete_poll(conn, fact, answer.call, answer.result, now)
+async def _find(
+    http: httpx2.AsyncClient, environment: Environment, find: FindCall
+) -> Looked:
+    found = await registry.find_payments(
+        http, environment, find.account, find.reference
+    )
+    return Looked(found)
 
 
 # --- requests -------------------------------------------------------------
@@ -498,18 +436,10 @@ async def _needs_person(
 # --- psp_payment_create ---------------------------------------------------
 
 
-def _created_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case PaymentAttemptCreatedV1(payment_attempt_id=attempt_id):
-            return attempt_id
-        case _:
-            raise WrongFact(f"psp_payment_create got {fact!r}")
-
-
 async def prepare_create(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, attempt_id: uuid.UUID, now: datetime
 ) -> NoCall | CreateCall | FindCall:
-    attempt = await lock_attempt(conn, _created_id(fact))
+    attempt = await lock_attempt(conn, attempt_id)
     if attempt.state != AttemptState.REQUESTED:
         return NoCall(Stale())  # an event or a lookup answered first
     account = await _account(conn, attempt)
@@ -555,28 +485,54 @@ async def prepare_create(
     )
 
 
-async def _complete_create(
+async def send_create(
+    http: httpx2.AsyncClient, environment: Environment, call: CreateCall | FindCall
+) -> CreateSent | Looked:
+    match call:
+        case CreateCall(account=account, request=request):
+            created = await registry.create_payment(http, environment, account, request)
+            return CreateSent(created)
+        case FindCall():
+            return await _find(http, environment, call)
+
+
+async def complete_create(
     conn: Connection,
-    fact: Fact,
-    create: CreateCall,
+    attempt_id: uuid.UUID,
+    call: CreateCall | FindCall,
+    answer: CreateSent | Looked,
+    now: datetime,
+) -> Done | RetryLater:
+    attempt = await lock_attempt(conn, attempt_id)
+    account = await _account(conn, attempt)
+    match answer:
+        case CreateSent(result=result):
+            return await _created(conn, attempt, account, call.request_id, result, now)
+        case Looked(result=result):
+            return await _create_looked_up(
+                conn, attempt, account, call.request_id, result, now
+            )
+
+
+async def _created(
+    conn: Connection,
+    attempt: Attempt,
+    account: PspAccount,
+    request_id: uuid.UUID,
     result: CreateResult,
     now: datetime,
 ) -> Done | RetryLater:
-    attempt = await lock_attempt(conn, _created_id(fact))
-    account = await _account(conn, attempt)
     match result:
         case ProviderPayment() as payment:
-            await _finish_request(
-                conn, create.request_id, VendorRequestState.SUCCEEDED, now
-            )
+            await _finish_request(conn, request_id, VendorRequestState.SUCCEEDED, now)
             return await apply_payment(conn, attempt, account, payment, now)
         case Declined(payment=payment, reason=reason):
             await _finish_request(
-                conn, create.request_id, VendorRequestState.REFUSED, now, reason
+                conn, request_id, VendorRequestState.REFUSED, now, reason
             )
             return await apply_payment(conn, attempt, account, payment, now, reason)
         case Unavailable(detail=detail):
-            await _unsend_request(conn, create.request_id)
+            await _unsend_request(conn, request_id)
             return RetryLater(f"create unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"create outcome unknown: {detail}")
@@ -586,11 +542,14 @@ async def _complete_create(
             )
 
 
-async def _complete_create_lookup(
-    conn: Connection, fact: Fact, find: FindCall, result: FindResult, now: datetime
+async def _create_looked_up(
+    conn: Connection,
+    attempt: Attempt,
+    account: PspAccount,
+    request_id: uuid.UUID,
+    result: FindResult,
+    now: datetime,
 ) -> Done | RetryLater:
-    attempt = await lock_attempt(conn, _created_id(fact))
-    account = await _account(conn, attempt)
     match result:
         case Found(payments=payments):
             if len(payments) == 0:
@@ -607,9 +566,7 @@ async def _complete_create_lookup(
                 return await _needs_person(
                     conn, attempt, account, "several payments at the PSP", now
                 )
-            await _finish_request(
-                conn, find.request_id, VendorRequestState.SUCCEEDED, now
-            )
+            await _finish_request(conn, request_id, VendorRequestState.SUCCEEDED, now)
             return await apply_payment(conn, attempt, account, payments[0], now)
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"create lookup: {detail}")
@@ -622,20 +579,12 @@ async def _complete_create_lookup(
 # --- psp_payment_capture --------------------------------------------------
 
 
-def _authorised_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case PaymentAuthorisedV1(payment_attempt_id=attempt_id):
-            return attempt_id
-        case _:
-            raise WrongFact(f"psp_payment_capture got {fact!r}")
-
-
 async def prepare_capture(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, attempt_id: uuid.UUID, now: datetime
 ) -> NoCall | CaptureCall | FindCall:
     """Capture at once after authorisation (answer 3 of 19-Nov-2026), but
     never once the buyer chose another way."""
-    attempt = await lock_attempt(conn, _authorised_id(fact))
+    attempt = await lock_attempt(conn, attempt_id)
     if attempt.state != AttemptState.AUTHORISED:
         return NoCall(Stale())
     assert attempt.provider_payment_id is not None
@@ -676,32 +625,60 @@ async def prepare_capture(
     )
 
 
-async def _complete_capture(
+async def send_capture(
+    http: httpx2.AsyncClient, environment: Environment, call: CaptureCall | FindCall
+) -> CaptureSent | Looked:
+    match call:
+        case CaptureCall(
+            account=account, provider_payment_id=payment_id, amount=amount, key=key
+        ):
+            captured = await registry.capture(
+                http, environment, account, payment_id, amount, key
+            )
+            return CaptureSent(captured)
+        case FindCall():
+            return await _find(http, environment, call)
+
+
+async def complete_capture(
     conn: Connection,
-    fact: Fact,
-    capture: CaptureCall,
+    attempt_id: uuid.UUID,
+    call: CaptureCall | FindCall,
+    answer: CaptureSent | Looked,
+    now: datetime,
+) -> Done | RetryLater:
+    attempt = await lock_attempt(conn, attempt_id)
+    account = await _account(conn, attempt)
+    match answer:
+        case CaptureSent(result=result):
+            return await _captured(conn, attempt, account, call.request_id, result, now)
+        case Looked(result=result):
+            return await _capture_looked_up(
+                conn, attempt, account, call.request_id, result, now
+            )
+
+
+async def _captured(
+    conn: Connection,
+    attempt: Attempt,
+    account: PspAccount,
+    request_id: uuid.UUID,
     result: CaptureResult,
     now: datetime,
 ) -> Done | RetryLater:
-    attempt = await lock_attempt(conn, _authorised_id(fact))
-    account = await _account(conn, attempt)
     match result:
         case ProviderPayment() as payment:
-            await _finish_request(
-                conn, capture.request_id, VendorRequestState.SUCCEEDED, now
-            )
+            await _finish_request(conn, request_id, VendorRequestState.SUCCEEDED, now)
             return await apply_payment(conn, attempt, account, payment, now)
         case NotCapturable(payment=payment):
-            await _finish_request(
-                conn, capture.request_id, VendorRequestState.REFUSED, now
-            )
+            await _finish_request(conn, request_id, VendorRequestState.REFUSED, now)
             if payment.status == PaymentStatus.AUTHORISED:
                 return await _needs_person(
                     conn, attempt, account, "capture refused", now
                 )
             return await apply_payment(conn, attempt, account, payment, now)
         case Unavailable(detail=detail):
-            await _unsend_request(conn, capture.request_id)
+            await _unsend_request(conn, request_id)
             return RetryLater(f"capture unavailable: {detail}")
         case OutcomeUnknown(detail=detail):
             return RetryLater(f"capture outcome unknown: {detail}")
@@ -711,11 +688,14 @@ async def _complete_capture(
             )
 
 
-async def _complete_capture_lookup(
-    conn: Connection, fact: Fact, find: FindCall, result: FindResult, now: datetime
+async def _capture_looked_up(
+    conn: Connection,
+    attempt: Attempt,
+    account: PspAccount,
+    request_id: uuid.UUID,
+    result: FindResult,
+    now: datetime,
 ) -> Done | RetryLater:
-    attempt = await lock_attempt(conn, _authorised_id(fact))
-    account = await _account(conn, attempt)
     match result:
         case Found(payments=payments):
             for payment in payments:
@@ -732,7 +712,7 @@ async def _complete_capture_lookup(
                         now,
                     )
                 await _finish_request(
-                    conn, find.request_id, VendorRequestState.SUCCEEDED, now
+                    conn, request_id, VendorRequestState.SUCCEEDED, now
                 )
                 return await apply_payment(conn, attempt, account, payment, now)
             return await _needs_person(
@@ -749,20 +729,12 @@ async def _complete_capture_lookup(
 # --- psp_payment_cancel ---------------------------------------------------
 
 
-def _cancel_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case PaymentCancelWantedV1(payment_attempt_id=attempt_id):
-            return attempt_id
-        case _:
-            raise WrongFact(f"psp_payment_cancel got {fact!r}")
-
-
 async def prepare_cancel(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, attempt_id: uuid.UUID, now: datetime
 ) -> NoCall | CancelCall:
     """A cancel moves no money and cancelling twice leaves it cancelled, so
     it is always sent again after a lost answer."""
-    attempt = await lock_attempt(conn, _cancel_id(fact))
+    attempt = await lock_attempt(conn, attempt_id)
     if attempt.state != AttemptState.CANCELLING:
         return NoCall(Stale())
     assert attempt.provider_payment_id is not None
@@ -778,14 +750,22 @@ async def prepare_cancel(
     return CancelCall(account, request.id, attempt.provider_payment_id)
 
 
-async def _complete_cancel(
+async def send_cancel(
+    http: httpx2.AsyncClient, environment: Environment, call: CancelCall
+) -> CancelResult:
+    return await registry.cancel(
+        http, environment, call.account, call.provider_payment_id
+    )
+
+
+async def complete_cancel(
     conn: Connection,
-    fact: Fact,
+    attempt_id: uuid.UUID,
     cancel: CancelCall,
     result: CancelResult,
     now: datetime,
 ) -> Done | RetryLater:
-    attempt = await lock_attempt(conn, _cancel_id(fact))
+    attempt = await lock_attempt(conn, attempt_id)
     account = await _account(conn, attempt)
     match result:
         case ProviderPayment() as payment:
@@ -811,60 +791,79 @@ async def _complete_cancel(
             )
 
 
-# --- psp_payment_poll -----------------------------------------------------
-
-
-def _poll_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case (
-            PaymentPollDueV1(payment_attempt_id=attempt_id)
-            | PaymentEventsWantedV1(payment_attempt_id=attempt_id)
-        ):
-            return attempt_id
-        case _:
-            raise WrongFact(f"psp_payment_poll got {fact!r}")
+# --- psp_payment_poll and psp_payment_fetch ---------------------------------
 
 
 async def prepare_poll(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, attempt_id: uuid.UUID, now: datetime
 ) -> NoCall | PollCall:
     """A fetch only reads at the PSP: no request row, no guard. Not once
     the attempt has an end, whatever started it."""
-    attempt = await lock_attempt(conn, _poll_id(fact))
+    attempt = await lock_attempt(conn, attempt_id)
     if attempt.state not in OPEN_STATES or attempt.provider_payment_id is None:
         return NoCall(Stale())
     account = await _account(conn, attempt)
     return PollCall(account, attempt.provider_payment_id)
 
 
-async def _complete_poll(
+async def fetch_events(
+    http: httpx2.AsyncClient, environment: Environment, call: PollCall
+) -> FetchResult:
+    return await registry.fetch_events(
+        http, environment, call.account, call.provider_payment_id
+    )
+
+
+async def complete_poll(
     conn: Connection,
-    fact: Fact,
+    attempt_id: uuid.UUID,
     poll: PollCall,
     result: FetchResult,
     now: datetime,
 ) -> Done | RetryLater:
-    attempt = await lock_attempt(conn, _poll_id(fact))
-    account = poll.account
+    """`psp_payment_poll`: the page stored, and the next poll scheduled
+    while the account polls and the attempt is open. The page just stored
+    is not applied yet, so an end in it is seen by the next poll, which
+    then stops."""
+    attempt = await lock_attempt(conn, attempt_id)
+    stored = await _store_page(conn, poll, result, now)
+    if stored is not None:
+        return stored
+    if poll.account.status_mode == StatusMode.POLL and attempt.state in OPEN_STATES:
+        await append_fact(
+            conn,
+            PaymentPollDueV1(payment_attempt_id=attempt.id),
+            FLOW,
+            now,
+            deliver_at=now + poll.account.poll_interval,
+        )
+    return Done(Applied())
+
+
+async def complete_fetch(
+    conn: Connection,
+    attempt_id: uuid.UUID,
+    poll: PollCall,
+    result: FetchResult,
+    now: datetime,
+) -> Done | RetryLater:
+    """`psp_payment_fetch` (a QR's expiry, a thin webhook): the page
+    stored; schedules nothing."""
+    await lock_attempt(conn, attempt_id)
+    stored = await _store_page(conn, poll, result, now)
+    if stored is not None:
+        return stored
+    return Done(Applied())
+
+
+async def _store_page(
+    conn: Connection, poll: PollCall, result: FetchResult, now: datetime
+) -> RetryLater | None:
+    """Stored raw and decoded on the webhook's path; a failed fetch is
+    retried."""
     match result:
         case Page(body=body):
-            # Stored raw and decoded on the webhook's path.
-            await store_inbox(conn, account.id, InboundMode.POLL, body, None, now)
+            await store_inbox(conn, poll.account.id, InboundMode.POLL, body, None, now)
+            return None
         case Unavailable(detail=detail) | OutcomeUnknown(detail=detail):
             return RetryLater(f"poll: {detail}")
-    match fact:
-        case PaymentPollDueV1() if (
-            account.status_mode == StatusMode.POLL and attempt.state in OPEN_STATES
-        ):
-            # The page just stored is not applied yet, so an end in it is
-            # seen by the next poll, which then stops.
-            await append_fact(
-                conn,
-                PaymentPollDueV1(payment_attempt_id=attempt.id),
-                FLOW,
-                now,
-                deliver_at=now + account.poll_interval,
-            )
-        case _:
-            pass  # a QR's expiry or a thin webhook's fetch schedules nothing
-    return Done(Applied())

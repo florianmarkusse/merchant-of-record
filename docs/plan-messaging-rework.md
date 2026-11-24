@@ -2,7 +2,8 @@
 
 Status: 24-Nov-2026: §1, §3.1 and §3.2 built (commit 83a9a04). §3.3,
 the one table for every consumer, agreed 24-Nov-2026: the test seam and
-`duty_rate_ask` built 24-Nov-2026 (§1); next, the other effects.
+every effect consumer but echo's built 24-Nov-2026 (§1); next, the local
+consumers' locks into the table.
 Amends `plan-messaging.md` and the worker loop in
 `plan-architecture.md` §5.
 
@@ -45,6 +46,21 @@ when following a fact through the code.
   profile (it records no reach milestones). The other effects still run
   through the old driver, moved into `consumers.py` and marked
   transitional, so `consumers.py` is larger until they move.
+
+- 24-Nov-2026, §3.3 continued: `shipping_price_ask`, the five payment
+  consumers and `psp_settlement_fetch` run through `run_steps`. Create
+  and capture make one of two calls (send, or look up after a lost
+  answer under guard `none`), so their call step says which it made:
+  `CreateSent`, `CaptureSent` or `Looked`, three small records where five
+  `*Answer` records were. Poll and fetch share `prepare_poll` and
+  `fetch_events`; only `complete_poll` schedules the next poll (it
+  matched on the fact before). Settlement makes one of four reads whose
+  `complete` needs that read typed, so its four answer records stay as
+  its call step's result; the `call` `run_steps` also hands it goes
+  unused. The two tests that held a step open by hand
+  (`test_quote_concurrency`, `test_concurrent_workers`) now call the
+  consumer's own steps. Left on the old driver: the three echo
+  consumers.
 
 ## 2. Decided: drop ordering per consumer and aggregate
 

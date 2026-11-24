@@ -10,9 +10,10 @@ good like a duty rate. The guard is one open request per combination at a
 time (a partial unique index on the `requested` rows). A finished lookup is
 held until `usable_until`, by the account's rule in force when it is read.
 A rate call is a read, so asking again after a lost answer is safe; each
-call is counted before it is made. `prepare` and `complete` run in the
-worker's transactions under the lookup's row lock and never commit; `call`
-runs with no transaction open.
+call is counted before it is made. The consumer is three steps, run by
+`mor.messaging.delivery.run_steps`: `prepare_rate` and `complete_rate` in
+its transactions under the lookup's row lock (they never commit),
+`ask_rate` with no transaction open and no connection.
 """
 
 import uuid
@@ -47,14 +48,12 @@ from mor.couriers.records import (
 from mor.db.connect import Connection
 from mor.markets.store import latest_load, read_market
 from mor.messaging.facts import (
-    Fact,
     ShippingPriceFoundV1,
     ShippingPriceNeededV1,
     ShippingPriceNeedsPersonV1,
     ShippingPriceNotServedV1,
 )
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -77,17 +76,10 @@ class NoCourierAccount:
 
 @dataclass(frozen=True)
 class PriceCall:
+    """What `prepare_rate` committed to ask, for `ask_rate`."""
+
     account: CourierAccount
-    lookup_id: uuid.UUID
     question: PriceQuestion
-
-
-@dataclass(frozen=True)
-class PriceAnswer:
-    """The call and what the carrier said to it, from `call` to `complete`."""
-
-    call: PriceCall
-    result: QuoteRateResult
 
 
 # --- rows -----------------------------------------------------------------
@@ -371,14 +363,6 @@ async def _lock_lookup(conn: Connection, lookup_id: uuid.UUID) -> _LookupRow:
     return row
 
 
-def _lookup_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case ShippingPriceNeededV1(shipping_price_lookup_id=lookup_id):
-            return lookup_id
-        case _:
-            raise WrongFact(f"shipping_price_ask got {fact!r}")
-
-
 def _question(row: _LookupRow) -> PriceQuestion:
     return PriceQuestion(
         carrier=row.carrier,
@@ -394,11 +378,13 @@ def _question(row: _LookupRow) -> PriceQuestion:
     )
 
 
-# --- prepare, call, complete ----------------------------------------------
+# --- the consumer shipping_price_ask: prepare_rate, ask_rate, complete_rate ---
 
 
-async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | PriceCall:
-    lookup = await _lock_lookup(conn, _lookup_id(fact))
+async def prepare_rate(
+    conn: Connection, lookup_id: uuid.UUID, now: datetime
+) -> NoCall | PriceCall:
+    lookup = await _lock_lookup(conn, lookup_id)
     if lookup.state != PriceState.REQUESTED:
         return NoCall(Stale())
     account = await courier_account(conn, lookup.carrier)
@@ -412,24 +398,23 @@ async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | Price
         """,
         (now, lookup.id),
     )
-    return PriceCall(account, lookup.id, _question(lookup))
+    return PriceCall(account, _question(lookup))
 
 
-async def call(
-    http: httpx2.AsyncClient, environment: Environment, price_call: PriceCall
-) -> PriceAnswer:
-    result = await registry.quote_rate(
-        http, environment, price_call.account, price_call.question
-    )
-    return PriceAnswer(price_call, result)
+async def ask_rate(
+    http: httpx2.AsyncClient, environment: Environment, call: PriceCall
+) -> QuoteRateResult:
+    return await registry.quote_rate(http, environment, call.account, call.question)
 
 
-async def complete(
-    conn: Connection, fact: Fact, answer: PriceAnswer, now: datetime
+async def complete_rate(
+    conn: Connection,
+    lookup_id: uuid.UUID,
+    call: PriceCall,
+    result: QuoteRateResult,
+    now: datetime,
 ) -> Done | RetryLater:
-    lookup = await _lock_lookup(conn, _lookup_id(fact))
-    assert lookup.id == answer.call.lookup_id
-    result = answer.result
+    lookup = await _lock_lookup(conn, lookup_id)
     if lookup.state != PriceState.REQUESTED:
         return Done(Stale())
     match result:

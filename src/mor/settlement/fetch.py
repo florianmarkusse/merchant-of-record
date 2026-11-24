@@ -32,9 +32,8 @@ from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
-from mor.messaging.facts import Fact, PspSettlementDueV1
+from mor.messaging.facts import PspSettlementDueV1
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.payments.inbound import store_inbox
 from mor.psp import registry
@@ -89,7 +88,9 @@ type SettlementCall = ListCall | FileCall | PayoutCall | LinesCall
 
 @dataclass(frozen=True)
 class ListAnswer:
-    """A call and what the PSP said to it, from `call` to `complete`."""
+    """A read and what the PSP said to it, from `read_settlement` to
+    `complete_fetch`: the answer keeps its own read, typed, which the one
+    `call` that `run_steps` also hands `complete_fetch` cannot be."""
 
     call: ListCall
     result: SettlementListResult | UndecodableBody
@@ -143,14 +144,6 @@ async def start_settlement_reading(
     return True
 
 
-def _account_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case PspSettlementDueV1(psp_account_id=account_id):
-            return account_id
-        case _:
-            raise WrongFact(f"psp_settlement_fetch got {fact!r}")
-
-
 async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
     async with conn.cursor(row_factory=class_row(_Cursor)) as cur:
         await cur.execute(
@@ -163,10 +156,13 @@ async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
         return await one_row(cur, f"settlement cursor for {account_id}")
 
 
+# --- the consumer psp_settlement_fetch: prepare_fetch, read_settlement,
+# complete_fetch, run by mor.messaging.delivery.run_steps ----------------------
+
+
 async def prepare_fetch(
-    conn: Connection, fact: Fact, now: datetime
+    conn: Connection, account_id: uuid.UUID, now: datetime
 ) -> NoCall | SettlementCall:
-    account_id = _account_id(fact)
     account = await read_psp_account(conn, account_id)
     assert account is not None, f"no psp account {account_id}"
     cursor = await _lock_cursor(conn, account_id)
@@ -185,7 +181,7 @@ async def prepare_fetch(
                     return LinesCall(account, cursor.pending, cursor.pending_after)
 
 
-async def call_fetch(
+async def read_settlement(
     http: httpx2.AsyncClient, environment: Environment, settlement_call: SettlementCall
 ) -> SettlementAnswer:
     match settlement_call:
@@ -208,9 +204,13 @@ async def call_fetch(
 
 
 async def complete_fetch(
-    conn: Connection, fact: Fact, answer: SettlementAnswer, now: datetime
+    conn: Connection,
+    account_id: uuid.UUID,
+    call: SettlementCall,
+    answer: SettlementAnswer,
+    now: datetime,
 ) -> Done | RetryLater | Again:
-    account_id = _account_id(fact)
+    """`call` is the read as one union; each answer holds it typed."""
     await _lock_cursor(conn, account_id)
     match answer:
         case ListAnswer(call=call, result=result):
