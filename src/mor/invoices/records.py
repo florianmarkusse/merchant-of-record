@@ -19,7 +19,7 @@ class InvoiceSection(StrEnum):
     BORDER = "border"  # duty and tax paid at the border on the buyer's behalf
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class InvoiceLine:
     section: InvoiceSection
     description: str
@@ -29,7 +29,7 @@ class InvoiceLine:
     source: str | None  # taxes: where the rate came from
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class BuyerAddress:
     """Copied from the session's address. No email or phone."""
 
@@ -42,7 +42,7 @@ class BuyerAddress:
     country: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Series:
     """A numbering series, as `invoice_series` holds it."""
 
@@ -53,7 +53,7 @@ class Series:
     pad_width: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Invoice:
     id: uuid.UUID
     order_id: uuid.UUID

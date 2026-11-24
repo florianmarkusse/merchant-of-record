@@ -383,7 +383,7 @@ async def _lookup_for(
     return await read_lookup(conn, source.vendor, question)
 
 
-class AskForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class AskForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     country: str
     origin: str
     hs: str
@@ -425,7 +425,7 @@ async def ask_vendor(request: Request, database_url: str, now: datetime) -> Resp
     return RedirectResponse(f"{form.back}{separator}{note}", status_code=303)
 
 
-class PriceForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class PriceForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     country: str
     service: str
     weight: str

@@ -79,7 +79,7 @@ type ShipPartKind = Literal[
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ShipPart:
     kind: ShipPartKind
     name: str
@@ -122,7 +122,7 @@ class FromCard:
     zone: CardZone
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FromCarrier:
     """A price the carrier gave, as we hold it."""
 
@@ -133,7 +133,7 @@ class FromCarrier:
     own: OwnPrice | None  # our card's price when the carrier answered
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Offer:
     route: ShippingRoute
     service: Service

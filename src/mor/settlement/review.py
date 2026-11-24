@@ -31,7 +31,7 @@ class Balance:
     in_transit_minor: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AccountSummary:
     id: uuid.UUID
     name: str
@@ -42,7 +42,7 @@ class AccountSummary:
     open_payouts: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _AccountRow:
     id: uuid.UUID
     name: str
@@ -117,7 +117,7 @@ async def account_summary(
     return None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PayoutRow:
     """A payout and whether its lines add up yet. `difference` is its net
     less the exact sum of its lines arrived so far, in minor units; open
@@ -168,7 +168,7 @@ async def payouts_of(
         return await cur.fetchall()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ExceptionRow:
     id: uuid.UUID
     kind: ExceptionKind

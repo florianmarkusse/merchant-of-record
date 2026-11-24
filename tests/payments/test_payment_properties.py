@@ -76,14 +76,14 @@ def _part(
     kind: PartKind, amount: int, line: int | None, collector: Collector | None
 ) -> Part:
     return Part(
-        kind,
-        kind.value,
-        line,
-        Fraction(amount),
-        Money(amount, Currency.SGD),
-        RoundingMode.HALF_EVEN,
-        collector,
-        "test",
+        kind=kind,
+        label=kind.value,
+        line=line,
+        exact=Fraction(amount),
+        amount=Money(amount, Currency.SGD),
+        mode=RoundingMode.HALF_EVEN,
+        collector=collector,
+        source="test",
     )
 
 
@@ -110,12 +110,14 @@ def _paid_quotes(draw: st.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
         quantity = draw(st.integers(1, 5))
         lines.append(
             SoldLine(
-                "Item",
-                quantity,
-                price,
-                "apparel",
-                None,
-                Customs("Item", "VN", 100, None),
+                name="Item",
+                quantity=quantity,
+                unit_price=price,
+                category="apparel",
+                merchant_sku=None,
+                customs=Customs(
+                    description="Item", origin_country="VN", weight_g=100, hs_code=None
+                ),
             )
         )
         goods.append(_part(PartKind.GOODS, draw(st.integers(0, 10**8)), number, None))
@@ -136,28 +138,28 @@ def _paid_quotes(draw: st.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
         option_parts.append(_part(PartKind.FREIGHT, 1, None, None))
         total = 1
     option = StoredOption(
-        "opt",
-        "exp",
-        "Express",
-        ServiceTier.EXPRESS,
-        None,
-        total,
-        Standing.AGREED,
-        tuple(option_parts),
+        key="opt",
+        service="exp",
+        service_name="Express",
+        tier=ServiceTier.EXPRESS,
+        transit=None,
+        total_minor=total,
+        standing=Standing.AGREED,
+        parts=tuple(option_parts),
     )
     quote = MadeQuote(
-        uuid.uuid7(),
-        uuid.uuid7(),
-        uuid.uuid7(),
-        uuid.uuid7(),
-        NOW,
-        NOW,
-        Currency.SGD,
-        tuple(goods),
-        (option,),
-        (),
-        (),
-        QuoteInputs((), ()),
+        id=uuid.uuid7(),
+        session_id=uuid.uuid7(),
+        address_id=uuid.uuid7(),
+        load_id=uuid.uuid7(),
+        made_at=NOW,
+        valid_until=NOW,
+        currency=Currency.SGD,
+        goods=tuple(goods),
+        options=(option,),
+        placeholders=(),
+        not_offered=(),
+        inputs=QuoteInputs((), ()),
     )
     return quote, tuple(lines)
 

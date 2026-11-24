@@ -10,7 +10,7 @@ from mor.money.amount import Money
 from mor.provider_accounts import ProviderAccountKind
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Parcel:
     """One parcel per order (4c): its packed weight and box."""
 
@@ -20,7 +20,7 @@ class Parcel:
     height_mm: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PriceQuestion:
     """A price for one service on one lane, for one exact parcel."""
 
@@ -47,7 +47,7 @@ class PriceExpiry(StrEnum):
     OWN_PERIOD = "own_period"  # ours, whatever the carrier said
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CourierAccount:
     id: uuid.UUID
     carrier: str
@@ -94,7 +94,7 @@ class OwnPrice:
     total: Money
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StoredPrice:
     total: Money
     parts: tuple[PricePart, ...]  # in the total's currency; they sum to it
@@ -102,7 +102,7 @@ class StoredPrice:
     own: OwnPrice | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FinishedLookup:
     """A lookup that left `requested`: a price (`price` set), not served or
     needs a person (`detail`). `usable_until` is worked out when it is read,

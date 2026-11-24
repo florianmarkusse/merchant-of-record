@@ -22,7 +22,7 @@ from mor.psp.port import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _AccountRow:
     id: uuid.UUID
     name: str

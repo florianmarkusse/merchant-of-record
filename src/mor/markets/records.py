@@ -106,7 +106,7 @@ class Category:
     label: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Country:
     iso2: str
     name: str
@@ -115,7 +115,7 @@ class Country:
     status_note: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Group:
     code: str
     label: str
@@ -160,7 +160,7 @@ class Scope:
     group: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class LandedRate:
     line_no: int  # the row in landed_rates.csv, 2 for the first
     scope: Scope
@@ -184,7 +184,7 @@ class Preference:
     conditions: frozenset[PreferenceCondition]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class HsRate:
     """A rate for products whose HS code starts with `hs_prefix`, into one
     destination (or group), from one origin (None: any)."""
@@ -209,7 +209,7 @@ class DutySource:
     vendor: str | None  # the vendor's name (`zonos`); None exactly for own_only
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Registration:
     country: str
     scheme: str
@@ -217,7 +217,7 @@ class Registration:
     effective_from: date
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FxRate:
     """Units of `quote` per one unit of `base`, exact."""
 
@@ -315,7 +315,7 @@ class FeeComponent(StrEnum):
     MOR_MARGIN = "mor_margin"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Service:
     code: str
     provider: str
@@ -328,7 +328,7 @@ class Service:
     status: ResearchStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RateCard:
     code: str
     service: str
@@ -340,7 +340,7 @@ class RateCard:
     source: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CardZone:
     rate_card: str
     destination: str  # a country
@@ -348,7 +348,7 @@ class CardZone:
     status: ResearchStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CardRate:
     """The price of one weight break in one zone, in the card's currency.
     With a maximum, the card gives a range: an estimate, not a price."""
@@ -360,7 +360,7 @@ class CardRate:
     amount_max_minor: int | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Surcharge:
     line_no: int  # the row in surcharges.csv
     service: str
@@ -379,7 +379,7 @@ class Surcharge:
     source: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Transit:
     service: str
     scope: Scope
@@ -388,7 +388,7 @@ class Transit:
     status: ResearchStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ServiceRestriction:
     service: str
     category: str
@@ -396,7 +396,7 @@ class ServiceRestriction:
     status: ResearchStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ShippingRoute:
     """A service offered into a country or group, priced from a rate card
     (`own_table`) or by the carrier (`carrier_api`, no card)."""
@@ -415,7 +415,7 @@ class ShippingRoute:
         return f"live:{self.service}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FeeRule:
     """One fee component for buyers in a country or group (None: the
     default), from a date. A percentage of the merchant's price plus an
@@ -431,7 +431,7 @@ class FeeRule:
     source: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class MarketSet:
     """Everything one load holds. Tuples in file order."""
 

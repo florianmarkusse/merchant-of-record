@@ -46,14 +46,19 @@ from tests.quote.fixtures import live_market, quote_market
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "test")
-PARCEL = Parcel(1000, 200, 150, 100)
+PARCEL = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
 LINE = SoldLine(
-    "Linen shirt",
-    2,
-    Money(2500, Currency.SGD),
-    "apparel",
-    "LIN-01",
-    Customs("Men's linen shirt, woven", "VN", 300, "610910"),
+    name="Linen shirt",
+    quantity=2,
+    unit_price=Money(2500, Currency.SGD),
+    category="apparel",
+    merchant_sku="LIN-01",
+    customs=Customs(
+        description="Men's linen shirt, woven",
+        origin_country="VN",
+        weight_g=300,
+        hs_code="610910",
+    ),
 )
 SG_ADDRESS = {
     f.NAME: "Tan Mei Ling",
@@ -76,7 +81,7 @@ TH_ADDRESS = {
 }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Setup:
     url: str
     wired: Wired
@@ -108,12 +113,12 @@ async def _with_setup(
             conn,
             merchant.id,
             SessionDraft(
-                (line,),
-                PARCEL,
-                "order-1",
-                "https://shop.example/thanks",
-                "https://shop.example/cart",
-                AfterPayment.OUR_PAGE,
+                lines=(line,),
+                parcel=PARCEL,
+                merchant_reference="order-1",
+                return_url="https://shop.example/thanks",
+                cancel_url="https://shop.example/cart",
+                after_payment=AfterPayment.OUR_PAGE,
             ),
             ACTOR,
             NOW,
@@ -130,7 +135,11 @@ async def _with_setup(
         )
         await conn.commit()
     try:
-        await body(Setup(url, wired, clock, session.id, key.text))
+        await body(
+            Setup(
+                url=url, wired=wired, clock=clock, session_id=session.id, key=key.text
+            )
+        )
     finally:
         await wired.http.aclose()
         await wired.control.aclose()
@@ -191,11 +200,19 @@ def test_an_address_gets_a_stored_quote_and_the_page_shows_four_lines(
         built = build_quote(
             quote_market(),
             QuoteRequest(
-                "SG",
-                (QuoteLine("apparel", "610910", "VN", 2, Money(2500, Currency.SGD)),),
-                PARCEL,
-                NOW.date(),
-                NOW,
+                destination="SG",
+                lines=(
+                    QuoteLine(
+                        category="apparel",
+                        hs_code="610910",
+                        origin="VN",
+                        quantity=2,
+                        unit_price=Money(2500, Currency.SGD),
+                    ),
+                ),
+                parcel=PARCEL,
+                on=NOW.date(),
+                now=NOW,
             ),
             {},
             {},
@@ -277,12 +294,17 @@ def test_a_refused_quote_says_why_in_buyer_words(database_url: str) -> None:
         )
 
     no_hs = SoldLine(
-        LINE.name,
-        LINE.quantity,
-        LINE.unit_price,
-        LINE.category,
-        LINE.merchant_sku,
-        Customs("Men's linen shirt, woven", "VN", 300, None),
+        name=LINE.name,
+        quantity=LINE.quantity,
+        unit_price=LINE.unit_price,
+        category=LINE.category,
+        merchant_sku=LINE.merchant_sku,
+        customs=Customs(
+            description="Men's linen shirt, woven",
+            origin_country="VN",
+            weight_g=300,
+            hs_code=None,
+        ),
     )
     market = quote_market(duty_sources="TH,vendor,acme,\n")
     asyncio.run(_with_setup(database_url, body, market, no_hs))

@@ -75,7 +75,7 @@ class PaymentMethod(StrEnum):
     QR = "qr"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PspAccount:
     id: uuid.UUID
     name: str
@@ -94,7 +94,7 @@ class PspAccount:
     settlement_interval: timedelta
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PaymentRequest:
     reference: str  # our attempt id: lookups and settlement match on it
     amount: Money
@@ -127,7 +127,7 @@ class BuyerAction:
     expires_at: datetime | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ProviderPayment:
     provider_payment_id: str
     reference: str
@@ -188,7 +188,7 @@ class PspEventKind(StrEnum):
     CANCELLED = "cancelled"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PspEvent:
     vendor_event_id: str
     provider_payment_id: str
@@ -258,7 +258,7 @@ class LineType(StrEnum):
     BALANCE_TRANSFER = "balance_transfer"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SettlementPayout:
     """One transfer to our bank, as the PSP reports it. Amounts are exact in
     our minor units: a PSP may count finer than we do (IDR at 2 decimals)."""
@@ -269,7 +269,7 @@ class SettlementPayout:
     paid_out_at: datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SettledLine:
     vendor_line_id: str
     vendor_payout_id: str

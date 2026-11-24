@@ -49,8 +49,10 @@ ACTOR = Actor(ActorKind.SYSTEM, "test")
 VALID_FOR = timedelta(hours=24)
 # 1 kg in a box that weighs less by volume: billed 1 kg at the fake, and at
 # our card's 1 kg break.
-BOX = Parcel(1000, 200, 150, 100)
-TO_SG = PriceQuestion("carrier", "exp", "VN", "SG", BOX)
+BOX = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
+TO_SG = PriceQuestion(
+    carrier="carrier", service="exp", origin="VN", destination="SG", parcel=BOX
+)
 
 
 @dataclass
@@ -303,7 +305,9 @@ def test_a_price_in_another_currency_is_stored_as_the_carrier_gave_it(
 
 def test_a_carrier_without_an_account_here_cannot_be_asked(database_url: str) -> None:
     async def body(setup: Setup) -> None:
-        other = PriceQuestion("other", "exp", "VN", "SG", BOX)
+        other = PriceQuestion(
+            carrier="other", service="exp", origin="VN", destination="SG", parcel=BOX
+        )
         async with await connect(setup.url) as conn:
             asked = await request_shipping_price(conn, other, ACTOR, NOW)
         assert asked == NoCourierAccount("other")

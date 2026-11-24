@@ -155,7 +155,7 @@ class EchoInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True)
 
 
 class EchoVendorEventReceivedV1(
-    msgspec.Struct, frozen=True, forbid_unknown_fields=True
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True
 ):
     """One event about a job: decoded from the vendor's bytes (`inbox_id`
     set), or recorded by hand (`manual`, the person is the fact's actor)."""
@@ -249,7 +249,9 @@ class DutyRateNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     detail: str
 
 
-class DutyRateDisagreedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class DutyRateDisagreedV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True
+):
     """The vendor's rate for a charge differs from our own row's. Rates are
     exact fractions written as "numerator/denominator"."""
 
@@ -480,7 +482,9 @@ class PspInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     inbox_id: uuid.UUID
 
 
-class PspEventReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class PspEventReceivedV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True
+):
     """One PSP event about an attempt, decoded from stored bytes. The
     amount is ours, converted from the PSP's units."""
 
@@ -616,7 +620,7 @@ type Fact = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class UndecodableFact:
     message_type: MessageType
     schema_version: int

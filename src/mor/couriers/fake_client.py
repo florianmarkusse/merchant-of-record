@@ -38,7 +38,7 @@ class _Part(msgspec.Struct, frozen=True):
     amount_minor: int
 
 
-class _Answer(msgspec.Struct, frozen=True):
+class _Answer(msgspec.Struct, frozen=True, kw_only=True):
     currency: str
     total_minor: int
     parts: list[_Part]

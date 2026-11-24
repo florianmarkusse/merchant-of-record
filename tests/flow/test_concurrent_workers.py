@@ -212,7 +212,12 @@ def test_many_workers_number_invoices_without_a_gap(database_url: str) -> None:
                 setup.url, setup.shop.merchant_id, SGD_PRICE, setup.clock[0]
             )
             paid = Setup(
-                setup.url, setup.wired, setup.clock, setup.shop, session_id, option
+                url=setup.url,
+                wired=setup.wired,
+                clock=setup.clock,
+                shop=setup.shop,
+                session_id=session_id,
+                option=option,
             )
             await approve_at_the_psp(paid)
             await drain_all_but_invoices(paid)
@@ -246,9 +251,9 @@ def test_a_webhook_is_applied_while_the_capture_call_is_out(
     while our capture call is still out, and the capture's `complete` then
     finds the attempt captured and changes nothing more."""
     wiring = Wiring(
-        StatusMode.PUSH_FAT,
-        CaptureMode.AUTHORISE_CAPTURE,
-        DuplicateGuard.VENDOR_CONSTRAINT,
+        status_mode=StatusMode.PUSH_FAT,
+        capture_mode=CaptureMode.AUTHORISE_CAPTURE,
+        guard=DuplicateGuard.VENDOR_CONSTRAINT,
     )
 
     async def body(setup: Setup) -> None:

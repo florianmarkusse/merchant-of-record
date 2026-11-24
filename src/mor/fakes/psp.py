@@ -137,7 +137,7 @@ SIGNATURE_HEADER = "Psp-Signature"
 QR_LIFETIME = timedelta(minutes=15)
 
 
-class SetupBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class SetupBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     capture: Capture
     keyed: bool
     webhook_url: str | None = None
@@ -145,7 +145,9 @@ class SetupBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     webhook_payload: Literal["full", "thin"] | None = None
 
 
-class PaymentBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class PaymentBody(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True
+):
     reference: str
     amount_minor: int
     currency: str
@@ -182,7 +184,7 @@ class Action(msgspec.Struct, frozen=True):
     expires_at: datetime | None
 
 
-class Payment(msgspec.Struct, frozen=True):
+class Payment(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     reference: str
     amount_minor: int
@@ -192,7 +194,7 @@ class Payment(msgspec.Struct, frozen=True):
     action: Action | None
 
 
-class Event(msgspec.Struct, frozen=True):
+class Event(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     payment_id: str
     reference: str
@@ -293,7 +295,7 @@ async def _account(conn: FakeConnection, name: str) -> _Account | None:
             raise AssertionError(f"unknown capture {row.capture!r}")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _PaymentRow:
     id: str
     reference: str
@@ -313,7 +315,7 @@ async def _payment_rows(
         return await cur.fetchall()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _EventRow:
     id: str
     payment_id: str
@@ -456,7 +458,7 @@ def payout_amount(currency: str, net_minor: int) -> int:
     return units * 100
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _CutLine:
     type: str
     payment_id: str
@@ -1239,7 +1241,7 @@ async def _batches_after(conn: FakeConnection, account: str, after: str) -> list
     return found
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _BatchRow:
     currency: str
     net_minor: int
@@ -1260,7 +1262,7 @@ async def _batch(conn: FakeConnection, account: str, batch_id: str) -> _BatchRow
         return await cur.fetchone()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _BatchLineRow:
     id: str
     type: str

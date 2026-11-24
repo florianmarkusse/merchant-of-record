@@ -124,7 +124,12 @@ def test_invoice_numbers_run_on_across_orders_and_a_redelivery_takes_none(
             setup.url, setup.shop.merchant_id, SGD_PRICE, setup.clock[0]
         )
         second = Setup(
-            setup.url, setup.wired, setup.clock, setup.shop, second_id, option
+            url=setup.url,
+            wired=setup.wired,
+            clock=setup.clock,
+            shop=setup.shop,
+            session_id=second_id,
+            option=option,
         )
         await approve_at_the_psp(second)
         await drain(second)

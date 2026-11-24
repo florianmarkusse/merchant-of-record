@@ -58,14 +58,14 @@ class MoneyIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     currency: Annotated[str, Meta(pattern="^[A-Z]{3}$")]
 
 
-class CustomsIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class CustomsIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     description: Text
     origin_country: Country
     weight_g: Annotated[int, Meta(ge=1, le=1_000_000)]  # one unit's
     hs_code: Annotated[str, Meta(pattern="^[0-9]{4,10}$")] | None = None
 
 
-class LineIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class LineIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     name: Text
     quantity: Annotated[int, Meta(ge=1, le=10_000)]
     unit_price: MoneyIn
@@ -74,7 +74,7 @@ class LineIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     merchant_sku: Annotated[str, Meta(min_length=1, max_length=200)] | None = None
 
 
-class ParcelIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class ParcelIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     weight_g: Annotated[int, Meta(ge=1, le=1_000_000)]
     length_mm: Annotated[int, Meta(ge=1, le=10_000)]
     width_mm: Annotated[int, Meta(ge=1, le=10_000)]
@@ -84,7 +84,7 @@ class ParcelIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 type Lines = Annotated[list[LineIn], Meta(min_length=1, max_length=100)]
 
 
-class SessionIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class SessionIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     lines: Lines
     parcel: ParcelIn
     return_url: Url
@@ -135,7 +135,7 @@ type ErrorCode = Literal[
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ApiError:
     status: int
     type: ErrorType
@@ -145,7 +145,7 @@ class ApiError:
     retry_after_s: int | None = None
 
 
-class _ErrorBody(msgspec.Struct, frozen=True):
+class _ErrorBody(msgspec.Struct, frozen=True, kw_only=True):
     type: ErrorType
     code: ErrorCode
     message: str
@@ -311,14 +311,14 @@ def money_out(money: Money) -> MoneyOut:
     return MoneyOut(money.amount_minor, money.currency)
 
 
-class CustomsOut(msgspec.Struct, frozen=True):
+class CustomsOut(msgspec.Struct, frozen=True, kw_only=True):
     description: str
     origin_country: str
     weight_g: int
     hs_code: str | None
 
 
-class LineOut(msgspec.Struct, frozen=True):
+class LineOut(msgspec.Struct, frozen=True, kw_only=True):
     name: str
     quantity: int
     unit_price: MoneyOut
@@ -327,14 +327,14 @@ class LineOut(msgspec.Struct, frozen=True):
     customs: CustomsOut
 
 
-class ParcelOut(msgspec.Struct, frozen=True):
+class ParcelOut(msgspec.Struct, frozen=True, kw_only=True):
     weight_g: int
     length_mm: int
     width_mm: int
     height_mm: int
 
 
-class QuoteOptionOut(msgspec.Struct, frozen=True):
+class QuoteOptionOut(msgspec.Struct, frozen=True, kw_only=True):
     key: str
     service: str
     name: str
@@ -346,7 +346,7 @@ class RefusalOut(msgspec.Struct, frozen=True):
     message: str
 
 
-class QuoteOut(msgspec.Struct, frozen=True):
+class QuoteOut(msgspec.Struct, frozen=True, kw_only=True):
     """The buyer's quote, without its build-up (the estimate gives that)."""
 
     id: str
@@ -390,7 +390,7 @@ def quote_out(stored: StoredQuote) -> QuoteOut:
             )
 
 
-class SessionOut(msgspec.Struct, frozen=True):
+class SessionOut(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     object: str
     merchant: str
@@ -471,7 +471,7 @@ def _lines_out(sold: tuple[SoldLine, ...]) -> list[LineOut]:
 # --- orders and the merchant (docs/plan-payments.md §6.1) -------------------------
 
 
-class ShippingOut(msgspec.Struct, frozen=True):
+class ShippingOut(msgspec.Struct, frozen=True, kw_only=True):
     key: str
     service: str
     name: str
@@ -479,7 +479,7 @@ class ShippingOut(msgspec.Struct, frozen=True):
     transit_days_max: int | None
 
 
-class AddressOut(msgspec.Struct, frozen=True):
+class AddressOut(msgspec.Struct, frozen=True, kw_only=True):
     """The full address, for fulfilment: personal data."""
 
     name: str
@@ -493,7 +493,7 @@ class AddressOut(msgspec.Struct, frozen=True):
     country: str
 
 
-class OrderOut(msgspec.Struct, frozen=True):
+class OrderOut(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     object: str
     merchant: str
@@ -565,7 +565,7 @@ class SettingsIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     support_email: Email | None
 
 
-class MerchantOut(msgspec.Struct, frozen=True):
+class MerchantOut(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     object: str
     display_name: str

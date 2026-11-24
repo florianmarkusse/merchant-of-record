@@ -35,25 +35,33 @@ from tests.quote.fixtures import live_market
 
 ON = date(2026, 11, 18)
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
-BOX = Parcel(1000, 200, 150, 100)
-TO_SG = PriceQuestion("carrier", "exp", "VN", "SG", BOX)
+BOX = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
+TO_SG = PriceQuestion(
+    carrier="carrier", service="exp", origin="VN", destination="SG", parcel=BOX
+)
 # The same parts our exp_card charges for this parcel, so the totals of
 # test_build_quote.py hold.
 CARD_LIKE = StoredPrice(
-    Money(4650, Currency.SGD),
-    (
+    total=Money(4650, Currency.SGD),
+    parts=(
         PricePart(PricePartKind.FREIGHT, "freight", 3000),
         PricePart(PricePartKind.SURCHARGE, "demand", 100),
         PricePart(PricePartKind.FUEL, "fuel", 1550),
     ),
-    None,
-    None,
+    carrier_valid_until=None,
+    own=None,
 )
 
 
 def _request(minor: int, parcel: Parcel = BOX) -> QuoteRequest:
-    line = QuoteLine("apparel", "610910", "VN", 1, Money(minor, Currency.SGD))
-    return QuoteRequest("SG", (line,), parcel, ON, NOW)
+    line = QuoteLine(
+        category="apparel",
+        hs_code="610910",
+        origin="VN",
+        quantity=1,
+        unit_price=Money(minor, Currency.SGD),
+    )
+    return QuoteRequest(destination="SG", lines=(line,), parcel=parcel, on=ON, now=NOW)
 
 
 def _held(
@@ -62,7 +70,13 @@ def _held(
     usable_until: datetime = NOW + timedelta(hours=1),
 ) -> PriceHeld:
     finished = FinishedLookup(
-        uuid.uuid7(), state, 1, None, NOW - timedelta(hours=1), usable_until, price
+        id=uuid.uuid7(),
+        state=state,
+        calls=1,
+        detail=None,
+        finished_at=NOW - timedelta(hours=1),
+        usable_until=usable_until,
+        price=price,
     )
     return PriceHeld(finished, None)
 
@@ -78,11 +92,13 @@ def _option(result: QuoteResult, key: str) -> ShippingOption:
 def test_a_live_route_waits_for_the_carrier_then_quotes_with_its_parts() -> None:
     market = live_market()
     request = _request(50000)
-    assert build_quote(market, request, {}, {}) == InputsMissing((), (), (TO_SG,), ())
+    assert build_quote(market, request, {}, {}) == InputsMissing(
+        asks=(), waiting=(), price_asks=(TO_SG,), price_waiting=()
+    )
     open_id = uuid.uuid7()
     waiting = {TO_SG: PriceHeld(None, open_id)}
     assert build_quote(market, request, {}, waiting) == InputsMissing(
-        (), (), (), (open_id,)
+        asks=(), waiting=(), price_asks=(), price_waiting=(open_id,)
     )
 
     held = _held()
@@ -114,16 +130,16 @@ def test_a_price_is_never_used_from_its_usable_until_on() -> None:
     market = live_market()
     held = _held(usable_until=NOW)
     assert build_quote(market, _request(50000), {}, {TO_SG: held}) == InputsMissing(
-        (), (), (TO_SG,), ()
+        asks=(), waiting=(), price_asks=(TO_SG,), price_waiting=()
     )
 
 
 def test_a_carrier_price_in_another_currency_is_converted_and_rounded_up() -> None:
     in_vnd = StoredPrice(
-        Money(500_001, Currency.VND),
-        (PricePart(PricePartKind.FREIGHT, "freight", 500_001),),
-        None,
-        None,
+        total=Money(500_001, Currency.VND),
+        parts=(PricePart(PricePartKind.FREIGHT, "freight", 500_001),),
+        carrier_valid_until=None,
+        own=None,
     )
     held = _held(price=in_vnd)
     option = _option(
@@ -149,6 +165,8 @@ def test_not_served_or_an_unread_answer_leaves_the_option_out() -> None:
 
 
 def test_a_parcel_over_the_services_limit_is_never_asked_about() -> None:
-    heavy = Parcel(31_000, 100, 100, 100)  # exp carries up to 30 kg
+    heavy = Parcel(
+        weight_g=31_000, length_mm=100, width_mm=100, height_mm=100
+    )  # exp carries up to 30 kg
     result = build_quote(live_market(), _request(10000, heavy), {}, {})
     assert not isinstance(result, InputsMissing), result

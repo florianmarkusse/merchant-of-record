@@ -76,7 +76,7 @@ class _Action(msgspec.Struct, frozen=True):
     expires_at: AwareDatetime | None
 
 
-class _Payment(msgspec.Struct, frozen=True):
+class _Payment(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     reference: str
     amount_minor: int
@@ -101,7 +101,7 @@ class _Refusal(msgspec.Struct, frozen=True):
     payment: _Payment | None = None
 
 
-class _Event(msgspec.Struct, frozen=True):
+class _Event(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     payment_id: str
     reference: str
@@ -394,7 +394,7 @@ class _Payouts(msgspec.Struct, frozen=True):
     payouts: list[str]
 
 
-class _Payout(msgspec.Struct, frozen=True):
+class _Payout(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     amount_minor: int
     currency: str
@@ -402,7 +402,7 @@ class _Payout(msgspec.Struct, frozen=True):
     reconciliation_status: Literal["in_progress", "completed"]
 
 
-class _Line(msgspec.Struct, frozen=True):
+class _Line(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     type: str
     payment_id: str

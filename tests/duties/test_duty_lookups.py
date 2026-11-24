@@ -44,7 +44,7 @@ T_SHIRT = RateQuestion("TH", "VN", "610910")
 TH_HS = "TH,6109,duty,,,,30,,secondary,WTO,https://example.test,,,\n"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Setup:
     url: str
     http: httpx2.AsyncClient
@@ -68,7 +68,7 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
                 timedelta(milliseconds=200),
             )
             await conn.commit()
-        await body(Setup(url, http, network, worker))
+        await body(Setup(url=url, http=http, network=network, worker=worker))
 
 
 async def _ask(setup: Setup, question: RateQuestion = T_SHIRT) -> uuid.UUID:

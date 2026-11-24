@@ -23,10 +23,10 @@ from tests.payments.support import (
 
 
 WIRING = Wiring(
-    StatusMode.PUSH_FAT,
-    CaptureMode.SALE,
-    DuplicateGuard.VENDOR_CONSTRAINT,
-    SettlementMode.FILE,
+    status_mode=StatusMode.PUSH_FAT,
+    capture_mode=CaptureMode.SALE,
+    guard=DuplicateGuard.VENDOR_CONSTRAINT,
+    settlement_mode=SettlementMode.FILE,
 )
 SAME_SITE = {"origin": "http://mor"}
 

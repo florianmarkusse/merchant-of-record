@@ -61,13 +61,18 @@ def _part(offer: Offer, kind: ShipPartKind) -> Fraction:
 
 def test_a_bulky_box_is_billed_by_volume_at_the_next_weight_break() -> None:
     # 400 g in 30 x 25 x 10 cm: 7,500 cm³ / 5,000 = 1.5 kg, billed as 2 kg.
-    offer = _express(quote_market(), Parcel(400, 300, 250, 100))
+    offer = _express(
+        quote_market(), Parcel(weight_g=400, length_mm=300, width_mm=250, height_mm=100)
+    )
     assert offer.chargeable_kg == Fraction(3, 2) and offer.billed_kg == 2
     assert _part(offer, PartKind.FREIGHT) == 4500
 
 
 def test_fuel_is_charged_on_the_freight_and_the_surcharges_it_applies_to() -> None:
-    offer = _express(quote_market(), Parcel(1000, 100, 100, 100))
+    offer = _express(
+        quote_market(),
+        Parcel(weight_g=1000, length_mm=100, width_mm=100, height_mm=100),
+    )
     assert _part(offer, PartKind.FREIGHT) == 3000
     assert _part(offer, PartKind.SURCHARGE) == 100  # demand, SGD 1.00 per kg
     assert _part(offer, PartKind.FUEL) == Fraction(3100, 2)
@@ -78,14 +83,17 @@ def test_fuel_is_charged_on_the_freight_and_the_surcharges_it_applies_to() -> No
 
 
 def test_a_fuel_rate_past_its_week_is_still_used_and_flagged() -> None:
-    parcel = Parcel(1000, 100, 100, 100)
+    parcel = Parcel(weight_g=1000, length_mm=100, width_mm=100, height_mm=100)
     assert _express(quote_market(), parcel, ON).fuel_stale_since == date(2026, 11, 15)
     assert _express(quote_market(), parcel, date(2026, 11, 14)).fuel_stale_since is None
 
 
 def test_a_card_is_left_out_with_the_reason() -> None:
-    small = Parcel(500, 100, 100, 100)
-    heavy = _offers(quote_market(), Parcel(3000, 100, 100, 100))["eco_card"]
+    small = Parcel(weight_g=500, length_mm=100, width_mm=100, height_mm=100)
+    heavy = _offers(
+        quote_market(),
+        Parcel(weight_g=3000, length_mm=100, width_mm=100, height_mm=100),
+    )["eco_card"]
     assert (
         isinstance(heavy, NotOffered) and heavy.reason == NotOfferedReason.OVER_WEIGHT
     )

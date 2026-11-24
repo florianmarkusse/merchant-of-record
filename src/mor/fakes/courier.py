@@ -61,7 +61,7 @@ LONG_PAST = datetime(2000, 1, 1, tzinfo=UTC)
 VND_PER_US_CENT = 250  # `other_currency`: roughly 25,000 VND to the dollar
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FakeRate:
     currency: str
     base_minor: int
@@ -81,7 +81,7 @@ DEFAULT_RATE = FakeRate(
 )
 
 
-class AskBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class AskBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     service: str
     origin: str
     destination: str
@@ -91,7 +91,7 @@ class AskBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     height_mm: int
 
 
-class RateBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class RateBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     service: str
     destination: str
     currency: str

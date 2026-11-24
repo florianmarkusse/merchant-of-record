@@ -32,7 +32,7 @@ def collected_by(collector: Collector | None) -> Literal["customs", "us"] | None
             return "us"
 
 
-class PartOut(msgspec.Struct, frozen=True):
+class PartOut(msgspec.Struct, frozen=True, kw_only=True):
     group: PartGroup
     kind: PartKind
     line: int | None
@@ -45,7 +45,7 @@ class TransitOut(msgspec.Struct, frozen=True):
     max_days: int
 
 
-class OptionOut(msgspec.Struct, frozen=True):
+class OptionOut(msgspec.Struct, frozen=True, kw_only=True):
     key: str
     service: str
     name: str
@@ -60,7 +60,7 @@ class NotOfferedOut(msgspec.Struct, frozen=True):
     reason: NotOfferedReason
 
 
-class EstimateOut(msgspec.Struct, frozen=True):
+class EstimateOut(msgspec.Struct, frozen=True, kw_only=True):
     object: str
     country: str
     currency: Currency

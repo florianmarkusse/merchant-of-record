@@ -58,7 +58,7 @@ from mor.tax.paths import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class OrderCheck:
     country: str
     category: str
@@ -96,7 +96,7 @@ class OwnData:
     differs: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ChargeRow:
     charge: Charge
     collected: str  # "at the border, on every order", "not due: …"
@@ -116,7 +116,7 @@ class DataRow:
     research: str | None  # how well the row is researched; None for a vendor
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Explained:
     summary: tuple[str, ...]  # sentences, most important first
     charges: tuple[ChargeRow, ...]

@@ -2,6 +2,7 @@ import psycopg
 from psycopg.rows import TupleRow
 
 from mor.db.enums import register_enums
+from mor.db.numeric import WholeNumericLoader
 
 
 type Connection = psycopg.AsyncConnection[TupleRow]
@@ -23,6 +24,7 @@ async def connect(database_url: str, autocommit: bool = False) -> Connection:
         database_url, autocommit=autocommit, options=SESSION_OPTIONS
     )
     await register_enums(conn)
+    conn.adapters.register_loader("numeric", WholeNumericLoader)
     if not autocommit:
         # The catalog read opened a transaction; the caller's work starts
         # its own, as it would on a fresh connection.

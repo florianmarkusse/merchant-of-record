@@ -10,7 +10,7 @@ from psycopg.rows import class_row
 from mor.db.connect import Connection
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Order:
     id: uuid.UUID
     session_id: uuid.UUID

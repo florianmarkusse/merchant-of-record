@@ -114,7 +114,7 @@ type EchoAnswer = SendAnswer | FindAnswer | CancelAnswer
 # --- rows -----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _JobRow:
     id: uuid.UUID
     account_id: uuid.UUID
@@ -124,7 +124,7 @@ class _JobRow:
     refusal: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _AccountRow:
     id: uuid.UUID
     provider: EchoProvider
@@ -133,7 +133,7 @@ class _AccountRow:
     timeout_ms: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _RequestRow:
     id: uuid.UUID
     number: int

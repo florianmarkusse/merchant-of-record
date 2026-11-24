@@ -63,7 +63,7 @@ from mor.money.currency import Currency
 LOAD_LOCK = "markets:load"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class LoadRow:
     id: uuid.UUID
     content_sha256: str
@@ -574,7 +574,7 @@ def _optional_fraction(
     return Fraction(numerator, denominator)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _GroupRow:
     code: str
     label: str
@@ -606,7 +606,7 @@ async def _read_groups(conn: Connection, load_id: uuid.UUID) -> tuple[Group, ...
     return tuple(groups)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _LandedRow:
     line_no: int
     country_iso2: str | None
@@ -690,7 +690,7 @@ def _landed_from_row(row: _LandedRow) -> LandedRate:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _FxRow:
     base_currency: Currency
     quote_currency: Currency
@@ -725,7 +725,7 @@ async def _read_fx_rates(conn: Connection, load_id: uuid.UUID) -> tuple[FxRate, 
     return tuple(fx_rates)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _HsRow:
     line_no: int
     country_iso2: str | None
@@ -781,7 +781,7 @@ async def _read_hs_rates(conn: Connection, load_id: uuid.UUID) -> tuple[HsRate, 
 # --- shipping -----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _Shipping:
     services: tuple[Service, ...]
     rate_cards: tuple[RateCard, ...]
@@ -830,7 +830,7 @@ async def _read_shipping(conn: Connection, load_id: uuid.UUID) -> _Shipping:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _ServiceRow:
     code: str
     provider: str
@@ -873,7 +873,7 @@ async def _read_services(conn: Connection, load_id: uuid.UUID) -> tuple[Service,
     return tuple(services)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _CardRateRow:
     rate_card: str
     zone: str
@@ -909,7 +909,7 @@ async def _read_card_rates(
     return tuple(rates)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _SurchargeRow:
     line_no: int
     service: str
@@ -966,7 +966,7 @@ async def _read_surcharges(
     return tuple(surcharges)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _TransitRow:
     service: str
     country_iso2: str | None
@@ -999,7 +999,7 @@ async def _read_transit(conn: Connection, load_id: uuid.UUID) -> tuple[Transit, 
     return tuple(transit)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _RouteRow:
     country_iso2: str | None
     group_code: str | None
@@ -1034,7 +1034,7 @@ async def _read_routes(
     return tuple(routes)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _FeeRow:
     line_no: int
     component: FeeComponent

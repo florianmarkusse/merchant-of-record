@@ -54,7 +54,12 @@ async def _count(url: str, query: bytes) -> int:
 
 
 def _echo_candidate(message_id: uuid.UUID, probe_id: uuid.UUID) -> Candidate:
-    return Candidate(message_id, ConsumerName.PROBE_ECHO, AggregateType.PROBE, probe_id)
+    return Candidate(
+        message_id=message_id,
+        consumer=ConsumerName.PROBE_ECHO,
+        aggregate_type=AggregateType.PROBE,
+        aggregate_id=probe_id,
+    )
 
 
 async def _only_candidate(conn: Connection, now: datetime) -> Candidate:

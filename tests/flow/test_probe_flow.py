@@ -225,10 +225,10 @@ class ProbeFlow(RuleBasedStateMachine):
         for message_id, consumer, aggregate_id in await cur.fetchall():
             deliveries.append(
                 Candidate(
-                    message_id,
-                    ConsumerName(consumer),
-                    AggregateType.PROBE,
-                    aggregate_id,
+                    message_id=message_id,
+                    consumer=ConsumerName(consumer),
+                    aggregate_type=AggregateType.PROBE,
+                    aggregate_id=aggregate_id,
                 )
             )
         return deliveries

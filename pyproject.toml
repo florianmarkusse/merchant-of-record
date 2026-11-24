@@ -25,11 +25,22 @@ line-length = 88
 
 [tool.ruff.lint]
 # The shared baseline (~/Desktop/conventions/AGENTS.md).
-select = ["E", "F", "I", "UP", "B", "DTZ005", "DTZ011"]
+# All of DTZ: timestamps are aware UTC. A: no shadowing of builtins (AGENTS.md,
+# Code Style). TID251: the banned APIs below, each with its rule.
+select = ["E", "F", "I", "UP", "B", "DTZ", "A", "TID251"]
 
 [tool.ruff.lint.per-file-ignores]
 # Vulture's whitelist format is bare attribute expressions.
 "vulture_whitelist.py" = ["B018"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.TYPE_CHECKING".msg = "No TYPE_CHECKING imports: move shared types to a third module."
+"typing.TypedDict".msg = "Records are frozen dataclasses or msgspec structs (AGENTS.md)."
+"pydantic".msg = "Records are frozen dataclasses or msgspec structs (AGENTS.md)."
+"httpx".msg = "Outgoing HTTP uses httpx2 (AGENTS.md, decided 17-Nov-2026)."
+"functools.partial".msg = "No partial-style indirection: call the function."
+"psycopg.sql".msg = "No SQL composed at runtime: literal SQL with named placeholders."
+"decimal.Decimal".msg = "Money is int minor units, rates are fractions.Fraction (AGENTS.md)."
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2

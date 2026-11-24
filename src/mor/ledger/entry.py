@@ -23,7 +23,7 @@ class Line:
     amount: Money
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class JournalEntry:
     id: uuid.UUID
     idempotency_key: str

@@ -502,7 +502,10 @@ class EchoFlow(RuleBasedStateMachine):
         for message_id, job_id in await cur.fetchall():
             handled.append(
                 Candidate(
-                    message_id, ConsumerName.ECHO_SEND, AggregateType.ECHO_JOB, job_id
+                    message_id=message_id,
+                    consumer=ConsumerName.ECHO_SEND,
+                    aggregate_type=AggregateType.ECHO_JOB,
+                    aggregate_id=job_id,
                 )
             )
         return handled

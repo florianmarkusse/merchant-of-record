@@ -8,7 +8,6 @@ stored; `read_quote` gives the same record back, which a property checks.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
 from fractions import Fraction
 
 from psycopg.rows import class_row
@@ -25,7 +24,7 @@ from mor.quote.refusals import RefusalCode
 from mor.quote.shipping import NotOfferedReason
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StoredOption:
     key: str
     service: str
@@ -45,7 +44,7 @@ class QuoteInputs:
     price_lookups: tuple[uuid.UUID, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class MadeQuote:
     id: uuid.UUID
     session_id: uuid.UUID
@@ -61,7 +60,7 @@ class MadeQuote:
     inputs: QuoteInputs
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RefusedQuote:
     id: uuid.UUID
     session_id: uuid.UUID
@@ -263,7 +262,7 @@ async def store_refused(conn: Connection, refused: RefusedQuote) -> None:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _QuoteRow:
     id: uuid.UUID
     session_id: uuid.UUID
@@ -283,21 +282,21 @@ class _NotOfferedRow:
     reason: NotOfferedReason
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _PartRow:
     option_no: int | None
     kind: PartKind
     label: str
     line: int | None
-    exact_numerator: Decimal
-    exact_denominator: Decimal
+    exact_numerator: int
+    exact_denominator: int
     amount_minor: int
     rounding: RoundingMode
     collector: Collector | None
     source: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _OptionRow:
     option_no: int
     key: str
@@ -332,7 +331,7 @@ def _part(row: _PartRow, currency: Currency) -> Part:
         kind=row.kind,
         label=row.label,
         line=row.line,
-        exact=Fraction(int(row.exact_numerator), int(row.exact_denominator)),
+        exact=Fraction(row.exact_numerator, row.exact_denominator),
         amount=Money(row.amount_minor, currency),
         mode=row.rounding,
         collector=row.collector,

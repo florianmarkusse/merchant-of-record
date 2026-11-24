@@ -116,7 +116,7 @@ class LinesAnswer:
 type SettlementAnswer = ListAnswer | FileAnswer | PayoutAnswer | LinesAnswer
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _Cursor:
     last_read: str | None
     pending: str | None

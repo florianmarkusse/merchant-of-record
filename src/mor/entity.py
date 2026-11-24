@@ -14,7 +14,7 @@ class TaxRegistration:
     number: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SellingEntity:
     code: str  # names its invoice series (`invoice_series.entity`)
     legal_name: str

@@ -80,7 +80,10 @@ from tests.quote.fixtures import live_market
 
 T0 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "fuzz")
-PARCELS = (Parcel(1000, 200, 150, 100), Parcel(2500, 400, 300, 200))
+PARCELS = (
+    Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100),
+    Parcel(weight_g=2500, length_mm=400, width_mm=300, height_mm=200),
+)
 FAULTS = (
     "fail_500",
     "timeout_after_work",
@@ -95,13 +98,29 @@ FAULTS = (
 def _address(country: str, n: int) -> Address:
     if country == "SG":
         return Address(
-            f"Buyer {n}", f"b{n}@example.test", "+65", "91234567",
-            "1 Example Road", None, "Singapore", None, "123456", "SG",
-        )  # fmt: skip
+            name=f"Buyer {n}",
+            email=f"b{n}@example.test",
+            phone_dial_code="+65",
+            phone_number="91234567",
+            line1="1 Example Road",
+            line2=None,
+            city="Singapore",
+            region=None,
+            postcode="123456",
+            country="SG",
+        )
     return Address(
-        f"Buyer {n}", f"b{n}@example.test", "+66", "812345678",
-        "99/1 Soi Example", None, "Khlong Toei", "Bangkok", "10110", "TH",
-    )  # fmt: skip
+        name=f"Buyer {n}",
+        email=f"b{n}@example.test",
+        phone_dial_code="+66",
+        phone_number="812345678",
+        line1="99/1 Soi Example",
+        line2=None,
+        city="Khlong Toei",
+        region="Bangkok",
+        postcode="10110",
+        country="TH",
+    )
 
 
 class QuoteFlow(RuleBasedStateMachine):
@@ -374,23 +393,28 @@ class QuoteFlow(RuleBasedStateMachine):
             sessions: list[uuid.UUID] = []
             for parcel in PARCELS:
                 line = SoldLine(
-                    "Linen shirt",
-                    1,
-                    Money(2500, Currency.SGD),
-                    "apparel",
-                    None,
-                    Customs("Linen shirt", "VN", 300, "610910"),
+                    name="Linen shirt",
+                    quantity=1,
+                    unit_price=Money(2500, Currency.SGD),
+                    category="apparel",
+                    merchant_sku=None,
+                    customs=Customs(
+                        description="Linen shirt",
+                        origin_country="VN",
+                        weight_g=300,
+                        hs_code="610910",
+                    ),
                 )
                 session = await create_session(
                     conn,
                     merchant.id,
                     SessionDraft(
-                        (line,),
-                        parcel,
-                        None,
-                        "https://shop.example/thanks",
-                        "https://shop.example/cart",
-                        AfterPayment.OUR_PAGE,
+                        lines=(line,),
+                        parcel=parcel,
+                        merchant_reference=None,
+                        return_url="https://shop.example/thanks",
+                        cancel_url="https://shop.example/cart",
+                        after_payment=AfterPayment.OUR_PAGE,
                     ),
                     ACTOR,
                     T0,

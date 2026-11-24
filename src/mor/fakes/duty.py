@@ -59,7 +59,7 @@ class AskBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     hs_code: str
 
 
-class RateBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+class RateBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
     destination: str
     hs_prefix: str
     duty: str

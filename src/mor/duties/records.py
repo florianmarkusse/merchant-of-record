@@ -18,7 +18,7 @@ class LookupState(StrEnum):
     NEEDS_PERSON = "needs_person"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StoredAnswer:
     """The vendor's answer for one charge, and what our own rows said when
     it came (None: we had no row)."""
@@ -32,7 +32,7 @@ class StoredAnswer:
     own_line_no: int | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class VendorLookup:
     id: uuid.UUID
     vendor: str

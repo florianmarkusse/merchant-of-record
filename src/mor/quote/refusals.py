@@ -44,7 +44,7 @@ type RefusalCode = Literal[
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Refusal:
     code: RefusalCode
     message: str

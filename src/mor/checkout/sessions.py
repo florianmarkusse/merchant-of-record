@@ -120,7 +120,7 @@ async def create_session(
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _SessionRow:
     id: uuid.UUID
     merchant_id: uuid.UUID
@@ -139,7 +139,7 @@ class _SessionRow:
     quote_id: uuid.UUID | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _LineRow:
     name: str
     quantity: int
@@ -334,7 +334,7 @@ async def read_address(conn: Connection, address_id: uuid.UUID) -> Address | Non
         return await cur.fetchone()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SessionSummary:
     """One row of the staff page's session list."""
 

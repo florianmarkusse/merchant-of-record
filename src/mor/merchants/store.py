@@ -212,7 +212,7 @@ async def merchant_has_key(conn: Connection, merchant_id: uuid.UUID) -> bool:
     return await cur.fetchone() is not None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _KeyRow:
     merchant_id: uuid.UUID
     env: KeyEnv

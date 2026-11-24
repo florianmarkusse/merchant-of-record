@@ -129,7 +129,7 @@ async def time_out_at_once() -> None:
 VENDOR_TIMEOUT = timedelta(seconds=30)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Wired:
     """Our app with the fakes mounted, all in-process. `http` is how our
     code reaches vendors (through `network`, which can refuse); the fakes'
@@ -159,10 +159,10 @@ def wire(database_url: str, clock: Callable[[], datetime]) -> Wired:
     built.append(app)
     network = RefusingTransport(httpx2.ASGITransport(app=app))
     return Wired(
-        app,
-        httpx2.AsyncClient(transport=network),
-        network,
-        httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app)),
+        app=app,
+        http=httpx2.AsyncClient(transport=network),
+        network=network,
+        control=httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app)),
     )
 
 

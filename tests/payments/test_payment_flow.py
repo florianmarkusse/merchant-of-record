@@ -138,7 +138,11 @@ def test_card_payment_completes_the_session_with_one_order_and_its_entry(
 def test_poll_account_captures_once_after_the_buyer_approves(
     database_url: str,
 ) -> None:
-    wiring = Wiring(StatusMode.POLL, CaptureMode.AUTHORISE_CAPTURE, DuplicateGuard.NONE)
+    wiring = Wiring(
+        status_mode=StatusMode.POLL,
+        capture_mode=CaptureMode.AUTHORISE_CAPTURE,
+        guard=DuplicateGuard.NONE,
+    )
 
     async def body(setup: Setup) -> None:
         await pay_on_page(setup)
@@ -176,7 +180,9 @@ def test_qr_payment_on_thin_webhooks_shows_the_code_and_completes(
     database_url: str,
 ) -> None:
     wiring = Wiring(
-        StatusMode.PUSH_THIN, CaptureMode.SALE, DuplicateGuard.VENDOR_CONSTRAINT
+        status_mode=StatusMode.PUSH_THIN,
+        capture_mode=CaptureMode.SALE,
+        guard=DuplicateGuard.VENDOR_CONSTRAINT,
     )
 
     async def body(setup: Setup) -> None:
@@ -367,7 +373,11 @@ def test_a_lost_create_answer_is_sent_again_on_a_keyed_account(
 def test_a_lost_create_answer_is_looked_up_on_an_unkeyed_account(
     database_url: str,
 ) -> None:
-    wiring = Wiring(StatusMode.PUSH_FAT, CaptureMode.SALE, DuplicateGuard.NONE)
+    wiring = Wiring(
+        status_mode=StatusMode.PUSH_FAT,
+        capture_mode=CaptureMode.SALE,
+        guard=DuplicateGuard.NONE,
+    )
 
     async def body(setup: Setup) -> None:
         await setup.wired.control.post(
@@ -395,7 +405,11 @@ def test_a_lost_create_answer_is_looked_up_on_an_unkeyed_account(
 def test_a_lost_create_the_psp_never_shows_goes_to_a_person(
     database_url: str,
 ) -> None:
-    wiring = Wiring(StatusMode.PUSH_FAT, CaptureMode.SALE, DuplicateGuard.NONE)
+    wiring = Wiring(
+        status_mode=StatusMode.PUSH_FAT,
+        capture_mode=CaptureMode.SALE,
+        guard=DuplicateGuard.NONE,
+    )
 
     async def body(setup: Setup) -> None:
         await setup.wired.control.post(
@@ -502,9 +516,9 @@ def test_a_lost_capture_answer_on_a_keyed_account_captures_once(
     database_url: str,
 ) -> None:
     wiring = Wiring(
-        StatusMode.PUSH_FAT,
-        CaptureMode.AUTHORISE_CAPTURE,
-        DuplicateGuard.VENDOR_CONSTRAINT,
+        status_mode=StatusMode.PUSH_FAT,
+        capture_mode=CaptureMode.AUTHORISE_CAPTURE,
+        guard=DuplicateGuard.VENDOR_CONSTRAINT,
     )
 
     async def body(setup: Setup) -> None:
@@ -537,7 +551,11 @@ def test_a_lost_capture_answer_on_a_keyed_account_captures_once(
 def test_a_lost_capture_answer_on_an_unkeyed_account_goes_to_a_person(
     database_url: str,
 ) -> None:
-    wiring = Wiring(StatusMode.POLL, CaptureMode.AUTHORISE_CAPTURE, DuplicateGuard.NONE)
+    wiring = Wiring(
+        status_mode=StatusMode.POLL,
+        capture_mode=CaptureMode.AUTHORISE_CAPTURE,
+        guard=DuplicateGuard.NONE,
+    )
 
     async def body(setup: Setup) -> None:
         await pay_on_page(setup)

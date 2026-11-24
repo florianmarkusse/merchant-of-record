@@ -67,7 +67,7 @@ def test_one_line_or_a_zero_line_is_a_bug() -> None:
 
 def test_naive_or_non_utc_timestamps_are_refused() -> None:
     lines = [debit(CLEARING, _sgd(500)), credit(MERCHANT, _sgd(500))]
-    naive = datetime(2026, 11, 16, 9, 30)
+    naive = datetime(2026, 11, 16, 9, 30)  # noqa: DTZ001 - the input refused
     bangkok = datetime(2026, 11, 16, 16, 30, tzinfo=timezone(timedelta(hours=7)))
     for moment in [naive, bangkok]:
         with pytest.raises(ValueError):

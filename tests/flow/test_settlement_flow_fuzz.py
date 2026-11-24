@@ -179,7 +179,12 @@ class SettlementFlow(RuleBasedStateMachine):
             shop = await make_shop(
                 TEST_URL,
                 self.control,
-                Wiring(status_mode, capture_mode, guard, settlement_mode),
+                Wiring(
+                    status_mode=status_mode,
+                    capture_mode=capture_mode,
+                    guard=guard,
+                    settlement_mode=settlement_mode,
+                ),
             )
             self.settlement_interval = shop.account.settlement_interval
             async with await connect(TEST_URL) as conn:

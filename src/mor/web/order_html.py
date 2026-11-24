@@ -21,7 +21,7 @@ from mor.web.staff_layout import money_text, static_url
 REFRESH_SECONDS = 2
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class OrderView:
     token: str
     merchant_name: str

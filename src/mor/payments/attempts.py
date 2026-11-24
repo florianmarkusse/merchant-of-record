@@ -34,7 +34,7 @@ from mor.psp.port import ActionKind, BuyerAction, PaymentMethod, PspAccount, Sta
 FLOW = Actor(ActorKind.SYSTEM, "payments")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Attempt:
     id: uuid.UUID
     session_id: uuid.UUID
@@ -52,7 +52,7 @@ class Attempt:
     created_at: datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _Row:
     id: uuid.UUID
     session_id: uuid.UUID

@@ -48,7 +48,7 @@ class AfterPayment(StrEnum):
 MAX_ADDRESSES = 10
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Customs:
     description: str
     origin_country: str
@@ -56,7 +56,7 @@ class Customs:
     hs_code: str | None  # the merchant's: a hint, classification is ours
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SoldLine:
     """A line as the merchant sent it, snapshotted: a later change on the
     merchant's side never changes what was sold."""
@@ -69,7 +69,7 @@ class SoldLine:
     customs: Customs
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SessionDraft:
     lines: tuple[SoldLine, ...]
     parcel: Parcel
@@ -79,7 +79,7 @@ class SessionDraft:
     after_payment: AfterPayment
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CheckoutSession:
     id: uuid.UUID
     merchant_id: uuid.UUID

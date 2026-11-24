@@ -48,7 +48,7 @@ from tests.quote.fixtures import quote_market
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "test")
-PARCEL = Parcel(1000, 200, 150, 100)
+PARCEL = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
 SECRET = "whsec-test"
 SG_ADDRESS = {
     f.NAME: "Tan Mei Ling",
@@ -63,16 +63,21 @@ SG_ADDRESS = {
 
 def line(price: Money) -> SoldLine:
     return SoldLine(
-        "Linen shirt",
-        2,
-        price,
-        "apparel",
-        "LIN-01",
-        Customs("Men's linen shirt, woven", "VN", 300, "610910"),
+        name="Linen shirt",
+        quantity=2,
+        unit_price=price,
+        category="apparel",
+        merchant_sku="LIN-01",
+        customs=Customs(
+            description="Men's linen shirt, woven",
+            origin_country="VN",
+            weight_g=300,
+            hs_code="610910",
+        ),
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Wiring:
     status_mode: StatusMode
     capture_mode: CaptureMode
@@ -146,12 +151,12 @@ async def quoted_session(
             conn,
             merchant_id,
             SessionDraft(
-                (line(price),),
-                PARCEL,
-                "order-1",
-                "https://shop.example/thanks",
-                "https://shop.example/cart",
-                after_payment,
+                lines=(line(price),),
+                parcel=PARCEL,
+                merchant_reference="order-1",
+                return_url="https://shop.example/thanks",
+                cancel_url="https://shop.example/cart",
+                after_payment=after_payment,
             ),
             ACTOR,
             now,
@@ -171,11 +176,13 @@ SGD_PRICE = Money(2500, Currency.SGD)
 
 
 FAT_SALE_KEYED = Wiring(
-    StatusMode.PUSH_FAT, CaptureMode.SALE, DuplicateGuard.VENDOR_CONSTRAINT
+    status_mode=StatusMode.PUSH_FAT,
+    capture_mode=CaptureMode.SALE,
+    guard=DuplicateGuard.VENDOR_CONSTRAINT,
 )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Setup:
     url: str
     wired: Wired
@@ -203,7 +210,16 @@ async def with_setup(
         session_id, option = await quoted_session(
             url, shop.merchant_id, price, NOW, after_payment
         )
-        await body(Setup(url, wired, clock, shop, session_id, option))
+        await body(
+            Setup(
+                url=url,
+                wired=wired,
+                clock=clock,
+                shop=shop,
+                session_id=session_id,
+                option=option,
+            )
+        )
     finally:
         await wired.http.aclose()
         await wired.control.aclose()

@@ -34,7 +34,7 @@ MIGRATION_LOCK_KEY = 7_201_100_001
 _FILE_NAME = re.compile(r"([0-9]{4})_([a-z0-9_]+)\.sql")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class MigrationFile:
     version: int
     name: str

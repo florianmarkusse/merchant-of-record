@@ -109,7 +109,7 @@ class FakeUnreachable:
     detail: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SeededAccount:
     account_id: uuid.UUID
     base_url: str

@@ -33,16 +33,16 @@ TH = {
 
 def test_an_address_is_tidied_and_its_phone_split_from_its_dial_code() -> None:
     assert parse_address(SG, OFFERED) == Address(
-        "Tan Mei Ling",
-        "mei@example.test",
-        "+65",
-        "91234567",
-        "1 Example Road, #02-03",
-        None,
-        "Singapore",
-        None,
-        "123456",
-        "SG",
+        name="Tan Mei Ling",
+        email="mei@example.test",
+        phone_dial_code="+65",
+        phone_number="91234567",
+        line1="1 Example Road, #02-03",
+        line2=None,
+        city="Singapore",
+        region=None,
+        postcode="123456",
+        country="SG",
     )
     parsed = parse_address(TH, OFFERED)
     assert isinstance(parsed, Address)

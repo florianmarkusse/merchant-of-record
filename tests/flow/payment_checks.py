@@ -405,7 +405,7 @@ async def crash_around_a_call(
         await crash(crashing)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Handled:
     """A handled delivery and its fact, as stored."""
 
@@ -451,10 +451,10 @@ async def meet_again(chosen: Handled, now: datetime) -> None:
     )
     assert not isinstance(fact, UndecodableFact), fact
     candidate = Candidate(
-        chosen.message_id,
-        ConsumerName(chosen.consumer),
-        AggregateType(chosen.aggregate_type),
-        chosen.aggregate_id,
+        message_id=chosen.message_id,
+        consumer=ConsumerName(chosen.consumer),
+        aggregate_type=AggregateType(chosen.aggregate_type),
+        aggregate_id=chosen.aggregate_id,
     )
     conn = await connect(TEST_URL, autocommit=True)
     try:

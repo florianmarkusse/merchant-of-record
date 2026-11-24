@@ -78,9 +78,27 @@ T0 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "fuzz")
 VALID_FOR = timedelta(hours=6)
 QUESTIONS = (
-    PriceQuestion("carrier", "exp", "VN", "SG", Parcel(1000, 200, 150, 100)),
-    PriceQuestion("carrier", "exp", "VN", "SG", Parcel(2500, 400, 300, 200)),
-    PriceQuestion("carrier", "exp", "VN", "AU", Parcel(1000, 200, 150, 100)),
+    PriceQuestion(
+        carrier="carrier",
+        service="exp",
+        origin="VN",
+        destination="SG",
+        parcel=Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100),
+    ),
+    PriceQuestion(
+        carrier="carrier",
+        service="exp",
+        origin="VN",
+        destination="SG",
+        parcel=Parcel(weight_g=2500, length_mm=400, width_mm=300, height_mm=200),
+    ),
+    PriceQuestion(
+        carrier="carrier",
+        service="exp",
+        origin="VN",
+        destination="AU",
+        parcel=Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100),
+    ),
 )
 # Faults after which the answer is lost, so the lookup is asked again.
 LOSING = ("fail_500", "timeout_after_work")
@@ -392,10 +410,10 @@ class ShippingPriceFlow(RuleBasedStateMachine):
         for message_id, lookup_id in await cur.fetchall():
             handled.append(
                 Candidate(
-                    message_id,
-                    ConsumerName.SHIPPING_PRICE_ASK,
-                    AggregateType.SHIPPING_PRICE_LOOKUP,
-                    lookup_id,
+                    message_id=message_id,
+                    consumer=ConsumerName.SHIPPING_PRICE_ASK,
+                    aggregate_type=AggregateType.SHIPPING_PRICE_LOOKUP,
+                    aggregate_id=lookup_id,
                 )
             )
         return handled

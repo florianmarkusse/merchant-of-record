@@ -244,7 +244,7 @@ def render_answers_page(
 # --- market data -----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DataView:
     loads: list[LoadRow]
     market: MarketSet | None

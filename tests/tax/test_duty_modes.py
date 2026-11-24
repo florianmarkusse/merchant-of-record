@@ -49,11 +49,21 @@ def _market(duty_sources: str) -> MarketSet:
 def _answer(
     charge: Charge, formula: str, rate: Fraction | None, note: str | None = None
 ) -> StoredAnswer:
-    return StoredAnswer(charge, formula, rate, note, "610910", None, None)
+    return StoredAnswer(
+        charge=charge,
+        formula=formula,
+        rate=rate,
+        note=note,
+        hs_code_used="610910",
+        own_rate=None,
+        own_line_no=None,
+    )
 
 
 def _lookup(state: LookupState, *answers: StoredAnswer) -> VendorLookup:
-    return VendorLookup(LOOKUP_ID, "acme", state, 1, None, answers)
+    return VendorLookup(
+        id=LOOKUP_ID, vendor="acme", state=state, calls=1, detail=None, answers=answers
+    )
 
 
 ANSWERED = _lookup(

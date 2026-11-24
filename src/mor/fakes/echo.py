@@ -78,7 +78,7 @@ class ReleaseBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     push: PushHow = "once"
 
 
-class _Event(msgspec.Struct, frozen=True):
+class _Event(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     echo_id: str
     reference: str
@@ -305,7 +305,7 @@ class _WebhookRow:
     payload: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _EventRow:
     id: str
     echo_id: str

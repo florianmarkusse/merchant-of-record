@@ -91,7 +91,7 @@ def _back(note: str) -> Response:
 # --- what the page shows ----------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AccountRow:
     id: uuid.UUID
     provider: EchoProvider
@@ -99,7 +99,7 @@ class AccountRow:
     base_url: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class JobRow:
     id: uuid.UUID
     account_id: uuid.UUID
@@ -123,7 +123,7 @@ class PspRow:
     settlement_mode: SettlementMode
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class View:
     accounts: list[AccountRow]
     jobs: list[JobRow]

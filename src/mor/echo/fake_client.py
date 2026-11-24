@@ -156,7 +156,7 @@ async def cancel(
 SIGNATURE_HEADER = "Echo-Signature"
 
 
-class _WebhookEvent(msgspec.Struct, frozen=True):
+class _WebhookEvent(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     echo_id: str
     reference: str

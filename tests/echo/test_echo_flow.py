@@ -46,7 +46,7 @@ FLAVOUR = {
 }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Setup:
     url: str
     http: httpx2.AsyncClient
@@ -62,7 +62,7 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
         httpx2.AsyncClient(transport=network) as http,
         await connect(url, autocommit=True) as worker,
     ):
-        await body(Setup(url, http, network, worker))
+        await body(Setup(url=url, http=http, network=network, worker=worker))
 
 
 async def _job(setup: Setup, provider: EchoProvider) -> uuid.UUID:

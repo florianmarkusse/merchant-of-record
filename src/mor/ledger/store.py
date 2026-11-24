@@ -31,7 +31,7 @@ class AlreadyRecorded:
     entry_id: uuid.UUID
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _EntryRow:
     id: uuid.UUID
     description: str
@@ -40,7 +40,7 @@ class _EntryRow:
     actor_id: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _LineRow:
     account_kind: AccountKind
     account_scope: str

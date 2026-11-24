@@ -90,7 +90,9 @@ this project.
     runtime); `tests/db/test_enums.py` fails on an enum missing there or
     on values that differ. Code writes a state as its member, passed as a
     parameter, not as a quoted label in SQL; a filter in a `WHERE` may
-    keep the label.
+    keep the label. `numeric` is only for whole numbers that can outgrow
+    `bigint`, with a CHECK that its scale is 0; `connect` reads it as an
+    `int` (`mor.db.numeric`, decided 24-Nov-2026), never as `Decimal`.
   - Parsing at the edges: msgspec. Every input (API body, webhook, form,
     settlement file) is decoded into a typed, frozen record at the edge
     before anything else sees it, because Python does not check types at
@@ -111,7 +113,10 @@ this project.
   improves a form or table the server already handles.
 - Checks: the shared order plus `uv run vulture` (set up 23-Nov-2026;
   settings in `pyproject.toml`, reviewed false positives with their reason
-  in `vulture_whitelist.py`) and `npx tsc`; pyright in strict mode.
+  in `vulture_whitelist.py`) and `npx tsc`; pyright in strict mode. Ruff
+  also bans APIs we do not use (`TID251` in `pyproject.toml`, each with
+  its reason). The formatter decides every layout: no `fmt: skip` or
+  `fmt: off` (`tests/test_no_format_skips.py`).
   `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
   the invoice PDF; it also needs Pango from the system). `scripts/` holds
   PEP 723 scripts with their own dependencies (`uv run scripts/markets.py
@@ -182,7 +187,9 @@ HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
   named after its columns, never unpacked from a tuple, also not a
   two-column row in a `for` (decided 23-Nov-2026, the two-column case
   24-Nov-2026: pyright sees tuple rows as `Any`, and two positional ints
-  can swap unnoticed). A single column is read with `one_value`.
+  can swap unnoticed). A single column is read with `one_value`. Such a
+  record says `kw_only=True`, so pyright refuses a positional build;
+  `tests/test_records_kw_only.py` fails on one that does not.
 - Errors as values covers declined card, tax rule missing, PSP timeout.
 - No shadowing (decided 24-Nov-2026: one name meaning two things is
   confusing): no local or parameter named after a domain name

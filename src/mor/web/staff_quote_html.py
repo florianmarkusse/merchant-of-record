@@ -65,7 +65,7 @@ class Ask:
     has_account: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class QuoteView:
     countries: list[Country]  # researched ones, for the country list
     origins: list[Country]  # every country in the file, for "Made in"

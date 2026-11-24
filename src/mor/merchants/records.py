@@ -19,7 +19,7 @@ class KybState(StrEnum):
     SUSPENDED = "suspended"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Merchant:
     id: uuid.UUID
     legal_name: str

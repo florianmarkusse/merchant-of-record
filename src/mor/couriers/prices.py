@@ -93,7 +93,7 @@ class PriceAnswer:
 # --- rows -----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _AccountRow:
     id: uuid.UUID
     carrier: str
@@ -105,7 +105,7 @@ class _AccountRow:
     price_expiry: PriceExpiry
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _LookupRow:
     id: uuid.UUID
     carrier: str
@@ -550,7 +550,7 @@ async def _store_price(
 # --- the answers page -----------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class LivePriceRow:
     """One carrier answer for a person: its price beside our card's."""
 

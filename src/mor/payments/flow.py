@@ -219,7 +219,7 @@ class CreateCall:
     request: PaymentRequest
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FindCall:
     """Guard `none` after an answer was lost: look only, never resend."""
 
@@ -229,7 +229,7 @@ class FindCall:
     operation: Literal[PspOperation.CREATE, PspOperation.CAPTURE]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CaptureCall:
     account: PspAccount
     request_id: uuid.UUID
@@ -346,7 +346,7 @@ async def complete(
 # --- requests -------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _Request:
     id: uuid.UUID
     number: int

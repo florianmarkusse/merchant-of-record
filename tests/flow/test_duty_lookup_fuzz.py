@@ -334,10 +334,10 @@ class DutyLookupFlow(RuleBasedStateMachine):
         for message_id, lookup_id in await cur.fetchall():
             handled.append(
                 Candidate(
-                    message_id,
-                    ConsumerName.DUTY_RATE_ASK,
-                    AggregateType.DUTY_LOOKUP,
-                    lookup_id,
+                    message_id=message_id,
+                    consumer=ConsumerName.DUTY_RATE_ASK,
+                    aggregate_type=AggregateType.DUTY_LOOKUP,
+                    aggregate_id=lookup_id,
                 )
             )
         return handled

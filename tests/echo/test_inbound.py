@@ -30,7 +30,7 @@ PERSON = Actor(ActorKind.STAFF, "staff-1")
 SECRET = "test-secret"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Setup:
     url: str
     wired: Wired
@@ -42,7 +42,7 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
     setup_box: list[Setup] = []
     wired = wire(url, lambda: setup_box[0].now)
     async with wired.http, wired.control, await connect(url, autocommit=True) as worker:
-        setup_box.append(Setup(url, wired, worker, NOW))
+        setup_box.append(Setup(url=url, wired=wired, worker=worker, now=NOW))
         await body(setup_box[0])
 
 

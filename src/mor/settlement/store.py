@@ -199,7 +199,7 @@ async def record_document(
 # --- booking a line ---------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _Line:
     id: uuid.UUID
     account_id: uuid.UUID
@@ -478,7 +478,7 @@ async def book_lines(conn: Connection, fact: Fact, now: datetime) -> ConsumerOut
 # --- booking and reconciling a payout -----------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _PayoutRow:
     id: uuid.UUID
     account_id: uuid.UUID
@@ -642,7 +642,7 @@ async def reconcile_payout(
     return Applied()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _LineAmountsRow:
     gross_numerator: int
     gross_denominator: int

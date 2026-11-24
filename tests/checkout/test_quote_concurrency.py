@@ -44,11 +44,19 @@ from tests.quote.fixtures import live_market
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "test")
-PARCEL = Parcel(1000, 200, 150, 100)
+PARCEL = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
 SG = Address(
-    "Tan Mei Ling", "mei@example.test", "+65", "91234567", "1 Example Road",
-    None, "Singapore", None, "123456", "SG",
-)  # fmt: skip
+    name="Tan Mei Ling",
+    email="mei@example.test",
+    phone_dial_code="+65",
+    phone_number="91234567",
+    line1="1 Example Road",
+    line2=None,
+    city="Singapore",
+    region=None,
+    postcode="123456",
+    country="SG",
+)
 # Long enough for the second buyer's step to reach the lookup it waits on
 # and block there.
 SETTLE_S = 0.3
@@ -76,24 +84,29 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
                 PriceExpiry.CARRIER_FIRST,
             )
             line = SoldLine(
-                "Linen shirt",
-                1,
-                Money(2500, Currency.SGD),
-                "apparel",
-                None,
-                Customs("Linen shirt", "VN", 300, "610910"),
+                name="Linen shirt",
+                quantity=1,
+                unit_price=Money(2500, Currency.SGD),
+                category="apparel",
+                merchant_sku=None,
+                customs=Customs(
+                    description="Linen shirt",
+                    origin_country="VN",
+                    weight_g=300,
+                    hs_code="610910",
+                ),
             )
             for _ in range(2):
                 session = await create_session(
                     conn,
                     merchant.id,
                     SessionDraft(
-                        (line,),
-                        PARCEL,
-                        None,
-                        "https://s/t",
-                        "https://s/c",
-                        AfterPayment.OUR_PAGE,
+                        lines=(line,),
+                        parcel=PARCEL,
+                        merchant_reference=None,
+                        return_url="https://s/t",
+                        cancel_url="https://s/c",
+                        after_payment=AfterPayment.OUR_PAGE,
                     ),
                     ACTOR,
                     NOW,

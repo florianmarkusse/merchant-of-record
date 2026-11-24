@@ -1006,7 +1006,8 @@ Next, in this order (agreed 23-Nov-2026). The reasoning: guards before
 the changes they protect, refactor before building on what is
 refactored, clean up code once it has stopped moving.
 
-1. The cheap guards (`plan-codified-rules.md` §2.3, §2.1 and §2.2): the
+1. The cheap guards (`plan-codified-rules.md` §2.3, §2.1 and §2.2; all
+   but §2.1 built 24-Nov-2026): the
    ruff settings (all of `DTZ` and `A`, banned imports), the fact-schema
    snapshot, which makes sure the refactor below cannot change a stored
    fact's shape unnoticed, and `kw_only` records (moved here

@@ -120,7 +120,13 @@ parcels = st.builds(
 def test_every_estimate_option_is_its_parts_summed(
     destination: str, order: list[QuoteLine], parcel: Parcel, prod: bool
 ) -> None:
-    request = QuoteRequest(destination, tuple(order), parcel, NOW.date(), NOW)
+    request = QuoteRequest(
+        destination=destination,
+        lines=tuple(order),
+        parcel=parcel,
+        on=NOW.date(),
+        now=NOW,
+    )
     result = build_quote(SYNTHETIC, request, {}, {})
     if not isinstance(result, Quote):
         return

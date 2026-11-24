@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AddressRule:
     country: str
     dial_code: str  # the default shown for the phone
@@ -83,7 +83,7 @@ def address_rule(country: str) -> AddressRule | None:
     return None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Address:
     name: str
     email: str

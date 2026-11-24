@@ -46,7 +46,12 @@ from tests.payments.support import (
 
 
 def _wiring(mode: SettlementMode, status: StatusMode = StatusMode.PUSH_FAT) -> Wiring:
-    return Wiring(status, CaptureMode.SALE, DuplicateGuard.VENDOR_CONSTRAINT, mode)
+    return Wiring(
+        status_mode=status,
+        capture_mode=CaptureMode.SALE,
+        guard=DuplicateGuard.VENDOR_CONSTRAINT,
+        settlement_mode=mode,
+    )
 
 
 async def _pay(setup: Setup) -> Setup:

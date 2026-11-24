@@ -60,7 +60,7 @@ class UnknownReference(Exception):
     (plan-architecture.md §9 does this for courier invoice lines)."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class InboundAccount:
     account: EchoAccount
     event_mode: EventMode
@@ -84,7 +84,7 @@ class JobNotFound:
     job_id: uuid.UUID
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _AccountRow:
     id: uuid.UUID
     provider: EchoProvider

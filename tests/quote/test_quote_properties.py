@@ -68,23 +68,29 @@ def _lookups(destinations: tuple[str, ...]) -> dict[RateQuestion, VendorLookup]:
                 continue
             question = RateQuestion(destination, "VN", hs_code)
             lookups[question] = VendorLookup(
-                uuid.uuid7(),
-                "zonos",
-                LookupState.ANSWERED,
-                1,
-                None,
-                (
+                id=uuid.uuid7(),
+                vendor="zonos",
+                state=LookupState.ANSWERED,
+                calls=1,
+                detail=None,
+                answers=(
                     StoredAnswer(
-                        Charge.DUTY, "12%", Fraction(12, 100), None, hs_code, None, None
+                        charge=Charge.DUTY,
+                        formula="12%",
+                        rate=Fraction(12, 100),
+                        note=None,
+                        hs_code_used=hs_code,
+                        own_rate=None,
+                        own_line_no=None,
                     ),
                     StoredAnswer(
-                        Charge.IMPORT_TAX,
-                        "8%",
-                        Fraction(8, 100),
-                        None,
-                        hs_code,
-                        None,
-                        None,
+                        charge=Charge.IMPORT_TAX,
+                        formula="8%",
+                        rate=Fraction(8, 100),
+                        note=None,
+                        hs_code_used=hs_code,
+                        own_rate=None,
+                        own_line_no=None,
                     ),
                 ),
             )
@@ -174,7 +180,9 @@ def _check(market: MarketSet, request: QuoteRequest, quote: Quote) -> None:
 def test_any_order_on_the_synthetic_set_quotes_consistently_or_is_refused(
     destination: str, order: list[QuoteLine], parcel: Parcel, on: date
 ) -> None:
-    request = QuoteRequest(destination, tuple(order), parcel, on, NOW)
+    request = QuoteRequest(
+        destination=destination, lines=tuple(order), parcel=parcel, on=on, now=NOW
+    )
     result = build_quote(SYNTHETIC, request, _lookups((destination,)), {})
     if isinstance(result, Quote):
         _check(SYNTHETIC, request, result)
@@ -189,7 +197,9 @@ def test_any_order_on_the_synthetic_set_quotes_consistently_or_is_refused(
 def test_any_order_on_the_research_files_quotes_consistently_or_is_refused(
     destination: str, order: list[QuoteLine], parcel: Parcel, on: date
 ) -> None:
-    request = QuoteRequest(destination, tuple(order), parcel, on, NOW)
+    request = QuoteRequest(
+        destination=destination, lines=tuple(order), parcel=parcel, on=on, now=NOW
+    )
     result = build_quote(RESEARCH, request, RESEARCH_LOOKUPS, {})
     if isinstance(result, Quote):
         _check(RESEARCH, request, result)
@@ -224,21 +234,38 @@ def test_any_carrier_price_quotes_consistently_with_each_part_charged(
     total = 0
     for part in parts:
         total += part.amount_minor
-    price = StoredPrice(Money(total, currency), tuple(parts), None, None)
+    price = StoredPrice(
+        total=Money(total, currency),
+        parts=tuple(parts),
+        carrier_valid_until=None,
+        own=None,
+    )
     held = PriceHeld(
         FinishedLookup(
-            uuid.uuid7(),
-            PriceState.ANSWERED,
-            1,
-            None,
-            NOW,
-            NOW + timedelta(hours=1),
-            price,
+            id=uuid.uuid7(),
+            state=PriceState.ANSWERED,
+            calls=1,
+            detail=None,
+            finished_at=NOW,
+            usable_until=NOW + timedelta(hours=1),
+            price=price,
         ),
         None,
     )
-    question = PriceQuestion("carrier", "exp", "VN", destination, parcel)
-    request = QuoteRequest(destination, tuple(order), parcel, days_start, NOW)
+    question = PriceQuestion(
+        carrier="carrier",
+        service="exp",
+        origin="VN",
+        destination=destination,
+        parcel=parcel,
+    )
+    request = QuoteRequest(
+        destination=destination,
+        lines=tuple(order),
+        parcel=parcel,
+        on=days_start,
+        now=NOW,
+    )
     result = build_quote(LIVE, request, _lookups((destination,)), {question: held})
     if not isinstance(result, Quote):
         return

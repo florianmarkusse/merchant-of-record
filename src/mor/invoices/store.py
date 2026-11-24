@@ -159,7 +159,7 @@ async def issue_invoice(conn: Connection, fact: Fact, now: datetime) -> Consumer
     return Applied()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _InvoiceRow:
     id: uuid.UUID
     order_id: uuid.UUID

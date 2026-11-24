@@ -17,7 +17,7 @@ from mor.money.currency import Currency
 from mor.vendor_failures import CallFailure, UndecodableBody
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CarrierPrice:
     currency: Currency
     total_minor: int

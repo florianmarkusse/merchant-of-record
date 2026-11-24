@@ -60,7 +60,7 @@ MAX_EFFECT_STEPS = 50
 SOURCE = Path(__file__).resolve().parent.parent.parent  # src/, watched outside prod
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Candidate:
     """A due, unhandled delivery: one fact for one consumer."""
 
@@ -105,7 +105,7 @@ class Deferred:
 type RunResult = Ran | Skipped | Deferred | Failed
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _DeliveryRow:
     not_before: datetime
     attempts: int

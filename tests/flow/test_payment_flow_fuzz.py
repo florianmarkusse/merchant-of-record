@@ -151,7 +151,9 @@ class PaymentFlow(RuleBasedStateMachine):
 
         async def step() -> None:
             shop = await make_shop(
-                TEST_URL, self.control, Wiring(status_mode, capture_mode, guard)
+                TEST_URL,
+                self.control,
+                Wiring(status_mode=status_mode, capture_mode=capture_mode, guard=guard),
             )
             for _ in range(2):
                 session_id, option = await quoted_session(

@@ -1,8 +1,10 @@
 # Rules that should be checked, not only written down
 
-Status: survey, 23-Nov-2026. Nothing built. To be picked up in a later
-session; items 1 to 3 are small and were recommended to do first, item 4
-needs the existing violations fixed. The open rules in §2.4 were decided
+Status: §2.2 and §2.3 built 24-Nov-2026 (ruff's `DTZ`, `A` and banned
+APIs in `pyproject.toml`; `kw_only` on all 179 records of 4 or more
+fields, checked by `tests/test_records_kw_only.py`). Next: §2.1, the
+fact-schema snapshot; §2.4 after the messaging refactor
+(`plan-architecture.md` §16). The open rules in §2.4 were decided
 on 24-Nov-2026 (shadowing, import aliases, two-column rows), and
 `AGENTS.md` Code Style says them.
 
@@ -53,7 +55,7 @@ the same change, by an explicit update command, never silently). Removing
 a version is allowed only with its transitional comment's condition met
 (`AGENTS.md`, Transitional code).
 
-### 2.2 "A record of 4 or more fields is built with keyword arguments" (AGENTS.md)
+### 2.2 "A record of 4 or more fields is built with keyword arguments" (AGENTS.md): built 24-Nov-2026
 
 134 of the 338 frozen dataclasses in `src/` have 4 or more fields (count
 by an `ast` walk over `src/`). Positional builds exist; one seen:
@@ -77,7 +79,7 @@ means the refactor writes its new records under the check. So it
 belongs with the cheap guards, before the refactor
 (`plan-architecture.md` §16).
 
-### 2.3 Ruff settings not used yet (config only)
+### 2.3 Ruff settings not used yet (config only): built 24-Nov-2026
 
 `pyproject.toml` selects `E, F, I, UP, B, DTZ005, DTZ011`.
 
@@ -92,11 +94,14 @@ belongs with the cheap guards, before the refactor
   - `functools.partial` (no `partial`-style indirection),
   - `psycopg.sql` (no SQL composed at runtime),
   - `decimal.Decimal` (money and rates are `int` and `Fraction`), with
-    one allowed use: `src/mor/checkout/quotes.py` reads `quote_part`'s
-    `numeric` columns, which are `numeric` on purpose
-    (`migrations/0022_convention_fixes.sql`), and turns them into a
-    `Fraction` at once. Allow it by a per-file ignore with that reason.
-  None of these is used today except the allowed `Decimal`.
+    no exception: `quote_part`'s two `numeric` columns, the only ones,
+    were read as `Decimal`; since 24-Nov-2026 every connection reads
+    `numeric` as a whole `int` (`src/mor/db/numeric.py`) and a CHECK
+    keeps their scale 0 (`migrations/0027_whole_numeric.sql`).
+  None of these is used.
+- **No `fmt: skip` or `fmt: off`** (decided 24-Nov-2026: the formatter
+  decides every layout): not a ruff rule, so
+  `tests/test_no_format_skips.py` checks it.
 - **All of `A`** (a local, parameter or import named after a builtin;
   part of the no-shadowing rule decided 24-Nov-2026). No violations
   today: `uv run ruff check --select A src tests`.

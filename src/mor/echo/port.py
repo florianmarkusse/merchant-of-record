@@ -24,7 +24,7 @@ class EchoProvider(StrEnum):
     FAKE_PLAIN = "fake_plain"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class EchoAccount:
     id: uuid.UUID
     provider: EchoProvider
@@ -86,7 +86,7 @@ class EventKind(StrEnum):
     ARCHIVED = "archived"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class VendorEvent:
     """One event the vendor reports about an echo, whatever the mode."""
 

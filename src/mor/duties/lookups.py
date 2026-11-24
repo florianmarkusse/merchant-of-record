@@ -83,7 +83,7 @@ class AskAnswer:
 # --- rows -----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _LookupRow:
     id: uuid.UUID
     vendor_name: str
@@ -95,7 +95,7 @@ class _LookupRow:
     detail: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _AccountRow:
     id: uuid.UUID
     vendor_name: str
@@ -105,7 +105,7 @@ class _AccountRow:
     timeout_ms: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _AnswerRow:
     charge: Charge
     formula: str
@@ -448,7 +448,7 @@ async def _store_answers(
 # --- agreement --------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Agreement:
     """Per destination and charge, how the vendor's answers compare with
     our own rows: the count a switch to `own_first` is judged on."""
@@ -488,7 +488,7 @@ async def agreement(conn: Connection) -> list[Agreement]:
 type Comparison = Literal["differs", "not_a_rate", "own_none", "agrees"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AnswerRow:
     """One vendor answer beside our own row in force when it came."""
 
@@ -505,7 +505,7 @@ class AnswerRow:
     answered_at: datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _VendorAnswerRow:
     vendor_name: str
     destination: str

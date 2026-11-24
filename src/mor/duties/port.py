@@ -27,7 +27,7 @@ class DutyProvider(StrEnum):
     FAKE = "fake"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DutyVendorAccount:
     id: uuid.UUID
     vendor_name: str
@@ -44,7 +44,7 @@ class RateQuestion:
     hs_code: str  # digits only
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class VendorRate:
     charge: Charge
     formula: str  # as the vendor wrote it: "30%", "2.00 USD/kg"

@@ -74,7 +74,7 @@ LABELS = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class BuyerView:
     session: CheckoutSession
     public_id: str

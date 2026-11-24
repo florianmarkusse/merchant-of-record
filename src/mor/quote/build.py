@@ -99,7 +99,7 @@ SHIPPING_ROUNDING = RoundingMode.CEILING  # never under-collect the carrier
 CHARGE_ROUNDING = RoundingMode.HALF_EVEN
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class QuoteLine:
     category: str
     hs_code: str | None
@@ -108,7 +108,7 @@ class QuoteLine:
     unit_price: Money  # the merchant's price, tax-exclusive, in its currency
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class QuoteRequest:
     destination: str
     lines: tuple[QuoteLine, ...]
@@ -117,7 +117,7 @@ class QuoteRequest:
     now: datetime  # a carrier's price is used only before its usable_until
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Part:
     kind: PartKind
     label: str  # how it was reached, for a person (its order line: `line`)
@@ -129,7 +129,7 @@ class Part:
     source: str  # where the number came from, for a person
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ShippingOption:
     key: str  # the route's: its card, or `live:<service>`
     rate_card: str | None  # None: priced by the carrier
@@ -144,7 +144,7 @@ class ShippingOption:
     standing: Standing
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Quote:
     destination: str
     currency: Currency
@@ -208,7 +208,7 @@ class VendorAsk:
     question: RateQuestion
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class InputsMissing:
     """A rate a vendor decides, or a carrier's price, is not held yet: ask
     (`asks`, `price_asks`) or wait for an answer already asked for
@@ -542,7 +542,7 @@ def _charges(
                 )
             )
     if asks or waiting:
-        return InputsMissing(tuple(asks), tuple(waiting))
+        return InputsMissing(asks=tuple(asks), waiting=tuple(waiting))
     return parts
 
 
