@@ -22,7 +22,7 @@ class AccountKind(StrEnum):
     # capture converts through it (docs/plan-payments.md §5).
     FX_POSITION = "fx_position"
     # What a PSP says it paid out and our bank has not shown yet
-    # (docs/plan-payments.md §7.1, question 9).
+    # (docs/plan-payments.md §7, question 9).
     PAYOUT_IN_TRANSIT = "payout_in_transit"
 
 

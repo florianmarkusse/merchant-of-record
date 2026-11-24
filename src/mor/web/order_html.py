@@ -1,4 +1,4 @@
-"""The buyer's order page (`/o/{token}`, docs/plan-payments.md §6.1;
+"""The buyer's order page (`/o/{token}`, docs/plan-payments.md §6;
 plan-merchant-surfaces §5): what was bought, where it goes, the total, the
 invoice as a page and a PDF, what happens next, and whom to ask. Until the
 invoice is issued, moments after payment, the page waits for it like the

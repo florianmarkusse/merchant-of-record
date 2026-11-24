@@ -1,6 +1,6 @@
 """The echo port: our records and result unions, no vendor words.
 
-Transitional, like the whole echo flow (docs/plan-messaging.md §10): it
+Transitional, like the whole echo flow (docs/plan-messaging.md §9): it
 proves the effect machinery and goes once the fake PSP exercises the same
 machinery (slice 5), unless it serves something else by then.
 """

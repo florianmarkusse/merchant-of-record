@@ -1,6 +1,6 @@
 """The payment flow up to the capture as a Hypothesis state machine
 against mor_test, the fake PSP and the worker (docs/plan-payments.md §8,
-docs/plan-fuzz-reach.md). Each run draws the account's wiring: how news
+docs/plan-architecture.md §10). Each run draws the account's wiring: how news
 arrives (fat or thin webhooks, polling), how it captures (sale, or
 authorise then capture) and its duplicate guard. What follows the capture
 is fuzzed in depth by the order machine (test_order_flow_fuzz.py); this
@@ -114,7 +114,7 @@ class PaymentFlow(RuleBasedStateMachine):
         self.options: dict[uuid.UUID, str] = {}
         # The clock's jumps past a quote's hold or a session's life wait
         # for a first attempt: early, they leave nothing to pay for the
-        # rest of the run (docs/plan-fuzz-reach.md §3).
+        # rest of the run (docs/plan-architecture.md §10).
         self.attempted = False
 
     def run[T](self, step: Coroutine[object, object, T]) -> T:
@@ -155,7 +155,7 @@ class PaymentFlow(RuleBasedStateMachine):
     ) -> None:
         """`planned`: faults decided for the whole run, each waiting at the
         PSP for its operation's first call (as FoundationDB's BUGGIFY sites
-        are on or off per run, docs/plan-fuzz-reach.md §2). A fault on the
+        are on or off per run, docs/plan-architecture.md §10). A fault on the
         one call that matters (a capture on an unkeyed account) is then
         common, where scripting it by a later action is rare."""
 

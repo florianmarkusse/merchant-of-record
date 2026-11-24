@@ -1,5 +1,5 @@
-"""Settlement in the database (docs/plan-payments.md §7.1,
-docs/plan-settlement-reconciliation.md §4): stored documents decoded into
+"""Settlement in the database (docs/plan-payments.md §7,
+docs/plan-payments.md §7): stored documents decoded into
 payouts and lines, each once by the PSP's id and in any order; each line
 booked against its capture; each payout booked on its way to our bank as
 reported; each payout reconciled against whatever lines have arrived; what
@@ -584,9 +584,9 @@ async def reconcile_payout(
     """Consumer `settlement_payout_reconcile`, on a payout and on each of its
     lines: under the payout's lock, does its net add up to the lines arrived
     so far? Every stored line sends its fact after its commit, so the last
-    run sees them all, whatever the order (plan-settlement-reconciliation
-    §4.2). The booked rounding follows: a new entry for each change, never
-    an edit. The payout locked, or None if a line came first."""
+    run sees them all, whatever the order (plan-payments.md §7). The
+    booked rounding follows: a new entry for each change, never an edit.
+    The payout locked, or None if a line came first."""
     if payout is None:
         return Stale()  # a line first: its payout's own fact runs this again
     async with conn.cursor(row_factory=class_row(_LineAmountsRow)) as cur:

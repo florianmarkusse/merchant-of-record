@@ -1,6 +1,6 @@
 """The echo flow: one effect consumer, `echo_send`, on echo_job_requested.
 
-Transitional (docs/plan-messaging.md §10): it proves prepare / call /
+Transitional (docs/plan-messaging.md §9): it proves prepare / call /
 complete and the three duplicate guards, and goes once the fake PSP
 exercises the same machinery (slice 5), unless it serves something else.
 

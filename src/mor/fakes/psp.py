@@ -33,7 +33,7 @@ A made-up acquirer API, with PSP-side accounts as a path segment
                                  the next create to be declined
     POST A/settlements           {"faults"?: [...]}: cut a batch now, one per
                                  currency, of every captured payment not
-                                 settled yet (docs/plan-payments.md §7.1)
+                                 settled yet (docs/plan-payments.md §7)
     GET  A/settlement-files?after=      {"files": [...]}, oldest first
     GET  A/settlement-files/{name}      a report, as Adyen's: CSV, a row
                                         per line, then the payout's row

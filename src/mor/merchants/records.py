@@ -11,7 +11,7 @@ DEFAULT_DAILY_VENDOR_ASKS = 100  # decided 19-Nov-2026
 
 class KybState(StrEnum):
     """Ours, never the merchant's: only `approved` may take a new payment
-    (docs/plan-payments.md §6.1). Matches the `merchant_kyb_state` enum
+    (docs/plan-payments.md §6). Matches the `merchant_kyb_state` enum
     type."""
 
     PENDING = "pending"

@@ -1,5 +1,5 @@
-"""Settlement through its edges (docs/plan-payments.md §7.1,
-docs/plan-settlement-reconciliation.md): the fake PSP cuts a batch, the
+"""Settlement through its edges (docs/plan-payments.md §7,
+docs/plan-payments.md §7): the fake PSP cuts a batch, the
 worker reads it as a report file (Adyen's shape) or as a payout and its
 lines (Stripe's), and the rows and the ledger come out. Every merchant,
 buyer and address here is made up."""
@@ -442,7 +442,7 @@ def test_a_payment_settled_twice_keeps_its_first_line_whichever_runs_first(
 def test_a_payout_and_its_pages_add_up_in_whatever_order_they_are_decoded(
     database_url: str, newest_first: bool
 ) -> None:
-    """Deliveries run in any order (plan-messaging-rework.md §2): a page of
+    """Deliveries run in any order (plan-messaging.md §4): a page of
     lines may be decoded before its payout, or before an earlier page.
     Found when ordering was dropped: the last page's decode booked the
     payout against the lines stored so far, a false `net_differs`."""

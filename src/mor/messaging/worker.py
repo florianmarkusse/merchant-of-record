@@ -2,13 +2,12 @@
 
     uv run python -m mor.messaging.worker      # DATABASE_URL, default mor_dev
 
-plan-architecture.md §5, as amended by plan-messaging-rework.md §3: pick
-due deliveries, lock the delivery row (skip it if another worker has it),
-run the consumer, mark it handled. An effect consumer also holds the
-session advisory lock on the fact's aggregate from `prepare` to
-`complete`, across its vendor call. Consumers take facts in any order.
-A lock guards; time only decides when to try again (`not_before`).
-"""
+docs/plan-messaging.md §4: pick due deliveries, lock the delivery row
+(skip it if another worker has it), run the consumer, mark it handled.
+An effect consumer also holds the session advisory lock on the fact's
+aggregate from `prepare` to `complete`, across its vendor call.
+Consumers take facts in any order. A lock guards; time only decides when
+to try again (`not_before`)."""
 
 import asyncio
 import os

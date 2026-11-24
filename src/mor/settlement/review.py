@@ -1,5 +1,5 @@
-"""What a person reviews of settlement (docs/plan-payments.md §7.1,
-docs/plan-settlement-reconciliation.md §4.3): per PSP account its health
+"""What a person reviews of settlement (docs/plan-payments.md §7,
+docs/plan-payments.md §7): per PSP account its health
 figures, its payouts with whether each adds up yet, its exceptions, and
 the note a person writes on resolving one. A note books nothing (question 10
 of 20-Nov-2026): a correcting entry is made by hand.

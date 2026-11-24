@@ -1,5 +1,5 @@
 """The buyer's order page and invoice handlers (`/o/{token}`,
-docs/plan-payments.md §6.1). The token is the link's bearer secret: 32
+docs/plan-payments.md §6). The token is the link's bearer secret: 32
 random bytes, no cookies, no expiry for now (revisited with the notify
 slice). All GET, so there is no form to guard.
 

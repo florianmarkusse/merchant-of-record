@@ -206,7 +206,7 @@ async def _landing(
     conn: Connection, session: CheckoutSession, now: datetime
 ) -> str | None:
     """Where a paid session sends the buyer, by its `after_payment`
-    (docs/plan-payments.md §6.1); None: the plain "paid" page. `completed`
+    (docs/plan-payments.md §6); None: the plain "paid" page. `completed`
     is only ever set after the PSP's capture, never on the browser's word.
     The order page only while the session would have lived, so a forwarded
     checkout link does not show the invoice and address for ever."""

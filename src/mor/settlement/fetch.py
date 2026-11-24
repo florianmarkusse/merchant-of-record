@@ -1,5 +1,5 @@
 """Reading what a PSP settled, per account, as the PSP sends it
-(docs/plan-settlement-reconciliation.md §2 and §4.5):
+(docs/plan-payments.md §7 and §4.5):
 
     start_settlement_reading ─▶ psp_settlement_due (scheduled, per account)
     psp_settlement_fetch (effect), one look:

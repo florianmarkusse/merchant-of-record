@@ -250,7 +250,7 @@ DEFAULT_PSP = "sandbox-push_fat-sale-vendor_constraint"
 
 
 # Short on the test setup, so a settlement cut on the sandbox page shows up
-# soon (docs/plan-payments.md §7.1).
+# soon (docs/plan-payments.md §7).
 SETTLEMENT_INTERVAL = timedelta(minutes=1)
 
 
@@ -462,7 +462,7 @@ async def seed_merchant(
         )
         merchant_id = created.id
     if not approved:
-        # The sandbox's KYB is at once (docs/plan-payments.md §6.1).
+        # The sandbox's KYB is at once (docs/plan-payments.md §6).
         await set_kyb_state(conn, merchant_id, KybState.APPROVED, SEEDER, now)
     if await merchant_has_key(conn, merchant_id):
         return None

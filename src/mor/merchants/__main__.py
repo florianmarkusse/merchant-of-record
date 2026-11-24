@@ -1,6 +1,6 @@
 """Merchants, API keys and KYB from the command line, until there is a
 dashboard and staff sign-in (docs/plan-quote.md §5, 4d-1;
-docs/plan-payments.md §6.1).
+docs/plan-payments.md §6).
 
     uv run python -m mor.merchants create "Legal Name Co., Ltd." "Shop Name"
     uv run python -m mor.merchants list

@@ -154,7 +154,7 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.ORDER_CREATE,)
         # A settled line waiting for its order is booked once the order
         # exists, or becomes an exception once its payment ended otherwise
-        # (docs/plan-payments.md §7.1).
+        # (docs/plan-payments.md §7).
         case MessageType.ORDER_PAID:
             return (ConsumerName.INVOICE_ISSUE, ConsumerName.SETTLEMENT_LINE_BOOK)
         case (
@@ -171,7 +171,7 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
         case MessageType.PSP_SETTLEMENT_DUE:
             return (ConsumerName.PSP_SETTLEMENT_FETCH,)
         # A line and its payout arrive in any order; each runs the payout's
-        # reconciliation (docs/plan-settlement-reconciliation.md §4.2).
+        # reconciliation (docs/plan-payments.md §7).
         case MessageType.SETTLEMENT_LINE_RECEIVED:
             return (
                 ConsumerName.SETTLEMENT_LINE_BOOK,

@@ -1,19 +1,11 @@
-# Plan: overall architecture, with logistics in detail
+# Architecture: the whole flow, with logistics in detail
 
-Status: design confirmed 15-Nov-2026 after review; the decisions are in §15.
-Slices are built in the order of §14; a new session starts at §16.
+Status: design confirmed 15-Nov-2026. Where the build stands and what
+comes next is `docs/README.md`; each slice's detail is in its own plan.
 
-This is the one design for the whole flow: checkout, tax and duty, payment,
-shipment, courier invoice, returns and payout. It sits above the earlier
-plans and does not repeat them:
-
-- `plan-psp-integration.md`: payment providers, merchant API, payouts.
-- `plan-merchant-surfaces.md`: API resources, hosted checkout, dashboard.
-- `plan-logistics.md`: countries, the tax path rule, carriers, returns
-  policy, registrations.
-
-Where this plan changes something in those, §12 lists the change and why.
-Logistics gets the detail here (§7 to §9) because it had the least.
+This is the one design for the whole flow: checkout, tax and duty,
+payment, shipment, courier invoice, returns and payout. Logistics gets
+the detail here (§7 to §9) because no slice plan covers it yet.
 
 ## 1. Three rules that shape everything
 
@@ -63,7 +55,7 @@ buyer ──▶ web handlers ──▶ one transaction: lock row · change state
 merchant ─▶ (HTML, JSON)    ledger entry · facts into the outbox
                                     │
                                     ▼
-                    workers: claim a delivery per aggregate (§5)
+                    workers: pick a due delivery (§5)
                     ├─ local consumer: one transaction, same shape
                     └─ effect consumer: prepare ▸ call ▸ complete
                                     │
@@ -84,11 +76,11 @@ no database and no environment; `now` is an argument.
 ## 3. Layout
 
 `mor` stays the placeholder package name. Folders, not a list of every
-file:
+file; the ones for slices not built yet are where their code will go:
 
 ```
 src/mor/
-  money/ db/ ledger/           the foundation (slice 1)
+  money/ db/ ledger/           the foundation
   messaging/    fact records with versions, the consumer table, the worker
   merchants/    merchant, users, API keys, KYB state
   checkout/     session, sold lines, quote (pure builder + store)
@@ -98,6 +90,7 @@ src/mor/
   payments/     attempt, refund, dispute (state machines)
   psp/          port, registry, client per PSP
   orders/       order, invoice
+  settlement/   the PSP's settlement lines and payouts
   shipments/    shipment, events, derived status, returns
   couriers/     port, registry, client per courier, rate cards
   payouts/      payout runs
@@ -138,10 +131,13 @@ Rules:
   The one planned exception is a decision on a merchant's balance (payout
   run, covering a refund): it locks the `merchant` row first, then its
   own row, always in that order.
+- **A row that is changed was read under its lock, checked by type.** A
+  function that changes a row takes it as its `Locked…` type, which only
+  the row's `lock_*` function makes (`plan-messaging.md` §5).
 - **Handlers never wait on a vendor.** A handler takes the row lock,
   changes state, writes facts, commits. The advisory lock is taken only
   by workers, so a buyer cancelling is never blocked by a courier call in
-  flight; the cancel is recorded and handled once the call is done.
+  flight; the cancel is recorded, and the call's `complete` finds it.
 - **The ledger needs no lock to append** (the idempotency key is unique),
   but a decision that depends on a balance takes the merchant lock, so two
   payouts cannot both spend the same money.
@@ -151,99 +147,48 @@ Rules:
   sees the new state. A payment captured for a stored quote is always
   honoured, even if the capture arrives after the quote's time: the buyer
   paid a price we showed.
-- **No expiring keys of our own.** Merchant idempotency keys, vendor
-  event keys and request keys are kept for good. A replay next year is
-  still recognised.
+- **No expiring keys of our own** (decided 15-Nov-2026). Merchant
+  idempotency keys, vendor event keys and request keys are kept for good.
+  A replay next year is still recognised.
 
 What time is still used for, and only for:
 
 | Use | Kind | How |
 |---|---|---|
 | Retry a failed call later | trigger | `not_before` on the delivery (§5) |
-| Poll DHL tracking; fetch reports | trigger | a scheduled fact (`tracking_poll_due`) |
+| Poll tracking; fetch reports | trigger | a scheduled fact (`tracking_poll_due`) |
 | Quote validity, return window, payout delay | business fact | stored on the record, compared under the row lock; a scheduled fact (`payout_delay_passed`) starts the step |
 | HTTP client timeout | gives up waiting | the result is `OutcomeUnknown`, a value; it decides nothing |
 
 ## 5. Messaging and workers
 
 Facts only: past tense, immutable, versioned, one record type per fact and
-version in `messaging/`. There are no command messages. "Book the label"
-is the courier consumer reacting to `shipment_created` (changed from the
-PSP plan, §12).
+version. There are no command messages: "book the label" is the courier
+consumer reacting to `shipment_created`. How facts are stored, routed,
+picked up and run is `plan-messaging.md`; the shape in short:
 
-Tables (detailed in `plan-messaging.md` §2):
+- A fact is written to the `outbox` in the same transaction as the state
+  change, with one `outbox_delivery` row per consumer. The worker picks
+  due deliveries in any order; every consumer takes facts late, twice and
+  out of order.
+- **A local consumer** is one transaction: lock the aggregate row, decide
+  with a pure function, write state, ledger entries and new facts, mark
+  the delivery handled, commit.
+- **An effect consumer** calls out, in three plain functions: `prepare`
+  (one transaction: is a call still wanted; mark the vendor request
+  `sent`; commit), the call (no transaction open, through the registry),
+  and `complete` (one transaction: apply the result to the state as it is
+  now, write facts, end or defer the delivery). The worker holds the
+  aggregate's session advisory lock across all three.
+- Why three functions and not one: a commit must separate "we are about
+  to ask the vendor" from "the vendor answered", or a crash cannot be told
+  from a call never made. And a test can stop between any two of them,
+  which is exactly a crash (§10).
 
-- `outbox`: one row per fact, with `message_type` as an enum type.
-- `outbox_delivery (message_id, consumer, aggregate_key, not_before,
-  handled_at)`: one row per consumer of a fact, written in the same
-  transaction as the fact. Which consumers get which fact is one table in
-  code. This replaces a relay plus broker while we run on one database;
-  moving to a broker later replaces this table and the claim query only.
-- `inbox (consumer, message_id)`: unchanged. With a broker it becomes the
-  only dedupe; today `handled_at` and it are written together.
-
-The worker loop (amended 23-Nov-2026: no ordering, and the advisory lock
-for effects only; `plan-messaging-rework.md` §2 and §3):
-
-1. Pick deliveries that are unhandled and whose `not_before` has passed,
-   oldest first. Consumers take facts in any order.
-2. An effect consumer: try the advisory lock for the delivery's aggregate
-   (`pg_try_advisory_lock`, which returns at once). Not acquired: another
-   worker has that aggregate mid-call; take the next one. No waiting, no
-   lease. A local consumer takes no advisory lock: it locks the rows it
-   changes.
-3. Lock the delivery row (`FOR UPDATE SKIP LOCKED`: a row another worker
-   holds is skipped), check it is still open and due, and run it.
-4. Release the advisory lock, if taken.
-
-Two kinds of consumer, told apart by a closed type and matched
-exhaustively:
-
-**Local consumer**, one transaction: lock the aggregate row, decide with a
-pure function, write state, ledger entries and new facts, mark the
-delivery handled, commit.
-
-**Effect consumer**, for anything that calls out. Three plain functions,
-which the worker calls in a row:
-
-```
-prepare(conn, delivery, now) -> Nothing | Call(request)
-    One transaction. Lock the row. Decide from the state whether a call is
-    still wanted (a cancelled shipment needs no label). Find or create the
-    vendor request row: unique on (aggregate, operation, number), holding
-    the idempotency key. Mark it `sent`. Commit.
-    If the row was already `sent` with no result, an earlier run died
-    mid-call: what to do next follows the operation's duplicate guard
-    (below).
-call(account, request) -> answer
-    No transaction open. Goes through the registry to one provider module.
-    The answer is a record per call holding the call and its result union,
-    so `complete` is picked by the answer and matches exactly the results
-    that call can get (decided 21-Nov-2026: one global result union lost
-    that pairing, and completions checked it at run time).
-complete(conn, delivery, answer, now)
-    One transaction. Lock the row. Store the result on the request row,
-    apply the transition for the state as it is now, write ledger entries
-    and facts, mark the delivery handled (or set `not_before` for a
-    retry). Commit.
-```
-
-The failures every call can end in (`Unavailable`, `OutcomeUnknown`,
-`UndecodableBody`) are one set of records for all ports,
-`mor/vendor_failures.py`; what to do about one is the operation's guard.
-Whether a consumer is local or effect is in its type
-(`LocalConsumer`, `EffectConsumer` in `mor/messaging/routing.py`).
-
-Why three functions and not one: a commit must separate "we are about to
-ask the vendor" from "the vendor answered", or a crash cannot be told from
-a call never made. And a test can stop between any two of them, which is
-exactly a crash (§10).
-
-**After an unknown outcome: the duplicate guard** (revised 15-Nov-2026
-after review). The first draft said "look the request up at the vendor
-first, and send again only if the vendor does not know it". That is
-check-then-act across two systems: the first request can still be on its
-way when the lookup answers "not found", and nothing we hold locks the
+**After an unknown outcome: the duplicate guard.** A request was sent and
+no answer came back. Looking it up at the vendor and sending again if
+"not found" is check-then-act across two systems: the first request can
+still be on its way when the lookup answers, and nothing we hold locks the
 vendor. A lookup can prove a request arrived; it can never prove it did
 not. Rule 1 applies to the vendor's side too: the only real guard is a
 constraint in the vendor's own system. So each port operation, per
@@ -253,8 +198,10 @@ provider, declares which guard it has, as capability data:
 |---|---|---|
 | `vendor_constraint` | it refuses or replays a second request with our key or our reference, for good | send the same request again with the same key; the vendor's constraint decides. No lookup is needed to be safe |
 | `compensable` | nothing, but a duplicate costs nothing and can be undone (a label that is never handed over) | send again; a duplicate shows up as two results for one reference, and the extra one is cancelled |
-| `none` | nothing, and a duplicate moves money or cannot be undone | never send again automatically. Lookups only: found means complete it; still not found goes to an exceptions list for a person |
+| `none` | nothing, and a duplicate moves money or cannot be undone | never send again automatically. Lookups only: found means complete it; still not found goes to the exceptions list for a person |
 
+- `none` is the default where a provider promises nothing (decided
+  15-Nov-2026): a stuck request waits for a person.
 - A key the vendor honours only for a window (1 hour at Mollie, 14 days
   at Adyen) counts as `none`, not as `vendor_constraint`: trusting it
   would put a clock comparison back in the guard. The cost is small: it
@@ -272,31 +219,23 @@ provider, declares which guard it has, as capability data:
   capabilities. Changing it (a vendor adds a key, or we learn an unused
   label is billed after all) is a one-line change with its test.
 
-Why our own row lock cannot do this alone (asked in review,
-15-Nov-2026): it already does everything that happens on our side. The
-advisory lock means only one worker ever talks to the vendor about a
-shipment, and the committed `sent` mark means we always know a call may
-have been made. What no lock of ours can do is make the vendor's work
-and our commit one atomic step, because they are two systems. So the
-provider's help is needed in exactly one case: the call was sent and no
-answer came back. Every other retry is decided by our own locks.
+Why our own locks cannot do this alone: they already do everything that
+happens on our side. The advisory lock means only one worker ever talks to
+the vendor about a shipment, and the committed `sent` mark means we always
+know a call may have been made. What no lock of ours can do is make the
+vendor's work and our commit one atomic step, because they are two
+systems. So the provider's help is needed in exactly one case: the call
+was sent and no answer came back.
 
-**Inbound: three modes, one path.** Event-driven where the vendor offers
-it, polling or files where it does not (decided 15-Nov-2026). The mode is
-capability data per provider and channel, never a branch in feature code:
-
-| Mode | How it arrives | Started by |
-|---|---|---|
-| `push` | a signed webhook | the vendor |
-| `poll` | we fetch a page of changes | a scheduled fact per aggregate, which schedules the next one until a final state |
-| `file` | a report or invoice file we fetch or are sent | a scheduled fact per account, or an upload |
-
-All three store the raw body in that port's inbox table with a unique key
-on the vendor's event id (or a hash of the body), commit, and stop there;
-a webhook handler then answers the vendor. A consumer decodes the raw row
-with msgspec into the same typed records whatever the mode, and applies
-them under the aggregate's row lock. A thin webhook that carries only an
-id is one more variant: the consumer fetches the state it points at.
+**Inbound: one path for every mode.** Event-driven where the vendor
+offers it, polling or files where it does not (decided 15-Nov-2026). The
+mode (`push`, a thin push, `poll`, `file`) is capability data per provider
+and channel, never a branch in feature code. Every mode stores the raw
+body in that port's inbox, commits and stops; a consumer decodes it into
+the same typed records whatever the mode and applies them under the
+aggregate's row lock. The duplicate guard for anything a vendor sends is
+the vendor's own id, never a hash of the bytes. Detail:
+`plan-messaging.md` §7.
 
 ## 6. Ports, provider choice and fakes
 
@@ -314,13 +253,14 @@ async def book(account: CourierAccount, request: BookRequest) -> BookResult:
             return await couriers.fake.book(account, request)
         case CourierName.DHL_EXPRESS:
             return await couriers.dhl_express.book(account, request)
-        case _:
-            assert_never(account.provider)
 ```
 
 No protocol class, no injection: jump-to-definition lands on the code that
-runs, and pyright checks every module against the port's records. Adding a
-provider is an enum member, a module and one `case` per operation.
+runs, and pyright checks every module against the port's records and
+refuses a missing case. Adding a provider is an enum member, a module and
+one `case` per operation. The registry is the only place that matches on
+a provider (an ast-grep rule); feature code switches on capability values
+the account carries.
 
 **Which account is used** comes from data: account rows per port
 (`psp_account`, `courier_account`, …) and effective-dated routing rows.
@@ -365,38 +305,30 @@ connection, as a real third party would.
 - It counts what it was asked to do per reference. That count is the
   fuzzer's proof that nothing was booked or charged twice.
 
-**Environments.** `ENVIRONMENT` is `dev`, `test` or `prod`. Outside `prod`
-the registries raise on any provider but the fake, so a wrong account row
-cannot reach a real vendor. Merchants test in a separate sandbox
-deployment (`ENVIRONMENT=test`, its own database, the fakes), never with
-test keys on prod (decided 17-Nov-2026, replacing "test keys on prod
-route to fake accounts, `livemode = false`"). Reasons: prod holds only
-live data, so no record needs a live/test flag and no test payment can
-reach a live report or payout; and the fakes never ship to prod. The
-cost: the sandbox is something merchants rely on, so it must stay up,
-and the long fuzz runs use a database of their own. Contract tests
-against a vendor's sandbox are run by hand with an explicit flag, never
-by `pytest`.
+**Environments.** `ENVIRONMENT` is `dev`, `test` or `prod`.
 
-Vendor sandboxes on the test setup (decided 19-Nov-2026, amending the
-rule above): once a real provider module exists, the test setup may also
-hold accounts on that vendor's own sandbox (a PSP's test mode, a
-carrier's test API), next to the fakes. So a merchant, and we, can run
-an order end to end against the real API without real money or parcels.
-- `dev` stays fakes only; `test` allows the fake and a provider's
-  sandbox; `prod` allows live accounts only. Each account row says which
-  of `fake`, `sandbox` or `live` it is, and the registry refuses any
-  account whose kind the environment does not allow, so a live key can
-  never be used outside prod, nor a sandbox key in prod. Every account
-  table has the `kind` (PSP, courier, duty vendor, echo; migration 0023),
-  and a CHECK makes a fake provider's account always `fake`, so the kind
-  check alone keeps the fakes out of prod.
-- A sandbox account is routed only to merchants we pick (a routing row
-  per merchant); the default routes stay on the fakes.
+- Merchants test in a separate sandbox deployment (`ENVIRONMENT=test`,
+  its own database), never with test keys on prod (decided 17-Nov-2026).
+  Reasons: prod holds only live data, so no record needs a live/test
+  flag and no test payment can reach a live report or payout; and the
+  fakes never ship to prod. The cost: the sandbox is something merchants
+  rely on, so it must stay up, and the long fuzz runs use a database of
+  their own. The test setup is `plan-test-setup.md`.
+- Every account row says whether it is `fake`, `sandbox` (a vendor's own
+  test API) or `live`, and the registry refuses an account whose kind the
+  environment does not allow: `dev` takes fakes only, `test` fakes and
+  vendor sandboxes, `prod` live accounts only (decided 19-Nov-2026). A
+  CHECK makes a fake provider's account always `fake`, so the kind check
+  alone keeps the fakes out of prod.
+- A vendor sandbox account on the test setup is routed only to merchants
+  we pick (a routing row per merchant), so a merchant, and we, can run an
+  order end to end against the real API without real money or parcels;
+  the default routes stay on the fakes. Built with the first real
+  provider module of each port.
 - The fakes remain what the fuzzer, the soak and `pytest` use: a vendor's
   sandbox has its own limits and outages, and only the fake can be
-  scripted into every fault.
-- Built with the first real provider module of each port, not before.
+  scripted into every fault. Contract tests against a vendor's sandbox
+  are run by hand with an explicit flag, never by `pytest`.
 
 **Every integration mode has a fake** (decided 15-Nov-2026: the fakes and
 the test setup must exercise every way a provider can be wired, not one
@@ -411,16 +343,7 @@ or service row:
 | Duty source | our own tables and a vendor call (§8) |
 | Payout rail | instruction file and API with status events |
 
-The fuzzer draws the mode per run (§10), so every one is exercised. The
-set of modes is derived from the capability types, and a test fails when
-a capability value exists that no fake account offers.
-
-**The test setup** (it does not exist yet; build order §14). A deployed
-copy with `ENVIRONMENT=test`: web (with the fakes' routes) and worker,
-its own database, synthetic data only. Its seed data
-has one merchant per mode combination worth walking through by hand (a
-push-tracked order, a polled one, a live-rated one, and so on), and it is
-where the long fuzz runs happen.
+The fuzzer draws the mode per run (§10), so every one is exercised.
 
 ## 7. Logistics: records and tables
 
@@ -466,6 +389,11 @@ One table per thing, typed columns, enum types for every closed set. The
 customs snapshot is real columns plus a `shipment_customs_line` table, not
 a serialized blob.
 
+**One shipment per order in v1** (decided 15-Nov-2026). Several boxes on
+one waybill can come later; true splits are out: a split needs the boxes
+known before payment, can change the tax owed, pays the duty-paid minimum
+twice, and needs "partly delivered" rules for status, payout and returns.
+
 **Port operations** (`couriers/port.py`): `book` (label, commercial
 invoice, duties billed to us), `find_by_reference`, `cancel`,
 `book_pickup`, `book_return`, `quote_rate` (a live price, §8),
@@ -493,8 +421,8 @@ buyer field missing (KR customs code), parcel over a service's limits.
 
 `build_quote` only ever sees prices and rates as plain inputs. Where each
 input comes from is routing data, switchable per lane without a deploy
-(decided 15-Nov-2026: the first draft fixed shipping to our own tables
-and duty to one vendor; both must be swappable like any provider).
+(decided 15-Nov-2026: shipping price and duty rates are swappable like
+any provider).
 
 **Shipping price: a source per service and lane.**
 
@@ -535,17 +463,15 @@ difference shows a wrong table or a wrong source.
 quote in its own transaction. When one is missing (a live shipping price,
 a duty rate for a new product in a new country), the handler records
 `quote_requested`, the workers fetch what is missing, and the buyer's
-page refreshes itself (the same pattern as the QR page) until `quote_made`
-or `quote_refused` exists. So no handler calls a vendor, as the shared
-Messaging rule requires.
+page refreshes itself until `quote_made` or `quote_refused` exists. So no
+handler calls a vendor.
 
-Decided 15-Nov-2026: a buyer waiting a little longer for a fresh landed
-price is acceptable. The same wait happens whenever a stored input can no
-longer be used: a rate row was superseded, a live price's `valid_until`
-passed, or routing changed the source. Later, popular products can be
-kept warm in the background so their buyers rarely wait: that is the
-scheduled refresh above, run per product and destination instead of per
-source. It adds a schedule, not a new mechanism.
+A buyer may wait a little for a fresh landed price (decided 15-Nov-2026).
+The same wait happens whenever a stored input can no longer be used: a
+rate row was superseded, a live price's `valid_until` passed, or routing
+changed the source. Later, popular products can be kept warm in the
+background so their buyers rarely wait: the scheduled refresh above, run
+per product and destination instead of per source.
 
 **How the buyer's price is built** (decided 15-Nov-2026: the merchant
 names the price it wants for the product and receives exactly that; we
@@ -560,9 +486,7 @@ add everything else on top, openly):
 = the one total the buyer pays
 ```
 
-- This replaces "merchant's price minus our fee" in the PSP plan's
-  capture entry. The merchant's payout no longer depends on our fee or
-  on the destination.
+- The merchant's payout does not depend on our fee or on the destination.
 - Our fee is part of what the buyer pays us for the goods, so by default
   it is inside the taxable amount and the customs value. Whether any
   country lets it sit outside is an adviser question, not assumed.
@@ -598,25 +522,28 @@ add everything else on top, openly):
   the PSP's real fee is only known at settlement and depends on the
   payment method, which the buyer picks after the quote. So the quote
   charges an estimated PSP fee from a rule per buyer country and
-  currency, and settlement import compares it with the real fee: the
-  collected amount sits in `psp_fee_collected`, the real fee clears it,
-  and the difference is ours, like any cost we could have priced in.
-  Pricing per method instead would change the total after the quote,
-  and charging a buyer extra for a payment method is restricted in
-  several countries (to be checked per country, not assumed).
-
-- **Prices from merchants are always tax-exclusive in v1** (decided
-  15-Nov-2026: simplest for the merchant, which names one price and gets
-  it). The `inclusive` option in the surfaces plan is dropped for now.
+  currency, and settlement compares it with the real fee: the collected
+  amount sits in `psp_fee_collected`, the real fee clears it, and the
+  difference is ours, like any cost we could have priced in. Pricing per
+  method instead would change the total after the quote, and charging a
+  buyer extra for a payment method is restricted in several countries
+  (to be checked per country, not assumed).
+- **Merchant prices are tax-exclusive in v1** (decided 15-Nov-2026:
+  simplest for the merchant, which names one price and gets it). There is
+  no tax-inclusive option.
 - **What the buyer sees** (decided 15-Nov-2026): four lines only, items,
   shipping, duties and taxes, and the total, with our fee inside the item
   price. The fee is stored as its own amount on the quote whatever is
   shown, so showing it as a line later is a change to one page. Reasons
   for folding it in: a buyer gains nothing from the split, and in law we
   are the seller, so our margin is part of the goods' price like any
-  shop's, not a separate service. The merchant sees the full build-up
-  per country in the dashboard and through the `estimates` endpoint, and
-  uses that all-in figure if it wants its own site to match checkout.
+  shop's, not a separate service. A merchant whose own site shows its
+  bare price will show a lower figure than our checkout; that is
+  accepted, since we aim to be the merchant's main integration and
+  payment links show our price from the start. The merchant sees the full
+  build-up per country in the dashboard and through the `estimates`
+  endpoint, and uses that all-in figure if it wants its own site to match
+  checkout.
 
 **Indirect tax we collect ourselves** comes from the jurisdiction module
 (`tax/gb.py` and so on), chosen by the tax path rule.
@@ -645,10 +572,10 @@ and emits `shipment_created`. The courier effect consumer handles that:
   `Unavailable` or `OutcomeUnknown` → the delivery stays unhandled with a
   later `not_before`; state stays `label_requested`.
 
-**Cancel and refund before pickup** are facts on the same shipment, so
-they queue behind a booking in flight. `complete` applies the result to
-the state as it is then: a label that comes back for a cancelled shipment
-leads straight to the `cancel` call. Pickup is its own request and state.
+**Cancel and refund before pickup** are facts on the same shipment.
+`complete` applies the result to the state as it is then: a label that
+comes back for a cancelled shipment leads straight to the `cancel` call.
+Pickup is its own request and state.
 
 **Tracking.** Shipment status is a pure function of the whole set of
 events, not of the order they arrived in:
@@ -661,9 +588,10 @@ So duplicates and out-of-order delivery cannot corrupt it, and a webhook
 carrier and a polled carrier behave the same. When the derived status
 first reaches a milestone (picked up, held at customs, delivered, lost,
 returning, returned), a row in `shipment_milestone` is inserted and the
-fact emitted, once, by the unique constraint. Polling (DHL) is a scheduled
-fact per shipment that fetches one page and schedules the next; it stops
-at a final status.
+fact emitted, once, by the unique constraint. Polling is a scheduled fact
+per shipment that fetches one page and schedules the next; it stops at a
+final status. The echo flow rehearses all of this (`plan-messaging.md`
+§9).
 
 A carrier correcting itself (a "delivered" scan withdrawn) is a new event
 and a new milestone, `delivery_withdrawn`. If the merchant's money was not
@@ -683,7 +611,7 @@ at capture (from the quote):
   Cr merchant_payable        the merchant's price for the goods, in full
   Cr psp_fee_collected       estimated PSP fee, charged on top (§8)
   Cr revenue_mor_margin      our margin, charged on top (§8)
-at settlement import (real PSP fee known):
+at settlement (real PSP fee known):
   Dr psp_fee_collected       the estimate
   Dr/Cr psp_fee_variance     the gap, ours
   Cr psp_clearing            the real fee the PSP kept
@@ -703,10 +631,9 @@ shipment already cleared (carriers re-bill weeks later), is not an error:
 it becomes a `courier_invoice_exception` row for a person, or a further
 entry on the same shipment.
 
-**Who bears a difference** (decided 15-Nov-2026; it replaces "duty
-estimate differences are the merchant's, both ways" of 04-Nov-2026). The
-carrier account is ours, so we always pay the bill. Each difference
-between quote and bill then opens a `variance_case`:
+**Who bears a difference** (decided 15-Nov-2026). The carrier account is
+ours, so we always pay the bill. Each difference between quote and bill
+then opens a `variance_case`:
 
 ```
 VarianceCase { id, shipment_id, invoice_line, difference: Money, state }
@@ -726,6 +653,11 @@ VarianceCase { id, shipment_id, invoice_line, difference: Money, state }
   attribute obvious causes by themselves can come later, per cause.
 - A difference in our favour (we collected more than the carrier billed)
   stays in the same account and is reviewed the same way.
+- Mistakes are covered per case, by deducting a merchant-caused
+  difference from that merchant's balance. No buffer percentage on every
+  shipment: it would make careful merchants pay for careless ones, remove
+  the reason to enter correct data, and save no work. The rolling reserve
+  covers a merchant whose balance cannot absorb a deduction.
 - The merchant contract must allow these deductions and say how a
   merchant disputes one: named for counsel, not assumed.
 
@@ -746,7 +678,7 @@ transaction.
 
 Three layers. The first two are Hypothesis tests, so they run in plain
 `pytest`, with a small budget in the normal check and a large one in the
-long runs.
+soak.
 
 **Layer 1: properties of pure functions** (no database).
 
@@ -756,47 +688,83 @@ long runs.
   never a negative line; the merchant's part equals its price exactly; a
   border-paid order never gets a service that is not duty-paid; every
   input yields a `Quote` or a `QuoteRefusal`, never an exception.
-- Transition tables: every (state, event) pair has an answer: a new state,
-  `Stale` or `Parked`.
+- Transition tables: every (state, event) pair has an answer: a new state
+  or `Stale`.
 - `derive_status`: the same for every order and duplication of the events.
 - Decoders: any bytes give a typed record or a typed error. Provider
   amount conversion round-trips or reports `not_representable`.
 - Posting builders: every entry balances per currency for any input.
 
-**Layer 2: the whole flow as a state machine** (`tests/flow/`), using
+**Layer 2: the flow as state machines** (`tests/flow/`), using
 Hypothesis's stateful testing against the real test database and the
-in-process fakes. Hypothesis picks the next action from:
+in-process fakes. One machine per stage of the flow: probe, echo, quote,
+duty lookup, shipping price, payment (up to the capture), order (from
+approved payments to the invoice) and settlement. Hypothesis picks the
+next action from:
 
-- merchant: create session, request refund, approve return;
-- buyer: enter address, pay, cancel, request return, double-submit;
+- merchant and buyer: create a session, enter an address, pay, cancel,
+  double-submit, approve or decline at the PSP;
 - fake vendors: release the next event, send it twice, send an older one,
-  send an invoice with a different amount, fail the next call, time out
-  after doing the work;
-- worker: run one delivery fully, or run `prepare` and stop, or `prepare`
-  and `call` and stop (a crash at each commit boundary);
+  send everything again, fail the next call, time out after doing the
+  work;
+- worker: run a due delivery, crash inside a local step, or crash around
+  an effect's call (before the request is sent, or after its answer came
+  back, as a fault of the test network: `plan-messaging.md` §10); meet a
+  handled fact again past the inbox, as a broker's redelivery could;
 - clock: move `now` forward past a deadline.
 
-A small in-memory model (a few dicts: what should be owed to whom, which
-state each order should be in) runs beside it. After every action:
-
-- no step raised (a raise is a bug by our own rule);
-- every journal entry balances; the ledger balances equal the model's;
-- every aggregate is in a state the model allows;
-- no advisory lock is left held.
-
-After draining all deliveries with faults switched off:
-
-- the fake PSP charged each paid order once, for exactly the quote total;
-  refunds never exceed captures;
-- the fake courier holds exactly one live booking per shipped order;
-- each paid order has one invoice; each delivered milestone exists once;
-- nothing is left unhandled, and `psp_clearing`, `duties_payable` and
-  `shipping_payable` are zero for orders whose bills have all arrived.
+A small in-memory model (what should be owed to whom, which state each
+aggregate may be in) runs beside it. After every action: no step raised
+(a raise is a bug by our own rule); every journal entry balances; every
+aggregate is in a state the model allows; no advisory lock is left held.
+After draining with faults off: the fake PSP charged each paid order
+once, for exactly the quote total; each paid order has one invoice, with
+no gap in the numbers; each milestone exists once; nothing is left
+unhandled; clearing accounts are zero where every bill has arrived. The
+rules the payment, order and settlement machines share live in
+`tests/flow/payment_checks.py`.
 
 Why serial orders of steps are enough: every step is one transaction under
 its aggregate's lock, so any real concurrent run equals some serial order
 of those steps. The fuzzer explores the orders; shrinking gives the
 shortest failing one.
+
+**Reach: deep enough to matter.** A green fuzzer says little about states
+its runs never reach (measured 20-Nov-2026: 59% of the then single
+payment machine's runs never made a payment attempt, none had a declined
+payment). Depth comes from structure, not search:
+
+- Machines split by stage, the later one starting deep: the order machine
+  starts from one to three payments the buyer approved, with everything
+  after still to run, so its actions are the delivery machinery's own
+  faults.
+- Actions that do a useful whole: "pay and answer" pays, has the worker
+  make the payment, and has the buyer approve, decline, let it expire,
+  choose another way or leave.
+- Clock jumps past a quote's hold or a session's life wait for a first
+  attempt; early, they left nothing payable.
+- Faults planned per run at setup (up to two PSP faults for the whole
+  run, as FoundationDB's `BUGGIFY` sites are on or off per run), so a
+  fault on the one call that matters is common.
+- A rule for a short moment (a crash around a capture) has a precondition
+  that the moment is now: Hypothesis draws only among rules whose
+  preconditions hold.
+- Swarm testing stays on (Hypothesis's `FeatureFlags`): runs differ in
+  kind, not only in order.
+
+Reach is measured and has a floor (`tests/flow/reach.py`): a machine
+lists its milestones (fact types in the outbox before the final drain,
+plus what its actions met) and writes a reach table to
+`.hypothesis/reach/`, which the soak appends to its log. With 500 runs or
+more, a milestone reached by fewer than 1 run in 200 fails the test, so a
+drop in reach alerts like a bug.
+
+`hypothesis.target()` was tried and dropped (20-Nov-2026): one score made
+each run climb toward whatever it found first and starved the rest
+(captured payments 2.5% on one seed, 60% on another; needs-a-person 60%
+or 0.3%), one label per milestone did no better, and Hypothesis's own
+optimiser crashed on one seed. Without it every milestone is reached on
+every seed.
 
 **Layer 3: real concurrency**, a smaller suite. Several worker tasks and
 handlers on separate connections against the same rows, checking the same
@@ -809,41 +777,38 @@ tests that the locks do what layer 2 assumes.
 - `uv run pytest` (the normal check): each property with a small,
   derandomized budget, plus every saved failure from the Hypothesis
   example database. Fast and repeatable.
-- `HYPOTHESIS_PROFILE=soak uv run pytest tests/`: the same tests with a
-  large random budget, run for hours on the test setup (nightly) or on
+- `HYPOTHESIS_PROFILE=soak uv run pytest`: the same tests with a large
+  random budget, nightly on the test setup (`plan-test-setup.md` §5) or on
   the laptop on demand. Failures go into the Hypothesis example database,
   so the next plain `pytest` replays them. A found failure is then pinned
   as an `@example` in the test and committed.
-- Plain Hypothesis is the fuzzer (decided 15-Nov-2026: HypoFuzz, checked
-  the same day, allows non-commercial use only; "any use within a
+- Plain Hypothesis (MPL-2.0) is the fuzzer (decided 15-Nov-2026:
+  HypoFuzz allows non-commercial use only, and "any use within a
   commercial organization, including internal tooling or testing" needs a
-  paid licence, and a generic tool is enough). Hypothesis is random
-  rather than coverage-guided, so it finds less per hour. The tests need
-  no change if a coverage-guided runner is added later.
-- Hypothesis is a new dev dependency; its version, licence (MPL-2.0 from
-  memory) and Python 3.14 support are checked when it is added.
-- Browser tests arrive with the checkout (decided 17-Nov-2026), not
-  before: until then every page is plain forms with no JavaScript, tested
-  at the HTTP edge (request in, page and rows out), and the sandbox page
-  is transitional. The checkout is the first page with JavaScript (the
-  PSP's card fields), buyer-facing and lasting, and where a broken browser
-  path loses a payment. It gets a small Playwright smoke suite against the
-  test setup: a few journeys end to end (pay, a declined card, a redirect
-  method) under the prod Content-Security-Policy, failing on any "Refused
-  to load" in the console. It runs beside the soak, not in every
+  paid licence). Hypothesis is random rather than coverage-guided, so it
+  finds less per hour; the tests need no change if a coverage-guided
+  runner is added later.
+- Browser tests come with the checkout's card fields (decided
+  17-Nov-2026): until then every page is plain forms with no JavaScript,
+  tested at the HTTP edge (request in, page and rows out). The checkout
+  is the first page with JavaScript (the PSP's card fields),
+  buyer-facing and lasting, and where a broken browser path loses a
+  payment. It gets a small Playwright smoke suite against the test setup:
+  a few journeys end to end (pay, a declined card, a redirect method)
+  under the prod Content-Security-Policy, failing on any "Refused to
+  load" in the console. It runs beside the soak, not in every
   `uv run pytest`. Until then each new page is driven once by hand with
   Playwright before review.
 
 **Modes.** Each layer 2 run first draws its wiring: for every port, which
-of the fake's modes this run uses (§6: push or poll tracking, file or API
-invoices, each duplicate guard, table or live shipping price, table or
-vendor duty). The invariants are the same for every wiring, which is the
-point: the money and the states must not depend on how a provider
-happens to deliver. With guard `none`, the allowed end state also
-includes "waiting on the exceptions list", and the invariant becomes:
-never charged or booked twice, and never silently stuck.
+of the fake's modes this run uses (§6). The invariants are the same for
+every wiring, which is the point: the money and the states must not
+depend on how a provider happens to deliver. With guard `none`, the
+allowed end state also includes "waiting on the exceptions list", and the
+invariant becomes: never charged or booked twice, and never silently
+stuck.
 
-Two notes on the rules:
+Notes on the rules:
 
 - Hypothesis's stateful API is a class that inherits from
   `RuleBasedStateMachine`. That breaks "no inheritance", in test code
@@ -851,14 +816,12 @@ Two notes on the rules:
 - Hypothesis test functions are synchronous. Each test owns one event
   loop and runs our async steps on it.
 - A step's outcome depends only on the draws, never on the wall clock
-  (decided 20-Nov-2026). Hypothesis replays a prefix of draws and expects
-  the same states; a different one is `FlakyStrategyDefinition`. The
-  fakes' "timed out after the work" is a `hang` they are given
-  (`mor.fakes.hang`): served, a real one-minute sleep; in the in-process
-  wiring (`tests/helpers.py` `wire`), a transport timeout at once. Vendor
-  accounts there get a 30 s timeout no answer comes near. Before, a
-  100 ms timeout met a stalled event loop (an answer after 148 ms) and two
-  fuzzers failed the 20-Nov-2026 soak as flaky.
+  (decided 20-Nov-2026): Hypothesis replays a prefix of draws and expects
+  the same states. The fakes' "timed out after the work" is a `hang` they
+  are given (`mor.fakes.hang`): served, a real one-minute sleep; in the
+  in-process wiring (`tests/helpers.py` `wire`), a transport timeout at
+  once. Vendor accounts there get a 30 s timeout no answer comes near, so
+  a stalled event loop cannot turn a slow answer into a timeout.
 
 ## 11. Compliance touchpoints (named, not answered)
 
@@ -870,26 +833,10 @@ Two notes on the rules:
   logged, retention to be decided.
 - The fakes and every fixture use synthetic people and addresses.
 
-## 12. What this changes in the earlier plans
+## 12. Rules this design applies
 
-| Earlier plan | Change | Why |
-|---|---|---|
-| PSP §5.3: commands in the outbox | facts only; a consumer reacts | the shared Messaging rule: messages are facts |
-| PSP §5.3: retry blindly inside the provider's idempotency window | a duplicate guard per operation: resend only where the vendor's own constraint (or free undo) makes it safe, else lookups and a person (§5) | rule 1: no clock decides, and a lookup cannot prove absence |
-| PSP §4: `outcome_unknown { since }` plus a reconciler sweep | the delivery stays unhandled and follows the duplicate guard | no sweep by age |
-| PSP §6.1, surfaces §4: idempotency keys replayed for 7 days | kept for good (decided 15-Nov-2026) | rule 1 |
-| PSP §5.7: mock in-process | a fake vendor over HTTP (ASGI in tests) | the same code path as a real provider; faults; shared by web and worker |
-| Logistics §7: `CourierModule` protocol | registry with an exhaustive match | no protocol classes; jump-to-definition |
-| Logistics §1, §7: `quote` port call at checkout | a shipping price source per lane, our tables or the carrier's rate call, fetched by a worker (§8) | no vendor call from a handler; switchable |
-| Logistics §2.3: duty source per order | stored rates per (HS, origin, destination), filled from our tables or a vendor, refreshed on a schedule (§8) | cost per call; switchable |
-| Surfaces §3, logistics §1 step 11: a duty difference goes to the merchant's balance, both ways | every difference is ours until a person attributes it by cause (§9) | decided 15-Nov-2026: we bear what we could have foreseen, the merchant what its data caused |
-| PSP §5.5: `merchant_payable` is the price net of our fee | the merchant gets its price in full; our fee is added on top (§8) | decided 15-Nov-2026 |
-| The first skeleton plan: sync psycopg, `claim_batch` with `SKIP LOCKED` on outbox rows | async psycopg throughout; `outbox_delivery` plus the advisory lock per aggregate | Starlette is async; the lock must survive the commits inside an effect step |
-
-## 13. Rules this design applies
-
-Data-oriented records and plain functions (§2, §6); closed sets with
-`assert_never` (§5, §6, §8); errors as values from every port (§6);
+Data-oriented records and plain functions (§2, §6); closed sets matched
+exhaustively (§5, §6, §8); errors as values from every port (§6);
 explicit over clever: registry by `match`, no injection, no reflection
 (§6); transactional outbox, idempotent consumers, facts in the past tense,
 facts taken in any order, state machines that commit before the next
@@ -900,173 +847,16 @@ jurisdiction, effective-dated, version stored on the quote (§8); one
 module per provider, one place that picks, fake by default (§6); no real
 personal data in fixtures (§11); verify on realistic synthetic data (§10).
 
-## 14. Build order
+## 13. To check in current docs when the slice that needs it starts
 
-Each slice ends with the checks clean and its part of the flow fuzzed.
-
-1. Skeleton: `money`, `db` and migrations, `ledger`.
-2. Messaging: `outbox_delivery`, the worker, both consumer kinds, the
-   duplicate guards, the three inbound modes, the fake-vendor frame, and
-   the layer 2 harness on a two-step toy flow. This is where the lock
-   design is proven before anything depends on it.
-3. The test setup: `deploy/deploy.sh` for an `ENVIRONMENT=test` server
-   running web (with the fakes) and worker, with the nightly soak run. Early,
-   so every later slice lands on it.
-4. Markets, tax path, rate tables and duty rates with both kinds of
-   source, `build_quote`; checkout session.
-5. Payments against the fake PSP in every mode; order and invoice.
-6. Shipments against the fake courier in every mode: booking, tracking,
-   milestones.
-7. Courier invoice import and its ledger entries.
-8. Returns and refunds.
-9. Payout release and payout runs against the fake rail.
-10. The first real courier module, once the quotes decide which.
-
-Staff sign-in (staff accounts, password plus a second factor, sessions,
-the person recorded as actor) is a slice of its own, before the first prod
-deploy (decided 17-Nov-2026, `plan-quote.md` §5b); until then staff pages
-are mounted only outside prod.
-
-## 15. Decisions from the review, and what is still open
-
-Decided 15-Nov-2026:
-
-- **Locks guard, time only triggers** (§1, §4). Event-driven is
-  preferred; polling and timers are used only where a provider offers
-  nothing else, as a capability mode (§5).
-- **Lookup-then-resend is not a guard** (§5): it only narrows the race.
-  Replaced by the duplicate guard per operation.
-- **Our idempotency keys never expire** (§4).
-- **Shipping price and duty rates are switchable sources**, our own
-  tables or a provider, per lane (§8). Duty rates are stored and can be
-  updated by file, scheduled refresh or hand.
-- **Fuzzing with plain Hypothesis**, no HypoFuzz licence (§10).
-- **The test setup** is a deployed `ENVIRONMENT=test` copy with the
-  fakes. It does not exist yet and is slice 3. It and the fuzzer exercise
-  every integration mode (§6).
-- **Guard `none` is the default** where a provider promises nothing: a
-  stuck request waits for a person. The guard is a value we can change
-  per provider operation (§5).
-- **A buyer may wait for a fresh landed price**; background warming for
-  popular products comes later on the same refresh mechanism (§8).
-- **We pay every carrier bill; a person then attributes each difference**
-  to us or to the merchant by cause (§9).
-
-- **Fakes live inside the dev web server** under `/_fake/` (§6).
-- **One shipment per order in v1**; several boxes on one waybill can come
-  later, true splits are out (reasons: a split needs the boxes known
-  before payment, can change the tax owed, pays the duty-paid minimum
-  twice, and needs "partly delivered" rules for status, payout and
-  returns).
-- **The buyer's price is the merchant's price plus our fee, shipping,
-  tax and duty on top** (§8).
-
-- **Mistakes are covered per case**, by deducting a merchant-caused
-  difference from that merchant's balance (§9). No buffer percentage on
-  every shipment: it would make careful merchants pay for careless ones,
-  remove the reason to enter correct data, and save no work. The rolling
-  reserve covers a merchant whose balance cannot absorb a deduction.
-- **The fee is a percentage at first, as a per-merchant rule in data**
-  that also allows a fixed amount (§8).
-- **Merchant prices are tax-exclusive in v1** (§8).
-
-- **Our fee is inside the item price the buyer sees** (§8). A merchant
-  whose own site shows its bare price will show a lower figure than our
-  checkout; that is accepted, since we aim to be the merchant's main
-  integration and payment links show our price from the start.
-
-- **Fees are named components** (PSP fee, FX, our margin), shown to the
-  merchant one by one (§8).
-
-- **Pass-through fees are charged on top as an estimate**; the gap to
-  the real fee is ours (§8).
-
-Nothing is open in this plan. Open items that belong to other plans
-(entity, carrier quotes, advisers) stay there.
-
-## 16. Picking this up in a new session
-
-Where things stand (21-Nov-2026): slices 1 to 4 of §14 are built, and
-slice 5 up to 5c-1. Each slice has its plan, whose Status line says how
-far it is:
-
-| Slice | Plan |
-|---|---|
-| 1. Skeleton: `money`, `db` and migrations, `ledger` | built 16-Nov-2026 (its plan is in git history) |
-| 2. Messaging | `plan-messaging.md` |
-| 3. The test setup | `plan-test-setup.md` |
-| 4. Markets, tax path, prices, the quote | `plan-quote.md` |
-| 5. Payments, order, invoice, settlement | `plan-payments.md` |
-| Fuzzing depth (amends §10) | `plan-fuzz-reach.md` |
-| Messaging rework (open, from a code review) | `plan-messaging-rework.md` |
-| Settlement as vendors send it (amends 5c-1) | `plan-settlement-reconciliation.md` |
-| Rules to check, not only write down (survey) | `plan-codified-rules.md` |
-
-Next, in this order (agreed 23-Nov-2026). The reasoning: guards before
-the changes they protect, refactor before building on what is
-refactored, clean up code once it has stopped moving.
-
-1. The cheap guards (`plan-codified-rules.md` §2.3, §2.1 and §2.2; built
-   24-Nov-2026): the
-   ruff settings (all of `DTZ` and `A`, banned imports), the fact-schema
-   snapshot, which makes sure the refactor below cannot change a stored
-   fact's shape unnoticed, and `kw_only` records (moved here
-   24-Nov-2026: its 90 fixes are in the quote tests, which the
-   refactor does not touch, and the refactor's new records then come
-   under the check).
-2. The messaging refactor: `plan-messaging-rework.md` §3.3 (built
-   24-Nov-2026). A new consumer is a case in `mor.messaging.consumers`:
-   narrow the fact, lock (a local consumer), run; an effect is three
-   steps through `run_steps`.
-3. The rest of the codifying (`plan-codified-rules.md` §2.4): the
-   ast-grep rules, after the refactor because it deletes or reshapes
-   much of what they would touch (most import aliases are in
-   `mor.messaging.consumers`). The shadowing, import-alias and
-   two-column-row rules were decided 24-Nov-2026 (`AGENTS.md`, Code
-   Style).
-   Built 24-Nov-2026. Then a type for a locked row
-   (`plan-messaging-rework.md` §3.5), required by the functions that
-   change that row: built 24-Nov-2026.
-4. The ledger's typed account scopes (`plan-messaging-rework.md` §5),
-   just before 5c-2, which adds `bank:{entity}`.
-5. 5c-2, the bank statement import that moves a PSP payout from
-   `payout_in_transit` to `bank` (`plan-payments.md` §7.1), on the new
-   consumer shape and under the new checks; it brings the "flagged"
-   state for a payout whose bank credit arrived but whose lines do not
-   add up (`plan-settlement-reconciliation.md` §4.3). Then 5c-3, card
-   fields and the Playwright suite.
-
-When they are needed, not before: `plan-messaging-rework.md` §3.5 (the
-message's own uuid, version draining, replay) and the markets source
-decoded with msgspec (§5). The echo vendor stays until the shipment
-slice.
-
-Read, in this order:
-
-1. `AGENTS.md` and the shared conventions it points to.
-2. This plan, whole. It wins over the earlier plans (§12).
-3. The plan of the slice in hand, and for a slice not planned yet the
-   earlier plan that covers it: `plan-psp-integration.md` (payouts,
-   Shopify), `plan-merchant-surfaces.md` (API, checkout pages,
-   dashboard), `plan-logistics.md` (countries, tax path rule, carriers,
-   returns).
-
-Each slice is designed first where it adds tables or message shapes: a
-short design, a reply, then the code.
-
-To check in current docs when the slice that needs it starts, never from
-memory:
+Never from memory:
 
 - The duplicate guard each real provider offers for booking, charging
   and paying out (§5), when its module is built.
 - Whether a carrier's API takes several boxes on one waybill, if a
-  merchant needs it (§15).
+  merchant needs it (§7).
 - Whether charging a buyer extra per payment method is allowed, per
   country, before any per-method pricing (§8).
 
 Names that are placeholders: the package `mor`; the fee percentages and
 shipping prices used in examples anywhere.
-
-An explainer page with worked examples of this design was published for
-the user as a private artifact, "MoR Flow Architecture". It is a reading
-aid; this file is the source.

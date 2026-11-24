@@ -1,5 +1,5 @@
-"""The staff Settlement pages (docs/plan-payments.md §7.1,
-docs/plan-settlement-reconciliation.md §4.3): per PSP account its health
+"""The staff Settlement pages (docs/plan-payments.md §7,
+docs/plan-payments.md §7): per PSP account its health
 figures (`psp_clearing` and `payout_in_transit` per currency), its payouts
 with whether each adds up to its lines yet (open ones first, with how long
 they have been open), and its exceptions, each open one with a form to

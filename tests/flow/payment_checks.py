@@ -1,4 +1,4 @@
-"""What the payment and order fuzzers share (docs/plan-fuzz-reach.md §3):
+"""What the payment and order fuzzers share (docs/plan-architecture.md §10):
 the rules that must hold after every action, the rules after a drain, and
 the worker steps both machines take (catch up, crash inside a local step,
 crash around an effect's call). Each is a plain function on the test
@@ -210,8 +210,8 @@ class _SettlementSumsRow:
 
 
 async def check_settlement_is_booked_once(conn: Connection) -> None:
-    """Settlement's rows and the ledger agree (docs/plan-payments.md §7.1,
-    plan-settlement-reconciliation §4): a booked line has its order and its
+    """Settlement's rows and the ledger agree (docs/plan-payments.md §7,
+    plan-payments.md §7): a booked line has its order and its
     one entry, taking its fee out of `psp_clearing`; a booked payout put
     its net on the way to the bank; the rounding entries hold exactly the
     rounding each payout says is booked, and only a balanced payout has
@@ -345,11 +345,11 @@ class _ClearingRow:
 
 async def check_settlement_drained(conn: Connection) -> None:
     """Everything the fake settled is in our books, each line once and as
-    its fault says (docs/plan-payments.md §7.1): a clean line booked, a
+    its fault says (docs/plan-payments.md §7): a clean line booked, a
     faulty one its exception, a line whose payment went to a person (no
     guard) `not_captured`, a balance transfer counted; every batch's
     payout booked, and open exactly where the fake cut its net off, by
-    that much (plan-settlement-reconciliation §4.3). `psp_clearing` then
+    that much (plan-payments.md §7). `psp_clearing` then
     holds what the orders put in, less the fees booked and the nets the
     fake paid out, plus the rounding booked (in SGD, where the fake's
     units are ours)."""

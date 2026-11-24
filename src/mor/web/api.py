@@ -191,7 +191,7 @@ async def get_checkout_session(request: Request, settings: Settings) -> Response
 
 async def get_order(request: Request, settings: Settings) -> Response:
     """The merchant's own order, with the full address for fulfilment
-    (docs/plan-payments.md §6.1); another merchant's is a 404."""
+    (docs/plan-payments.md §6); another merchant's is a 404."""
     not_found = ApiError(
         status=404,
         type=ErrorType.NOT_FOUND,
@@ -232,7 +232,7 @@ async def get_merchant(request: Request, settings: Settings) -> Response:
 async def post_merchant_settings(
     request: Request, settings: Settings, now: datetime
 ) -> Response:
-    """The merchant's own settings (docs/plan-payments.md §6.1). No
+    """The merchant's own settings (docs/plan-payments.md §6). No
     Idempotency-Key: setting the same values again changes nothing."""
     async with await connect(settings.database_url) as conn:
         auth = await _authenticated(conn, request, settings)

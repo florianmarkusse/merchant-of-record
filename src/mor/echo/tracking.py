@@ -1,5 +1,5 @@
 """Polling an echo job's events, for `poll` accounts and thin webhooks
-(docs/plan-messaging.md §12). Transitional with the echo flow.
+(docs/plan-messaging.md §7). Transitional with the echo flow.
 
     echo_job_echoed ─▶ echo_tracking_start: on a `poll` account, schedule
                        the first echo_poll_due

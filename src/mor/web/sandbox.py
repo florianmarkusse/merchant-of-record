@@ -9,7 +9,7 @@
     POST /_fake/sandbox/cut          vendor side: cut a report
     POST /_fake/sandbox/fault        vendor side: script a fault
     POST /_fake/sandbox/settlement   PSP side: cut a settlement, maybe with
-                                     a fault (docs/plan-payments.md §7.1)
+                                     a fault (docs/plan-payments.md §7)
 
 Forms are plain POSTs answered with a redirect back to the page, which
 carries a short note on what happened. The vendor-side buttons call the

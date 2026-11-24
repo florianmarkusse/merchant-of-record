@@ -1,4 +1,4 @@
-"""After the payment (docs/plan-payments.md §6.1): the invoice with its
+"""After the payment (docs/plan-payments.md §6): the invoice with its
 gapless number, the buyer's order page, where a paid buyer lands, the KYB
 gate, and the orders and merchant API. A request in, the page, the rows
 and the API's answer out. Every merchant, buyer and address here is made

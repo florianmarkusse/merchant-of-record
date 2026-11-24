@@ -1,6 +1,6 @@
 """What the vendor's events mean for a job: pure, no database, no clock.
 
-Transitional with the echo flow (docs/plan-messaging.md §12); it rehearses
+Transitional with the echo flow (docs/plan-messaging.md §7); it rehearses
 shipment tracking (plan-architecture.md §9).
 """
 

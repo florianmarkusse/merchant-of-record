@@ -1,4 +1,4 @@
-"""Inbound events for the echo flow (docs/plan-messaging.md §12), one path
+"""Inbound events for the echo flow (docs/plan-messaging.md §7), one path
 for every mode:
 
     raw bytes ─▶ store_inbox (unique per account + sha256) + echo_inbox_stored

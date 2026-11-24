@@ -1,5 +1,5 @@
 """The Settlement staff pages and the sandbox's cut (docs/plan-payments.md
-§7.1, docs/plan-settlement-reconciliation.md §4.3): a request in, the page
+§7.1, docs/plan-payments.md §7): a request in, the page
 and the rows out. Every merchant, buyer and
 address here is made up."""
 

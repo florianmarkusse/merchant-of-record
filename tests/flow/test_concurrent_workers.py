@@ -238,7 +238,7 @@ def test_a_webhook_is_applied_while_the_capture_call_is_out(
     database_url: str,
 ) -> None:
     """A local consumer does not wait for an effect's advisory lock
-    (plan-messaging-rework.md §3.2): the PSP's `captured` webhook is applied
+    (plan-messaging.md §6): the PSP's `captured` webhook is applied
     while our capture call is still out, and the capture's `complete` then
     finds the attempt captured and changes nothing more."""
     wiring = Wiring(

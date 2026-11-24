@@ -1,4 +1,4 @@
-"""Issuing and reading invoices (docs/plan-payments.md §6.1).
+"""Issuing and reading invoices (docs/plan-payments.md §6).
 
     order_paid ─▶ invoice_issue (local): lock the order; if its invoice
         exists, nothing to do; else lock the series row, take its next

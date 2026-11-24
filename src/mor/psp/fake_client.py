@@ -383,7 +383,7 @@ def decode_thin_webhook(body: bytes) -> ThinNotice | UndecodableBody:
     return ThinNotice(thin.reference)
 
 
-# --- settlement (docs/plan-settlement-reconciliation.md) ----------------------
+# --- settlement (docs/plan-payments.md §7) ----------------------
 
 
 class _Files(msgspec.Struct, frozen=True):

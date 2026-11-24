@@ -57,7 +57,7 @@ class Attempt:
 # A row read under its row lock (`SELECT … FOR UPDATE`), made only by
 # the lock function: the functions that change the row take this type, so
 # pyright refuses a read-then-write on a row read without its lock
-# (docs/plan-messaging-rework.md §3.5). It says the row was locked when
+# (docs/plan-messaging.md §5). It says the row was locked when
 # read, not that the transaction holding the lock is still open.
 LockedAttempt = NewType("LockedAttempt", Attempt)
 

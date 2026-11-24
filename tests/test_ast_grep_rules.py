@@ -1,5 +1,5 @@
 """The ast-grep rules (sgconfig.yml, ast-grep/rules/) for what ruff cannot
-say (docs/plan-codified-rules.md §2.4): the code breaks none, and each
+say (AGENTS.md, Checks): the code breaks none, and each
 rule's examples in ast-grep/rule-tests/ hold, so a rule that stopped
 matching what it is for fails here too."""
 

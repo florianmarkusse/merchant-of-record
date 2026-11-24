@@ -1,5 +1,5 @@
 """Settlement's journal entries and the payout's check (docs/plan-payments.md
-§7.1, docs/plan-settlement-reconciliation.md §4). Pure.
+§7.1, docs/plan-payments.md §7). Pure.
 
     a settled line, in its currency:
       Dr psp_fee_collected               the estimate the capture booked

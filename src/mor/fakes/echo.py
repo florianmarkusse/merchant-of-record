@@ -1,5 +1,5 @@
 """The fake echo vendor: stores a message, returns an id, and later reports
-what happens to it (docs/plan-messaging.md §10 and §12).
+what happens to it (docs/plan-messaging.md §9).
 
 A made-up vendor API in three flavours, one per duplicate guard, with
 vendor-side accounts as a path segment (`A` = /_fake/echo/{flavour}/{account}):

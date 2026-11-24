@@ -90,7 +90,7 @@ class SessionIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only
     return_url: Url
     cancel_url: Url
     merchant_reference: Annotated[str, Meta(min_length=1, max_length=200)] | None = None
-    # Where the buyer lands once paid (docs/plan-payments.md §6.1).
+    # Where the buyer lands once paid (docs/plan-payments.md §6).
     after_payment: Literal["our_page", "merchant_page"] = "our_page"
 
 
@@ -468,7 +468,7 @@ def _lines_out(sold: tuple[SoldLine, ...]) -> list[LineOut]:
     return lines
 
 
-# --- orders and the merchant (docs/plan-payments.md §6.1) -------------------------
+# --- orders and the merchant (docs/plan-payments.md §6) -------------------------
 
 
 class ShippingOut(msgspec.Struct, frozen=True, kw_only=True):

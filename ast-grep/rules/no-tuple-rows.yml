@@ -11,7 +11,7 @@ message: >-
 files:
   - src/**/*.py
   - tests/**/*.py
-# Transitional, with the echo flow (docs/plan-messaging.md §10): its fake,
+# Transitional, with the echo flow (docs/plan-messaging.md §9): its fake,
 # its client and its fuzzer go with it, so their rows are left as they are.
 ignores:
   - src/mor/echo/fake_client.py

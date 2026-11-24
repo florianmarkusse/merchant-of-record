@@ -1,6 +1,6 @@
 """The invoice, drawn from its rows by one htpy function: as a page
 (`/o/{token}/invoice`) and, through WeasyPrint, as a PDF
-(docs/plan-payments.md §6.1). Never re-derived from the quote.
+(docs/plan-payments.md §6). Never re-derived from the quote.
 
 What a tax invoice must show per country, and in which words, waits for
 an adviser (§9): the fields are here, the wording is a placeholder.

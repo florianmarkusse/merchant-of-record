@@ -44,7 +44,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 # about 0.17 s an example, so about 17 minutes (19-Nov-2026). The payment
 # fuzzer about 0.13 s an example, so about 13 minutes, and the payment
 # properties about 0.4 ms an example, 2 minutes more (19-Nov-2026). After
-# the reach work (docs/plan-fuzz-reach.md) the payment fuzzer is about
+# the reach work (docs/plan-architecture.md §10) the payment fuzzer is about
 # 0.12 s an example and the order fuzzer about 0.19 s, so about 12 and 19
 # minutes (20-Nov-2026). The settlement fuzzer about 0.28 s an example, so
 # about 28 minutes; the settlement properties about 0.4 ms an example, about
@@ -121,7 +121,7 @@ run_soak() {
     fi
     local log="${LOGS}/${stamp}-${name}.log"
     local code=0
-    # Each fuzzer writes how far its runs went (docs/plan-fuzz-reach.md);
+    # Each fuzzer writes how far its runs went (docs/plan-architecture.md §10);
     # the tables go at the end of the target's log.
     rm -rf "${CHECKOUT}/.hypothesis/reach"
     # shellcheck disable=SC2086  # paths is a list of words on purpose

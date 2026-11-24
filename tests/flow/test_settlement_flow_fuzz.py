@@ -1,7 +1,7 @@
-"""Settlement (docs/plan-payments.md §7.1) as a Hypothesis state machine
+"""Settlement (docs/plan-payments.md §7) as a Hypothesis state machine
 against mor_test, the fake PSP and the worker: the stage after the capture,
 in a machine of its own so it neither dilutes the order fuzzer's reach nor
-waits behind it (docs/plan-fuzz-reach.md §3).
+waits behind it (docs/plan-architecture.md §10).
 
 The run starts deep: one to three sessions of one shop, each paid by card
 and approved at the PSP; for each the run draws whether our books have
@@ -127,7 +127,7 @@ MILESTONES = (
     "exception: amount_differs",
     "exception: settled_twice",
     "exception: unknown_type",
-    # The orders plan-settlement-reconciliation §4.2 must take, seen while
+    # The orders plan-payments.md §7 must take, seen while
     # they last, and what reconciling ends in.
     "a line stored before its payout",
     "an older page stored before a newer one",
@@ -201,7 +201,7 @@ class SettlementFlow(RuleBasedStateMachine):
         fetched whole and decoded in a drawn order, and booked as it is
         decoded if drawn so: the orders a payout and its pages arrive in
         come from the start, not from luck in the actions
-        (plan-settlement-reconciliation §5)."""
+        (plan-payments.md §7)."""
         self.guard = guard
 
         async def step() -> None:

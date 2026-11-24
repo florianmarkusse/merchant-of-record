@@ -1,5 +1,5 @@
 """What follows a payment the buyer approved, as a Hypothesis state machine
-against mor_test, the fake PSP and the worker (docs/plan-fuzz-reach.md §3):
+against mor_test, the fake PSP and the worker (docs/plan-architecture.md §10):
 the PSP's news decoded, the capture, the order with its ledger entry, the
 invoice. Settlement, refunds and payouts join here as they are built.
 

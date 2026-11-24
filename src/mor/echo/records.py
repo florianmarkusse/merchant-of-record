@@ -1,6 +1,6 @@
 """The echo job's states, apart from its flow so `mor.db.enums` can load
 them (the flow imports the database). Transitional with the echo flow
-(docs/plan-messaging.md §10)."""
+(docs/plan-messaging.md §9)."""
 
 from enum import StrEnum
 

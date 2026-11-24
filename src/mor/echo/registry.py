@@ -2,7 +2,7 @@
 first checks that this environment may use the account's kind
 (`mor.provider_accounts`).
 
-Transitional with the echo flow (docs/plan-messaging.md §10).
+Transitional with the echo flow (docs/plan-messaging.md §9).
 """
 
 import httpx2

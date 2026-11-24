@@ -41,7 +41,7 @@ class StatusMode(StrEnum):
 
 class SettlementMode(StrEnum):
     """How settlement reaches us; matches `psp_settlement_mode`
-    (docs/plan-settlement-reconciliation.md §2). Both are reads."""
+    (docs/plan-payments.md §7). Both are reads."""
 
     FILE = "file"  # a report file per batch, its payout a row (Adyen)
     API = "api"  # a payout object, then its lines by cursor (Stripe)
@@ -205,7 +205,7 @@ class ThinNotice:
     reference: str
 
 
-# --- settlement (docs/plan-settlement-reconciliation.md) ----------------------
+# --- settlement (docs/plan-payments.md §7) ----------------------
 
 
 @dataclass(frozen=True)

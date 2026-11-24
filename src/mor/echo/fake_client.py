@@ -1,6 +1,6 @@
 """Client for the fake echo vendor's API (mor.fakes.echo), shaped like any
 real provider module: our records in, our result union out, never our
-database. Transitional with the echo flow (docs/plan-messaging.md §10).
+database. Transitional with the echo flow (docs/plan-messaging.md §9).
 
 How a call ends:
 - connection refused or no such host: `Unavailable`, it never left;

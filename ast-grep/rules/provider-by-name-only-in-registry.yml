@@ -10,7 +10,7 @@ files:
   - tests/**/*.py
 ignores:
   - src/mor/*/registry.py
-  # Transitional, with the echo flow (docs/plan-messaging.md §10): echo
+  # Transitional, with the echo flow (docs/plan-messaging.md §9): echo
   # picks its send guard and its seeded fake's URL by provider; both go
   # with it.
   - src/mor/echo/capabilities.py

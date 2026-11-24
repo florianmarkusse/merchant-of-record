@@ -35,7 +35,7 @@ and wins where the two differ.
 - Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
   the vendor's own id (event id, notice id, file name), never a hash of
   the bytes; the inbox's body hash only means "these bytes are stored
-  already" (`docs/plan-messaging.md` §12.2).
+  already" (`docs/plan-messaging.md` §7).
 - Decided 16-Nov-2026: local databases `mor_dev` and `mor_test` on the
   PostgreSQL 18 cluster, reached over peer auth as the developer's own
   role (`postgresql:///mor_dev`), no dedicated role locally. Ids are
@@ -161,7 +161,7 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   1 run in 200. Depth comes from structure (machines split by stage, a deep
   start, per-run fault plans, preconditioned rules), not from
   `hypothesis.target`, which was measured and dropped
-  (`docs/plan-fuzz-reach.md`).
+  (`docs/plan-architecture.md` §10).
 - Async tests: pytest functions are synchronous and run their async body
   with `asyncio.run`, one event loop per call; no pytest async plugin.
 - The ledger refuses `UPDATE` and `DELETE` by trigger but not `TRUNCATE`

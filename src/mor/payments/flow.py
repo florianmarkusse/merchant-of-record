@@ -129,7 +129,7 @@ async def pay(
         return NotPayable("not_quoted")
     if now >= session.expires_at:
         return NotPayable("session_over")
-    # KYB, in every environment (docs/plan-payments.md §6.1): held FOR
+    # KYB, in every environment (docs/plan-payments.md §6): held FOR
     # SHARE, so a suspension and this attempt cannot cross.
     if await kyb_state_for_pay(conn, session.merchant_id) != KybState.APPROVED:
         return NotPayable("merchant_not_approved")

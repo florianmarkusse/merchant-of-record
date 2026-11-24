@@ -1,5 +1,5 @@
-"""Properties of settlement's pure parts (docs/plan-payments.md §7.1,
-docs/plan-settlement-reconciliation.md): the line, payout and rounding
+"""Properties of settlement's pure parts (docs/plan-payments.md §7,
+docs/plan-payments.md §7): the line, payout and rounding
 entries balance and clear what they should, the payout's check is exact,
 the fake's payout rounding stays within half a unit, and the decoders turn
 any bytes into a document or a typed error."""

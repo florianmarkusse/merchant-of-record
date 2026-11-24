@@ -1,4 +1,4 @@
-"""The invoice as a PDF, through WeasyPrint (docs/plan-payments.md §6.1),
+"""The invoice as a PDF, through WeasyPrint (docs/plan-payments.md §6),
 from the same HTML as the page. Rendering blocks for a while, so callers
 run it in a thread.
 

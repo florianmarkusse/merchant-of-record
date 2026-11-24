@@ -1,5 +1,5 @@
 """Webhook handlers: verify, store the raw body, answer. Nothing is decoded
-here, so a decoder bug never loses an event (docs/plan-messaging.md §12).
+here, so a decoder bug never loses an event (docs/plan-messaging.md §7).
 
 Webhooks carry no cookies, so the cross-site rule for POSTs is met by the
 signature: a forged request has no valid one.

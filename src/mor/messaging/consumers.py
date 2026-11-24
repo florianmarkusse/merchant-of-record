@@ -5,7 +5,7 @@
 Each case narrows the fact to what the consumer needs (`expect`, or a
 `match` where a consumer gets several facts), so consumer functions take
 ids and typed facts, never `Fact`. An effect consumer is three steps run
-by `run_steps` (plan-messaging-rework.md §3.3)."""
+by `run_steps` (plan-messaging.md §6)."""
 
 from datetime import datetime
 
@@ -184,7 +184,7 @@ async def run_effect(
                 call=mor.settlement.fetch.read_settlement,
                 complete=mor.settlement.fetch.complete_fetch,
             )
-        # Transitional, with the echo flow (docs/plan-messaging.md §10).
+        # Transitional, with the echo flow (docs/plan-messaging.md §9).
         case ConsumerName.ECHO_SEND:
             job_id = expect(fact, EchoJobRequestedV1).echo_job_id
             return await run_steps(
@@ -227,7 +227,7 @@ async def run_local(
 ) -> ConsumerOutcome:
     """A local consumer, in the worker's transaction, under the delivery's
     row lock. Each case locks the row the consumer changes before any of
-    its code runs and hands it over (plan-messaging-rework.md §3.3), or
+    its code runs and hands it over (plan-messaging.md §5), or
     says why it locks nothing. Never commits."""
     match consumer:
         case ConsumerName.PROBE_ECHO:

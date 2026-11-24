@@ -1,6 +1,6 @@
 """The echo flow through the worker, against the fake echo vendor in-process:
 each result kind, and each duplicate guard after a lost answer or a crash
-between commits (docs/plan-messaging.md §10)."""
+between commits (docs/plan-messaging.md §9)."""
 
 import asyncio
 import uuid

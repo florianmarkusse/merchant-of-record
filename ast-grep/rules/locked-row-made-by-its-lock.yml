@@ -5,7 +5,7 @@ message: >-
   A Locked… row is made only by its lock function (`lock_attempt`,
   `lock_session`, `lock_order`), which reads it FOR UPDATE: a value built
   anywhere else would let a write run without the lock
-  (docs/plan-messaging-rework.md §3.5).
+  (docs/plan-messaging.md §5).
 files:
   - src/**/*.py
   - tests/**/*.py

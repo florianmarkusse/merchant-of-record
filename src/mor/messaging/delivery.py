@@ -7,7 +7,7 @@ these, so neither imports the other's internals.
 `run_steps` is the only code that holds a database connection and the
 HTTP client at once: an effect's `prepare` and `complete` get the
 connection, its `call` gets the client. So no row lock can be held across
-a vendor call (plan-messaging-rework.md §3.3).
+a vendor call (plan-messaging.md §6).
 """
 
 import uuid

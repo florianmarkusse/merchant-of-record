@@ -1,12 +1,12 @@
 """What the PSP sends us, one path for every mode (docs/plan-payments.md
-§4; docs/plan-messaging.md §12):
+§4; docs/plan-messaging.md §7):
 
     raw bytes (webhook or fetched page) ─▶ store_inbox (unique per account
         and body hash) + psp_inbox_stored
     psp_inbox_decode (per account): a thin notice becomes
         payment_events_wanted; events become one psp_event_received each;
         a settlement report or page becomes its batch and lines
-        (mor.settlement.store, docs/plan-payments.md §7.1)
+        (mor.settlement.store, docs/plan-payments.md §7)
     payment_event_apply (per attempt): the event once, by the PSP's id,
         through the transition table
 
@@ -145,7 +145,7 @@ async def decode_inbox(
             | InboundMode.SETTLEMENT_PAGE
         ):
             # A report, a payout or a page of its lines
-            # (docs/plan-settlement-reconciliation.md §4.5).
+            # (docs/plan-payments.md §7).
             failed = await record_document(
                 conn, account, inbox_id, mode, body, stored.request_ref, now
             )

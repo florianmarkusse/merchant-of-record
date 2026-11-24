@@ -45,7 +45,7 @@ class MessageType(StrEnum):
 
     PROBE_STARTED = "probe_started"
     PROBE_ECHOED = "probe_echoed"
-    # Transitional, with the echo flow (docs/plan-messaging.md §10).
+    # Transitional, with the echo flow (docs/plan-messaging.md §9).
     ECHO_JOB_REQUESTED = "echo_job_requested"
     ECHO_JOB_ECHOED = "echo_job_echoed"
     ECHO_JOB_REFUSED = "echo_job_refused"
@@ -540,7 +540,7 @@ class InvoiceIssuedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 
 class PspSettlementDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Scheduled: look for settlement the PSP has published, one report or
-    page per look (docs/plan-payments.md §7.1)."""
+    page per look (docs/plan-payments.md §7)."""
 
     message_type: ClassVar[MessageType] = MessageType.PSP_SETTLEMENT_DUE
     schema_version: ClassVar[int] = 1

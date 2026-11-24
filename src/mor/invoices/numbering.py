@@ -1,5 +1,5 @@
 """The numbering series, which one an invoice is numbered in, and how its
-number is written (docs/plan-payments.md §6.1). A series is plain data
+number is written (docs/plan-payments.md §6). A series is plain data
 here; its counter is a row of `invoice_series`, inserted on first use and
 taken under its lock in `mor.invoices.store`.
 

@@ -1,4 +1,4 @@
-"""How far a fuzzer's runs go (docs/plan-fuzz-reach.md §3).
+"""How far a fuzzer's runs go (docs/plan-architecture.md §10).
 
 Each run records the milestones it reached. `finish` writes the reach
 table to `.hypothesis/reach/` (git-ignored; the soak appends it to its
@@ -7,7 +7,7 @@ fewer than `FLOOR` of them: a drop in reach then alerts like a bug.
 
 A tally is a `Counter`: each milestone's runs, and the runs themselves
 under `RUNS`. Reach is measured, not steered: `hypothesis.target` on it
-was tried and dropped (docs/plan-fuzz-reach.md §4).
+was tried and dropped (docs/plan-architecture.md §10).
 """
 
 from collections import Counter

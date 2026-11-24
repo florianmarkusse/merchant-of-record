@@ -1,6 +1,6 @@
 """Inbound events through our app, the fake vendor and the worker, all
 in-process: push webhooks, the `none` mode, and events recorded by hand
-(docs/plan-messaging.md §12, step 1)."""
+(docs/plan-messaging.md §7)."""
 
 import asyncio
 import uuid

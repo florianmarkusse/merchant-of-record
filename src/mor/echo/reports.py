@@ -1,4 +1,4 @@
-"""Report files for `file` accounts (docs/plan-messaging.md §12).
+"""Report files for `file` accounts (docs/plan-messaging.md §7).
 Transitional with the echo flow.
 
     start_report_schedule ─▶ echo_report_due (scheduled, per account)
