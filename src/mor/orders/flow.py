@@ -14,7 +14,7 @@ from datetime import datetime
 
 from mor.audit import Actor, ActorKind
 from mor.checkout.quotes import read_made_quote
-from mor.checkout.records import CheckoutSession, SessionState
+from mor.checkout.records import LockedSession, SessionState
 from mor.checkout.sessions import read_address, set_session_state
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
@@ -46,7 +46,7 @@ async def _courier(conn: Connection, load_id: uuid.UUID, service: str) -> str:
 
 async def create_order(
     conn: Connection,
-    session: CheckoutSession,
+    session: LockedSession,
     captured: PaymentCapturedV1,
     now: datetime,
 ) -> ConsumerOutcome:
@@ -100,7 +100,7 @@ async def create_order(
     )
     await record_entry(conn, entry)
     await set_session_state(
-        conn, session.id, SessionState.COMPLETED, session.address_id, session.quote_id
+        conn, session, SessionState.COMPLETED, session.address_id, session.quote_id
     )
     await append_fact(
         conn,

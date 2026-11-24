@@ -195,6 +195,11 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   can swap unnoticed). A single column is read with `one_value`. Such a
   record says `kw_only=True`, so pyright refuses a positional build;
   `tests/test_records_kw_only.py` fails on one that does not.
+- A function that changes a row it read takes the row as its `Locked…`
+  type (`LockedAttempt`, `LockedSession`, `LockedOrder`, or a record of
+  its own such as `LockedLine`), made only by the row's `lock_*`
+  function (decided 24-Nov-2026): pyright then refuses a read-then-write
+  without the row lock (ast-grep `locked-row-made-by-its-lock`).
 - Errors as values covers declined card, tax rule missing, PSP timeout.
 - No shadowing (decided 24-Nov-2026: one name meaning two things is
   confusing): no local or parameter named after a domain name

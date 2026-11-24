@@ -1,0 +1,14 @@
+id: locked-row-made-by-its-lock
+valid:
+  - |
+    async def lock_attempt(conn, attempt_id):
+        return LockedAttempt(_attempt(row))
+  - |
+    async def lock_session(conn, session_id):
+        return None if found is None else LockedSession(found)
+invalid:
+  - |
+    async def pay(conn, session_id):
+        session = LockedSession(await session_by_id(conn, session_id))
+  - |
+    attempt = LockedAttempt(await read_attempt(conn, attempt_id))

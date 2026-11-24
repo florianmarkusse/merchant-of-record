@@ -36,7 +36,7 @@ from mor.messaging.facts import InvoiceIssuedV1
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
 from mor.messaging.store import append_fact
 from mor.money.currency import Currency
-from mor.orders.store import Order
+from mor.orders.store import LockedOrder
 
 
 ACTOR = Actor(ActorKind.SYSTEM, "invoice_issue")
@@ -68,7 +68,7 @@ async def _take_number(conn: Connection, code: str) -> tuple[Series, int]:
 
 
 async def issue_invoice(
-    conn: Connection, order: Order, now: datetime
+    conn: Connection, order: LockedOrder, now: datetime
 ) -> ConsumerOutcome:
     """Consumer `invoice_issue`, on order_paid, the order locked."""
     cur = await conn.execute("SELECT 1 FROM invoice WHERE order_id = %s", (order.id,))

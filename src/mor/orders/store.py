@@ -4,6 +4,7 @@ functions take the connection first and never commit."""
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import NewType
 
 from psycopg.rows import class_row
 
@@ -21,6 +22,14 @@ class Order:
     address_id: uuid.UUID
     paid_at: datetime
     buyer_token: str  # the order page's link: a bearer token
+
+
+# A row read under its row lock (`SELECT … FOR UPDATE`), made only by
+# the lock function: the functions that change the row take this type, so
+# pyright refuses a read-then-write on a row read without its lock
+# (docs/plan-messaging-rework.md §3.5). It says the row was locked when
+# read, not that the transaction holding the lock is still open.
+LockedOrder = NewType("LockedOrder", Order)
 
 
 async def order_by_token(conn: Connection, buyer_token: str) -> Order | None:
@@ -65,7 +74,7 @@ async def read_order(
         return await cur.fetchone()
 
 
-async def lock_order(conn: Connection, order_id: uuid.UUID) -> Order | None:
+async def lock_order(conn: Connection, order_id: uuid.UUID) -> LockedOrder | None:
     """The order under its row lock, for a step that adds to it."""
     async with conn.cursor(row_factory=class_row(Order)) as cur:
         await cur.execute(
@@ -76,4 +85,5 @@ async def lock_order(conn: Connection, order_id: uuid.UUID) -> Order | None:
             """,
             (order_id,),
         )
-        return await cur.fetchone()
+        found = await cur.fetchone()
+    return None if found is None else LockedOrder(found)

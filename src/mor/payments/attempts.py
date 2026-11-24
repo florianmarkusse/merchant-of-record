@@ -6,10 +6,12 @@ Every function runs under the caller's transaction and never commits;
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import NewType
 
 from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
+from mor.checkout.records import LockedSession
 from mor.db.connect import Connection
 from mor.messaging.facts import (
     Fact,
@@ -50,6 +52,14 @@ class Attempt:
     action: BuyerAction | None
     ended_reason: str | None
     created_at: datetime
+
+
+# A row read under its row lock (`SELECT … FOR UPDATE`), made only by
+# the lock function: the functions that change the row take this type, so
+# pyright refuses a read-then-write on a row read without its lock
+# (docs/plan-messaging-rework.md §3.5). It says the row was locked when
+# read, not that the transaction holding the lock is still open.
+LockedAttempt = NewType("LockedAttempt", Attempt)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,7 +109,7 @@ def _attempt(row: _Row) -> Attempt:
 
 async def insert_attempt(
     conn: Connection,
-    session_id: uuid.UUID,
+    session: LockedSession,
     quote_id: uuid.UUID,
     option_no: int,
     account: PspAccount,
@@ -125,7 +135,7 @@ async def insert_attempt(
         """,
         (
             attempt_id,
-            session_id,
+            session.id,
             quote_id,
             option_no,
             account.id,
@@ -143,7 +153,7 @@ async def insert_attempt(
     await append_fact(
         conn,
         PaymentAttemptCreatedV1(
-            payment_attempt_id=attempt_id, checkout_session_id=session_id
+            payment_attempt_id=attempt_id, checkout_session_id=session.id
         ),
         actor,
         now,
@@ -151,7 +161,7 @@ async def insert_attempt(
     return attempt_id
 
 
-async def lock_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt:
+async def lock_attempt(conn: Connection, attempt_id: uuid.UUID) -> LockedAttempt:
     async with conn.cursor(row_factory=class_row(_Row)) as cur:
         await cur.execute(
             """
@@ -167,7 +177,7 @@ async def lock_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt:
         row = await cur.fetchone()
     if row is None:
         raise LookupError(f"payment attempt {attempt_id} does not exist")
-    return _attempt(row)
+    return LockedAttempt(_attempt(row))
 
 
 async def read_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt | None:
@@ -225,11 +235,11 @@ async def attempt_of_account(
 
 async def record_payment(
     conn: Connection,
-    attempt: Attempt,
+    attempt: LockedAttempt,
     provider_payment_id: str,
     action: BuyerAction | None,
     now: datetime,
-) -> Attempt:
+) -> LockedAttempt:
     """The PSP's id for the payment and what the buyer must do, kept as the
     PSP gave them. The id never changes once known."""
     if attempt.provider_payment_id not in (None, provider_payment_id):
@@ -254,21 +264,23 @@ async def record_payment(
             attempt.id,
         ),
     )
-    return Attempt(
-        id=attempt.id,
-        session_id=attempt.session_id,
-        quote_id=attempt.quote_id,
-        option_no=attempt.option_no,
-        psp_account_id=attempt.psp_account_id,
-        route_id=attempt.route_id,
-        method=attempt.method,
-        amount=attempt.amount,
-        return_url=attempt.return_url,
-        state=attempt.state,
-        provider_payment_id=provider_payment_id,
-        action=keep,
-        ended_reason=attempt.ended_reason,
-        created_at=attempt.created_at,
+    return LockedAttempt(
+        Attempt(
+            id=attempt.id,
+            session_id=attempt.session_id,
+            quote_id=attempt.quote_id,
+            option_no=attempt.option_no,
+            psp_account_id=attempt.psp_account_id,
+            route_id=attempt.route_id,
+            method=attempt.method,
+            amount=attempt.amount,
+            return_url=attempt.return_url,
+            state=attempt.state,
+            provider_payment_id=provider_payment_id,
+            action=keep,
+            ended_reason=attempt.ended_reason,
+            created_at=attempt.created_at,
+        )
     )
 
 
@@ -285,7 +297,7 @@ async def _other_capture(conn: Connection, attempt: Attempt) -> bool:
 
 async def move(
     conn: Connection,
-    attempt: Attempt,
+    attempt: LockedAttempt,
     state: AttemptState,
     account: PspAccount,
     now: datetime,

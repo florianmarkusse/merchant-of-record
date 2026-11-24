@@ -1,0 +1,25 @@
+id: locked-row-made-by-its-lock
+language: python
+severity: error
+message: >-
+  A Locked… row is made only by its lock function (`lock_attempt`,
+  `lock_session`, `lock_order`), which reads it FOR UPDATE: a value built
+  anywhere else would let a write run without the lock
+  (docs/plan-messaging-rework.md §3.5).
+files:
+  - src/**/*.py
+  - tests/**/*.py
+rule:
+  kind: call
+  has:
+    field: function
+    regex: ^Locked(Attempt|Session|Order)$
+  not:
+    inside:
+      stopBy: end
+      kind: function_definition
+      has:
+        field: name
+        # record_payment writes the locked attempt and returns it updated,
+        # still under the same lock.
+        regex: ^(lock_\w+|record_payment)$

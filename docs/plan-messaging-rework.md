@@ -3,7 +3,7 @@
 Status: 24-Nov-2026: §1, §3.1 and §3.2 built (commit 83a9a04). §3.3,
 the one table for every consumer, agreed 24-Nov-2026: the test seam and
 built 24-Nov-2026 (§1): every consumer is narrowed, locked and run by
-the table. A type for a locked row is decided and planned (§3.5).
+the table. A type for a locked row built 24-Nov-2026 (§3.5).
 Amends `plan-messaging.md` and the worker loop in
 `plan-architecture.md` §5.
 
@@ -317,9 +317,20 @@ aimed at the functions that change a row rather than the consumers; see
   table does not cover: the shared "row lock around every read-then-
   write" rule checked by type. Limits: it proves the row was locked when
   read, not that the transaction holding the lock is still open (a value
-  can outlive its commit, as across `run_steps`); and only convention
-  keeps other code from making one. The consumers gain little: the table
-  is their one caller and always locks first.
+  can outlive its commit, as across `run_steps`). The consumers gain
+  little: the table is their one caller and always locks first.
+
+  Built 24-Nov-2026: `LockedAttempt`, `LockedSession`, `LockedOrder`
+  beside their records. They are required by `move`, `record_payment`
+  (which returns the updated row, still locked), `set_session_state`
+  (now given the session, not its id), `add_address` and
+  `insert_attempt` (both counted or checked under the session's lock),
+  and `issue_invoice`. No write had been reading its row without the
+  lock: pyright found none once the types were in. The ast-grep rule
+  `locked-row-made-by-its-lock` refuses building one outside a `lock_*`
+  function (and `record_payment`), so it is no longer only convention.
+  The probe and settlement already had their own records for a locked
+  row (`LockedProbe`, `LockedLine`, `LockedPayout`).
 
 - **The message's own uuid.** `outbox.id` identifies the message (one
   probe has two facts), but `outbox.seq` already does. Dropping `id`

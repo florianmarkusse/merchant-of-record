@@ -32,7 +32,12 @@ from mor.checkout.quotes import (
     store_refused,
     stored_from,
 )
-from mor.checkout.records import MAX_ADDRESSES, CheckoutSession, SessionState
+from mor.checkout.records import (
+    MAX_ADDRESSES,
+    CheckoutSession,
+    LockedSession,
+    SessionState,
+)
 from mor.checkout.sessions import (
     add_address,
     address_count,
@@ -156,7 +161,7 @@ def _quote_request(
 
 async def _refuse(
     conn: Connection,
-    session: CheckoutSession,
+    session: LockedSession,
     address_id: uuid.UUID,
     load_id: uuid.UUID,
     refusal: Refusal,
@@ -176,9 +181,7 @@ async def _refuse(
             message=refusal.message,
         ),
     )
-    await set_session_state(
-        conn, session.id, SessionState.REFUSED, address_id, quote_id
-    )
+    await set_session_state(conn, session, SessionState.REFUSED, address_id, quote_id)
     await append_fact(
         conn,
         QuoteRefusedV1(
@@ -192,7 +195,7 @@ async def _refuse(
 
 async def _wait(
     conn: Connection,
-    session: CheckoutSession,
+    session: LockedSession,
     address_id: uuid.UUID,
     asked: Asked,
 ) -> Waiting:
@@ -212,7 +215,7 @@ async def _wait(
             """,
             (session.id, address_id, lookup_id),
         )
-    await set_session_state(conn, session.id, SessionState.QUOTING, address_id, None)
+    await set_session_state(conn, session, SessionState.QUOTING, address_id, None)
     return Waiting()
 
 
@@ -228,7 +231,7 @@ def _inputs(quote: Quote, lookups_used: list[uuid.UUID]) -> QuoteInputs:
 
 async def _attempt(
     conn: Connection,
-    session: CheckoutSession,
+    session: LockedSession,
     address_id: uuid.UUID,
     country: str,
     environment: Environment,
@@ -269,7 +272,7 @@ async def _attempt(
                 )
                 await store_made(conn, made)
                 await set_session_state(
-                    conn, session.id, SessionState.QUOTED, address_id, quote_id
+                    conn, session, SessionState.QUOTED, address_id, quote_id
                 )
                 await append_fact(
                     conn,
@@ -304,7 +307,7 @@ async def _attempt(
                     now,
                 )
     # Lookups kept finishing under this step: let the worker build again.
-    await set_session_state(conn, session.id, SessionState.QUOTING, address_id, None)
+    await set_session_state(conn, session, SessionState.QUOTING, address_id, None)
     await append_fact(
         conn,
         QuoteInputsArrivedV1(checkout_session_id=session.id, address_id=address_id),
@@ -334,7 +337,7 @@ async def submit_address(
         return SessionOver()
     if await address_count(conn, session_id) >= MAX_ADDRESSES:
         return TooManyAddresses()
-    address_id = await add_address(conn, session_id, address, now)
+    address_id = await add_address(conn, session, address, now)
     attempt = await _attempt(
         conn, session, address_id, address.country, environment, FLOW, now
     )
@@ -428,7 +431,7 @@ async def notify_waiting(
 
 async def build_waiting(
     conn: Connection,
-    session: CheckoutSession | None,
+    session: LockedSession | None,
     arrived: QuoteInputsArrivedV1,
     environment: Environment,
     now: datetime,
@@ -453,7 +456,7 @@ async def build_waiting(
 
 async def expire_session(
     conn: Connection,
-    session: CheckoutSession | None,
+    session: LockedSession | None,
     due: CheckoutSessionExpiryDueV1,
     now: datetime,
 ) -> ConsumerOutcome:
@@ -467,7 +470,7 @@ async def expire_session(
         await append_fact(conn, due, FLOW, now, deliver_at=session.expires_at)
         return Stale()
     await set_session_state(
-        conn, session.id, SessionState.EXPIRED, session.address_id, session.quote_id
+        conn, session, SessionState.EXPIRED, session.address_id, session.quote_id
     )
     await append_fact(
         conn, CheckoutSessionExpiredV1(checkout_session_id=session.id), FLOW, now
@@ -477,7 +480,7 @@ async def expire_session(
 
 async def end_payment(
     conn: Connection,
-    session: CheckoutSession | None,
+    session: LockedSession | None,
     ended: uuid.UUID,
     now: datetime,
 ) -> ConsumerOutcome:
@@ -501,13 +504,13 @@ async def end_payment(
         return Stale()
     if now >= session.expires_at:
         await set_session_state(
-            conn, session.id, SessionState.EXPIRED, session.address_id, session.quote_id
+            conn, session, SessionState.EXPIRED, session.address_id, session.quote_id
         )
         await append_fact(
             conn, CheckoutSessionExpiredV1(checkout_session_id=session.id), FLOW, now
         )
         return Applied()
     await set_session_state(
-        conn, session.id, SessionState.QUOTED, session.address_id, session.quote_id
+        conn, session, SessionState.QUOTED, session.address_id, session.quote_id
     )
     return Applied()

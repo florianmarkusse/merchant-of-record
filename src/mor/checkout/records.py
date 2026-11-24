@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from typing import NewType
 
 from mor.couriers.records import Parcel
 from mor.money.amount import Money
@@ -94,3 +95,11 @@ class CheckoutSession:
     expires_at: datetime
     address_id: uuid.UUID | None  # the newest address given
     quote_id: uuid.UUID | None  # its quote, once made or refused
+
+
+# A row read under its row lock (`SELECT … FOR UPDATE`), made only by
+# the lock function: the functions that change the row take this type, so
+# pyright refuses a read-then-write on a row read without its lock
+# (docs/plan-messaging-rework.md §3.5). It says the row was locked when
+# read, not that the transaction holding the lock is still open.
+LockedSession = NewType("LockedSession", CheckoutSession)

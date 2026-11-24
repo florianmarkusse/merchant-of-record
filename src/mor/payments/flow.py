@@ -46,6 +46,7 @@ from mor.money.amount import Money
 from mor.payments.attempts import (
     FLOW,
     Attempt,
+    LockedAttempt,
     insert_attempt,
     lock_attempt,
     move,
@@ -155,7 +156,7 @@ async def pay(
         return NotPayable("unknown_method")
     attempt_id = await insert_attempt(
         conn,
-        session.id,
+        session,
         quote.id,
         option_no,
         routed.account,
@@ -167,7 +168,7 @@ async def pay(
         now,
     )
     await set_session_state(
-        conn, session.id, SessionState.PAYING, session.address_id, session.quote_id
+        conn, session, SessionState.PAYING, session.address_id, session.quote_id
     )
     return Paying(attempt_id)
 
@@ -399,7 +400,7 @@ def _event_kind(status: PaymentStatus) -> PspEventKind | None:
 
 async def apply_payment(
     conn: Connection,
-    attempt: Attempt,
+    attempt: LockedAttempt,
     account: PspAccount,
     psp_payment: ProviderPayment,
     now: datetime,
@@ -424,7 +425,11 @@ async def apply_payment(
 
 
 async def _needs_person(
-    conn: Connection, attempt: Attempt, account: PspAccount, detail: str, now: datetime
+    conn: Connection,
+    attempt: LockedAttempt,
+    account: PspAccount,
+    detail: str,
+    now: datetime,
 ) -> Done:
     if attempt.state not in OPEN_STATES:
         return Done(Stale())
@@ -515,7 +520,7 @@ async def complete_create(
 
 async def _created(
     conn: Connection,
-    attempt: Attempt,
+    attempt: LockedAttempt,
     account: PspAccount,
     request_id: uuid.UUID,
     result: CreateResult,
@@ -543,7 +548,7 @@ async def _created(
 
 async def _create_looked_up(
     conn: Connection,
-    attempt: Attempt,
+    attempt: LockedAttempt,
     account: PspAccount,
     request_id: uuid.UUID,
     result: FindResult,
@@ -659,7 +664,7 @@ async def complete_capture(
 
 async def _captured(
     conn: Connection,
-    attempt: Attempt,
+    attempt: LockedAttempt,
     account: PspAccount,
     request_id: uuid.UUID,
     result: CaptureResult,
@@ -689,7 +694,7 @@ async def _captured(
 
 async def _capture_looked_up(
     conn: Connection,
-    attempt: Attempt,
+    attempt: LockedAttempt,
     account: PspAccount,
     request_id: uuid.UUID,
     result: FindResult,

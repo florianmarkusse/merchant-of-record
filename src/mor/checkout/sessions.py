@@ -15,6 +15,7 @@ from mor.checkout.records import (
     AfterPayment,
     CheckoutSession,
     Customs,
+    LockedSession,
     SessionDraft,
     SessionState,
     SoldLine,
@@ -244,9 +245,7 @@ async def session_by_id(
     return await _session(conn, row)
 
 
-async def lock_session(
-    conn: Connection, session_id: uuid.UUID
-) -> CheckoutSession | None:
+async def lock_session(conn: Connection, session_id: uuid.UUID) -> LockedSession | None:
     """The session under its row lock, for a step that changes it."""
     async with conn.cursor(row_factory=class_row(_SessionRow)) as cur:
         await cur.execute(
@@ -260,31 +259,32 @@ async def lock_session(
             (session_id,),
         )
         row = await cur.fetchone()
-    return await _session(conn, row)
+    found = await _session(conn, row)
+    return None if found is None else LockedSession(found)
 
 
 async def set_session_state(
     conn: Connection,
-    session_id: uuid.UUID,
+    session: LockedSession,
     state: SessionState,
     address_id: uuid.UUID | None,
     quote_id: uuid.UUID | None,
 ) -> None:
-    """Under the lock the caller holds. Never commits."""
+    """Never commits."""
     await conn.execute(
         """
         UPDATE checkout_session SET state = %s, address_id = %s, quote_id = %s
         WHERE id = %s
         """,
-        (state.value, address_id, quote_id, session_id),
+        (state.value, address_id, quote_id, session.id),
     )
 
 
 async def add_address(
-    conn: Connection, session_id: uuid.UUID, address: Address, now: datetime
+    conn: Connection, session: LockedSession, address: Address, now: datetime
 ) -> uuid.UUID:
-    """A new address for the session; addresses are never changed. Under
-    the session's lock. Never commits."""
+    """A new address for the session; addresses are never changed. The
+    caller has counted them under the session's lock. Never commits."""
     address_id = uuid.uuid7()
     await conn.execute(
         """
@@ -295,7 +295,7 @@ async def add_address(
         """,
         (
             address_id,
-            session_id,
+            session.id,
             address.name,
             address.email,
             address.phone_dial_code,
