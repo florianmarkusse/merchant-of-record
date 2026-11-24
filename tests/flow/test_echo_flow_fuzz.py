@@ -41,6 +41,7 @@ from hypothesis.stateful import (
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_row
 from mor.echo.events import VendorStatus, derive_status, rank
 from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.inbound import record_manual_event
@@ -451,9 +452,7 @@ class EchoFlow(RuleBasedStateMachine):
             " (SELECT count(*) FROM outbox_delivery WHERE handled_at IS NULL"
             "  AND consumer <> 'echo_report_fetch')"
         )
-        row = await cur.fetchone()
-        assert row is not None
-        return tuple(row)
+        return tuple(await one_row(cur, "the progress counts"))
 
     async def _vendor_echo_ids(self) -> dict[uuid.UUID, str]:
         cur = await self.worker.execute(

@@ -46,6 +46,7 @@ from hypothesis.stateful import (
 from mor.checkout.flow import QUOTE_VALID_FOR, refresh_quote
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_value
 from mor.fakes.psp import QR_LIFETIME
 from mor.messaging.delivery import (
     Candidate,
@@ -405,12 +406,12 @@ class PaymentFlow(RuleBasedStateMachine):
         assert response.status_code == 204
 
     async def _faults_waiting(self) -> int:
-        cur = await self.worker.execute(
-            "SELECT count(*) FROM fake_vendor.psp_fake_fault_next"
+        return await one_value(
+            self.worker,
+            "SELECT count(*) FROM fake_vendor.psp_fake_fault_next",
+            None,
+            int,
         )
-        row = await cur.fetchone()
-        assert row is not None
-        return row[0]
 
     def _draw_candidate(self, data: strategies.DataObject) -> Candidate | None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))

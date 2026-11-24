@@ -8,7 +8,6 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import LiteralString
 
 import httpx2
 
@@ -24,7 +23,7 @@ from mor.merchants.store import create_api_key, create_merchant, revoke_api_key
 from mor.messaging.worker import drain_once
 from mor.provider_accounts import ProviderAccountKind
 from mor.web.main import make_app
-from tests.helpers import ENV, VENDOR_TIMEOUT, wire
+from tests.helpers import ENV, VENDOR_TIMEOUT, count_rows, wire
 from tests.quote.fixtures import live_market, quote_market
 
 
@@ -110,14 +109,6 @@ async def _call(
         )
 
 
-async def _count(url: str, sql: LiteralString) -> int:
-    async with await connect(url) as conn:
-        cur = await conn.execute(sql)
-        row = await cur.fetchone()
-    assert row is not None
-    return row[0]
-
-
 def _error(response: httpx2.Response) -> dict[str, str | None]:
     body = response.json()
     assert set(body) == {"error"}, body
@@ -181,8 +172,10 @@ def test_a_session_is_stored_as_sent_and_read_back(database_url: str) -> None:
         )
         assert read.status_code == 200
         assert read.json() == session
-        assert await _count(database_url, "SELECT count(*) FROM checkout_session") == 1
-        facts = await _count(
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM checkout_session") == 1
+        )
+        facts = await count_rows(
             database_url,
             "SELECT count(*) FROM outbox"
             " WHERE message_type = 'checkout_session_created'",
@@ -231,7 +224,9 @@ def test_the_same_key_and_request_replays_the_first_answer(database_url: str) ->
         )
         assert again.status_code == 201
         assert again.content == first.content
-        assert await _count(database_url, "SELECT count(*) FROM checkout_session") == 1
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM checkout_session") == 1
+        )
 
     asyncio.run(body())
 
@@ -254,7 +249,9 @@ def test_the_same_key_for_another_request_is_refused(database_url: str) -> None:
             database_url, "POST", "/v1/checkout_sessions", other.key, changed, "k-1"
         )
         assert theirs.status_code == 201
-        assert await _count(database_url, "SELECT count(*) FROM checkout_session") == 2
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM checkout_session") == 2
+        )
 
     asyncio.run(body())
 
@@ -317,8 +314,12 @@ def test_bad_requests_name_what_is_wrong(database_url: str) -> None:
             error = _error(response)
             assert error["type"] == "invalid_request"
             assert (error["code"], error["param"]) == (code, param), error
-        assert await _count(database_url, "SELECT count(*) FROM checkout_session") == 0
-        assert await _count(database_url, "SELECT count(*) FROM api_idempotency") == 0
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM checkout_session") == 0
+        )
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM api_idempotency") == 0
+        )
 
     asyncio.run(body())
 
@@ -343,7 +344,9 @@ def test_two_requests_at_once_with_one_key_make_one_session(
         )
         assert {response.status_code for response in responses} == {201}
         assert len({response.content for response in responses}) == 1
-        assert await _count(database_url, "SELECT count(*) FROM checkout_session") == 1
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM checkout_session") == 1
+        )
 
     asyncio.run(body())
 
@@ -375,7 +378,9 @@ def test_an_estimate_lists_each_option_with_parts_that_sum_to_its_total(
             assert {"goods", "fees", "shipping"} <= groups
         # Outside prod the placeholder fee rules are answered and named.
         assert estimate["placeholders"]
-        assert await _count(database_url, "SELECT count(*) FROM checkout_session") == 0
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM checkout_session") == 0
+        )
 
     asyncio.run(body())
 
@@ -417,7 +422,7 @@ def test_an_estimate_is_refused_with_the_reason(database_url: str) -> None:
             assert error["code"] == code
             if param is not None:
                 assert error["param"] == param
-        assert await _count(database_url, "SELECT count(*) FROM duty_lookup") == 0
+        assert await count_rows(database_url, "SELECT count(*) FROM duty_lookup") == 0
 
     asyncio.run(body())
 
@@ -450,9 +455,9 @@ def test_a_live_price_is_fetched_once_while_the_merchant_waits(
                 assert _error(pending)["code"] == "estimate_pending"
             # Asked once, counted once.
             lookups = "SELECT count(*) FROM shipping_price_lookup"
-            assert await _count(database_url, lookups) == 1
+            assert await count_rows(database_url, lookups) == 1
             asks = "SELECT coalesce(sum(asks), 0) FROM merchant_vendor_asks"
-            assert await _count(database_url, asks) == 1
+            assert await count_rows(database_url, asks) == 1
             async with await connect(database_url, autocommit=True) as worker:
                 await drain_once(worker, wired.http, ENV, NOW)
             ready = await _call(
@@ -491,6 +496,6 @@ def test_new_lookups_over_the_daily_limit_are_not_asked(database_url: str) -> No
         # Until the next UTC midnight: 14 h 30 min after 09:30.
         assert response.headers["retry-after"] == str(14 * 3600 + 30 * 60)
         lookups = "SELECT count(*) FROM shipping_price_lookup"
-        assert await _count(database_url, lookups) == 0
+        assert await count_rows(database_url, lookups) == 0
 
     asyncio.run(body())

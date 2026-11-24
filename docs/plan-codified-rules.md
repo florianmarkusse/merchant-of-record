@@ -3,18 +3,20 @@
 Status: §2.2 and §2.3 built 24-Nov-2026 (ruff's `DTZ`, `A` and banned
 APIs in `pyproject.toml`; `kw_only` on all 179 records of 4 or more
 fields, checked by `tests/test_records_kw_only.py`). §2.1 built
-24-Nov-2026 (`tests/messaging/test_fact_schemas.py`). §2.4 under way
-24-Nov-2026: built, with their cases fixed, `no-import-alias`,
-`no-domain-name-local`, `no-local-named-after-import`, `no-tuple-rows`
-(echo's files excluded as transitional), `strftime-only-in-dates`,
-`commit-only-in-callers`, `asynccontextmanager-returns-asyncgenerator`,
-`no-assert-never-fallback` (scoped to `src/` and `tests/`: `scripts/` is
-outside pyright, where the fallback is the only check). Open:
-`fetchone()` and an assert (35 cases, most in tests), reflection in
-`src/mor/markets/changes.py` (a decision: explicit field lists per
-record, or an exception), and the provider-by-name rule, whose one case
-is echo's (transitional). The rules in §2.4 were decided
-on 24-Nov-2026 (shadowing, import aliases, two-column rows), and
+24-Nov-2026 (`tests/messaging/test_fact_schemas.py`). §2.4 built
+24-Nov-2026, every rule over `src/` and `tests/` with its cases fixed:
+`no-import-alias`, `no-domain-name-local`, `no-local-named-after-import`,
+`no-tuple-rows`, `no-fetchone-assert`, `strftime-only-in-dates`,
+`asynccontextmanager-returns-asyncgenerator`, `no-assert-never-fallback`,
+`provider-by-name-only-in-registry`, and `commit-only-in-callers`, which
+skips tests: a test is the outermost caller and commits for real, so
+commit-time triggers run. Exceptions, each said in its rule:
+`no-assert-never-fallback` leaves `scripts/` (outside pyright, where the
+fallback is the only check); `no-tuple-rows` and the provider rule leave
+echo's files (transitional, they go with echo). Open: reflection in
+`src/mor/markets/changes.py` (explicit field lists per record, or a
+documented exception), undecided, so it has no rule yet. The rules in
+§2.4 were decided on 24-Nov-2026 (shadowing, import aliases, two-column rows), and
 `AGENTS.md` Code Style says them.
 
 Why: a rule in prose is easy to forget, and several already are broken in
@@ -167,13 +169,23 @@ What the cases are:
   rule covers them, each with its own small row record.
 - **`fetchone()` and an assert**: both inbox decoders
   (`src/mor/payments/inbound.py`, `src/mor/echo/inbound.py`),
-  `src/mor/seed.py`, `src/mor/fakes/echo.py`.
+  `src/mor/fakes/echo.py`, and 38 in tests, most of them single counts:
+  five `_count` copies and `support.count_rows` are now one
+  `tests.helpers.count_rows`.
+  `one_value` takes `params=None`, as `execute` does, so a query with a
+  literal `%` (`LIKE 'capture:%'`) needs no escaping.
 - **Reflection**: `src/mor/markets/changes.py` compares two records field
   by field with `getattr`. Explicit comparisons per record, or a field
   list as data, would replace it.
-- **Provider by name outside a registry**: `src/mor/echo/flow.py`
-  (`send_guard(account.provider)`); echo is transitional (retired with
-  the shipment slice), so this may go with it rather than be fixed.
+- **Provider by name outside a registry**: `src/mor/echo/capabilities.py`
+  (`send_guard`) and the seed's echo URL flavour (`src/mor/seed.py`);
+  echo is transitional (retired with the shipment slice), so both are
+  excluded and go with it.
+- **Found by the rules' own gaps**: `no-tuple-rows` missed a parenthesised
+  `(a, b) = row` (a `tuple_pattern`), which hid a 7-column and a 6-column
+  row in `tests/flow/payment_checks.py`; the fetchone rule missed
+  `assert row is not None and …`. Both shapes are in the rules and their
+  examples now.
 
 ### 2.5 Found while looking, not a rule check
 

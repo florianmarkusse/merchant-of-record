@@ -21,15 +21,15 @@ rule:
   any:
     - kind: for_statement
       all:
-        - has: {field: left, kind: pattern_list}
+        - has: {field: left, any: [{kind: pattern_list}, {kind: tuple_pattern, not: {regex: '^\(\s*\w+\s*,\s*\)$'}}]}
         - has: {field: right, pattern: await $C.fetchall()}
     - kind: for_in_clause
       all:
-        - has: {field: left, kind: pattern_list}
+        - has: {field: left, any: [{kind: pattern_list}, {kind: tuple_pattern, not: {regex: '^\(\s*\w+\s*,\s*\)$'}}]}
         - has: {field: right, pattern: await $C.fetchall()}
     - kind: assignment
       all:
-        - has: {field: left, kind: pattern_list}
+        - has: {field: left, any: [{kind: pattern_list}, {kind: tuple_pattern, not: {regex: '^\(\s*\w+\s*,\s*\)$'}}]}
         - has:
             field: right
             any:

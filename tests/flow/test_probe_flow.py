@@ -31,6 +31,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_value
 from mor.messaging.delivery import (
     Candidate,
     Skipped,
@@ -230,14 +231,14 @@ class ProbeFlow(RuleBasedStateMachine):
         return counts
 
     async def _advisory_locks(self) -> int:
-        cur = await self.worker.execute(
+        return await one_value(
+            self.worker,
             "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
             " AND database = (SELECT oid FROM pg_database"
-            " WHERE datname = current_database())"
+            " WHERE datname = current_database())",
+            None,
+            int,
         )
-        row = await cur.fetchone()
-        assert row is not None
-        return row[0]
 
     async def _deliveries(self, handled: bool) -> list[Candidate]:
         cur = await self.worker.cursor(row_factory=class_row(_DeliveryRow)).execute(
@@ -274,12 +275,14 @@ class ProbeFlow(RuleBasedStateMachine):
         echo_counts = await self._echo_counts()
         for probe_id in states:
             assert echo_counts.get(probe_id) == 1
-        cur = await self.worker.execute(
+        unfinished = await one_value(
+            self.worker,
             "SELECT count(*) FROM outbox_delivery"
-            " WHERE handled_at IS NULL OR last_error IS NOT NULL"
+            " WHERE handled_at IS NULL OR last_error IS NOT NULL",
+            None,
+            int,
         )
-        row = await cur.fetchone()
-        assert row is not None and row[0] == 0
+        assert unfinished == 0
         assert await self._advisory_locks() == 0
 
 

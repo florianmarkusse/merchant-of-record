@@ -26,7 +26,14 @@ from mor.messaging.worker import (
 )
 from mor.probe.flow import probe_state, start_probe
 from mor.probe.records import ProbeState
-from tests.helpers import ENV, NO_HTTP, advisory_locks_held, crash, local_consumer
+from tests.helpers import (
+    ENV,
+    NO_HTTP,
+    advisory_locks_held,
+    count_rows,
+    crash,
+    local_consumer,
+)
 
 
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -43,16 +50,6 @@ async def _start(url: str) -> uuid.UUID:
 async def _state(url: str, probe_id: uuid.UUID) -> ProbeState | None:
     async with await connect(url) as conn:
         return await probe_state(conn, probe_id)
-
-
-async def _count(url: str, query: bytes) -> int:
-    async with await connect(url) as conn:
-        cur = await conn.execute(query)
-        row = await cur.fetchone()
-    assert row is not None
-    count = row[0]
-    assert isinstance(count, int)
-    return count
 
 
 def _echo_candidate(message_id: uuid.UUID, probe_id: uuid.UUID) -> Candidate:
@@ -81,8 +78,8 @@ def test_worker_takes_a_probe_through_both_steps(database_url: str) -> None:
             assert second == [Ran(Applied())]
             assert await drain_once(worker, NO_HTTP, ENV, NOW) == []
         assert await _state(database_url, probe_id) == ProbeState.FINISHED
-        assert await _count(database_url, b"SELECT count(*) FROM outbox") == 2
-        assert await _count(database_url, b"SELECT count(*) FROM inbox") == 2
+        assert await count_rows(database_url, "SELECT count(*) FROM outbox") == 2
+        assert await count_rows(database_url, "SELECT count(*) FROM inbox") == 2
         assert await advisory_locks_held(database_url) == 0
 
     asyncio.run(scenario())
@@ -98,7 +95,7 @@ def test_a_handled_delivery_is_not_run_again(database_url: str) -> None:
             assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Skipped(
                 "already_handled"
             )
-        count = await _count(database_url, b"SELECT count(*) FROM outbox")
+        count = await count_rows(database_url, "SELECT count(*) FROM outbox")
         assert count == 2
 
     asyncio.run(scenario())
@@ -124,8 +121,8 @@ def test_a_later_fact_of_one_aggregate_may_run_first_and_the_other_is_stale(
             # No order per aggregate: the later one runs, the older is stale.
             assert await run_one(worker, NO_HTTP, ENV, repeat, NOW) == Ran(Applied())
             assert await run_one(worker, NO_HTTP, ENV, first, NOW) == Ran(Stale())
-        echoed = b"SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
-        assert await _count(database_url, echoed) == 1
+        echoed = "SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
+        assert await count_rows(database_url, echoed) == 1
 
     asyncio.run(scenario())
 
@@ -245,8 +242,8 @@ def test_a_crash_before_commit_leaves_nothing_and_frees_the_delivery(
         assert await advisory_locks_held(database_url) == 0
         async with await connect(database_url, autocommit=True) as worker:
             assert await run_one(worker, NO_HTTP, ENV, candidate, NOW) == Ran(Applied())
-        echoed = b"SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
-        assert await _count(database_url, echoed) == 1
+        echoed = "SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
+        assert await count_rows(database_url, echoed) == 1
 
     asyncio.run(scenario())
 

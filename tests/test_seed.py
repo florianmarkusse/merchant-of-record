@@ -10,6 +10,7 @@ from mor.config import Environment, Settings
 from mor.couriers.prices import courier_account
 from mor.couriers.records import PriceExpiry
 from mor.db.connect import connect
+from mor.db.fetch import one_value
 from mor.echo.flow import create_echo_job
 from mor.echo.port import EchoProvider, EventMode
 from mor.markets.store import load_market
@@ -28,7 +29,7 @@ from mor.seed import (
     set_up_fake_psp,
     subscribe_webhooks,
 )
-from tests.helpers import ENV, Wired, wire
+from tests.helpers import ENV, Wired, count_rows, wire
 from tests.quote.fixtures import live_market
 
 
@@ -47,14 +48,6 @@ async def _seed(url: str, wired: Wired) -> list[SeededAccount]:
     return seeded
 
 
-async def _count(url: str, query: bytes) -> int:
-    async with await connect(url) as conn:
-        cur = await conn.execute(query)
-        row = await cur.fetchone()
-    assert row is not None and isinstance(row[0], int)
-    return row[0]
-
-
 def test_the_seed_makes_one_account_per_provider_and_mode_once(
     database_url: str,
 ) -> None:
@@ -67,12 +60,12 @@ def test_the_seed_makes_one_account_per_provider_and_mode_once(
         assert len(first) == len(EchoProvider) * modes
         assert all(account.created for account in first)
         assert not any(account.created for account in again)
-        accounts = b"SELECT count(*) FROM echo_account"
-        assert await _count(database_url, accounts) == len(EchoProvider) * modes
-        looks = b"SELECT count(*) FROM outbox WHERE message_type = 'echo_report_due'"
-        assert await _count(database_url, looks) == len(EchoProvider)
-        subscriptions = b"SELECT count(*) FROM fake_vendor.echo_webhook"
-        assert await _count(database_url, subscriptions) == len(EchoProvider) * 2
+        accounts = "SELECT count(*) FROM echo_account"
+        assert await count_rows(database_url, accounts) == len(EchoProvider) * modes
+        looks = "SELECT count(*) FROM outbox WHERE message_type = 'echo_report_due'"
+        assert await count_rows(database_url, looks) == len(EchoProvider)
+        subscriptions = "SELECT count(*) FROM fake_vendor.echo_webhook"
+        assert await count_rows(database_url, subscriptions) == len(EchoProvider) * 2
 
     asyncio.run(body())
 
@@ -84,7 +77,9 @@ def test_the_seed_is_refused_in_prod(database_url: str) -> None:
             assert await seed_accounts(conn, settings, NOW) == SeedInProd()
 
     asyncio.run(body())
-    assert asyncio.run(_count(database_url, b"SELECT count(*) FROM echo_account")) == 0
+    assert (
+        asyncio.run(count_rows(database_url, "SELECT count(*) FROM echo_account")) == 0
+    )
 
 
 def test_a_seeded_push_account_receives_the_vendors_events(database_url: str) -> None:
@@ -107,13 +102,14 @@ def test_a_seeded_push_account_receives_the_vendors_events(database_url: str) ->
                 for result in await drain_once(worker, wired.http, ENV, NOW):
                     assert not isinstance(result, Failed), result
             async with await connect(database_url) as conn:
-                cur = await conn.execute(
-                    "SELECT vendor_echo_id FROM echo_job WHERE id = %s", (job_id,)
+                vendor_echo_id = await one_value(
+                    conn,
+                    "SELECT vendor_echo_id FROM echo_job WHERE id = %s",
+                    (job_id,),
+                    str,
                 )
-                row = await cur.fetchone()
-            assert row is not None
             response = await wired.control.post(
-                f"{url}/echoes/{row[0]}/events/release", json={}
+                f"{url}/echoes/{vendor_echo_id}/events/release", json={}
             )
             assert response.json()["push"] == "delivered"
             for _ in range(5):
@@ -163,7 +159,7 @@ def test_the_sandbox_merchant_gets_one_key_shown_once(database_url: str) -> None
             await conn.commit()
         assert found is not None and found.merchant.display_name == "Sandbox Shop"
         assert isinstance(refused, SeedInProd)
-        assert await _count(database_url, b"SELECT count(*) FROM merchant") == 1
+        assert await count_rows(database_url, "SELECT count(*) FROM merchant") == 1
 
     asyncio.run(body())
 

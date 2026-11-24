@@ -27,7 +27,7 @@ async def one_row[Row](cur: AsyncCursor[Row], missing: str) -> Row:
 
 
 async def one_value[T](
-    conn: Connection, query: LiteralString, params: Params, kind: type[T]
+    conn: Connection, query: LiteralString, params: Params | None, kind: type[T]
 ) -> T:
     """The single non-null value of a one-column query that must find a
     row, checked against `kind` (psycopg reads columns untyped)."""

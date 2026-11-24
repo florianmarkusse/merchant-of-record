@@ -1,0 +1,22 @@
+id: provider-by-name-only-in-registry
+language: python
+severity: error
+message: >-
+  Exactly one place picks a provider by name: its registry (conventions,
+  External Services). Elsewhere switch on a capability value the account
+  carries (its duplicate guard, its status mode), never on the provider.
+files:
+  - src/**/*.py
+  - tests/**/*.py
+ignores:
+  - src/mor/*/registry.py
+  # Transitional, with the echo flow (docs/plan-messaging.md §10): echo
+  # picks its send guard and its seeded fake's URL by provider; both go
+  # with it.
+  - src/mor/echo/capabilities.py
+  - src/mor/seed.py
+rule:
+  kind: case_clause
+  has:
+    kind: case_pattern
+    regex: ^\w*Provider\.

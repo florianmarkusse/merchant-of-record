@@ -12,6 +12,7 @@ import httpx2
 from psycopg.rows import class_row
 
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_row
 from mor.messaging import consumers
 from mor.messaging.delivery import (
     Candidate,
@@ -197,6 +198,17 @@ async def check_invoice_numbers(conn: Connection) -> None:
     assert await cur.fetchall() == []
 
 
+@dataclass(frozen=True, kw_only=True)
+class _SettlementSumsRow:
+    fees_booked: int
+    fees_of_lines: int
+    in_transit: int
+    nets: int
+    rounding_booked: int
+    rounding_said: int
+    open_with_rounding: int
+
+
 async def check_settlement_is_booked_once(conn: Connection) -> None:
     """Settlement's rows and the ledger agree (docs/plan-payments.md §7.1,
     plan-settlement-reconciliation §4): a booked line has its order and its
@@ -216,43 +228,36 @@ async def check_settlement_is_booked_once(conn: Connection) -> None:
         """
     )
     assert await cur.fetchall() == []
-    cur = await conn.execute(
-        """
+    async with conn.cursor(row_factory=class_row(_SettlementSumsRow)) as sums_cur:
+        await sums_cur.execute(
+            """
         SELECT
           (SELECT coalesce(sum(l.amount_minor), 0) FROM journal_line l
             JOIN journal_entry e ON e.id = l.entry_id
             WHERE l.account_kind = 'psp_clearing'
-              AND e.idempotency_key LIKE 'settlement:%'),
+              AND e.idempotency_key LIKE 'settlement:%') AS fees_booked,
           (SELECT coalesce(-sum(fee_minor), 0) FROM settlement_line
-            WHERE state = 'booked'),
+            WHERE state = 'booked') AS fees_of_lines,
           (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
-            WHERE account_kind = 'payout_in_transit'),
+            WHERE account_kind = 'payout_in_transit') AS in_transit,
           (SELECT coalesce(sum(net_minor), 0) FROM settlement_payout
-            WHERE booked_at IS NOT NULL),
+            WHERE booked_at IS NOT NULL) AS nets,
           (SELECT coalesce(sum(l.amount_minor), 0) FROM journal_line l
             JOIN journal_entry e ON e.id = l.entry_id
             WHERE l.account_kind = 'psp_clearing'
-              AND e.idempotency_key LIKE 'payout-rounding:%'),
-          (SELECT coalesce(sum(rounding_minor), 0) FROM settlement_payout),
+              AND e.idempotency_key LIKE 'payout-rounding:%') AS rounding_booked,
+          (SELECT coalesce(sum(rounding_minor), 0) FROM settlement_payout)
+            AS rounding_said,
           (SELECT count(*) FROM settlement_payout
             WHERE reconciliation = 'open' AND rounding_minor <> 0)
-        """
-    )
-    row = await cur.fetchone()
-    assert row is not None
-    (
-        fees_booked,
-        fees_of_lines,
-        in_transit,
-        nets,
-        rounding_booked,
-        rounding_said,
-        open_with_rounding,
-    ) = row
-    assert fees_booked == fees_of_lines, (fees_booked, fees_of_lines)
-    assert in_transit == nets, (in_transit, nets)
-    assert rounding_booked == rounding_said, (rounding_booked, rounding_said)
-    assert open_with_rounding == 0
+            AS open_with_rounding
+            """
+        )
+        sums = await one_row(sums_cur, "the settlement sums")
+    assert sums.fees_booked == sums.fees_of_lines, sums
+    assert sums.in_transit == sums.nets, sums
+    assert sums.rounding_booked == sums.rounding_said, sums
+    assert sums.open_with_rounding == 0, sums
 
 
 async def check_no_advisory_lock_is_held(conn: Connection) -> None:
@@ -322,6 +327,22 @@ class _SettledLineRow:
     attempt_state: str | None
 
 
+@dataclass(frozen=True, kw_only=True)
+class _BatchRow:
+    id: str
+    fault: str | None
+    booked: bool
+    reconciliation: str | None
+    numerator: int | None
+    denominator: int | None
+
+
+@dataclass(frozen=True)
+class _ClearingRow:
+    booked: int
+    expected: int
+
+
 async def check_settlement_drained(conn: Connection) -> None:
     """Everything the fake settled is in our books, each line once and as
     its fault says (docs/plan-payments.md §7.1): a clean line booked, a
@@ -365,53 +386,48 @@ async def check_settlement_drained(conn: Connection) -> None:
                 state,
                 kind,
             )
-    cur = await conn.execute(
-        """
-        SELECT f.id, f.fault, p.booked_at IS NOT NULL, p.reconciliation::text,
-               p.difference_numerator, p.difference_denominator
-        FROM fake_vendor.psp_fake_settlement_batch f
-        LEFT JOIN settlement_payout p ON p.vendor_payout_id = f.id
-        """
-    )
-    for (
-        batch_id,
-        fault,
-        booked,
-        reconciliation,
-        numerator,
-        denominator,
-    ) in await cur.fetchall():
-        assert booked, f"payout {batch_id} not booked after the drain"
-        if fault == "net_differs":
+    async with conn.cursor(row_factory=class_row(_BatchRow)) as batches_cur:
+        await batches_cur.execute(
+            """
+            SELECT f.id, f.fault, p.booked_at IS NOT NULL AS booked,
+                   p.reconciliation::text AS reconciliation,
+                   p.difference_numerator AS numerator,
+                   p.difference_denominator AS denominator
+            FROM fake_vendor.psp_fake_settlement_batch f
+            LEFT JOIN settlement_payout p ON p.vendor_payout_id = f.id
+            """
+        )
+        batches = await batches_cur.fetchall()
+    for batch in batches:
+        assert batch.booked, f"payout {batch.id} not booked after the drain"
+        if batch.fault == "net_differs":
             # The fake paid one dollar less than its lines.
-            assert (reconciliation, numerator, denominator) == ("open", -100, 1), (
-                batch_id,
-                reconciliation,
-                numerator,
-            )
+            difference = (batch.reconciliation, batch.numerator, batch.denominator)
+            assert difference == ("open", -100, 1), batch
         else:
-            assert reconciliation == "balanced", (batch_id, reconciliation)
+            assert batch.reconciliation == "balanced", batch
     cur = await conn.execute(
         "SELECT count(*) FROM settlement_line WHERE state IN ('received', 'waiting')"
     )
     assert await cur.fetchone() == (0,)
-    cur = await conn.execute(
-        """
-        SELECT
-          (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
-            WHERE account_kind = 'psp_clearing'),
-          (SELECT coalesce(sum(a.amount_minor), 0) FROM order_ o
-            JOIN payment_attempt a ON a.id = o.attempt_id)
-          - (SELECT coalesce(sum(fee_minor), 0) FROM settlement_line
-              WHERE state = 'booked')
-          - (SELECT coalesce(sum(net_minor), 0)
-              FROM fake_vendor.psp_fake_settlement_batch)
-          + (SELECT coalesce(sum(rounding_minor), 0) FROM settlement_payout)
-        """
-    )
-    row = await cur.fetchone()
-    assert row is not None
-    assert row[0] == row[1], row
+    async with conn.cursor(row_factory=class_row(_ClearingRow)) as clearing_cur:
+        await clearing_cur.execute(
+            """
+            SELECT
+              (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
+                WHERE account_kind = 'psp_clearing') AS booked,
+              (SELECT coalesce(sum(a.amount_minor), 0) FROM order_ o
+                JOIN payment_attempt a ON a.id = o.attempt_id)
+              - (SELECT coalesce(sum(fee_minor), 0) FROM settlement_line
+                  WHERE state = 'booked')
+              - (SELECT coalesce(sum(net_minor), 0)
+                  FROM fake_vendor.psp_fake_settlement_batch)
+              + (SELECT coalesce(sum(rounding_minor), 0) FROM settlement_payout)
+                AS expected
+            """
+        )
+        clearing = await one_row(clearing_cur, "the clearing balance")
+    assert clearing.booked == clearing.expected, clearing
 
 
 # --- worker steps -----------------------------------------------------------------

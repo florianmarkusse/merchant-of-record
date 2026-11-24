@@ -24,6 +24,7 @@ from mor.money.currency import Currency
 from mor.payments.transitions import AttemptState
 from mor.psp.port import CaptureMode, StatusMode
 from mor.web.staff_layout import money_text
+from tests.helpers import count_rows
 from tests.payments.support import (
     ACTOR,
     FAT_SALE_KEYED,
@@ -31,7 +32,6 @@ from tests.payments.support import (
     Setup,
     Wiring,
     attempts_of,
-    count_rows,
     drain,
     pay_on_page,
     release,

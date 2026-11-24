@@ -1,0 +1,18 @@
+id: no-fetchone-assert
+valid:
+  - |
+    row = await cur.fetchone()
+    if row is None:
+        return None
+  - |
+    found = await one_row(cur, "settlement line")
+invalid:
+  - |
+    row = await cur.fetchone()
+    assert row is not None
+  - |
+    stored = await cur.fetchone()
+    assert stored is not None, f"no inbox row {inbox_id}"
+  - |
+    row = await cur.fetchone()
+    assert row is not None and isinstance(row[0], int)

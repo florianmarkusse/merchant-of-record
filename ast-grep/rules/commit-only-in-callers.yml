@@ -4,6 +4,8 @@ severity: error
 message: >-
   Persistence functions never commit: the caller commits what belongs
   together (a handler, a CLI, the worker's transactions, a fake).
+# Not tests/: a test is the outermost caller and commits for real, so
+# commit-time triggers (the ledger balance check) run as in prod.
 files:
   - src/**/*.py
 ignores:

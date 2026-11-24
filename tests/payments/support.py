@@ -10,7 +10,6 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import LiteralString
 
 import httpx2
 
@@ -253,14 +252,6 @@ async def session_state(setup: Setup) -> str:
         session = await session_by_id(conn, setup.session_id)
     assert session is not None
     return session.state.value
-
-
-async def count_rows(url: str, sql: LiteralString) -> int:
-    async with await connect(url) as conn:
-        cur = await conn.execute(sql)
-        row = await cur.fetchone()
-    assert row is not None
-    return row[0]
 
 
 async def release(setup: Setup, attempt: Attempt, outcome: str) -> None:

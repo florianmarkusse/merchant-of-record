@@ -1,0 +1,19 @@
+id: provider-by-name-only-in-registry
+valid:
+  - |
+    match account.guard:
+        case DuplicateGuard.VENDOR_CONSTRAINT:
+            pass
+  - |
+    match mode:
+        case StatusMode.PUSH_FAT:
+            pass
+invalid:
+  - |
+    match account.provider:
+        case PspProvider.FAKE:
+            pass
+  - |
+    match provider:
+        case EchoProvider.FAKE_KEYED:
+            return DuplicateGuard.VENDOR_CONSTRAINT

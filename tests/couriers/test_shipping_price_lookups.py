@@ -39,7 +39,7 @@ from mor.messaging.worker import drain_once
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.provider_accounts import AccountNotAllowed, ProviderAccountKind
-from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, wire
+from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, count_rows, wire
 from tests.quote.fixtures import quote_market
 
 
@@ -108,11 +108,7 @@ async def _latest(setup: Setup) -> FinishedLookup:
 
 
 async def _carrier_calls(setup: Setup) -> int:
-    async with await connect(setup.url) as conn:
-        cur = await conn.execute("SELECT count(*) FROM fake_vendor.courier_call")
-        row = await cur.fetchone()
-    assert row is not None
-    return row[0]
+    return await count_rows(setup.url, "SELECT count(*) FROM fake_vendor.courier_call")
 
 
 async def _facts(setup: Setup, lookup_id: uuid.UUID) -> list[str]:

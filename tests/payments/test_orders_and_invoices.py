@@ -22,7 +22,7 @@ from mor.messaging.worker import (
 )
 from mor.orders.store import order_by_session
 from mor.web.staff_layout import money_text
-from tests.helpers import ENV, crash, local_consumer
+from tests.helpers import ENV, count_rows, crash, local_consumer
 from tests.payments.support import (
     ACTOR,
     FAT_SALE_KEYED,
@@ -31,7 +31,6 @@ from tests.payments.support import (
     Setup,
     approve_at_the_psp,
     attempts_of,
-    count_rows,
     drain,
     drain_all_but_invoices,
     pay_on_page,

@@ -33,7 +33,7 @@ from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.messaging.worker import drain_once
 from mor.provider_accounts import AccountNotAllowed, ProviderAccountKind
-from tests.helpers import ENV, RefusingTransport
+from tests.helpers import ENV, RefusingTransport, count_rows
 from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
 
 
@@ -94,11 +94,7 @@ def _answer(lookup: VendorLookup, charge: Charge) -> StoredAnswer:
 
 
 async def _vendor_calls(setup: Setup) -> int:
-    async with await connect(setup.url) as conn:
-        cur = await conn.execute("SELECT count(*) FROM fake_vendor.duty_call")
-        row = await cur.fetchone()
-    assert row is not None
-    return row[0]
+    return await count_rows(setup.url, "SELECT count(*) FROM fake_vendor.duty_call")
 
 
 async def _facts(setup: Setup, lookup_id: uuid.UUID) -> list[str]:

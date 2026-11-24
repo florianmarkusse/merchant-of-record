@@ -45,6 +45,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from mor.db.connect import SESSION_OPTIONS
+from mor.db.fetch import one_row
 from mor.fakes.hang import Hang
 
 
@@ -214,9 +215,8 @@ async def handle_send(request: Request, database_url: str, hang: Hang) -> Respon
                 """,
                 (key,),
             )
-            row = await cur.fetchone()
+            row = await one_row(cur, f"keyed echo {key}")
             status = 200
-        assert row is not None
         await conn.commit()
 
     if fault == "fail_500_after_work":

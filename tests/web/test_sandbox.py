@@ -11,6 +11,7 @@ import httpx2
 
 from mor.config import Settings
 from mor.db.connect import connect
+from mor.db.fetch import one_value
 from mor.echo.port import EchoProvider, EventMode
 from mor.messaging.worker import Failed, drain_once
 from mor.seed import SeedInProd, base_url, seed_accounts, subscribe_webhooks
@@ -36,13 +37,12 @@ async def _with_seed(url: str, body: Callable[[Wired], Awaitable[None]]) -> None
 
 async def _account_id(url: str, provider: EchoProvider, mode: EventMode) -> uuid.UUID:
     async with await connect(url) as conn:
-        cur = await conn.execute(
+        return await one_value(
+            conn,
             "SELECT id FROM echo_account WHERE base_url = %s",
             (base_url(SELF_URL, provider, mode),),
+            uuid.UUID,
         )
-        row = await cur.fetchone()
-    assert row is not None and isinstance(row[0], uuid.UUID)
-    return row[0]
 
 
 async def _post(wired: Wired, path: str, form: dict[str, str]) -> httpx2.Response:

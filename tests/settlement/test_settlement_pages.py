@@ -4,18 +4,20 @@ and the rows out. Every merchant, buyer and
 address here is made up."""
 
 import asyncio
+import uuid
 
 from mor.db.connect import connect
+from mor.db.fetch import one_value
 from mor.messaging.guard import DuplicateGuard
 from mor.psp.port import CaptureMode, SettlementMode, StatusMode
 from mor.settlement.fetch import start_settlement_reading
+from tests.helpers import count_rows
 from tests.payments.support import (
     ACTOR,
     NOW,
     Setup,
     Wiring,
     approve_at_the_psp,
-    count_rows,
     drain,
     with_setup,
     words,
@@ -67,10 +69,10 @@ def test_the_staff_page_shows_an_exception_and_resolving_records_one_note(
         text = words(page.text)
         assert "unknown_type" in text and "Resolve" in text
         async with await connect(setup.url) as conn:
-            cur = await conn.execute("SELECT id FROM settlement_exception")
-            row = await cur.fetchone()
-        assert row is not None
-        action = f"{account_page}/exceptions/{row[0]}"
+            exception_id = await one_value(
+                conn, "SELECT id FROM settlement_exception", None, uuid.UUID
+            )
+        action = f"{account_page}/exceptions/{exception_id}"
 
         refused = await setup.wired.control.post(
             action, data={"note": "looked"}, headers={"origin": "http://evil"}

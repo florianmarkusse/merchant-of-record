@@ -1,0 +1,21 @@
+id: no-fetchone-assert
+language: python
+severity: error
+message: >-
+  A read that must find a row uses mor.db.fetch (one_row, one_value), not
+  fetchone() and an assert (AGENTS.md, Code Style).
+files:
+  - src/**/*.py
+  - tests/**/*.py
+rule:
+  kind: assert_statement
+  any:
+    - pattern: assert $R is not None
+    - pattern: assert $R is not None, $MSG
+    - pattern: assert $R is not None and $$$REST
+  follows:
+    stopBy: end
+    any:
+      - pattern: $R = await $C.fetchone()
+      - pattern: "$R: $T = await $C.fetchone()"
+      - has: {pattern: $R = await $C.fetchone(), stopBy: end}

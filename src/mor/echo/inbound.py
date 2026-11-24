@@ -20,7 +20,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
-from mor.db.fetch import one_value
+from mor.db.fetch import one_row, one_value
 from mor.echo import registry
 from mor.echo.events import VendorStatus, derive_status, rank
 from mor.echo.port import (
@@ -179,8 +179,7 @@ async def decode_inbox(
         await cur.execute(
             "SELECT mode, body FROM echo_inbox WHERE id = %s", (inbox_id,)
         )
-        stored = await cur.fetchone()
-    assert stored is not None, f"no inbox row {inbox_id}"
+        stored = await one_row(cur, f"echo inbox row {inbox_id}")
     mode = stored.mode
     body = stored.body
     inbound = await inbound_account(conn, account_id)

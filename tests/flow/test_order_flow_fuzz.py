@@ -37,6 +37,7 @@ from hypothesis.stateful import (
 
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_value
 from mor.messaging.delivery import (
     Candidate,
 )
@@ -162,15 +163,16 @@ class OrderFlow(RuleBasedStateMachine):
                     await conn.commit()
                 assert isinstance(paid, Paying), paid
                 await catch_up(self.worker, self.http, self.now)
-                cur = await self.worker.execute(
+                # The payment waits on the buyer.
+                waiting_id = await one_value(
+                    self.worker,
                     "SELECT id FROM fake_vendor.psp_fake_payment"
                     " WHERE reference = %s AND status = 'requires_action'",
                     (str(paid.attempt_id),),
+                    str,
                 )
-                row = await cur.fetchone()
-                assert row is not None, "the payment waits on the buyer"
                 response = await self.control.post(
-                    f"http://mor/_fake/psp/acct/payments/{row[0]}/release",
+                    f"http://mor/_fake/psp/acct/payments/{waiting_id}/release",
                     json={"outcome": "paid", "push": "once"},
                 )
                 assert response.status_code == 200, response.text
@@ -283,10 +285,7 @@ class OrderFlow(RuleBasedStateMachine):
         return found
 
     async def _orders(self) -> int:
-        cur = await self.worker.execute("SELECT count(*) FROM order_")
-        row = await cur.fetchone()
-        assert row is not None
-        return row[0]
+        return await one_value(self.worker, "SELECT count(*) FROM order_", None, int)
 
     async def _reached(self) -> set[str]:
         cur = await self.worker.execute(

@@ -4,6 +4,9 @@ valid:
     for row in await cur.fetchall():
         pass
   - first, second = pair
+  - |
+    for (kind,) in await cur.fetchall():
+        pass
 invalid:
   - |
     for name, values in await cur.fetchall():
@@ -11,3 +14,8 @@ invalid:
   - "fractions = [Fraction(n, d) for n, d in await cur.fetchall()]"
   - route_id, account_id = row
   - a, b = await cur.fetchone()
+  - |
+    (
+        fees_booked,
+        fees_of_lines,
+    ) = row

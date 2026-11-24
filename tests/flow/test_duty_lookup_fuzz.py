@@ -35,6 +35,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_value
 from mor.duties.lookups import create_vendor_account, request_duty_rate
 from mor.duties.port import DutyProvider, RateQuestion
 from mor.markets.source import parse
@@ -290,10 +291,9 @@ class DutyLookupFlow(RuleBasedStateMachine):
             await conn.commit()
 
     async def _faults_waiting(self) -> int:
-        cur = await self.worker.execute("SELECT count(*) FROM fake_vendor.duty_fault")
-        row = await cur.fetchone()
-        assert row is not None
-        return row[0]
+        return await one_value(
+            self.worker, "SELECT count(*) FROM fake_vendor.duty_fault", None, int
+        )
 
     async def _used(self, kinds: tuple[str, ...]) -> int:
         """Faults of these kinds the vendor has taken: scripted minus

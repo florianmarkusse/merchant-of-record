@@ -14,6 +14,7 @@ import mor.fakes.echo
 from mor.audit import Actor, ActorKind
 from mor.config import Environment, Settings
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_value
 from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.inbound import JobNotFound, record_manual_event, store_inbox
 from mor.echo.port import EchoProvider, EventKind, EventMode
@@ -28,7 +29,7 @@ from mor.messaging.worker import (
     drain_once,
 )
 from mor.web.main import Fakes, FakesInProd, make_app
-from tests.helpers import ENV, NO_HTTP, Wired, wire
+from tests.helpers import ENV, NO_HTTP, Wired, count_rows, wire
 
 
 NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
@@ -101,12 +102,13 @@ async def _echoed_job(setup: Setup, account_id: uuid.UUID) -> tuple[uuid.UUID, s
     for result in await _drain(setup):
         assert not isinstance(result, Failed), result
     async with await connect(setup.url) as conn:
-        cur = await conn.execute(
-            "SELECT vendor_echo_id FROM echo_job WHERE id = %s", (job_id,)
+        vendor_echo_id = await one_value(
+            conn,
+            "SELECT vendor_echo_id FROM echo_job WHERE id = %s",
+            (job_id,),
+            str,
         )
-        row = await cur.fetchone()
-    assert row is not None and isinstance(row[0], str)
-    return job_id, row[0]
+    return job_id, vendor_echo_id
 
 
 async def _release(
@@ -153,11 +155,7 @@ async def _milestone_facts(setup: Setup, job_id: uuid.UUID) -> list[str]:
 
 
 async def _inbox_count(setup: Setup) -> int:
-    async with await connect(setup.url) as conn:
-        cur = await conn.execute("SELECT count(*) FROM echo_inbox")
-        row = await cur.fetchone()
-    assert row is not None and isinstance(row[0], int)
-    return row[0]
+    return await count_rows(setup.url, "SELECT count(*) FROM echo_inbox")
 
 
 def test_pushed_events_become_milestones_once(database_url: str) -> None:
@@ -325,14 +323,13 @@ def test_the_fakes_are_never_mounted_in_prod() -> None:
 
 async def _scheduled_polls(setup: Setup, job_id: uuid.UUID) -> int:
     async with await connect(setup.url) as conn:
-        cur = await conn.execute(
+        return await one_value(
+            conn,
             "SELECT count(*) FROM outbox_delivery WHERE aggregate_id = %s"
             " AND consumer = 'echo_poll' AND handled_at IS NULL",
             (job_id,),
+            int,
         )
-        row = await cur.fetchone()
-    assert row is not None and isinstance(row[0], int)
-    return row[0]
 
 
 def test_a_poll_account_polls_until_the_status_is_final(database_url: str) -> None:

@@ -50,6 +50,7 @@ from mor.couriers.records import (
     PriceState,
 )
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_value
 from mor.messaging.delivery import (
     Candidate,
     Skipped,
@@ -355,21 +356,18 @@ class ShippingPriceFlow(RuleBasedStateMachine):
             await conn.commit()
 
     async def _is_open(self, lookup_id: uuid.UUID) -> bool:
-        cur = await self.worker.execute(
-            "SELECT state::text FROM shipping_price_lookup WHERE id = %s",
+        state = await one_value(
+            self.worker,
+            "SELECT state FROM shipping_price_lookup WHERE id = %s",
             (lookup_id,),
+            PriceState,
         )
-        row = await cur.fetchone()
-        assert row is not None
-        return PriceState(row[0]) == PriceState.REQUESTED
+        return state == PriceState.REQUESTED
 
     async def _faults_waiting(self) -> int:
-        cur = await self.worker.execute(
-            "SELECT count(*) FROM fake_vendor.courier_fault"
+        return await one_value(
+            self.worker, "SELECT count(*) FROM fake_vendor.courier_fault", None, int
         )
-        row = await cur.fetchone()
-        assert row is not None
-        return row[0]
 
     async def _used(self, kinds: tuple[str, ...]) -> int:
         """Faults of these kinds the carrier has taken: scripted minus

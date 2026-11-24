@@ -36,7 +36,7 @@ from mor.payments.flow import CaptureCall
 from mor.payments.transitions import AttemptState
 from mor.probe.flow import start_probe
 from mor.psp.port import CaptureMode, StatusMode
-from tests.helpers import ENV, NO_HTTP, advisory_locks_held
+from tests.helpers import ENV, NO_HTTP, advisory_locks_held, count_rows
 from tests.payments.support import (
     FAT_SALE_KEYED,
     SGD_PRICE,
@@ -44,7 +44,6 @@ from tests.payments.support import (
     Wiring,
     approve_at_the_psp,
     attempts_of,
-    count_rows,
     drain,
     drain_all_but_invoices,
     pay_on_page,
@@ -73,16 +72,6 @@ async def _worker(url: str, results: list[RunResult]) -> None:
             await asyncio.sleep(0)
 
 
-async def _count(url: str, query: bytes) -> int:
-    async with await connect(url) as conn:
-        cur = await conn.execute(query)
-        row = await cur.fetchone()
-    assert row is not None
-    count = row[0]
-    assert isinstance(count, int)
-    return count
-
-
 def test_many_workers_finish_every_probe_once(database_url: str) -> None:
     async def scenario() -> list[RunResult]:
         async with await connect(database_url) as conn:
@@ -106,16 +95,16 @@ def test_many_workers_finish_every_probe_once(database_url: str) -> None:
     assert ran == 2 * PROBES
 
     async def checks() -> None:
-        finished = b"SELECT count(*) FROM probe WHERE state = 'finished'"
-        assert await _count(database_url, finished) == PROBES
-        echoed = b"SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
-        assert await _count(database_url, echoed) == PROBES
-        inbox = b"SELECT count(*) FROM inbox"
-        assert await _count(database_url, inbox) == 2 * PROBES
+        finished = "SELECT count(*) FROM probe WHERE state = 'finished'"
+        assert await count_rows(database_url, finished) == PROBES
+        echoed = "SELECT count(*) FROM outbox WHERE message_type = 'probe_echoed'"
+        assert await count_rows(database_url, echoed) == PROBES
+        inbox = "SELECT count(*) FROM inbox"
+        assert await count_rows(database_url, inbox) == 2 * PROBES
         open_deliveries = (
-            b"SELECT count(*) FROM outbox_delivery WHERE handled_at IS NULL"
+            "SELECT count(*) FROM outbox_delivery WHERE handled_at IS NULL"
         )
-        assert await _count(database_url, open_deliveries) == 0
+        assert await count_rows(database_url, open_deliveries) == 0
         assert await advisory_locks_held(database_url) == 0
 
     asyncio.run(checks())
@@ -176,10 +165,10 @@ def test_many_workers_send_every_echo_once_across_the_call(database_url: str) ->
 
     async def checks() -> None:
         jobs = 3 * ECHO_JOBS_PER_PROVIDER
-        echoed = b"SELECT count(*) FROM echo_job WHERE state = 'echoed'"
-        assert await _count(database_url, echoed) == jobs
-        made = b"SELECT count(*) FROM fake_vendor.echo"
-        assert await _count(database_url, made) == jobs
+        echoed = "SELECT count(*) FROM echo_job WHERE state = 'echoed'"
+        assert await count_rows(database_url, echoed) == jobs
+        made = "SELECT count(*) FROM fake_vendor.echo"
+        assert await count_rows(database_url, made) == jobs
         assert await advisory_locks_held(database_url) == 0
 
     asyncio.run(checks())
@@ -223,7 +212,7 @@ def test_many_workers_number_invoices_without_a_gap(database_url: str) -> None:
             )
             await approve_at_the_psp(paid)
             await drain_all_but_invoices(paid)
-        assert await _count(setup.url, b"SELECT count(*) FROM invoice") == 0
+        assert await count_rows(setup.url, "SELECT count(*) FROM invoice") == 0
         results: list[RunResult] = []
         await asyncio.gather(
             *[

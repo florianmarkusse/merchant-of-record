@@ -49,6 +49,7 @@ from mor.checkout.sessions import create_session
 from mor.couriers.prices import create_courier_account
 from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_value
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import (
@@ -416,12 +417,9 @@ class QuoteFlow(RuleBasedStateMachine):
         return sessions
 
     async def _faults_waiting(self) -> int:
-        cur = await self.worker.execute(
-            "SELECT count(*) FROM fake_vendor.courier_fault"
+        return await one_value(
+            self.worker, "SELECT count(*) FROM fake_vendor.courier_fault", None, int
         )
-        row = await cur.fetchone()
-        assert row is not None
-        return row[0]
 
     async def _catch_up(self) -> None:
         for _ in range(100):

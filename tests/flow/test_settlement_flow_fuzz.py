@@ -48,6 +48,7 @@ from hypothesis.stateful import (
 from psycopg.rows import class_row
 
 from mor.db.connect import Connection, connect
+from mor.db.fetch import one_row, one_value
 from mor.fakes.psp import CUT_FAULTS, CutFault
 from mor.messaging.delivery import (
     Candidate,
@@ -235,15 +236,16 @@ class SettlementFlow(RuleBasedStateMachine):
                     await conn.commit()
                 assert isinstance(paid, Paying), paid
                 await catch_up(self.worker, self.http, self.now)
-                cur = await self.worker.execute(
+                # The payment waits on the buyer.
+                waiting_id = await one_value(
+                    self.worker,
                     "SELECT id FROM fake_vendor.psp_fake_payment"
                     " WHERE reference = %s AND status = 'requires_action'",
                     (str(paid.attempt_id),),
+                    str,
                 )
-                row = await cur.fetchone()
-                assert row is not None, "the payment waits on the buyer"
                 response = await self.control.post(
-                    f"http://mor/_fake/psp/acct/payments/{row[0]}/release",
+                    f"http://mor/_fake/psp/acct/payments/{waiting_id}/release",
                     json={"outcome": "paid", "push": "once"},
                 )
                 assert response.status_code == 200, response.text
@@ -462,12 +464,12 @@ class SettlementFlow(RuleBasedStateMachine):
         assert response.status_code == 200, response.text
 
     async def _faults_waiting(self) -> int:
-        cur = await self.worker.execute(
-            "SELECT count(*) FROM fake_vendor.psp_fake_fault_next"
+        return await one_value(
+            self.worker,
+            "SELECT count(*) FROM fake_vendor.psp_fake_fault_next",
+            None,
+            int,
         )
-        row = await cur.fetchone()
-        assert row is not None
-        return row[0]
 
     async def _lines_waiting(self) -> bool:
         cur = await self.worker.execute(
@@ -509,8 +511,7 @@ class SettlementFlow(RuleBasedStateMachine):
                        WHERE fl.batch_id = f.id)) AS open_while_arriving
             """
         )
-        orders = await cur.fetchone()
-        assert orders is not None
+        orders = await one_row(cur, "the arrival orders")
         if orders.line_first:
             seen.add("a line stored before its payout")
         if orders.older_page_first:
@@ -539,8 +540,7 @@ class SettlementFlow(RuleBasedStateMachine):
                 AS counted
             """
         )
-        found = await cur.fetchone()
-        assert found is not None
+        found = await one_row(cur, "the settlement milestones")
         booked_lines = found.booked_lines
         payout_booked = found.payout_booked
         balanced = found.balanced

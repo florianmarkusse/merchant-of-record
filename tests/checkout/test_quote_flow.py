@@ -11,7 +11,6 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import LiteralString
 
 import httpx2
 
@@ -40,7 +39,7 @@ from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
 from mor.quote.build import Quote, QuoteLine, QuoteRequest, build_quote
-from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, wire
+from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, count_rows, wire
 from tests.quote.fixtures import live_market, quote_market
 
 
@@ -158,14 +157,6 @@ async def _drain(setup: Setup) -> None:
                 return
 
 
-async def _count(url: str, sql: LiteralString) -> int:
-    async with await connect(url) as conn:
-        cur = await conn.execute(sql)
-        row = await cur.fetchone()
-    assert row is not None
-    return row[0]
-
-
 def _words(page: str) -> str:
     return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
 
@@ -261,7 +252,7 @@ def test_a_bad_address_is_shown_back_with_its_errors_and_nothing_stored(
         assert "This isn't a postcode for that country." in words
         assert "Please fill this in." in words
         assert 'value="Tan Mei Ling"' in response.text  # kept for the buyer
-        assert await _count(setup.url, "SELECT count(*) FROM checkout_address") == 0
+        assert await count_rows(setup.url, "SELECT count(*) FROM checkout_address") == 0
 
     asyncio.run(_with_setup(database_url, body))
 
@@ -274,7 +265,7 @@ def test_a_cross_site_post_is_refused(database_url: str) -> None:
             headers={"origin": "https://evil.example"},
         )
         assert response.status_code == 403
-        assert await _count(setup.url, "SELECT count(*) FROM checkout_address") == 0
+        assert await count_rows(setup.url, "SELECT count(*) FROM checkout_address") == 0
 
     asyncio.run(_with_setup(database_url, body))
 
@@ -287,7 +278,7 @@ def test_a_refused_quote_says_why_in_buyer_words(database_url: str) -> None:
         assert "This order can't be priced for that country yet." in page
         assert "Where should we send it?" in page
         assert (
-            await _count(
+            await count_rows(
                 setup.url, "SELECT count(*) FROM quote WHERE state = 'refused'"
             )
             == 1
@@ -322,7 +313,7 @@ def test_the_page_waits_while_the_carriers_price_is_fetched(
         # A double submit of the same address asks nothing more.
         await _post(setup, "/address", SG_ADDRESS)
         lookups = "SELECT count(*) FROM shipping_price_lookup"
-        assert await _count(setup.url, lookups) == 1
+        assert await count_rows(setup.url, lookups) == 1
 
         await _drain(setup)
         async with await connect(setup.url) as conn:
@@ -345,14 +336,14 @@ def test_a_lapsed_quote_can_be_priced_again(database_url: str) -> None:
         await _post(setup, "/address", SG_ADDRESS)
         refused = await _post(setup, "/refresh", {})
         assert refused.status_code == 303
-        assert await _count(setup.url, "SELECT count(*) FROM quote") == 1
+        assert await count_rows(setup.url, "SELECT count(*) FROM quote") == 1
 
         setup.clock[0] = NOW + QUOTE_VALID_FOR
         lapsed = _words((await setup.wired.control.get(setup.page)).text)
         assert "This price is no longer held." in lapsed
         assert "Get the current price" in lapsed
         await _post(setup, "/refresh", {})
-        assert await _count(setup.url, "SELECT count(*) FROM quote") == 2
+        assert await count_rows(setup.url, "SELECT count(*) FROM quote") == 2
         held = _words((await setup.wired.control.get(setup.page)).text)
         assert "This price is held until 18-Nov-2026 10:30 UTC" in held
 
@@ -367,7 +358,7 @@ def test_a_session_takes_at_most_its_number_of_addresses(database_url: str) -> N
         over = await _post(setup, "/address", SG_ADDRESS)
         assert over.status_code == 429
         assert "too many addresses" in _words(over.text)
-        count = await _count(setup.url, "SELECT count(*) FROM checkout_address")
+        count = await count_rows(setup.url, "SELECT count(*) FROM checkout_address")
         assert count == MAX_ADDRESSES
 
     asyncio.run(_with_setup(database_url, body))
@@ -384,7 +375,7 @@ def test_an_expired_session_sends_the_buyer_back_to_the_shop(
         assert page.headers["location"] == "https://shop.example/cart"
         posted = await _post(setup, "/address", SG_ADDRESS)
         assert posted.status_code == 303
-        assert await _count(setup.url, "SELECT count(*) FROM checkout_address") == 0
+        assert await count_rows(setup.url, "SELECT count(*) FROM checkout_address") == 0
         await _drain(setup)
         async with await connect(setup.url) as conn:
             session = await session_by_id(conn, setup.session_id)

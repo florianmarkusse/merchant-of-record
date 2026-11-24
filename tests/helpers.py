@@ -3,7 +3,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Literal, LiteralString
 
 import httpx2
 import psycopg
@@ -14,6 +14,7 @@ import mor.fakes.app
 import mor.web.main
 from mor.config import Environment, Settings
 from mor.db.connect import connect
+from mor.db.fetch import one_value
 from mor.messaging.delivery import (
     Candidate,
 )
@@ -80,16 +81,20 @@ async def advisory_locks_held(database_url: str) -> int:
     sandbox's worker, a soak run) take advisory locks of their own, and once
     made the soak fail by chance (17-Nov-2026)."""
     async with await psycopg.AsyncConnection.connect(database_url) as conn:
-        cur = await conn.execute(
+        return await one_value(
+            conn,
             "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
             " AND database = (SELECT oid FROM pg_database"
-            " WHERE datname = current_database())"
+            " WHERE datname = current_database())",
+            None,
+            int,
         )
-        row = await cur.fetchone()
-    assert row is not None
-    count = row[0]
-    assert isinstance(count, int)
-    return count
+
+
+async def count_rows(url: str, sql: LiteralString) -> int:
+    """The single count a `SELECT count(*) …` gives."""
+    async with await connect(url) as conn:
+        return await one_value(conn, sql, None, int)
 
 
 ENV = Environment.TEST
@@ -199,10 +204,7 @@ async def crash(conn: psycopg.AsyncConnection[tuple[object, ...]]) -> None:
     locks as that process exits, a moment after the client closes; a check
     right after must not see that moment. Production needs no such wait:
     a worker that meets the lock in it gets "busy" and tries later."""
-    cur = await conn.execute("SELECT pg_backend_pid()")
-    row = await cur.fetchone()
-    assert row is not None
-    pid = row[0]
+    pid = await one_value(conn, "SELECT pg_backend_pid()", None, int)
     await conn.close()
     async with await psycopg.AsyncConnection.connect(
         TEST_URL, autocommit=True

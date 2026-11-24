@@ -6,6 +6,7 @@ buyer and address here is made up."""
 
 import asyncio
 import dataclasses
+import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 from fractions import Fraction
@@ -14,6 +15,7 @@ import pytest
 from psycopg.rows import class_row
 
 from mor.db.connect import connect
+from mor.db.fetch import one_value
 from mor.fakes.psp import HELD_BACK_MINOR
 from mor.ledger.account import Account, AccountKind
 from mor.ledger.store import balance
@@ -28,7 +30,7 @@ from mor.money.currency import Currency
 from mor.payments.inbound import store_inbox
 from mor.psp.port import CaptureMode, InboundMode, SettlementMode, StatusMode
 from mor.settlement.fetch import start_settlement_reading
-from tests.helpers import ENV
+from tests.helpers import ENV, count_rows
 from tests.payments.support import (
     ACTOR,
     NOW,
@@ -37,7 +39,6 @@ from tests.payments.support import (
     Wiring,
     approve_at_the_psp,
     attempts_of,
-    count_rows,
     drain,
     pay_on_page,
     quoted_session,
@@ -142,22 +143,24 @@ async def _line_states(setup: Setup) -> list[str]:
 async def _fees(setup: Setup) -> tuple[int, int]:
     """The fees the fake kept and the estimates the captures booked."""
     async with await connect(setup.url) as conn:
-        cur = await conn.execute(
-            "SELECT coalesce(sum(fee_minor), 0)::bigint FROM settlement_line"
+        kept = await one_value(
+            conn,
+            "SELECT coalesce(sum(fee_minor), 0)::bigint FROM settlement_line",
+            None,
+            int,
         )
-        row = await cur.fetchone()
-        assert row is not None
-        cur = await conn.execute(
+        estimated = await one_value(
+            conn,
             """
             SELECT coalesce(-sum(l.amount_minor), 0)::bigint FROM journal_line l
             JOIN journal_entry e ON e.id = l.entry_id
             WHERE l.account_kind = 'psp_fee_collected'
               AND e.idempotency_key LIKE 'capture:%'
-            """
+            """,
+            None,
+            int,
         )
-        estimate = await cur.fetchone()
-        assert estimate is not None
-    return row[0], estimate[0]
+    return kept, estimated
 
 
 @pytest.mark.parametrize("mode", list(SettlementMode))
@@ -572,18 +575,18 @@ def test_a_line_and_a_payout_met_again_book_nothing_more(database_url: str) -> N
         await _read_settlement(setup)
         entries = await count_rows(setup.url, "SELECT count(*) FROM journal_entry")
         async with await connect(setup.url) as conn:
-            cur = await conn.execute("SELECT id FROM settlement_line")
-            row = await cur.fetchone()
-            assert row is not None
-            cur = await conn.execute("SELECT id FROM settlement_payout")
-            payout_row = await cur.fetchone()
-            assert payout_row is not None
+            line_id = await one_value(
+                conn, "SELECT id FROM settlement_line", None, uuid.UUID
+            )
+            payout_id = await one_value(
+                conn, "SELECT id FROM settlement_payout", None, uuid.UUID
+            )
             account_id = setup.shop.account.id
             line_fact = SettlementLineReceivedV1(
-                settlement_line_id=row[0], psp_account_id=account_id
+                settlement_line_id=line_id, psp_account_id=account_id
             )
             payout_fact = SettlementPayoutReportedV1(
-                settlement_payout_id=payout_row[0], psp_account_id=account_id
+                settlement_payout_id=payout_id, psp_account_id=account_id
             )
             now = setup.clock[0]
             book_line = ConsumerName.SETTLEMENT_LINE_BOOK
