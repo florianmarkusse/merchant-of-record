@@ -1,0 +1,1143 @@
+{
+  "checkout_session_completed/v1": {
+    "$defs": {
+      "CheckoutSessionCompletedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id",
+          "order_id"
+        ],
+        "title": "CheckoutSessionCompletedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/CheckoutSessionCompletedV1"
+  },
+  "checkout_session_created/v1": {
+    "$defs": {
+      "CheckoutSessionCreatedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "merchant_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id",
+          "merchant_id"
+        ],
+        "title": "CheckoutSessionCreatedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/CheckoutSessionCreatedV1"
+  },
+  "checkout_session_expired/v1": {
+    "$defs": {
+      "CheckoutSessionExpiredV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id"
+        ],
+        "title": "CheckoutSessionExpiredV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/CheckoutSessionExpiredV1"
+  },
+  "checkout_session_expiry_due/v1": {
+    "$defs": {
+      "CheckoutSessionExpiryDueV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id"
+        ],
+        "title": "CheckoutSessionExpiryDueV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/CheckoutSessionExpiryDueV1"
+  },
+  "duty_rate_disagreed/v1": {
+    "$defs": {
+      "DutyRateDisagreedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "charge": {
+            "type": "string"
+          },
+          "duty_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "own_line_no": {
+            "type": "integer"
+          },
+          "own_rate": {
+            "type": "string"
+          },
+          "vendor_rate": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "duty_lookup_id",
+          "charge",
+          "vendor_rate",
+          "own_rate",
+          "own_line_no"
+        ],
+        "title": "DutyRateDisagreedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/DutyRateDisagreedV1"
+  },
+  "duty_rate_found/v1": {
+    "$defs": {
+      "DutyRateFoundV1": {
+        "additionalProperties": false,
+        "properties": {
+          "duty_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duty_lookup_id"
+        ],
+        "title": "DutyRateFoundV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/DutyRateFoundV1"
+  },
+  "duty_rate_needed/v1": {
+    "$defs": {
+      "DutyRateNeededV1": {
+        "additionalProperties": false,
+        "properties": {
+          "duty_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duty_lookup_id"
+        ],
+        "title": "DutyRateNeededV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/DutyRateNeededV1"
+  },
+  "duty_rate_needs_person/v1": {
+    "$defs": {
+      "DutyRateNeedsPersonV1": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "duty_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duty_lookup_id",
+          "detail"
+        ],
+        "title": "DutyRateNeedsPersonV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/DutyRateNeedsPersonV1"
+  },
+  "duty_rate_unknown_code/v1": {
+    "$defs": {
+      "DutyRateUnknownCodeV1": {
+        "additionalProperties": false,
+        "properties": {
+          "duty_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duty_lookup_id"
+        ],
+        "title": "DutyRateUnknownCodeV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/DutyRateUnknownCodeV1"
+  },
+  "echo_events_wanted/v1": {
+    "$defs": {
+      "EchoEventsWantedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id"
+        ],
+        "title": "EchoEventsWantedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoEventsWantedV1"
+  },
+  "echo_inbox_stored/v1": {
+    "$defs": {
+      "EchoInboxStoredV1": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "inbox_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "inbox_id"
+        ],
+        "title": "EchoInboxStoredV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoInboxStoredV1"
+  },
+  "echo_job_archived/v1": {
+    "$defs": {
+      "EchoJobArchivedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id"
+        ],
+        "title": "EchoJobArchivedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoJobArchivedV1"
+  },
+  "echo_job_confirmed/v1": {
+    "$defs": {
+      "EchoJobConfirmedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id"
+        ],
+        "title": "EchoJobConfirmedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoJobConfirmedV1"
+  },
+  "echo_job_echoed/v1": {
+    "$defs": {
+      "EchoJobEchoedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "vendor_echo_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id",
+          "vendor_echo_id"
+        ],
+        "title": "EchoJobEchoedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoJobEchoedV1"
+  },
+  "echo_job_needs_person/v1": {
+    "$defs": {
+      "EchoJobNeedsPersonV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id"
+        ],
+        "title": "EchoJobNeedsPersonV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoJobNeedsPersonV1"
+  },
+  "echo_job_refused/v1": {
+    "$defs": {
+      "EchoJobRefusedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id",
+          "reason"
+        ],
+        "title": "EchoJobRefusedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoJobRefusedV1"
+  },
+  "echo_job_requested/v1": {
+    "$defs": {
+      "EchoJobRequestedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id"
+        ],
+        "title": "EchoJobRequestedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoJobRequestedV1"
+  },
+  "echo_poll_due/v1": {
+    "$defs": {
+      "EchoPollDueV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id"
+        ],
+        "title": "EchoPollDueV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoPollDueV1"
+  },
+  "echo_report_due/v1": {
+    "$defs": {
+      "EchoReportDueV1": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id"
+        ],
+        "title": "EchoReportDueV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/EchoReportDueV1"
+  },
+  "echo_vendor_event_received/v1": {
+    "$defs": {
+      "EchoEventSource": {
+        "enum": [
+          "manual",
+          "vendor"
+        ],
+        "title": "EchoEventSource"
+      },
+      "EchoVendorEventReceivedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "echo_job_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "inbox_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/$defs/EventKind"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/EchoEventSource"
+          },
+          "vendor_event_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo_job_id",
+          "vendor_event_id",
+          "kind",
+          "occurred_at",
+          "source",
+          "inbox_id"
+        ],
+        "title": "EchoVendorEventReceivedV1",
+        "type": "object"
+      },
+      "EventKind": {
+        "enum": [
+          "archived",
+          "confirmed"
+        ],
+        "title": "EventKind"
+      }
+    },
+    "$ref": "#/$defs/EchoVendorEventReceivedV1"
+  },
+  "invoice_issued/v1": {
+    "$defs": {
+      "InvoiceIssuedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "invoice_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "merchant_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invoice_id",
+          "order_id",
+          "merchant_id"
+        ],
+        "title": "InvoiceIssuedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/InvoiceIssuedV1"
+  },
+  "order_paid/v1": {
+    "$defs": {
+      "OrderPaidV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "merchant_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "checkout_session_id",
+          "merchant_id"
+        ],
+        "title": "OrderPaidV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/OrderPaidV1"
+  },
+  "payment_action_required/v1": {
+    "$defs": {
+      "PaymentActionRequiredV1": {
+        "additionalProperties": false,
+        "properties": {
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id"
+        ],
+        "title": "PaymentActionRequiredV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentActionRequiredV1"
+  },
+  "payment_attempt_created/v1": {
+    "$defs": {
+      "PaymentAttemptCreatedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id",
+          "checkout_session_id"
+        ],
+        "title": "PaymentAttemptCreatedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentAttemptCreatedV1"
+  },
+  "payment_authorised/v1": {
+    "$defs": {
+      "PaymentAuthorisedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id"
+        ],
+        "title": "PaymentAuthorisedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentAuthorisedV1"
+  },
+  "payment_cancel_wanted/v1": {
+    "$defs": {
+      "PaymentCancelWantedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id"
+        ],
+        "title": "PaymentCancelWantedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentCancelWantedV1"
+  },
+  "payment_cancelled/v1": {
+    "$defs": {
+      "PaymentCancelledV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id",
+          "checkout_session_id"
+        ],
+        "title": "PaymentCancelledV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentCancelledV1"
+  },
+  "payment_captured/v1": {
+    "$defs": {
+      "PaymentCapturedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id",
+          "checkout_session_id"
+        ],
+        "title": "PaymentCapturedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentCapturedV1"
+  },
+  "payment_declined/v1": {
+    "$defs": {
+      "PaymentDeclinedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id",
+          "checkout_session_id",
+          "reason"
+        ],
+        "title": "PaymentDeclinedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentDeclinedV1"
+  },
+  "payment_events_wanted/v1": {
+    "$defs": {
+      "PaymentEventsWantedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id"
+        ],
+        "title": "PaymentEventsWantedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentEventsWantedV1"
+  },
+  "payment_expired/v1": {
+    "$defs": {
+      "PaymentExpiredV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id",
+          "checkout_session_id"
+        ],
+        "title": "PaymentExpiredV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentExpiredV1"
+  },
+  "payment_needs_person/v1": {
+    "$defs": {
+      "PaymentNeedsPersonV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id",
+          "checkout_session_id",
+          "detail"
+        ],
+        "title": "PaymentNeedsPersonV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentNeedsPersonV1"
+  },
+  "payment_poll_due/v1": {
+    "$defs": {
+      "PaymentPollDueV1": {
+        "additionalProperties": false,
+        "properties": {
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id"
+        ],
+        "title": "PaymentPollDueV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PaymentPollDueV1"
+  },
+  "probe_echoed/v1": {
+    "$defs": {
+      "ProbeEchoedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "probe_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "probe_id"
+        ],
+        "title": "ProbeEchoedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ProbeEchoedV1"
+  },
+  "probe_started/v1": {
+    "$defs": {
+      "ProbeStartedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "probe_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "probe_id"
+        ],
+        "title": "ProbeStartedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ProbeStartedV1"
+  },
+  "psp_event_received/v1": {
+    "$defs": {
+      "PspEventKind": {
+        "enum": [
+          "authorised",
+          "cancelled",
+          "captured",
+          "declined",
+          "expired"
+        ],
+        "title": "PspEventKind"
+      },
+      "PspEventReceivedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_minor": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "inbox_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/PspEventKind"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "payment_attempt_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "provider_payment_id": {
+            "type": "string"
+          },
+          "vendor_event_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_attempt_id",
+          "vendor_event_id",
+          "provider_payment_id",
+          "kind",
+          "amount_minor",
+          "currency",
+          "occurred_at",
+          "inbox_id"
+        ],
+        "title": "PspEventReceivedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PspEventReceivedV1"
+  },
+  "psp_inbox_stored/v1": {
+    "$defs": {
+      "PspInboxStoredV1": {
+        "additionalProperties": false,
+        "properties": {
+          "inbox_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "psp_account_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "psp_account_id",
+          "inbox_id"
+        ],
+        "title": "PspInboxStoredV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PspInboxStoredV1"
+  },
+  "psp_settlement_due/v1": {
+    "$defs": {
+      "PspSettlementDueV1": {
+        "additionalProperties": false,
+        "properties": {
+          "psp_account_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "psp_account_id"
+        ],
+        "title": "PspSettlementDueV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/PspSettlementDueV1"
+  },
+  "quote_inputs_arrived/v1": {
+    "$defs": {
+      "QuoteInputsArrivedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "address_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id",
+          "address_id"
+        ],
+        "title": "QuoteInputsArrivedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/QuoteInputsArrivedV1"
+  },
+  "quote_made/v1": {
+    "$defs": {
+      "QuoteMadeV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id",
+          "quote_id"
+        ],
+        "title": "QuoteMadeV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/QuoteMadeV1"
+  },
+  "quote_refused/v1": {
+    "$defs": {
+      "QuoteRefusedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id",
+          "quote_id",
+          "code"
+        ],
+        "title": "QuoteRefusedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/QuoteRefusedV1"
+  },
+  "quote_requested/v1": {
+    "$defs": {
+      "QuoteRequestedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "address_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "checkout_session_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_session_id",
+          "address_id"
+        ],
+        "title": "QuoteRequestedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/QuoteRequestedV1"
+  },
+  "settlement_line_received/v1": {
+    "$defs": {
+      "SettlementLineReceivedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "psp_account_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "settlement_line_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "settlement_line_id",
+          "psp_account_id"
+        ],
+        "title": "SettlementLineReceivedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/SettlementLineReceivedV1"
+  },
+  "settlement_payout_reported/v1": {
+    "$defs": {
+      "SettlementPayoutReportedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "psp_account_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "settlement_payout_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "settlement_payout_id",
+          "psp_account_id"
+        ],
+        "title": "SettlementPayoutReportedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/SettlementPayoutReportedV1"
+  },
+  "shipping_price_found/v1": {
+    "$defs": {
+      "ShippingPriceFoundV1": {
+        "additionalProperties": false,
+        "properties": {
+          "shipping_price_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipping_price_lookup_id"
+        ],
+        "title": "ShippingPriceFoundV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShippingPriceFoundV1"
+  },
+  "shipping_price_needed/v1": {
+    "$defs": {
+      "ShippingPriceNeededV1": {
+        "additionalProperties": false,
+        "properties": {
+          "shipping_price_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipping_price_lookup_id"
+        ],
+        "title": "ShippingPriceNeededV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShippingPriceNeededV1"
+  },
+  "shipping_price_needs_person/v1": {
+    "$defs": {
+      "ShippingPriceNeedsPersonV1": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "shipping_price_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipping_price_lookup_id",
+          "detail"
+        ],
+        "title": "ShippingPriceNeedsPersonV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShippingPriceNeedsPersonV1"
+  },
+  "shipping_price_not_served/v1": {
+    "$defs": {
+      "ShippingPriceNotServedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "shipping_price_lookup_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipping_price_lookup_id",
+          "detail"
+        ],
+        "title": "ShippingPriceNotServedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShippingPriceNotServedV1"
+  }
+}

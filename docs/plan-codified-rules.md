@@ -2,8 +2,9 @@
 
 Status: §2.2 and §2.3 built 24-Nov-2026 (ruff's `DTZ`, `A` and banned
 APIs in `pyproject.toml`; `kw_only` on all 179 records of 4 or more
-fields, checked by `tests/test_records_kw_only.py`). Next: §2.1, the
-fact-schema snapshot; §2.4 after the messaging refactor
+fields, checked by `tests/test_records_kw_only.py`). §2.1 built
+24-Nov-2026 (`tests/messaging/test_fact_schemas.py`). Next: §2.4, after
+the messaging refactor
 (`plan-architecture.md` §16). The open rules in §2.4 were decided
 on 24-Nov-2026 (shadowing, import aliases, two-column rows), and
 `AGENTS.md` Code Style says them.
@@ -41,10 +42,10 @@ that finds the cases, so run it again before starting.
 
 ## 2. To codify, most valuable first
 
-### 2.1 "A shape change is a new version" (messaging.md)
+### 2.1 "A shape change is a new version" (messaging.md): built 24-Nov-2026
 
-Unchecked today: adding a field to `PaymentDeclinedV1` passes every test,
-while undelivered messages of the old shape no longer decode as expected.
+Was unchecked: adding a field to `PaymentDeclinedV1` passed every test,
+while undelivered messages of the old shape no longer decode.
 
 Check: a snapshot test. Each fact's msgspec JSON schema
 (`msgspec.json.schema(record)`), per `(message_type, schema_version)`,
@@ -54,6 +55,13 @@ snapshot, and when a version has no snapshot (a new version adds one, in
 the same change, by an explicit update command, never silently). Removing
 a version is allowed only with its transitional comment's condition met
 (`AGENTS.md`, Transitional code).
+
+As built: `tests/messaging/fact_schemas.json`, recorded by `uv run python
+-m tests.messaging.fact_schemas`, which adds new versions and drops gone
+ones but refuses to rewrite a changed one. Docstrings (msgspec's
+`description`) are left out, so editing one is no shape change; any
+other change, an optional field or a nested enum's new value included,
+is one.
 
 ### 2.2 "A record of 4 or more fields is built with keyword arguments" (AGENTS.md): built 24-Nov-2026
 

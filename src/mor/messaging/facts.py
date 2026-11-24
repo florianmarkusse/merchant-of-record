@@ -5,6 +5,10 @@ and the old one stays decodable while prod holds undelivered messages of it.
 Each record names its own `message_type` and `schema_version` (class
 constants, not encoded); `decode` is the one table from those back to the
 record, and `tests/messaging/test_facts.py` checks the two agree.
+Each version's shape is recorded in `tests/messaging/fact_schemas.json`;
+`tests/messaging/test_fact_schemas.py` fails when an existing version's
+shape changes, and `uv run python -m tests.messaging.fact_schemas`
+records a new version's.
 """
 
 import uuid

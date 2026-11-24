@@ -137,6 +137,7 @@ deploy/soak.sh                           # the nightly soak, now; `install` sets
 npx tsc                                  # compile ts/ into static/js/ (after `npm install` once)
 uv run pytest                            # drops and recreates mor_test, then runs the suite
 HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
+uv run python -m tests.messaging.fact_schemas  # record a new fact version's shape (never rewrites an existing one)
 ```
 
 - The test setup (`docs/plan-test-setup.md`) runs on this laptop for now:
