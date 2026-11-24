@@ -3,7 +3,7 @@
 Status: 24-Nov-2026: §1, §3.1 and §3.2 built (commit 83a9a04). §3.3,
 the one table for every consumer, agreed 24-Nov-2026: the test seam and
 built 24-Nov-2026 (§1): every consumer is narrowed, locked and run by
-the table. Open: §3.3's question of a type of its own for a locked row.
+the table. A type for a locked row is decided and planned (§3.5).
 Amends `plan-messaging.md` and the worker loop in
 `plan-architecture.md` §5.
 
@@ -291,9 +291,9 @@ converted last, or retired with the echo flow if the shipment slice
 comes first. No fact changes shape, so the fact-schema snapshot guards
 each step.
 
-**Open**: whether a locked row gets a type of its own (`Locked[Attempt]`)
-so a consumer cannot be handed one from `read_attempt`. Proposed: no; the
-table is the one place that calls the consumer, so review sees it.
+**Decided 24-Nov-2026** (was open): a locked row gets a type of its own,
+aimed at the functions that change a row rather than the consumers; see
+§3.5.
 
 ### 3.4 Order of work
 
@@ -304,6 +304,22 @@ table is the one place that calls the consumer, so review sees it.
    gives.
 
 ### 3.5 Smaller items
+
+- **A type for a locked row** (decided 24-Nov-2026, after the ast-grep
+  rules: `plan-architecture.md` §16). Today `lock_attempt` and
+  `read_attempt` both return `Attempt`. A `NewType` per locked row
+  (`LockedAttempt = NewType("LockedAttempt", Attempt)`, likewise the
+  session and the order), made only by the `lock_*` functions, and
+  required by the functions that change that row: `move` (5 calls),
+  `set_session_state` (9), `record_payment` (1), and the like. Pyright
+  then refuses a read-then-write on a row read without its lock, in a
+  consumer or in a web handler (`pay`, `pay_another_way`), which the
+  table does not cover: the shared "row lock around every read-then-
+  write" rule checked by type. Limits: it proves the row was locked when
+  read, not that the transaction holding the lock is still open (a value
+  can outlive its commit, as across `run_steps`); and only convention
+  keeps other code from making one. The consumers gain little: the table
+  is their one caller and always locks first.
 
 - **The message's own uuid.** `outbox.id` identifies the message (one
   probe has two facts), but `outbox.seq` already does. Dropping `id`

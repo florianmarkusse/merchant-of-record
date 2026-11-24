@@ -1024,6 +1024,8 @@ refactored, clean up code once it has stopped moving.
    `mor.messaging.consumers`). The shadowing, import-alias and
    two-column-row rules were decided 24-Nov-2026 (`AGENTS.md`, Code
    Style).
+   Then a type for a locked row (`plan-messaging-rework.md` §3.5),
+   required by the functions that change that row.
 4. The ledger's typed account scopes (`plan-messaging-rework.md` §5),
    just before 5c-2, which adds `bank:{entity}`.
 5. 5c-2, the bank statement import that moves a PSP payout from
