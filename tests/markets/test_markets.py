@@ -11,8 +11,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import connect
@@ -75,7 +74,7 @@ def test_a_rate_that_does_not_parse_names_its_column() -> None:
     ]
 
 
-@given(text=st.text(max_size=400))
+@given(text=strategies.text(max_size=400))
 def test_any_landed_rates_text_gives_a_set_or_errors(text: str) -> None:
     result = parse(market_texts("") | {"landed_rates": LANDED_HEADER + text})
     assert isinstance(result, MarketSet | list)
@@ -152,8 +151,8 @@ def test_loaded_rows_cannot_be_changed_in_place(database_url: str) -> None:
 
 
 @given(
-    line=st.integers(min_value=0, max_value=1),
-    percent=st.integers(min_value=0, max_value=40),
+    line=strategies.integers(min_value=0, max_value=1),
+    percent=strategies.integers(min_value=0, max_value=40),
 )
 def test_editing_one_rate_changes_the_hash_and_reports_one_line(
     line: int, percent: int

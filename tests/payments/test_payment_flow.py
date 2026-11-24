@@ -88,7 +88,7 @@ def test_card_payment_completes_the_session_with_one_order_and_its_entry(
                 Account(AccountKind.PSP_CLEARING, str(setup.shop.account.id)),
                 Currency.SGD,
             )
-            merchant = await balance(
+            merchant_balance = await balance(
                 conn,
                 Account(AccountKind.MERCHANT_PAYABLE, str(setup.shop.merchant_id)),
                 Currency.SGD,
@@ -108,7 +108,7 @@ def test_card_payment_completes_the_session_with_one_order_and_its_entry(
             with pytest.raises(psycopg.errors.RaiseException, match="append-only"):
                 await conn.execute("UPDATE order_ SET buyer_token = 'other'")
         # The merchant is owed exactly its price: 2 × 25.00 SGD.
-        assert merchant == Money(-5000, Currency.SGD)
+        assert merchant_balance == Money(-5000, Currency.SGD)
         # The paid checkout link leads to the order page (`our_page`).
         landing = await setup.wired.control.get(setup.page)
         assert landing.status_code == 303
@@ -463,7 +463,7 @@ def test_goods_priced_in_another_currency_convert_through_fx_position(
         await release(setup, attempt, "paid")
         await drain(setup)
         async with await connect(setup.url) as conn:
-            merchant = await balance(
+            merchant_balance = await balance(
                 conn,
                 Account(AccountKind.MERCHANT_PAYABLE, str(setup.shop.merchant_id)),
                 Currency.USD,
@@ -475,7 +475,7 @@ def test_goods_priced_in_another_currency_convert_through_fx_position(
                 conn, Account(AccountKind.FX_POSITION), Currency.SGD
             )
         # Exactly the merchant's price, 2 × 18.00 USD, in its own currency.
-        assert merchant == Money(-3600, Currency.USD)
+        assert merchant_balance == Money(-3600, Currency.USD)
         assert usd_side == Money(3600, Currency.USD)
         assert sgd_side.amount_minor < 0  # the buyer's money held for it
 

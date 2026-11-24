@@ -372,11 +372,19 @@ async def recent_sessions(conn: Connection, limit: int) -> list[SessionSummary]:
 
 async def address_countries(conn: Connection, session_id: uuid.UUID) -> dict[str, str]:
     """Each of the session's addresses (id in hex) to its country only."""
-    cur = await conn.execute(
-        "SELECT id, country FROM checkout_address WHERE session_id = %s",
-        (session_id,),
-    )
+    async with conn.cursor(row_factory=class_row(_AddressCountryRow)) as cur:
+        await cur.execute(
+            "SELECT id, country FROM checkout_address WHERE session_id = %s",
+            (session_id,),
+        )
+        found = await cur.fetchall()
     countries: dict[str, str] = {}
-    for address_id, country in await cur.fetchall():
-        countries[address_id.hex] = country
+    for address in found:
+        countries[address.id.hex] = address.country
     return countries
+
+
+@dataclass(frozen=True)
+class _AddressCountryRow:
+    id: uuid.UUID
+    country: str

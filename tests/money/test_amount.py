@@ -1,6 +1,5 @@
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies
 
 from mor.money.amount import (
     MAX_MINOR,
@@ -79,15 +78,15 @@ def test_format_major() -> None:
 
 
 @given(
-    amount_minor=st.integers(min_value=MIN_MINOR, max_value=MAX_MINOR),
-    currency=st.sampled_from(Currency),
+    amount_minor=strategies.integers(min_value=MIN_MINOR, max_value=MAX_MINOR),
+    currency=strategies.sampled_from(Currency),
 )
 def test_format_then_parse_round_trips(amount_minor: int, currency: Currency) -> None:
     money = Money(amount_minor, currency)
     assert parse_major(format_major(money), currency) == money
 
 
-@given(text=st.text(max_size=30), currency=st.sampled_from(Currency))
+@given(text=strategies.text(max_size=30), currency=strategies.sampled_from(Currency))
 def test_parse_any_text_gives_money_or_invalid_amount(
     text: str, currency: Currency
 ) -> None:

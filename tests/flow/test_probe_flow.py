@@ -16,10 +16,10 @@ import asyncio
 import os
 import uuid
 from collections.abc import Coroutine
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -27,6 +27,7 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
@@ -46,6 +47,25 @@ from mor.messaging.worker import (
 from mor.probe.flow import start_probe
 from mor.probe.records import ProbeState
 from tests.helpers import ENV, NO_HTTP, TEST_URL, crash, empty_tables, local_consumer
+
+
+@dataclass(frozen=True)
+class _ProbeRow:
+    id: uuid.UUID
+    state: str
+
+
+@dataclass(frozen=True)
+class _EchoCount:
+    aggregate_id: uuid.UUID
+    count: int
+
+
+@dataclass(frozen=True)
+class _DeliveryRow:
+    message_id: uuid.UUID
+    consumer: str
+    aggregate_id: uuid.UUID
 
 
 T0 = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
@@ -86,32 +106,32 @@ class ProbeFlow(RuleBasedStateMachine):
 
         self.seen[self.run(step())] = ProbeState.STARTED
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return
-        candidate = data.draw(st.sampled_from(candidates))
+        candidate = data.draw(strategies.sampled_from(candidates))
         result = self.run(run_one(self.worker, NO_HTTP, ENV, candidate, self.now))
         assert not isinstance(result, Failed), result
 
-    @rule(data=st.data())
-    def run_any_open_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_any_open_delivery(self, data: strategies.DataObject) -> None:
         # Not only the oldest per aggregate: a worker with an out-of-date
         # candidate list tries whatever it saw.
         open_deliveries = self.run(self._deliveries(handled=False))
         if not open_deliveries:
             return
-        candidate = data.draw(st.sampled_from(open_deliveries))
+        candidate = data.draw(strategies.sampled_from(open_deliveries))
         result = self.run(run_one(self.worker, NO_HTTP, ENV, candidate, self.now))
         assert not isinstance(result, Failed), result
 
-    @rule(data=st.data())
-    def crash_mid_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def crash_mid_delivery(self, data: strategies.DataObject) -> None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return
-        candidate = data.draw(st.sampled_from(candidates))
+        candidate = data.draw(strategies.sampled_from(candidates))
 
         async def step() -> None:
             crashing = await connect(TEST_URL, autocommit=True)
@@ -123,12 +143,12 @@ class ProbeFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(data=st.data())
-    def crash_holding_the_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def crash_holding_the_delivery(self, data: strategies.DataObject) -> None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return
-        candidate = data.draw(st.sampled_from(candidates))
+        candidate = data.draw(strategies.sampled_from(candidates))
 
         async def step() -> None:
             crashing = await connect(TEST_URL, autocommit=True)
@@ -142,19 +162,19 @@ class ProbeFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(data=st.data())
-    def redeliver_a_handled_message(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def redeliver_a_handled_message(self, data: strategies.DataObject) -> None:
         handled = self.run(self._deliveries(handled=True))
         if not handled:
             return
-        candidate = data.draw(st.sampled_from(handled))
+        candidate = data.draw(strategies.sampled_from(handled))
         result = self.run(run_one(self.worker, NO_HTTP, ENV, candidate, self.now))
         assert result == Skipped("already_handled"), result
 
     @precondition(lambda self: len(self.seen) > 0)
-    @rule(data=st.data())
-    def producer_repeats_a_fact(self, data: st.DataObject) -> None:
-        probe_id = data.draw(st.sampled_from(sorted(self.seen)))
+    @rule(data=strategies.data())
+    def producer_repeats_a_fact(self, data: strategies.DataObject) -> None:
+        probe_id = data.draw(strategies.sampled_from(sorted(self.seen)))
 
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
@@ -165,7 +185,7 @@ class ProbeFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(seconds=st.integers(min_value=0, max_value=120))
+    @rule(seconds=strategies.integers(min_value=0, max_value=120))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -191,20 +211,22 @@ class ProbeFlow(RuleBasedStateMachine):
     # --- queries ---------------------------------------------------------
 
     async def _states(self) -> dict[uuid.UUID, ProbeState]:
-        cur = await self.worker.execute("SELECT id, state::text FROM probe")
+        cur = await self.worker.cursor(row_factory=class_row(_ProbeRow)).execute(
+            "SELECT id, state::text AS state FROM probe"
+        )
         states: dict[uuid.UUID, ProbeState] = {}
-        for probe_id, state in await cur.fetchall():
-            states[probe_id] = ProbeState(state)
+        for probe in await cur.fetchall():
+            states[probe.id] = ProbeState(probe.state)
         return states
 
     async def _echo_counts(self) -> dict[uuid.UUID, int]:
-        cur = await self.worker.execute(
-            "SELECT aggregate_id, count(*) FROM outbox"
+        cur = await self.worker.cursor(row_factory=class_row(_EchoCount)).execute(
+            "SELECT aggregate_id, count(*) AS count FROM outbox"
             " WHERE message_type = 'probe_echoed' GROUP BY aggregate_id"
         )
         counts: dict[uuid.UUID, int] = {}
-        for probe_id, count in await cur.fetchall():
-            counts[probe_id] = count
+        for echoed in await cur.fetchall():
+            counts[echoed.aggregate_id] = echoed.count
         return counts
 
     async def _advisory_locks(self) -> int:
@@ -218,19 +240,20 @@ class ProbeFlow(RuleBasedStateMachine):
         return row[0]
 
     async def _deliveries(self, handled: bool) -> list[Candidate]:
-        cur = await self.worker.execute(
-            "SELECT message_id, consumer::text, aggregate_id FROM outbox_delivery"
+        cur = await self.worker.cursor(row_factory=class_row(_DeliveryRow)).execute(
+            "SELECT message_id, consumer::text AS consumer, aggregate_id"
+            " FROM outbox_delivery"
             " WHERE (handled_at IS NOT NULL) = %s ORDER BY seq, consumer",
             (handled,),
         )
         deliveries: list[Candidate] = []
-        for message_id, consumer, aggregate_id in await cur.fetchall():
+        for delivery in await cur.fetchall():
             deliveries.append(
                 Candidate(
-                    message_id=message_id,
-                    consumer=ConsumerName(consumer),
+                    message_id=delivery.message_id,
+                    consumer=ConsumerName(delivery.consumer),
                     aggregate_type=AggregateType.PROBE,
-                    aggregate_id=aggregate_id,
+                    aggregate_id=delivery.aggregate_id,
                 )
             )
         return deliveries

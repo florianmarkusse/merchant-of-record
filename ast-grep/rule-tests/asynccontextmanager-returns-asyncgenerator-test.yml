@@ -1,0 +1,15 @@
+id: asynccontextmanager-returns-asyncgenerator
+valid:
+  - |
+    @asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncGenerator[None]:
+        yield
+invalid:
+  - |
+    @asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        yield
+  - |
+    @asynccontextmanager
+    async def lifespan(app):
+        yield

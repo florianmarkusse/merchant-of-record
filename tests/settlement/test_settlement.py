@@ -6,10 +6,12 @@ buyer and address here is made up."""
 
 import asyncio
 import dataclasses
+from dataclasses import dataclass
 from datetime import timedelta
 from fractions import Fraction
 
 import pytest
+from psycopg.rows import class_row
 
 from mor.db.connect import connect
 from mor.fakes.psp import HELD_BACK_MINOR
@@ -43,6 +45,12 @@ from tests.payments.support import (
     session_state,
     with_setup,
 )
+
+
+@dataclass(frozen=True)
+class _Difference:
+    difference_numerator: int
+    difference_denominator: int
 
 
 def _wiring(mode: SettlementMode, status: StatusMode = StatusMode.PUSH_FAT) -> Wiring:
@@ -113,11 +121,16 @@ async def _reconciliations(setup: Setup) -> list[str]:
 
 async def _differences(setup: Setup) -> list[Fraction]:
     async with await connect(setup.url) as conn:
-        cur = await conn.execute(
+        cur = await conn.cursor(row_factory=class_row(_Difference)).execute(
             "SELECT difference_numerator, difference_denominator"
             " FROM settlement_payout ORDER BY recorded_at"
         )
-        return [Fraction(n, d) for n, d in await cur.fetchall()]
+        differences: list[Fraction] = []
+        for payout in await cur.fetchall():
+            differences.append(
+                Fraction(payout.difference_numerator, payout.difference_denominator)
+            )
+        return differences
 
 
 async def _line_states(setup: Setup) -> list[str]:

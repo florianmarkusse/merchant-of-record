@@ -9,8 +9,7 @@ import uuid
 from datetime import UTC, datetime
 from fractions import Fraction
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies
 
 from mor.audit import Actor, ActorKind
 from mor.fakes.psp import payout_amount
@@ -54,8 +53,8 @@ def _on(entry: JournalEntry, kind: AccountKind) -> int:
 
 
 @given(
-    estimate=st.integers(0, 10**9),
-    fee=st.integers(-(10**6), 10**9),
+    estimate=strategies.integers(0, 10**9),
+    fee=strategies.integers(-(10**6), 10**9),
 )
 def test_a_line_clears_its_estimate_and_books_the_gap_as_ours(
     estimate: int, fee: int
@@ -78,18 +77,18 @@ def test_a_line_clears_its_estimate_and_books_the_gap_as_ours(
     assert _on(entry, AccountKind.PSP_FEE_VARIANCE) == fee - estimate
 
 
-_lines = st.lists(
-    st.builds(
+_lines = strategies.lists(
+    strategies.builds(
         LineAmounts,
-        st.integers(0, 10**10).map(Fraction),
+        strategies.integers(0, 10**10).map(Fraction),
         # A fee a PSP counting in hundredths of our unit may charge.
-        st.integers(0, 10**8).map(lambda hundredths: Fraction(hundredths, 100)),
+        strategies.integers(0, 10**8).map(lambda hundredths: Fraction(hundredths, 100)),
     ),
     max_size=8,
 )
 
 
-@given(lines=_lines, up=st.booleans())
+@given(lines=_lines, up=strategies.booleans())
 def test_a_net_rounded_either_way_adds_up_and_clears_what_its_lines_left(
     lines: list[LineAmounts], up: bool
 ) -> None:
@@ -121,7 +120,7 @@ def test_a_net_rounded_either_way_adds_up_and_clears_what_its_lines_left(
     assert rounded == left - reported
 
 
-@given(change=st.integers(-(10**6), 10**6))
+@given(change=strategies.integers(-(10**6), 10**6))
 def test_a_rounding_change_and_its_reversal_leave_nothing(change: int) -> None:
     there = rounding_entry(
         ACCOUNT, "po-1", 1, Money(change, Currency.SGD), WHEN, ACTOR, WHEN
@@ -138,7 +137,7 @@ def test_a_rounding_change_and_its_reversal_leave_nothing(change: int) -> None:
         assert _on(there, kind) + _on(back, kind) == 0
 
 
-@given(lines=_lines, off=st.integers(1, 10**6), below=st.booleans())
+@given(lines=_lines, off=strategies.integers(1, 10**6), below=strategies.booleans())
 def test_a_net_further_off_than_rounding_does_not_add_up(
     lines: list[LineAmounts], off: int, below: bool
 ) -> None:
@@ -147,7 +146,7 @@ def test_a_net_further_off_than_rounding_does_not_add_up(
     assert isinstance(check_net(Fraction(reported), lines), NetDiffers)
 
 
-@given(net=st.integers(-(10**9), 10**9))
+@given(net=strategies.integers(-(10**9), 10**9))
 def test_a_payout_is_booked_as_reported(net: int) -> None:
     entry = payout_entry(ACCOUNT, "po-1", Money(net, Currency.SGD), WHEN, ACTOR, WHEN)
     if net == 0:
@@ -158,7 +157,7 @@ def test_a_payout_is_booked_as_reported(net: int) -> None:
     assert _on(entry, AccountKind.PSP_CLEARING) == -net
 
 
-@given(net=st.integers(-(10**12), 10**12))
+@given(net=strategies.integers(-(10**12), 10**12))
 def test_the_fakes_idr_payout_is_whole_rupiah_within_half_a_rupiah(net: int) -> None:
     paid = payout_amount("IDR", net)
     assert paid % 100 == 0
@@ -166,7 +165,7 @@ def test_the_fakes_idr_payout_is_whole_rupiah_within_half_a_rupiah(net: int) -> 
     assert payout_amount("SGD", net) == net
 
 
-@given(body=st.binary(max_size=400))
+@given(body=strategies.binary(max_size=400))
 def test_any_bytes_decode_to_a_document_or_a_typed_error(body: bytes) -> None:
     for decoded in (
         decode_settlement_file(body),
@@ -176,9 +175,10 @@ def test_any_bytes_decode_to_a_document_or_a_typed_error(body: bytes) -> None:
         assert isinstance(decoded, SettlementDocument | UndecodableBody)
 
 
-_cells = st.text(
-    alphabet=st.characters(codec="utf-8", exclude_categories=("Cs",)), max_size=12
-) | st.sampled_from(
+_cells = strategies.text(
+    alphabet=strategies.characters(codec="utf-8", exclude_categories=("Cs",)),
+    max_size=12,
+) | strategies.sampled_from(
     [
         "line",
         "merchant_payout",
@@ -195,7 +195,9 @@ _cells = st.text(
 )
 
 
-@given(rows=st.lists(st.lists(_cells, min_size=0, max_size=12), max_size=5))
+@given(
+    rows=strategies.lists(strategies.lists(_cells, min_size=0, max_size=12), max_size=5)
+)
 def test_any_csv_decodes_to_a_report_or_a_typed_error(rows: list[list[str]]) -> None:
     lines = [",".join(CSV_HEADER)]
     for row in rows:

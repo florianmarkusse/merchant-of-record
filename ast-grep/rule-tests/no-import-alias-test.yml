@@ -1,0 +1,8 @@
+id: no-import-alias
+valid:
+  - from hypothesis import strategies
+  - import mor.payments.flow
+invalid:
+  - from hypothesis import strategies as st
+  - import mor.payments.flow as payment_flow
+  - from mor.psp import registry as psp_registry

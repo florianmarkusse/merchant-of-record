@@ -44,17 +44,17 @@ async def order_page(request: Request, settings: Settings) -> Response:
             return _not_found()
         session = await session_by_id(conn, order.session_id)
         assert session is not None
-        merchant = await read_merchant(conn, order.merchant_id)
-        assert merchant is not None
+        seller = await read_merchant(conn, order.merchant_id)
+        assert seller is not None
         quote = await read_made_quote(conn, order.quote_id)
         address = await read_address(conn, order.address_id)
         assert address is not None
-        invoice = await invoice_for_order(conn, order.id)
-    number = None if invoice is None else invoice.number_text
+        tax_invoice = await invoice_for_order(conn, order.id)
+    number = None if tax_invoice is None else tax_invoice.number_text
     view = OrderView(
         token=order.buyer_token,
-        merchant_name=merchant.display_name,
-        merchant_support_email=merchant.support_email,
+        merchant_name=seller.display_name,
+        merchant_support_email=seller.support_email,
         return_url=session.return_url,
         lines=session.lines,
         option=quote.options[order.option_no],
@@ -72,8 +72,8 @@ async def order_status_route(request: Request, settings: Settings) -> Response:
         order = await order_by_token(conn, request.path_params["token"])
         if order is None:
             return _not_found()
-        invoice = await invoice_for_order(conn, order.id)
-    number = None if invoice is None else invoice.number_text
+        tax_invoice = await invoice_for_order(conn, order.id)
+    number = None if tax_invoice is None else tax_invoice.number_text
     return JSONResponse({"status": order_status(number)}, headers=PRIVATE)
 
 
@@ -82,10 +82,10 @@ async def invoice_page(request: Request, settings: Settings) -> Response:
         order = await order_by_token(conn, request.path_params["token"])
         if order is None:
             return _not_found()
-        invoice = await invoice_for_order(conn, order.id)
-    if invoice is None:
+        tax_invoice = await invoice_for_order(conn, order.id)
+    if tax_invoice is None:
         return _not_found()
-    return HTMLResponse(invoice_document(invoice, False), headers=PRIVATE)
+    return HTMLResponse(invoice_document(tax_invoice, False), headers=PRIVATE)
 
 
 async def invoice_pdf_route(request: Request, settings: Settings) -> Response:
@@ -93,15 +93,15 @@ async def invoice_pdf_route(request: Request, settings: Settings) -> Response:
         order = await order_by_token(conn, request.path_params["token"])
         if order is None:
             return _not_found()
-        invoice = await invoice_for_order(conn, order.id)
-    if invoice is None:
+        tax_invoice = await invoice_for_order(conn, order.id)
+    if tax_invoice is None:
         return _not_found()
-    pdf = await asyncio.to_thread(invoice_pdf, invoice)
+    pdf = await asyncio.to_thread(invoice_pdf, tax_invoice)
     return Response(
         pdf,
         media_type="application/pdf",
         headers={
             **PRIVATE,
-            "Content-Disposition": f'inline; filename="{invoice.number_text}.pdf"',
+            "Content-Disposition": f'inline; filename="{tax_invoice.number_text}.pdf"',
         },
     )

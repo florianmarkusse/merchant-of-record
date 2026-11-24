@@ -33,8 +33,7 @@ from collections import Counter
 from collections.abc import Coroutine
 from datetime import timedelta
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     initialize,
@@ -134,11 +133,15 @@ class PaymentFlow(RuleBasedStateMachine):
     # --- actions ---------------------------------------------------------
 
     @initialize(
-        status_mode=st.sampled_from(list(StatusMode)),
-        capture_mode=st.sampled_from(list(CaptureMode)),
-        guard=st.sampled_from((DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)),
-        planned=st.lists(
-            st.tuples(st.sampled_from(OPERATIONS), st.sampled_from(FAULTS)),
+        status_mode=strategies.sampled_from(list(StatusMode)),
+        capture_mode=strategies.sampled_from(list(CaptureMode)),
+        guard=strategies.sampled_from(
+            (DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)
+        ),
+        planned=strategies.lists(
+            strategies.tuples(
+                strategies.sampled_from(OPERATIONS), strategies.sampled_from(FAULTS)
+            ),
             max_size=2,
         ),
     )
@@ -173,9 +176,9 @@ class PaymentFlow(RuleBasedStateMachine):
         self.run(step())
 
     @rule(
-        session=st.integers(0, 1),
-        method=st.sampled_from(("card", "qr")),
-        twice=st.booleans(),
+        session=strategies.integers(0, 1),
+        method=strategies.sampled_from(("card", "qr")),
+        twice=strategies.booleans(),
     )
     def the_buyer_pays(self, session: int, method: str, twice: bool) -> None:
         session_id = self.sessions[session]
@@ -204,9 +207,9 @@ class PaymentFlow(RuleBasedStateMachine):
         self.run(step())
 
     @rule(
-        session=st.integers(0, 1),
-        method=st.sampled_from(("card", "qr")),
-        answer=st.sampled_from(
+        session=strategies.integers(0, 1),
+        method=strategies.sampled_from(("card", "qr")),
+        answer=strategies.sampled_from(
             ("paid", "paid", "declined", "expired", "leave", "another_way")
         ),
     )
@@ -259,7 +262,7 @@ class PaymentFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(session=st.integers(0, 1))
+    @rule(session=strategies.integers(0, 1))
     def the_buyer_pays_another_way(self, session: int) -> None:
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
@@ -268,7 +271,7 @@ class PaymentFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(session=st.integers(0, 1))
+    @rule(session=strategies.integers(0, 1))
     def the_buyer_asks_for_the_current_price(self, session: int) -> None:
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
@@ -278,12 +281,12 @@ class PaymentFlow(RuleBasedStateMachine):
         self.run(step())
 
     @rule(
-        data=st.data(),
-        outcome=st.sampled_from(("paid", "paid", "declined", "expired")),
-        push=st.sampled_from(("once", "twice", "bad_signature")),
+        data=strategies.data(),
+        outcome=strategies.sampled_from(("paid", "paid", "declined", "expired")),
+        push=strategies.sampled_from(("once", "twice", "bad_signature")),
     )
     def the_buyer_answers_at_the_psp(
-        self, data: st.DataObject, outcome: str, push: str
+        self, data: strategies.DataObject, outcome: str, push: str
     ) -> None:
         # Ordered by our attempt id (uuid7, in creation order), not the
         # fake's random `pay_…` id: a replay of the same example must draw
@@ -297,7 +300,7 @@ class PaymentFlow(RuleBasedStateMachine):
         waiting = [row[0] for row in self.run(cur.fetchall())]
         if not waiting:
             return
-        payment_id = data.draw(st.sampled_from(waiting))
+        payment_id = data.draw(strategies.sampled_from(waiting))
         response = self.run(
             self.control.post(
                 f"http://mor/_fake/psp/acct/payments/{payment_id}/release",
@@ -315,8 +318,8 @@ class PaymentFlow(RuleBasedStateMachine):
         )
         assert response.status_code == 200
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None:
             return
@@ -327,8 +330,10 @@ class PaymentFlow(RuleBasedStateMachine):
     def the_worker_catches_up(self) -> None:
         self.run(catch_up(self.worker, self.http, self.now))
 
-    @rule(data=st.data(), with_call=st.booleans())
-    def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
+    @rule(data=strategies.data(), with_call=strategies.booleans())
+    def crash_between_commits(
+        self, data: strategies.DataObject, with_call: bool
+    ) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None or not isinstance(
             consumer_kind(candidate.consumer), Effect
@@ -338,8 +343,8 @@ class PaymentFlow(RuleBasedStateMachine):
             crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
         )
 
-    @rule(data=st.data())
-    def crash_inside_a_local_step(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def crash_inside_a_local_step(self, data: strategies.DataObject) -> None:
         """Drawn among local steps only: a local step is one transaction,
         and the window before it runs is short."""
         candidates = self.run(find_candidates(self.worker, self.now, 50))
@@ -349,10 +354,15 @@ class PaymentFlow(RuleBasedStateMachine):
                 local.append(found)
         if not local:
             return
-        self.run(crash_in_a_local_step(data.draw(st.sampled_from(local)), self.now))
+        self.run(
+            crash_in_a_local_step(data.draw(strategies.sampled_from(local)), self.now)
+        )
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
-    @rule(operation=st.sampled_from(OPERATIONS), fault=st.sampled_from(FAULTS))
+    @rule(
+        operation=strategies.sampled_from(OPERATIONS),
+        fault=strategies.sampled_from(FAULTS),
+    )
     def script_a_fault(self, operation: str, fault: str) -> None:
         self.run(self._script_fault(operation, fault))
 
@@ -361,7 +371,7 @@ class PaymentFlow(RuleBasedStateMachine):
     def refuse_the_next_connection(self) -> None:
         self.network.refuse_next += 1
 
-    @rule(seconds=st.integers(min_value=0, max_value=600))
+    @rule(seconds=strategies.integers(min_value=0, max_value=600))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -402,11 +412,11 @@ class PaymentFlow(RuleBasedStateMachine):
         assert row is not None
         return row[0]
 
-    def _draw_candidate(self, data: st.DataObject) -> Candidate | None:
+    def _draw_candidate(self, data: strategies.DataObject) -> Candidate | None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return None
-        return data.draw(st.sampled_from(candidates))
+        return data.draw(strategies.sampled_from(candidates))
 
     async def _reached(self) -> set[str]:
         cur = await self.worker.execute(

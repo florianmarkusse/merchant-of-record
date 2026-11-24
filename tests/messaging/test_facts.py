@@ -1,8 +1,7 @@
 import uuid
 from typing import get_args
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies
 
 from mor.messaging.facts import (
     Aggregate,
@@ -20,7 +19,7 @@ from mor.messaging.facts import (
 
 FACT_RECORDS: tuple[type[Fact], ...] = get_args(Fact.__value__)
 
-facts = st.one_of([st.from_type(record) for record in FACT_RECORDS])
+facts = strategies.one_of([strategies.from_type(record) for record in FACT_RECORDS])
 
 
 @given(fact=facts)
@@ -38,9 +37,9 @@ def test_every_message_type_is_named_by_one_record() -> None:
 
 
 @given(
-    message_type=st.sampled_from(MessageType),
-    schema_version=st.integers(min_value=1, max_value=3),
-    payload=st.binary(max_size=200),
+    message_type=strategies.sampled_from(MessageType),
+    schema_version=strategies.integers(min_value=1, max_value=3),
+    payload=strategies.binary(max_size=200),
 )
 def test_any_bytes_decode_to_a_fact_or_undecodable(
     message_type: MessageType, schema_version: int, payload: bytes

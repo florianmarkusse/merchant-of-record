@@ -1,0 +1,21 @@
+id: no-assert-never-fallback
+language: python
+severity: error
+message: >-
+  A match over a closed set lists every case and has no `case _:
+  assert_never(...)`: pyright's reportMatchNotExhaustive refuses a missing
+  case (AGENTS.md, decided 23-Nov-2026).
+# scripts/ is outside the package's pyright run, so an assert_never
+# fallback is its only exhaustiveness check there.
+files:
+  - src/**/*.py
+  - tests/**/*.py
+rule:
+  kind: case_clause
+  all:
+    - has:
+        kind: case_pattern
+        regex: ^_$
+    - has:
+        pattern: assert_never($X)
+        stopBy: end

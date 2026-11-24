@@ -19,10 +19,10 @@ import asyncio
 import os
 import uuid
 from collections.abc import Coroutine
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     initialize,
@@ -31,6 +31,7 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
@@ -59,6 +60,18 @@ from tests.helpers import (
     wire,
 )
 from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
+
+
+@dataclass(frozen=True)
+class _FaultCount:
+    fault: str
+    count: int
+
+
+@dataclass(frozen=True)
+class _HandledRow:
+    message_id: uuid.UUID
+    aggregate_id: uuid.UUID
 
 
 T0 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -110,14 +123,14 @@ class DutyLookupFlow(RuleBasedStateMachine):
 
     # --- actions ---------------------------------------------------------
 
-    @initialize(question=st.sampled_from(QUESTIONS))
+    @initialize(question=strategies.sampled_from(QUESTIONS))
     def a_first_combination_is_asked(self, question: RateQuestion) -> None:
         """So a delivery is there to crash or fault from the first step: a
         crash right after the first ask was missed at the dev budget
         without it (18-Nov-2026)."""
         self.ask_about_a_combination(question)
 
-    @rule(question=st.sampled_from(QUESTIONS))
+    @rule(question=strategies.sampled_from(QUESTIONS))
     def ask_about_a_combination(self, question: RateQuestion) -> None:
         async def step() -> uuid.UUID:
             async with await connect(TEST_URL) as conn:
@@ -131,8 +144,8 @@ class DutyLookupFlow(RuleBasedStateMachine):
         assert known is None or known == lookup_id
         self.lookups[question] = lookup_id
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None:
             return
@@ -143,8 +156,10 @@ class DutyLookupFlow(RuleBasedStateMachine):
     def the_worker_catches_up(self) -> None:
         self.run(self._catch_up())
 
-    @rule(data=st.data(), with_call=st.booleans())
-    def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
+    @rule(data=strategies.data(), with_call=strategies.booleans())
+    def crash_between_commits(
+        self, data: strategies.DataObject, with_call: bool
+    ) -> None:
         """`prepare` commits (the call counted), maybe the call is made,
         and the worker dies before `complete`."""
         candidate = self._draw_candidate(data)
@@ -160,7 +175,7 @@ class DutyLookupFlow(RuleBasedStateMachine):
             self.counted_crashes += 1
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
-    @rule(fault=st.sampled_from(LOSING + ENDING + ANSWERING))
+    @rule(fault=strategies.sampled_from(LOSING + ENDING + ANSWERING))
     def script_a_fault(self, fault: str) -> None:
         self.scripted[fault] = self.scripted.get(fault, 0) + 1
         response = self.run(
@@ -175,16 +190,16 @@ class DutyLookupFlow(RuleBasedStateMachine):
         self.refusals_scripted += 1
 
     @precondition(lambda self: len(self.lookups) > 0)
-    @rule(data=st.data())
-    def redeliver_a_handled_message(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def redeliver_a_handled_message(self, data: strategies.DataObject) -> None:
         handled = self.run(self._handled())
         if not handled:
             return
-        candidate = data.draw(st.sampled_from(handled))
+        candidate = data.draw(strategies.sampled_from(handled))
         result = self.run(run_one(self.worker, self.http, ENV, candidate, self.now))
         assert result == Skipped("already_handled"), result
 
-    @rule(seconds=st.integers(min_value=0, max_value=600))
+    @rule(seconds=strategies.integers(min_value=0, max_value=600))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -283,12 +298,13 @@ class DutyLookupFlow(RuleBasedStateMachine):
     async def _used(self, kinds: tuple[str, ...]) -> int:
         """Faults of these kinds the vendor has taken: scripted minus
         still waiting."""
-        cur = await self.worker.execute(
-            "SELECT fault::text, count(*) FROM fake_vendor.duty_fault GROUP BY fault"
+        cur = await self.worker.cursor(row_factory=class_row(_FaultCount)).execute(
+            "SELECT fault::text AS fault, count(*) AS count"
+            " FROM fake_vendor.duty_fault GROUP BY fault"
         )
         waiting: dict[str, int] = {}
-        for fault, count in await cur.fetchall():
-            waiting[fault] = count
+        for fault_count in await cur.fetchall():
+            waiting[fault_count.fault] = fault_count.count
         used = 0
         for kind in kinds:
             used += self.scripted.get(kind, 0) - waiting.get(kind, 0)
@@ -304,26 +320,26 @@ class DutyLookupFlow(RuleBasedStateMachine):
                 assert not isinstance(result, Failed), result
         raise AssertionError("the worker never caught up")
 
-    def _draw_candidate(self, data: st.DataObject) -> Candidate | None:
+    def _draw_candidate(self, data: strategies.DataObject) -> Candidate | None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return None
-        return data.draw(st.sampled_from(candidates))
+        return data.draw(strategies.sampled_from(candidates))
 
     async def _handled(self) -> list[Candidate]:
-        cur = await self.worker.execute(
+        cur = await self.worker.cursor(row_factory=class_row(_HandledRow)).execute(
             "SELECT message_id, aggregate_id FROM outbox_delivery"
             " WHERE handled_at IS NOT NULL AND consumer = 'duty_rate_ask'"
             " ORDER BY seq"
         )
         handled: list[Candidate] = []
-        for message_id, lookup_id in await cur.fetchall():
+        for handled_row in await cur.fetchall():
             handled.append(
                 Candidate(
-                    message_id=message_id,
+                    message_id=handled_row.message_id,
                     consumer=ConsumerName.DUTY_RATE_ASK,
                     aggregate_type=AggregateType.DUTY_LOOKUP,
-                    aggregate_id=lookup_id,
+                    aggregate_id=handled_row.aggregate_id,
                 )
             )
         return handled

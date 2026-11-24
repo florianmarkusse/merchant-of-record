@@ -61,7 +61,7 @@ async def _main(argv: list[str]) -> int:
     async with await connect(settings.database_url) as conn:
         match args.command:
             case "create":
-                merchant = await create_merchant(
+                seller = await create_merchant(
                     conn,
                     args.legal_name,
                     args.display_name,
@@ -71,14 +71,14 @@ async def _main(argv: list[str]) -> int:
                     now,
                 )
                 await conn.commit()
-                print(public_id(MERCHANT_PREFIX, merchant.id))
+                print(public_id(MERCHANT_PREFIX, seller.id))
             case "list":
-                for merchant in await merchants(conn):
+                for seller in await merchants(conn):
                     print(
-                        public_id(MERCHANT_PREFIX, merchant.id),
-                        merchant.display_name,
-                        f"({merchant.legal_name})",
-                        f"kyb {merchant.kyb_state}",
+                        public_id(MERCHANT_PREFIX, seller.id),
+                        seller.display_name,
+                        f"({seller.legal_name})",
+                        f"kyb {seller.kyb_state}",
                     )
             case "key":
                 merchant_id = parse_id(MERCHANT_PREFIX, args.merchant)

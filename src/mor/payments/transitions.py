@@ -1,6 +1,6 @@
 """The payment attempt's states and what a PSP event does to each
 (docs/plan-payments.md §4). Pure: every (state, event) pair has an answer,
-a new state or `Stale`, and a property checks the table is total.
+a new state or `StaleEvent`, and a property checks the table is total.
 
 Events may arrive twice, late or out of order (a webhook racing the
 create call's answer, an old event redelivered after a new one), so the
@@ -45,11 +45,11 @@ OPEN_STATES = (
 
 
 @dataclass(frozen=True)
-class Stale:
+class StaleEvent:
     """The attempt is already past what this event says."""
 
 
-def _ended(kind: PspEventKind) -> AttemptState | Stale:
+def _ended(kind: PspEventKind) -> AttemptState | StaleEvent:
     match kind:
         case PspEventKind.DECLINED:
             return AttemptState.DECLINED
@@ -58,10 +58,10 @@ def _ended(kind: PspEventKind) -> AttemptState | Stale:
         case PspEventKind.CANCELLED:
             return AttemptState.CANCELLED
         case PspEventKind.AUTHORISED | PspEventKind.CAPTURED:
-            return Stale()
+            return StaleEvent()
 
 
-def after_event(state: AttemptState, kind: PspEventKind) -> AttemptState | Stale:
+def after_event(state: AttemptState, kind: PspEventKind) -> AttemptState | StaleEvent:
     match state:
         case AttemptState.REQUESTED | AttemptState.ACTION_REQUIRED:
             match kind:
@@ -80,7 +80,7 @@ def after_event(state: AttemptState, kind: PspEventKind) -> AttemptState | Stale
                 case PspEventKind.CAPTURED:
                     return AttemptState.CAPTURED
                 case PspEventKind.AUTHORISED | PspEventKind.DECLINED:
-                    return Stale()
+                    return StaleEvent()
                 case PspEventKind.EXPIRED | PspEventKind.CANCELLED:
                     return _ended(kind)
         case AttemptState.CANCELLING:
@@ -88,7 +88,7 @@ def after_event(state: AttemptState, kind: PspEventKind) -> AttemptState | Stale
                 case PspEventKind.CAPTURED:
                     return AttemptState.CAPTURED  # a payment made is honoured
                 case PspEventKind.AUTHORISED:
-                    return Stale()  # still cancelling: never captured
+                    return StaleEvent()  # still cancelling: never captured
                 case (
                     PspEventKind.DECLINED
                     | PspEventKind.EXPIRED
@@ -107,6 +107,6 @@ def after_event(state: AttemptState, kind: PspEventKind) -> AttemptState | Stale
                     | PspEventKind.EXPIRED
                     | PspEventKind.CANCELLED
                 ):
-                    return Stale()
+                    return StaleEvent()
         case AttemptState.CAPTURED | AttemptState.NEEDS_PERSON:
-            return Stale()
+            return StaleEvent()

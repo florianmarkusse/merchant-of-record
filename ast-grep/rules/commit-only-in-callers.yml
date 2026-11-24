@@ -1,0 +1,17 @@
+id: commit-only-in-callers
+language: python
+severity: error
+message: >-
+  Persistence functions never commit: the caller commits what belongs
+  together (a handler, a CLI, the worker's transactions, a fake).
+files:
+  - src/**/*.py
+ignores:
+  - src/mor/web/**
+  - src/mor/fakes/**
+  - src/mor/**/__main__.py
+  - src/mor/db/migrate.py
+  - src/mor/markets/load.py
+  - src/mor/seed.py
+rule:
+  pattern: $C.commit()

@@ -24,8 +24,7 @@ import uuid
 from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     initialize,
@@ -149,11 +148,13 @@ class QuoteFlow(RuleBasedStateMachine):
 
     # --- actions ---------------------------------------------------------
 
-    @initialize(country=st.sampled_from(("SG", "TH")))
+    @initialize(country=strategies.sampled_from(("SG", "TH")))
     def a_first_address_is_given(self, country: str) -> None:
         self.give_an_address(0, country)
 
-    @rule(session=st.integers(0, 1), country=st.sampled_from(("SG", "TH")))
+    @rule(
+        session=strategies.integers(0, 1), country=strategies.sampled_from(("SG", "TH"))
+    )
     def give_an_address(self, session: int, country: str) -> None:
         self.given += 1
 
@@ -170,7 +171,9 @@ class QuoteFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(session=st.integers(0, 1), country=st.sampled_from(("SG", "TH")))
+    @rule(
+        session=strategies.integers(0, 1), country=strategies.sampled_from(("SG", "TH"))
+    )
     def an_address_step_crashes_before_it_commits(
         self, session: int, country: str
     ) -> None:
@@ -189,7 +192,7 @@ class QuoteFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(session=st.integers(0, 1))
+    @rule(session=strategies.integers(0, 1))
     def the_buyer_asks_for_the_current_price(self, session: int) -> None:
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
@@ -198,8 +201,8 @@ class QuoteFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None:
             return
@@ -210,8 +213,10 @@ class QuoteFlow(RuleBasedStateMachine):
     def the_worker_catches_up(self) -> None:
         self.run(self._catch_up())
 
-    @rule(data=st.data(), with_call=st.booleans())
-    def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
+    @rule(data=strategies.data(), with_call=strategies.booleans())
+    def crash_between_commits(
+        self, data: strategies.DataObject, with_call: bool
+    ) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None or not isinstance(
             consumer_kind(candidate.consumer), Effect
@@ -223,7 +228,7 @@ class QuoteFlow(RuleBasedStateMachine):
         )
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
-    @rule(fault=st.sampled_from(FAULTS))
+    @rule(fault=strategies.sampled_from(FAULTS))
     def script_a_fault(self, fault: str) -> None:
         response = self.run(
             self.control.post("http://mor/_fake/courier/faults", json={"fault": fault})
@@ -235,7 +240,7 @@ class QuoteFlow(RuleBasedStateMachine):
     def refuse_the_next_connection(self) -> None:
         self.network.refuse_next += 1
 
-    @rule(seconds=st.integers(min_value=0, max_value=600))
+    @rule(seconds=strategies.integers(min_value=0, max_value=600))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -364,7 +369,7 @@ class QuoteFlow(RuleBasedStateMachine):
     async def _set_up(self) -> list[uuid.UUID]:
         async with await connect(TEST_URL) as conn:
             await load_market(conn, live_market(), "fuzz", ACTOR, T0)
-            merchant = await create_merchant(
+            seller = await create_merchant(
                 conn, "Fuzz Shop Co.", "Fuzz Shop", "VN", 100, ACTOR, T0
             )
             await create_courier_account(
@@ -394,7 +399,7 @@ class QuoteFlow(RuleBasedStateMachine):
                 )
                 session = await create_session(
                     conn,
-                    merchant.id,
+                    seller.id,
                     SessionDraft(
                         lines=(line,),
                         parcel=parcel,
@@ -428,11 +433,11 @@ class QuoteFlow(RuleBasedStateMachine):
                 assert not isinstance(result, Failed), result
         raise AssertionError("the worker never caught up")
 
-    def _draw_candidate(self, data: st.DataObject) -> Candidate | None:
+    def _draw_candidate(self, data: strategies.DataObject) -> Candidate | None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return None
-        return data.draw(st.sampled_from(candidates))
+        return data.draw(strategies.sampled_from(candidates))
 
     async def _drain_and_check(self) -> None:
         # Faults off; the clock moves only by retry backoffs, so a session

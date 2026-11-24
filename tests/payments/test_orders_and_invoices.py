@@ -88,9 +88,9 @@ def test_a_paid_order_gets_one_numbered_invoice_as_a_page_and_a_pdf(
         status = await setup.wired.control.get(f"{order_url}/status")
         assert status.json() == {"status": "invoiced"}
 
-        invoice = await setup.wired.control.get(f"{order_url}/invoice")
-        assert invoice.status_code == 200
-        text = words(invoice.text)
+        invoice_page = await setup.wired.control.get(f"{order_url}/invoice")
+        assert invoice_page.status_code == 200
+        text = words(invoice_page.text)
         assert "Invoice INV-2026-000001" in text
         assert "Sold on behalf of Test Shop Co." in text
         assert "Linen shirt" in text and "Shipping:" in text

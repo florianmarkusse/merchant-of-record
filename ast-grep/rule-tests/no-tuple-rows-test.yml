@@ -1,0 +1,13 @@
+id: no-tuple-rows
+valid:
+  - |
+    for row in await cur.fetchall():
+        pass
+  - first, second = pair
+invalid:
+  - |
+    for name, values in await cur.fetchall():
+        pass
+  - "fractions = [Fraction(n, d) for n, d in await cur.fetchall()]"
+  - route_id, account_id = row
+  - a, b = await cur.fetchone()

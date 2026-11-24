@@ -21,10 +21,10 @@ import asyncio
 import os
 import uuid
 from collections.abc import Coroutine
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     initialize,
@@ -33,6 +33,7 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
+from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.couriers.prices import (
@@ -69,6 +70,18 @@ from tests.helpers import (
     empty_tables,
     wire,
 )
+
+
+@dataclass(frozen=True)
+class _FaultCount:
+    fault: str
+    count: int
+
+
+@dataclass(frozen=True)
+class _HandledRow:
+    message_id: uuid.UUID
+    aggregate_id: uuid.UUID
 
 
 T0 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -135,12 +148,12 @@ class ShippingPriceFlow(RuleBasedStateMachine):
 
     # --- actions ---------------------------------------------------------
 
-    @initialize(question=st.sampled_from(QUESTIONS))
+    @initialize(question=strategies.sampled_from(QUESTIONS))
     def a_first_price_is_asked(self, question: PriceQuestion) -> None:
         """So a delivery is there to crash or fault from the first step."""
         self.ask_for_a_price(question)
 
-    @rule(question=st.sampled_from(QUESTIONS))
+    @rule(question=strategies.sampled_from(QUESTIONS))
     def ask_for_a_price(self, question: PriceQuestion) -> None:
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
@@ -160,8 +173,8 @@ class ShippingPriceFlow(RuleBasedStateMachine):
 
         self.run(step())
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None:
             return
@@ -172,8 +185,10 @@ class ShippingPriceFlow(RuleBasedStateMachine):
     def the_worker_catches_up(self) -> None:
         self.run(self._catch_up())
 
-    @rule(data=st.data(), with_call=st.booleans())
-    def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
+    @rule(data=strategies.data(), with_call=strategies.booleans())
+    def crash_between_commits(
+        self, data: strategies.DataObject, with_call: bool
+    ) -> None:
         """`prepare` commits (the call counted), maybe the call is made,
         and the worker dies before `complete`."""
         candidate = self._draw_candidate(data)
@@ -189,7 +204,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
             self.counted_crashes += 1
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
-    @rule(fault=st.sampled_from(LOSING + ENDING + ANSWERING))
+    @rule(fault=strategies.sampled_from(LOSING + ENDING + ANSWERING))
     def script_a_fault(self, fault: str) -> None:
         self.scripted[fault] = self.scripted.get(fault, 0) + 1
         response = self.run(
@@ -203,16 +218,16 @@ class ShippingPriceFlow(RuleBasedStateMachine):
         self.network.refuse_next += 1
         self.refusals_scripted += 1
 
-    @rule(data=st.data())
-    def redeliver_a_handled_message(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def redeliver_a_handled_message(self, data: strategies.DataObject) -> None:
         handled = self.run(self._handled())
         if not handled:
             return
-        candidate = data.draw(st.sampled_from(handled))
+        candidate = data.draw(strategies.sampled_from(handled))
         result = self.run(run_one(self.worker, self.http, ENV, candidate, self.now))
         assert result == Skipped("already_handled"), result
 
-    @rule(seconds=st.integers(min_value=0, max_value=600))
+    @rule(seconds=strategies.integers(min_value=0, max_value=600))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -220,7 +235,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
     def clock_passes_a_period(self) -> None:
         self.now += VALID_FOR
 
-    @rule(expiry=st.sampled_from(PriceExpiry))
+    @rule(expiry=strategies.sampled_from(PriceExpiry))
     def the_expiry_rule_is_switched(self, expiry: PriceExpiry) -> None:
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
@@ -359,12 +374,13 @@ class ShippingPriceFlow(RuleBasedStateMachine):
     async def _used(self, kinds: tuple[str, ...]) -> int:
         """Faults of these kinds the carrier has taken: scripted minus
         still waiting."""
-        cur = await self.worker.execute(
-            "SELECT fault::text, count(*) FROM fake_vendor.courier_fault GROUP BY fault"
+        cur = await self.worker.cursor(row_factory=class_row(_FaultCount)).execute(
+            "SELECT fault::text AS fault, count(*) AS count"
+            " FROM fake_vendor.courier_fault GROUP BY fault"
         )
         waiting: dict[str, int] = {}
-        for fault, count in await cur.fetchall():
-            waiting[fault] = count
+        for fault_count in await cur.fetchall():
+            waiting[fault_count.fault] = fault_count.count
         used = 0
         for kind in kinds:
             used += self.scripted.get(kind, 0) - waiting.get(kind, 0)
@@ -380,26 +396,26 @@ class ShippingPriceFlow(RuleBasedStateMachine):
                 assert not isinstance(result, Failed), result
         raise AssertionError("the worker never caught up")
 
-    def _draw_candidate(self, data: st.DataObject) -> Candidate | None:
+    def _draw_candidate(self, data: strategies.DataObject) -> Candidate | None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return None
-        return data.draw(st.sampled_from(candidates))
+        return data.draw(strategies.sampled_from(candidates))
 
     async def _handled(self) -> list[Candidate]:
-        cur = await self.worker.execute(
+        cur = await self.worker.cursor(row_factory=class_row(_HandledRow)).execute(
             "SELECT message_id, aggregate_id FROM outbox_delivery"
             " WHERE handled_at IS NOT NULL AND consumer = 'shipping_price_ask'"
             " ORDER BY seq"
         )
         handled: list[Candidate] = []
-        for message_id, lookup_id in await cur.fetchall():
+        for handled_row in await cur.fetchall():
             handled.append(
                 Candidate(
-                    message_id=message_id,
+                    message_id=handled_row.message_id,
                     consumer=ConsumerName.SHIPPING_PRICE_ASK,
                     aggregate_type=AggregateType.SHIPPING_PRICE_LOOKUP,
-                    aggregate_id=lookup_id,
+                    aggregate_id=handled_row.aggregate_id,
                 )
             )
         return handled

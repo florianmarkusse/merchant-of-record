@@ -211,8 +211,9 @@ async def route_for(
     """The account for a payment: among rows in force that match, the most
     specific (merchant and country, merchant, country, neither), then the
     newest."""
-    cur = await conn.execute(
-        """
+    async with conn.cursor(row_factory=class_row(_RouteRow)) as cur:
+        await cur.execute(
+            """
         SELECT id, psp_account_id FROM psp_route
         WHERE effective_from <= %(now)s
           AND (merchant_id IS NULL OR merchant_id = %(merchant)s)
@@ -221,12 +222,17 @@ async def route_for(
                  effective_from DESC, id DESC
         LIMIT 1
         """,
-        {"now": now, "merchant": merchant_id, "country": buyer_country},
-    )
-    row = await cur.fetchone()
-    if row is None:
+            {"now": now, "merchant": merchant_id, "country": buyer_country},
+        )
+        route = await cur.fetchone()
+    if route is None:
         return None
-    route_id, account_id = row
-    account = await read_psp_account(conn, account_id)
+    account = await read_psp_account(conn, route.psp_account_id)
     assert account is not None
-    return Routed(route_id, account)
+    return Routed(route.id, account)
+
+
+@dataclass(frozen=True)
+class _RouteRow:
+    id: uuid.UUID
+    psp_account_id: uuid.UUID

@@ -1,0 +1,37 @@
+id: no-tuple-rows
+language: python
+severity: error
+message: >-
+  A query of two or more columns is read with class_row into a row record
+  named after its columns, never unpacked from a tuple (AGENTS.md, decided
+  23-Nov-2026, two columns 24-Nov-2026): pyright sees a tuple row as Any,
+  and two positional values can swap unnoticed. A single column is read
+  with one_value. (A tuple assigned from a variable named `row` counts as a
+  row: a name, not a meaning.)
+files:
+  - src/**/*.py
+  - tests/**/*.py
+# Transitional, with the echo flow (docs/plan-messaging.md §10): its fake,
+# its client and its fuzzer go with it, so their rows are left as they are.
+ignores:
+  - src/mor/echo/fake_client.py
+  - src/mor/fakes/echo.py
+  - tests/flow/test_echo_flow_fuzz.py
+rule:
+  any:
+    - kind: for_statement
+      all:
+        - has: {field: left, kind: pattern_list}
+        - has: {field: right, pattern: await $C.fetchall()}
+    - kind: for_in_clause
+      all:
+        - has: {field: left, kind: pattern_list}
+        - has: {field: right, pattern: await $C.fetchall()}
+    - kind: assignment
+      all:
+        - has: {field: left, kind: pattern_list}
+        - has:
+            field: right
+            any:
+              - pattern: await $C.fetchone()
+              - regex: ^row$

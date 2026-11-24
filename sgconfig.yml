@@ -1,0 +1,7 @@
+# Rules ruff cannot say (docs/plan-codified-rules.md §2.4). Run by
+# tests/test_ast_grep_rules.py: `ast-grep scan` must find nothing, and each
+# rule's examples in ast-grep/rule-tests/ must hold (`ast-grep test`).
+ruleDirs:
+  - ast-grep/rules
+testConfigs:
+  - testDir: ast-grep/rule-tests

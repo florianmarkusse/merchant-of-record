@@ -32,6 +32,7 @@ import msgspec
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
+import mor.markets.fx
 from mor.audit import Actor, ActorKind
 from mor.checkout.quotes import session_quotes
 from mor.checkout.sessions import address_countries, recent_sessions, session_by_id
@@ -56,7 +57,6 @@ from mor.duties.records import VendorLookup
 from mor.invoices.store import invoice_for_order
 from mor.markets.changes import describe_changes
 from mor.markets.fx import FxMissing
-from mor.markets.fx import rate as fx_rate
 from mor.markets.records import (
     Country,
     DutyMode,
@@ -330,7 +330,7 @@ def _references(
     for reference in REFERENCE_CURRENCIES:
         if reference == currency:
             continue
-        per_unit = fx_rate(market, currency, reference)
+        per_unit = mor.markets.fx.rate(market, currency, reference)
         if not isinstance(per_unit, FxMissing):
             found.append((reference, per_unit))
     return tuple(found)
@@ -494,8 +494,8 @@ async def session_page(request: Request, database_url: str) -> Response:
         session = await session_by_id(conn, session_id)
         if session is None:
             return Response("no such session", status_code=404)
-        merchant = await read_merchant(conn, session.merchant_id)
-        assert merchant is not None
+        seller = await read_merchant(conn, session.merchant_id)
+        assert seller is not None
         countries = await address_countries(conn, session_id)
         quotes = await session_quotes(conn, session_id)
         attempts = await session_attempts(conn, session_id)
@@ -505,16 +505,16 @@ async def session_page(request: Request, database_url: str) -> Response:
             assert account is not None
             account_names[account.id.hex] = account.name
         order = await order_by_session(conn, session_id)
-        invoice = None if order is None else await invoice_for_order(conn, order.id)
+        tax_invoice = None if order is None else await invoice_for_order(conn, order.id)
     return HTMLResponse(
         render_session_page(
             session,
-            merchant.display_name,
+            seller.display_name,
             countries,
             quotes,
             attempts,
             account_names,
             order,
-            None if invoice is None else invoice.number_text,
+            None if tax_invoice is None else tax_invoice.number_text,
         )
     )

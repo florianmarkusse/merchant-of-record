@@ -124,8 +124,8 @@ async def _view(
     errors: AddressErrors | None = None,
     notice: str | None = None,
 ) -> BuyerView:
-    merchant = await read_merchant(conn, session.merchant_id)
-    assert merchant is not None
+    seller = await read_merchant(conn, session.merchant_id)
+    assert seller is not None
     quote: MadeQuote | None = None
     refused: RefusedQuote | None = None
     if session.quote_id is not None:
@@ -151,7 +151,7 @@ async def _view(
     return BuyerView(
         session=session,
         public_id=f"{SESSION_PREFIX}{session.id.hex}",
-        merchant_name=merchant.display_name,
+        merchant_name=seller.display_name,
         countries=_country_names(market, countries_for(market, session, now)),
         values=values,
         errors=errors or {},
@@ -162,7 +162,7 @@ async def _view(
         now=now,
         attempt=attempt,
         methods=methods,
-        takes_payments=merchant.kyb_state == KybState.APPROVED,
+        takes_payments=seller.kyb_state == KybState.APPROVED,
         status=status_text(session, attempt),
     )
 

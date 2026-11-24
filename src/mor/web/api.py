@@ -214,8 +214,8 @@ async def get_order(request: Request, settings: Settings) -> Response:
         quote = await read_made_quote(conn, order.quote_id)
         address = await read_address(conn, order.address_id)
         assert address is not None
-        invoice = await invoice_for_order(conn, order.id)
-    number = None if invoice is None else invoice.number_text
+        tax_invoice = await invoice_for_order(conn, order.id)
+    number = None if tax_invoice is None else tax_invoice.number_text
     return json_response(
         200, order_out(order, session, quote, address, number, settings.self_url)
     )
@@ -245,10 +245,10 @@ async def post_merchant_settings(
         await set_support_email(
             conn, auth.merchant.id, decoded.support_email, actor, now
         )
-        merchant = await read_merchant(conn, auth.merchant.id)
-        assert merchant is not None
+        seller = await read_merchant(conn, auth.merchant.id)
+        assert seller is not None
         await conn.commit()
-    return json_response(200, merchant_out(merchant))
+    return json_response(200, merchant_out(seller))
 
 
 def _next_utc_midnight_s(now: datetime) -> int:
@@ -327,9 +327,9 @@ async def _ask(
     count = new_asks(missing)
     if count == 0:
         return pending
-    merchant = auth.merchant
+    seller = auth.merchant
     if not await take_vendor_asks(
-        conn, merchant.id, now.date(), count, merchant.daily_vendor_asks
+        conn, seller.id, now.date(), count, seller.daily_vendor_asks
     ):
         await conn.rollback()
         return ApiError(

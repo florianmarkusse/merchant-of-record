@@ -6,8 +6,7 @@ import uuid
 from datetime import date
 from fractions import Fraction
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies
 
 from mor.duties.port import percent_formula
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
@@ -141,8 +140,8 @@ def test_a_vendor_mode_must_name_its_vendor_and_own_only_none() -> None:
 
 
 @given(
-    whole=st.integers(min_value=0, max_value=1000),
-    places=st.text(alphabet="0123456789", max_size=6),
+    whole=strategies.integers(min_value=0, max_value=1000),
+    places=strategies.text(alphabet="0123456789", max_size=6),
 )
 def test_a_percentage_formula_reads_as_its_exact_rate(whole: int, places: str) -> None:
     written = f"{whole}.{places}" if places else str(whole)

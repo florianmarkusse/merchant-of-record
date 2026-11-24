@@ -231,10 +231,10 @@ async def _connect(database_url: str) -> FakeConnection:
     )
 
 
-def _error(status: int, code: str, payment: Payment | None = None) -> JSONResponse:
+def _error(status: int, code: str, psp_payment: Payment | None = None) -> JSONResponse:
     body: dict[str, object] = {"error": code}
-    if payment is not None:
-        body["payment"] = msgspec.to_builtins(payment)
+    if psp_payment is not None:
+        body["payment"] = msgspec.to_builtins(psp_payment)
     return JSONResponse(body, status_code=status)
 
 
@@ -530,7 +530,7 @@ async def _push(
 async def _record_event(
     conn: FakeConnection,
     account: str,
-    payment: Payment,
+    psp_payment: Payment,
     kind: EventKind,
     how: PushHow,
     outgoing: httpx2.AsyncClient,
@@ -538,11 +538,11 @@ async def _record_event(
 ) -> Event:
     event = Event(
         id=f"evt_{uuid.uuid4().hex}",
-        payment_id=payment.id,
-        reference=payment.reference,
+        payment_id=psp_payment.id,
+        reference=psp_payment.reference,
         kind=kind,
-        amount_minor=payment.amount_minor,
-        currency=payment.currency,
+        amount_minor=psp_payment.amount_minor,
+        currency=psp_payment.currency,
         occurred_at=clock(),
     )
     push = await _push(conn, account, event, how, outgoing)
@@ -552,13 +552,13 @@ async def _record_event(
           (id, payment_id, kind, amount_minor, occurred_at, push)
         VALUES (%s, %s, %s, %s, %s, %s)
         """,
-        (event.id, payment.id, kind, event.amount_minor, event.occurred_at, push),
+        (event.id, psp_payment.id, kind, event.amount_minor, event.occurred_at, push),
     )
     return event
 
 
 async def _set_status(
-    conn: FakeConnection, payment: Payment, status: Status, base: str
+    conn: FakeConnection, psp_payment: Payment, status: Status, base: str
 ) -> Payment:
     rows = await _payment_rows(
         conn,
@@ -567,20 +567,25 @@ async def _set_status(
         RETURNING id, reference, amount_minor, currency, method, status::text,
                   qr_expires_at
         """,
-        (status, payment.id),
+        (status, psp_payment.id),
     )
     row = rows[0] if rows else None
     assert row is not None
     return _payment(row, base)
 
 
-async def _charge(conn: FakeConnection, payment: Payment) -> None:
+async def _charge(conn: FakeConnection, psp_payment: Payment) -> None:
     await conn.execute(
         """
         INSERT INTO psp_fake_charge (payment_id, reference, amount_minor, currency)
         VALUES (%s, %s, %s, %s)
         """,
-        (payment.id, payment.reference, payment.amount_minor, payment.currency),
+        (
+            psp_payment.id,
+            psp_payment.reference,
+            psp_payment.amount_minor,
+            psp_payment.currency,
+        ),
     )
 
 
@@ -680,15 +685,15 @@ async def handle_create(
             row = rows[0] if rows else None
             status = 200
         assert row is not None
-        payment = _payment(row, base)
+        psp_payment = _payment(row, base)
         await conn.commit()
     if fault == "fail_500_after_work":
         return _error(500, "internal_error")
     if fault == "timeout_after_work":
         await hang()
-    if payment.status == "declined":
-        return _error(402, "declined", payment)
-    return _json({"payment": payment}, status)
+    if psp_payment.status == "declined":
+        return _error(402, "declined", psp_payment)
+    return _json({"payment": psp_payment}, status)
 
 
 async def handle_find(request: Request, database_url: str, hang: Hang) -> Response:
@@ -726,15 +731,15 @@ async def handle_get(request: Request, database_url: str, hang: Hang) -> Respons
         await conn.commit()
         if fault in ("fail_500", "fail_500_after_work"):
             return _error(500, "internal_error")
-        payment = await _read_payment(
+        psp_payment = await _read_payment(
             conn, account, request.path_params["payment_id"], _base(request)
         )
-        if payment is None:
+        if psp_payment is None:
             return _error(404, "unknown_payment")
-        events = await _events(conn, payment.id)
+        events = await _events(conn, psp_payment.id)
     if fault == "timeout_after_work":
         await hang()
-    return _json({"payment": payment, "events": events})
+    return _json({"payment": psp_payment, "events": events})
 
 
 async def handle_capture(
@@ -760,10 +765,10 @@ async def handle_capture(
         if fault == "fail_500":
             await conn.commit()
             return _error(500, "internal_error")
-        payment = await _lock_payment(
+        psp_payment = await _lock_payment(
             conn, account, request.path_params["payment_id"], base
         )
-        if payment is None:
+        if psp_payment is None:
             return _error(404, "unknown_payment")
         replay = False
         if keyed and key is not None:
@@ -773,28 +778,28 @@ async def handle_capture(
                   (account, idempotency_key, payment_id)
                 VALUES (%s, %s, %s) ON CONFLICT DO NOTHING RETURNING 1
                 """,
-                (account, key, payment.id),
+                (account, key, psp_payment.id),
             )
             replay = await cur.fetchone() is None
         if replay:
             pass  # the first answer stands: the payment as it is now
-        elif payment.status != "authorised" or body.amount_minor != (
-            payment.amount_minor
+        elif psp_payment.status != "authorised" or body.amount_minor != (
+            psp_payment.amount_minor
         ):
             await conn.commit()
-            return _error(409, "not_capturable", payment)
+            return _error(409, "not_capturable", psp_payment)
         else:
-            payment = await _set_status(conn, payment, "captured", base)
-            await _charge(conn, payment)
+            psp_payment = await _set_status(conn, psp_payment, "captured", base)
+            await _charge(conn, psp_payment)
             await _record_event(
-                conn, account, payment, "captured", "once", outgoing, clock
+                conn, account, psp_payment, "captured", "once", outgoing, clock
             )
         await conn.commit()
     if fault == "fail_500_after_work":
         return _error(500, "internal_error")
     if fault == "timeout_after_work":
         await hang()
-    return _json({"payment": payment})
+    return _json({"payment": psp_payment})
 
 
 async def handle_cancel(
@@ -811,30 +816,30 @@ async def handle_cancel(
         if fault == "fail_500":
             await conn.commit()
             return _error(500, "internal_error")
-        payment = await _lock_payment(
+        psp_payment = await _lock_payment(
             conn, account, request.path_params["payment_id"], base
         )
-        if payment is None:
+        if psp_payment is None:
             return _error(404, "unknown_payment")
-        if payment.status not in ("requires_action", "authorised"):
+        if psp_payment.status not in ("requires_action", "authorised"):
             await conn.commit()
-            return _error(409, "already_final", payment)
-        payment = await _set_status(conn, payment, "cancelled", base)
+            return _error(409, "already_final", psp_payment)
+        psp_payment = await _set_status(conn, psp_payment, "cancelled", base)
         await _record_event(
-            conn, account, payment, "cancelled", "once", outgoing, clock
+            conn, account, psp_payment, "cancelled", "once", outgoing, clock
         )
         await conn.commit()
     if fault == "fail_500_after_work":
         return _error(500, "internal_error")
     if fault == "timeout_after_work":
         await hang()
-    return _json({"payment": payment})
+    return _json({"payment": psp_payment})
 
 
 async def _release(
     conn: FakeConnection,
     account: str,
-    payment: Payment,
+    psp_payment: Payment,
     outcome: Outcome,
     how: PushHow,
     base: str,
@@ -842,7 +847,7 @@ async def _release(
     clock: Callable[[], datetime],
 ) -> Event | None:
     """The buyer's (or the phone's) answer, once, while it is wanted."""
-    if payment.status != "requires_action":
+    if psp_payment.status != "requires_action":
         return None
     known = await _account(conn, account)
     assert known is not None
@@ -850,24 +855,24 @@ async def _release(
     match outcome:
         case "paid":
             if capture_mode == "sale":
-                payment = await _set_status(conn, payment, "captured", base)
-                await _charge(conn, payment)
+                psp_payment = await _set_status(conn, psp_payment, "captured", base)
+                await _charge(conn, psp_payment)
                 return await _record_event(
-                    conn, account, payment, "captured", how, outgoing, clock
+                    conn, account, psp_payment, "captured", how, outgoing, clock
                 )
-            payment = await _set_status(conn, payment, "authorised", base)
+            psp_payment = await _set_status(conn, psp_payment, "authorised", base)
             return await _record_event(
-                conn, account, payment, "authorised", how, outgoing, clock
+                conn, account, psp_payment, "authorised", how, outgoing, clock
             )
         case "declined":
-            payment = await _set_status(conn, payment, "declined", base)
+            psp_payment = await _set_status(conn, psp_payment, "declined", base)
             return await _record_event(
-                conn, account, payment, "declined", how, outgoing, clock
+                conn, account, psp_payment, "declined", how, outgoing, clock
             )
         case "expired":
-            payment = await _set_status(conn, payment, "expired", base)
+            psp_payment = await _set_status(conn, psp_payment, "expired", base)
             return await _record_event(
-                conn, account, payment, "expired", how, outgoing, clock
+                conn, account, psp_payment, "expired", how, outgoing, clock
             )
 
 
@@ -885,17 +890,17 @@ async def handle_release(
         return _error(400, "invalid_body")
     base = _base(request)
     async with await _connect(database_url) as conn:
-        payment = await _lock_payment(
+        psp_payment = await _lock_payment(
             conn, account, request.path_params["payment_id"], base
         )
-        if payment is None:
+        if psp_payment is None:
             return _error(404, "unknown_payment")
         event = await _release(
-            conn, account, payment, body.outcome, body.push, base, outgoing, clock
+            conn, account, psp_payment, body.outcome, body.push, base, outgoing, clock
         )
         await conn.commit()
     if event is None:
-        return _error(409, "not_waiting", payment)
+        return _error(409, "not_waiting", psp_payment)
     return _json(event)
 
 
@@ -935,18 +940,32 @@ async def handle_redeliver(
     return JSONResponse({"redelivered": delivered})
 
 
+@dataclass(frozen=True, kw_only=True)
+class _HostedPaymentRow:
+    amount_minor: int
+    currency: str
+    method: str
+    status: str
+
+
 async def handle_hosted_page(request: Request, database_url: str) -> Response:
     payment_id = request.path_params["payment_id"]
-    async with await _connect(database_url) as conn:
-        cur = await conn.execute(
-            "SELECT account, amount_minor, currency, method, status::text"
+    async with (
+        await _connect(database_url) as conn,
+        conn.cursor(row_factory=class_row(_HostedPaymentRow)) as cur,
+    ):
+        await cur.execute(
+            "SELECT amount_minor, currency, method, status::text AS status"
             " FROM psp_fake_payment WHERE id = %s",
             (payment_id,),
         )
-        row = await cur.fetchone()
-    if row is None:
+        hosted = await cur.fetchone()
+    if hosted is None:
         return HTMLResponse("No such payment.", status_code=404)
-    _, amount, currency, method, status = row
+    amount = hosted.amount_minor
+    currency = hosted.currency
+    method = hosted.method
+    status = hosted.status
     choices: htpy.Node = htpy.p[f"This payment is {status}."]
     if status == "requires_action":
         choices = htpy.form(method="post")[
@@ -1011,11 +1030,28 @@ async def handle_hosted_answer(
             return HTMLResponse("No such payment.", status_code=404)
         account = hosted.account
         return_url = hosted.return_url
-        payment = await _lock_payment(conn, account, payment_id, base)
-        assert payment is not None
-        await _release(conn, account, payment, outcome, "once", base, outgoing, clock)
+        psp_payment = await _lock_payment(conn, account, payment_id, base)
+        assert psp_payment is not None
+        await _release(
+            conn, account, psp_payment, outcome, "once", base, outgoing, clock
+        )
         await conn.commit()
     return RedirectResponse(return_url, status_code=303)
+
+
+@dataclass(frozen=True, kw_only=True)
+class _SettleableRow:
+    id: str
+    reference: str
+    amount_minor: int
+    currency: str
+    method: str
+
+
+@dataclass(frozen=True)
+class _CarryRow:
+    currency: str
+    amount_minor: int
 
 
 async def handle_cut_settlement(
@@ -1033,64 +1069,68 @@ async def handle_cut_settlement(
         )
         if await cur.fetchone() is None:
             return _error(404, "unknown_account")
-        cur = await conn.execute(
-            """
-            SELECT p.id, p.reference, p.amount_minor, p.currency, p.method
-            FROM psp_fake_payment p
-            WHERE p.account = %s AND p.status = 'captured'
-              AND NOT EXISTS (SELECT 1 FROM psp_fake_settled s
-                              WHERE s.payment_id = p.id)
-            ORDER BY p.created_at, p.id
-            """,
-            (account,),
-        )
+        async with conn.cursor(row_factory=class_row(_SettleableRow)) as rows:
+            await rows.execute(
+                """
+                SELECT p.id, p.reference, p.amount_minor, p.currency, p.method
+                FROM psp_fake_payment p
+                WHERE p.account = %s AND p.status = 'captured'
+                  AND NOT EXISTS (SELECT 1 FROM psp_fake_settled s
+                                  WHERE s.payment_id = p.id)
+                ORDER BY p.created_at, p.id
+                """,
+                (account,),
+            )
+            unsettled = await rows.fetchall()
         groups: dict[str, list[_CutLine]] = {}
-        for payment_id, reference, amount, currency, method in await cur.fetchall():
-            groups.setdefault(currency, []).append(
+        for settleable in unsettled:
+            groups.setdefault(settleable.currency, []).append(
                 _CutLine(
                     type="capture",
-                    payment_id=payment_id,
-                    reference=reference,
-                    gross_minor=amount,
-                    fee_minor=fee_of(method, amount),
+                    payment_id=settleable.id,
+                    reference=settleable.reference,
+                    gross_minor=settleable.amount_minor,
+                    fee_minor=fee_of(settleable.method, settleable.amount_minor),
                     fault=None,
                     settles=True,
                 )
             )
         # Settled again: a payment whose first settlement was clean.
         if "settled_again" in faults:
-            cur = await conn.execute(
-                """
-                SELECT p.id, p.reference, p.amount_minor, p.currency, p.method
-                FROM psp_fake_settled s
-                JOIN psp_fake_payment p ON p.id = s.payment_id
-                JOIN psp_fake_settlement_line l
-                  ON l.payment_id = p.id AND l.fault IS NULL
-                WHERE p.account = %s ORDER BY p.created_at, p.id LIMIT 1
-                """,
-                (account,),
-            )
-            again = await cur.fetchone()
+            async with conn.cursor(row_factory=class_row(_SettleableRow)) as rows:
+                await rows.execute(
+                    """
+                    SELECT p.id, p.reference, p.amount_minor, p.currency, p.method
+                    FROM psp_fake_settled s
+                    JOIN psp_fake_payment p ON p.id = s.payment_id
+                    JOIN psp_fake_settlement_line l
+                      ON l.payment_id = p.id AND l.fault IS NULL
+                    WHERE p.account = %s ORDER BY p.created_at, p.id LIMIT 1
+                    """,
+                    (account,),
+                )
+                again = await rows.fetchone()
             if again is not None:
-                payment_id, reference, amount, currency, method = again
-                groups.setdefault(currency, []).append(
+                groups.setdefault(again.currency, []).append(
                     _CutLine(
                         type="capture",
-                        payment_id=payment_id,
-                        reference=reference,
-                        gross_minor=amount,
-                        fee_minor=fee_of(method, amount),
+                        payment_id=again.id,
+                        reference=again.reference,
+                        gross_minor=again.amount_minor,
+                        fee_minor=fee_of(again.method, again.amount_minor),
                         fault="settled_again",
                         settles=False,
                     )
                 )
-        cur = await conn.execute(
-            "SELECT currency, amount_minor FROM psp_fake_carry WHERE account = %s",
-            (account,),
-        )
+        async with conn.cursor(row_factory=class_row(_CarryRow)) as rows:
+            await rows.execute(
+                "SELECT currency, amount_minor FROM psp_fake_carry WHERE account = %s",
+                (account,),
+            )
+            carries = await rows.fetchall()
         carried: dict[str, int] = {}
-        for currency, amount in await cur.fetchall():
-            carried[currency] = amount
+        for carry in carries:
+            carried[carry.currency] = carry.amount_minor
         made: list[str] = []
         for currency in sorted(groups):
             lines = groups[currency]

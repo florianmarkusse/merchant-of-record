@@ -79,8 +79,8 @@ async def issue_invoice(
     assert session is not None
     address = await read_address(conn, order.address_id)
     assert address is not None
-    merchant = await read_merchant(conn, order.merchant_id)
-    assert merchant is not None
+    seller = await read_merchant(conn, order.merchant_id)
+    assert seller is not None
     lines = invoice_lines(quote, order.option_no, session.lines)
     total = 0
     for line in lines:
@@ -114,7 +114,7 @@ async def issue_invoice(
             ENTITY.address,
             None if registration is None else registration.label,
             None if registration is None else registration.number,
-            merchant.legal_name,
+            seller.legal_name,
             address.name,
             address.line1,
             address.line2,

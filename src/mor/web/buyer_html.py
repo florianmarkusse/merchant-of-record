@@ -15,7 +15,7 @@ from datetime import datetime
 
 import htpy
 
-from mor.checkout import addresses as fields
+from mor.checkout import addresses
 from mor.checkout.addresses import Address, AddressError, AddressErrors
 from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredOption
 from mor.checkout.records import CheckoutSession, SessionState
@@ -64,13 +64,13 @@ ERROR_WORDS: dict[AddressError, str] = {
 }
 
 LABELS = (
-    (fields.NAME, "Full name", "name"),
-    (fields.EMAIL, "Email", "email"),
-    (fields.LINE1, "Address", "address-line1"),
-    (fields.LINE2, "Address line 2 (optional)", "address-line2"),
-    (fields.CITY, "City or district", "address-level2"),
-    (fields.REGION, "Province or state", "address-level1"),
-    (fields.POSTCODE, "Postcode", "postal-code"),
+    (addresses.NAME, "Full name", "name"),
+    (addresses.EMAIL, "Email", "email"),
+    (addresses.LINE1, "Address", "address-line1"),
+    (addresses.LINE2, "Address line 2 (optional)", "address-line2"),
+    (addresses.CITY, "City or district", "address-level2"),
+    (addresses.REGION, "Province or state", "address-level1"),
+    (addresses.POSTCODE, "Postcode", "postal-code"),
 )
 
 
@@ -165,7 +165,7 @@ def _field(view: BuyerView, name: str, label: str, autocomplete: str) -> htpy.No
     message: htpy.Node = None
     if error is not None:
         message = htpy.span(class_="error", id=f"{name}-error")[ERROR_WORDS[error]]
-    kind = "email" if name == fields.EMAIL else "text"
+    kind = "email" if name == addresses.EMAIL else "text"
     return htpy.label[
         htpy.span[label],
         htpy.input(
@@ -173,7 +173,7 @@ def _field(view: BuyerView, name: str, label: str, autocomplete: str) -> htpy.No
             name=name,
             value=view.values.get(name, ""),
             autocomplete=autocomplete,
-            maxlength=str(fields.MAX_FIELD),
+            maxlength=str(addresses.MAX_FIELD),
             aria_invalid="true" if error is not None else None,
             aria_describedby=f"{name}-error" if error is not None else None,
         ),
@@ -182,16 +182,16 @@ def _field(view: BuyerView, name: str, label: str, autocomplete: str) -> htpy.No
 
 
 def _address_form(view: BuyerView, action: str) -> htpy.Node:
-    chosen = view.values.get(fields.COUNTRY, "")
+    chosen = view.values.get(addresses.COUNTRY, "")
     options: list[htpy.Node] = [htpy.option(value="")["Choose a country"]]
     for iso2, name in view.countries:
         options.append(htpy.option(value=iso2, selected=iso2 == chosen)[name])
-    country_error = view.errors.get(fields.COUNTRY)
-    phone_error = view.errors.get(fields.PHONE)
+    country_error = view.errors.get(addresses.COUNTRY)
+    phone_error = view.errors.get(addresses.PHONE)
     rows: list[htpy.Node] = [
         htpy.label[
             htpy.span["Country"],
-            htpy.select(name=fields.COUNTRY, autocomplete="country")[options],
+            htpy.select(name=addresses.COUNTRY, autocomplete="country")[options],
             None
             if country_error is None
             else htpy.span(class_="error")[ERROR_WORDS[country_error]],
@@ -204,8 +204,8 @@ def _address_form(view: BuyerView, action: str) -> htpy.Node:
             htpy.legend["Phone, for the courier"],
             htpy.input(
                 type="text",
-                name=fields.DIAL_CODE,
-                value=view.values.get(fields.DIAL_CODE, ""),
+                name=addresses.DIAL_CODE,
+                value=view.values.get(addresses.DIAL_CODE, ""),
                 placeholder="auto",  # blank: the chosen country's own code
                 autocomplete="tel-country-code",
                 aria_label="Country code, blank for the country's own",
@@ -213,8 +213,8 @@ def _address_form(view: BuyerView, action: str) -> htpy.Node:
             ),
             htpy.input(
                 type="tel",
-                name=fields.PHONE,
-                value=view.values.get(fields.PHONE, ""),
+                name=addresses.PHONE,
+                value=view.values.get(addresses.PHONE, ""),
                 autocomplete="tel-national",
                 aria_label="Phone number",
             ),
@@ -475,14 +475,14 @@ def render_buyer_page(view: BuyerView) -> str:
 def address_values(address: Address) -> dict[str, str]:
     """A stored address back into the form, to change it."""
     return {
-        fields.NAME: address.name,
-        fields.EMAIL: address.email,
-        fields.DIAL_CODE: address.phone_dial_code,
-        fields.PHONE: address.phone_number,
-        fields.LINE1: address.line1,
-        fields.LINE2: address.line2 or "",
-        fields.CITY: address.city,
-        fields.REGION: address.region or "",
-        fields.POSTCODE: address.postcode or "",
-        fields.COUNTRY: address.country,
+        addresses.NAME: address.name,
+        addresses.EMAIL: address.email,
+        addresses.DIAL_CODE: address.phone_dial_code,
+        addresses.PHONE: address.phone_number,
+        addresses.LINE1: address.line1,
+        addresses.LINE2: address.line2 or "",
+        addresses.CITY: address.city,
+        addresses.REGION: address.region or "",
+        addresses.POSTCODE: address.postcode or "",
+        addresses.COUNTRY: address.country,
     }

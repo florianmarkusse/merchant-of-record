@@ -84,12 +84,12 @@ def _invoice(view: OrderView) -> htpy.Node:
 
 
 def _help(view: OrderView) -> htpy.Node:
-    merchant: htpy.Node = htpy.li[
+    seller_item: htpy.Node = htpy.li[
         f"About your order or its delivery: {view.merchant_name}."
     ]
     if view.merchant_support_email is not None:
         email = view.merchant_support_email
-        merchant = htpy.li[
+        seller_item = htpy.li[
             f"About your order or its delivery: {view.merchant_name}, ",
             htpy.a(href=f"mailto:{email}")[email],
             ".",
@@ -97,7 +97,7 @@ def _help(view: OrderView) -> htpy.Node:
     return htpy.section(class_="help")[
         htpy.h2["Questions?"],
         htpy.ul[
-            merchant,
+            seller_item,
             htpy.li[
                 f"About your payment or invoice: {ENTITY.legal_name}, ",
                 ENTITY.support_email,

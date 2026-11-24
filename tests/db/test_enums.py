@@ -3,18 +3,28 @@ exactly the labels of its StrEnum: a value added on one side only fails
 here, not on the first row that carries it."""
 
 import asyncio
+from dataclasses import dataclass
+
+from psycopg.rows import class_row
 
 from mor.db.connect import connect
 from mor.db.enums import DATABASE_ENUMS
 from mor.merchants.records import KybState
 
 
+@dataclass(frozen=True)
+class _EnumLabels:
+    typname: str
+    labels: list[str]
+
+
 def test_every_database_enum_has_a_strenum_with_its_labels(database_url: str) -> None:
     async def body() -> dict[str, list[str]]:
         async with await connect(database_url) as conn:
-            cur = await conn.execute(
+            cur = await conn.cursor(row_factory=class_row(_EnumLabels)).execute(
                 """
-                SELECT t.typname, array_agg(e.enumlabel ORDER BY e.enumsortorder)
+                SELECT t.typname,
+                       array_agg(e.enumlabel ORDER BY e.enumsortorder) AS labels
                 FROM pg_type t
                 JOIN pg_namespace n ON n.oid = t.typnamespace
                 JOIN pg_enum e ON e.enumtypid = t.oid
@@ -23,8 +33,8 @@ def test_every_database_enum_has_a_strenum_with_its_labels(database_url: str) ->
                 """
             )
             labels: dict[str, list[str]] = {}
-            for name, values in await cur.fetchall():
-                labels[name] = values
+            for enum_type in await cur.fetchall():
+                labels[enum_type.typname] = enum_type.labels
             return labels
 
     labels = asyncio.run(body())

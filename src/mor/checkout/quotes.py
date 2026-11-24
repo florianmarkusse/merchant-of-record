@@ -296,6 +296,12 @@ class _PartRow:
     source: str
 
 
+@dataclass(frozen=True)
+class _QuoteInputRow:
+    duty_lookup_id: uuid.UUID | None
+    shipping_price_lookup_id: uuid.UUID | None
+
+
 @dataclass(frozen=True, kw_only=True)
 class _OptionRow:
     option_no: int
@@ -431,20 +437,24 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
     not_offered: list[tuple[str, NotOfferedReason]] = []
     for not_offered_row in not_offered_rows:
         not_offered.append((not_offered_row.key, not_offered_row.reason))
-    cur = await conn.execute(
-        """
-        SELECT duty_lookup_id, shipping_price_lookup_id FROM quote_input
-        WHERE quote_id = %s ORDER BY duty_lookup_id, shipping_price_lookup_id
-        """,
-        (quote_id,),
-    )
+    async with conn.cursor(row_factory=class_row(_QuoteInputRow)) as cur:
+        await cur.execute(
+            """
+            SELECT duty_lookup_id, shipping_price_lookup_id FROM quote_input
+            WHERE quote_id = %s ORDER BY duty_lookup_id, shipping_price_lookup_id
+            """,
+            (quote_id,),
+        )
+        inputs = await cur.fetchall()
     duty_lookups: list[uuid.UUID] = []
     price_lookups: list[uuid.UUID] = []
-    for duty_lookup_id, price_lookup_id in await cur.fetchall():
-        if duty_lookup_id is not None:
-            duty_lookups.append(duty_lookup_id)
+    for quote_input in inputs:
+        if quote_input.duty_lookup_id is not None:
+            duty_lookups.append(quote_input.duty_lookup_id)
         else:
-            price_lookups.append(price_lookup_id)
+            # A CHECK keeps exactly one of the two set.
+            assert quote_input.shipping_price_lookup_id is not None
+            price_lookups.append(quote_input.shipping_price_lookup_id)
     return MadeQuote(
         id=row.id,
         session_id=row.session_id,

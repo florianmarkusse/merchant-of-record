@@ -1,0 +1,16 @@
+id: no-domain-name-local
+valid:
+  - seller = await read_merchant(conn, merchant_id)
+  - |
+    class Order:
+        merchant: Merchant
+  - Shop(merchant=seller)
+  - name = auth.merchant
+invalid:
+  - merchant = await read_merchant(conn, merchant_id)
+  - |
+    def page(invoice: Invoice) -> str:
+        return ""
+  - |
+    for payment in payments:
+        pass

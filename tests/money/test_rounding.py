@@ -1,8 +1,7 @@
 from fractions import Fraction
 
 import pytest
-from hypothesis import example, given
-from hypothesis import strategies as st
+from hypothesis import example, given, strategies
 
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -101,11 +100,11 @@ def test_allocate_refuses_weights_that_cannot_split() -> None:
             allocate(Money(100, Currency.SGD), weights)
 
 
-amounts = st.integers(min_value=-(10**15), max_value=10**15)
-ratios = st.fractions(min_value=-10, max_value=10, max_denominator=10**6)
+amounts = strategies.integers(min_value=-(10**15), max_value=10**15)
+ratios = strategies.fractions(min_value=-10, max_value=10, max_denominator=10**6)
 
 
-@given(amount_minor=amounts, ratio=ratios, mode=st.sampled_from(RoundingMode))
+@given(amount_minor=amounts, ratio=ratios, mode=strategies.sampled_from(RoundingMode))
 def test_divide_result_plus_remainder_is_exact(
     amount_minor: int, ratio: Fraction, mode: RoundingMode
 ) -> None:
@@ -125,9 +124,9 @@ def test_half_modes_leave_at_most_half_a_unit(
 
 @given(
     amount_minor=amounts,
-    weights=st.lists(st.integers(min_value=0, max_value=10**6), min_size=1).filter(
-        lambda ws: sum(ws) > 0
-    ),
+    weights=strategies.lists(
+        strategies.integers(min_value=0, max_value=10**6), min_size=1
+    ).filter(lambda ws: sum(ws) > 0),
 )
 @example(amount_minor=1, weights=[1, 1])
 def test_allocate_parts_sum_to_the_total_and_stay_near_their_share(

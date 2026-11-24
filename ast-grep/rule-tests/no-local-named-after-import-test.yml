@@ -1,0 +1,23 @@
+id: no-local-named-after-import
+valid:
+  - |
+    from enum import StrEnum
+
+    def f():
+        enum = 1
+  - |
+    from mor.dates import format_day
+
+    def f():
+        day = format_day(today)
+invalid:
+  - |
+    from mor.dates import format_day
+
+    def f():
+        format_day = 1
+  - |
+    from mor.x import a, rate
+
+    def f(rate: int) -> None:
+        pass

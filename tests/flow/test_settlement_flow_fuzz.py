@@ -33,10 +33,10 @@ import random
 import uuid
 from collections import Counter
 from collections.abc import Coroutine
+from dataclasses import dataclass
 from datetime import timedelta
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     initialize,
@@ -45,6 +45,7 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
+from psycopg.rows import class_row
 
 from mor.db.connect import Connection, connect
 from mor.fakes.psp import CUT_FAULTS, CutFault
@@ -81,6 +82,22 @@ from tests.payments.support import (
     make_shop,
     quoted_session,
 )
+
+
+@dataclass(frozen=True)
+class _ArrivalOrders:
+    line_first: bool
+    older_page_first: bool
+    open_while_arriving: bool
+
+
+@dataclass(frozen=True, kw_only=True)
+class _Reached:
+    booked_lines: int
+    payout_booked: bool
+    balanced: bool
+    net_off: bool
+    counted: bool
 
 
 T0 = NOW
@@ -154,14 +171,18 @@ class SettlementFlow(RuleBasedStateMachine):
     # --- the deep start --------------------------------------------------
 
     @initialize(
-        status_mode=st.sampled_from(list(StatusMode)),
-        capture_mode=st.sampled_from(list(CaptureMode)),
-        guard=st.sampled_from((DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)),
-        settlement_mode=st.sampled_from(list(SettlementMode)),
-        booked=st.lists(st.booleans(), min_size=1, max_size=3),
-        first_cut=st.lists(st.sampled_from(CUT_FAULTS), max_size=2, unique=True),
-        book_first_cut=st.booleans(),
-        decode_order=st.randoms(use_true_random=False),
+        status_mode=strategies.sampled_from(list(StatusMode)),
+        capture_mode=strategies.sampled_from(list(CaptureMode)),
+        guard=strategies.sampled_from(
+            (DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)
+        ),
+        settlement_mode=strategies.sampled_from(list(SettlementMode)),
+        booked=strategies.lists(strategies.booleans(), min_size=1, max_size=3),
+        first_cut=strategies.lists(
+            strategies.sampled_from(CUT_FAULTS), max_size=2, unique=True
+        ),
+        book_first_cut=strategies.booleans(),
+        decode_order=strategies.randoms(use_true_random=False),
     )
     def approved_payments(
         self,
@@ -238,8 +259,8 @@ class SettlementFlow(RuleBasedStateMachine):
 
     # --- actions ---------------------------------------------------------
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidate = self._draw(data, None)
         if candidate is None:
             return
@@ -250,17 +271,17 @@ class SettlementFlow(RuleBasedStateMachine):
     def the_worker_catches_up(self) -> None:
         self.run(catch_up(self.worker, self.http, self.now))
 
-    @rule(data=st.data())
-    def crash_inside_a_local_step(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def crash_inside_a_local_step(self, data: strategies.DataObject) -> None:
         candidate = self._draw(data, Local)
         if candidate is None:
             return
         self.met.add(f"crash in {candidate.consumer.value}")
         self.run(crash_in_a_local_step(candidate, self.now))
 
-    @rule(data=st.data(), with_call=st.booleans())
+    @rule(data=strategies.data(), with_call=strategies.booleans())
     def crash_around_an_effects_call(
-        self, data: st.DataObject, with_call: bool
+        self, data: strategies.DataObject, with_call: bool
     ) -> None:
         candidate = self._draw(data, Effect)
         if candidate is None:
@@ -272,29 +293,33 @@ class SettlementFlow(RuleBasedStateMachine):
         )
 
     @precondition(lambda self: self.run(self._settlement_steps_due()) != [])
-    @rule(data=st.data())
-    def crash_inside_a_settlement_step(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def crash_inside_a_settlement_step(self, data: strategies.DataObject) -> None:
         """Only drawn while one is due: booking a line or a payout is a
         short moment among many deliveries."""
-        candidate = data.draw(st.sampled_from(self.run(self._settlement_steps_due())))
+        candidate = data.draw(
+            strategies.sampled_from(self.run(self._settlement_steps_due()))
+        )
         self.met.add(f"crash in {candidate.consumer.value}")
         self.run(crash_in_a_local_step(candidate, self.now))
 
     @precondition(lambda self: self.run(self._settlement_steps_handled()) != [])
-    @rule(data=st.data())
-    def a_settlement_step_meets_its_fact_again(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def a_settlement_step_meets_its_fact_again(
+        self, data: strategies.DataObject
+    ) -> None:
         handled = self.run(self._settlement_steps_handled())
-        chosen = data.draw(st.sampled_from(handled))
+        chosen = data.draw(strategies.sampled_from(handled))
         self.met.add(f"met again: {chosen.consumer}")
         self.run(meet_again(chosen, self.now))
 
-    @rule(data=st.data())
-    def a_consumer_meets_its_fact_again(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def a_consumer_meets_its_fact_again(self, data: strategies.DataObject) -> None:
         """See payment_checks.meet_again."""
         handled = self.run(handled_locally(self.worker))
         if not handled:
             return
-        chosen = data.draw(st.sampled_from(handled))
+        chosen = data.draw(strategies.sampled_from(handled))
         self.met.add(f"met again: {chosen.consumer}")
         self.run(meet_again(chosen, self.now))
 
@@ -307,7 +332,7 @@ class SettlementFlow(RuleBasedStateMachine):
         )
         assert response.status_code == 200
 
-    @rule(seconds=st.integers(min_value=0, max_value=600))
+    @rule(seconds=strategies.integers(min_value=0, max_value=600))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -316,12 +341,16 @@ class SettlementFlow(RuleBasedStateMachine):
         """The account's next look for settlement comes due."""
         self.now += self.settlement_interval
 
-    @rule(faults=st.lists(st.sampled_from(CUT_FAULTS), max_size=2, unique=True))
+    @rule(
+        faults=strategies.lists(
+            strategies.sampled_from(CUT_FAULTS), max_size=2, unique=True
+        )
+    )
     def the_psp_cuts_a_settlement(self, faults: list[CutFault]) -> None:
         self.run(self._cut(faults))
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
-    @rule(fault=st.sampled_from(READ_FAULTS))
+    @rule(fault=strategies.sampled_from(READ_FAULTS))
     def a_settlement_read_fails(self, fault: str) -> None:
         response = self.run(
             self.control.post(
@@ -352,14 +381,14 @@ class SettlementFlow(RuleBasedStateMachine):
     # --- helpers ---------------------------------------------------------
 
     def _draw(
-        self, data: st.DataObject, kind: type[Local] | type[Effect] | None
+        self, data: strategies.DataObject, kind: type[Local] | type[Effect] | None
     ) -> Candidate | None:
         found = self.run(find_candidates(self.worker, self.now, 50))
         if kind is not None:
             found = [c for c in found if isinstance(consumer_kind(c.consumer), kind)]
         if not found:
             return None
-        return data.draw(st.sampled_from(found))
+        return data.draw(strategies.sampled_from(found))
 
     async def _books_catch_up(self) -> None:
         """Our side of the payment, through to its order and invoice: what
@@ -448,13 +477,13 @@ class SettlementFlow(RuleBasedStateMachine):
 
     async def _arrival_orders(self) -> set[str]:
         seen: set[str] = set()
-        cur = await self.worker.execute(
+        cur = await self.worker.cursor(row_factory=class_row(_ArrivalOrders)).execute(
             """
             SELECT
               EXISTS (SELECT 1 FROM settlement_line l WHERE NOT EXISTS (
                 SELECT 1 FROM settlement_payout p
                 WHERE p.account_id = l.account_id
-                  AND p.vendor_payout_id = l.vendor_payout_id)),
+                  AND p.vendor_payout_id = l.vendor_payout_id)) AS line_first,
               -- Pages come newest first: an older line stored first came on
               -- a later page decoded before an earlier one.
               EXISTS (SELECT 1
@@ -468,7 +497,7 @@ class SettlementFlow(RuleBasedStateMachine):
                   ON fn.id = newer.vendor_line_id
                 JOIN psp_account a ON a.id = older.account_id
                 WHERE a.settlement_mode = 'api'
-                  AND fo.seq < fn.seq AND older.id < newer.id),
+                  AND fo.seq < fn.seq AND older.id < newer.id) AS older_page_first,
               EXISTS (SELECT 1 FROM settlement_payout p
                 JOIN fake_vendor.psp_fake_settlement_batch f
                   ON f.id = p.vendor_payout_id
@@ -477,39 +506,46 @@ class SettlementFlow(RuleBasedStateMachine):
                        WHERE l.account_id = p.account_id
                          AND l.vendor_payout_id = p.vendor_payout_id)
                     < (SELECT count(*) FROM fake_vendor.psp_fake_settlement_line fl
-                       WHERE fl.batch_id = f.id))
+                       WHERE fl.batch_id = f.id)) AS open_while_arriving
             """
         )
-        row = await cur.fetchone()
-        assert row is not None
-        line_first, older_page_first, open_while_arriving = row
-        if line_first:
+        orders = await cur.fetchone()
+        assert orders is not None
+        if orders.line_first:
             seen.add("a line stored before its payout")
-        if older_page_first:
+        if orders.older_page_first:
             seen.add("an older page stored before a newer one")
-        if open_while_arriving:
+        if orders.open_while_arriving:
             seen.add("a payout open while its lines arrive")
         return seen
 
     async def _reached(self) -> set[str]:
         reached = set(self.met & set(MILESTONES))
-        cur = await self.worker.execute(
+        cur = await self.worker.cursor(row_factory=class_row(_Reached)).execute(
             """
             SELECT
-              (SELECT count(*) FROM settlement_line WHERE state = 'booked'),
-              EXISTS (SELECT 1 FROM settlement_payout WHERE booked_at IS NOT NULL),
+              (SELECT count(*) FROM settlement_line WHERE state = 'booked')
+                AS booked_lines,
+              EXISTS (SELECT 1 FROM settlement_payout WHERE booked_at IS NOT NULL)
+                AS payout_booked,
               EXISTS (SELECT 1 FROM settlement_payout
-                      WHERE reconciliation = 'balanced'),
+                      WHERE reconciliation = 'balanced') AS balanced,
               EXISTS (SELECT 1 FROM settlement_payout p
                       JOIN fake_vendor.psp_fake_settlement_batch f
                         ON f.id = p.vendor_payout_id
-                      WHERE p.reconciliation = 'open' AND f.fault = 'net_differs'),
+                      WHERE p.reconciliation = 'open' AND f.fault = 'net_differs')
+                AS net_off,
               EXISTS (SELECT 1 FROM settlement_line WHERE state = 'counted')
+                AS counted
             """
         )
-        row = await cur.fetchone()
-        assert row is not None
-        booked_lines, payout_booked, balanced, net_off, counted = row
+        found = await cur.fetchone()
+        assert found is not None
+        booked_lines = found.booked_lines
+        payout_booked = found.payout_booked
+        balanced = found.balanced
+        net_off = found.net_off
+        counted = found.counted
         if booked_lines >= 1:
             reached.add("a settled line booked")
         if booked_lines >= 2:

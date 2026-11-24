@@ -1,0 +1,43 @@
+id: no-local-named-after-import
+language: python
+severity: error
+message: >-
+  No local or parameter named after a name this module imports (AGENTS.md, decided 24-Nov-2026): one name meaning two things is confusing.
+files:
+  - src/**/*.py
+  - tests/**/*.py
+utils:
+  local-name:
+    any:
+      - inside: {kind: assignment, field: left}
+      - inside: {kind: pattern_list, inside: {kind: assignment, field: left}}
+      - inside: {kind: for_statement, field: left}
+      - inside: {kind: pattern_list, inside: {kind: for_statement, field: left}}
+      - inside: {kind: parameters}
+      - all:
+          - inside: {kind: typed_parameter}
+          - not: {inside: {kind: type, stopBy: end}}
+      - inside: {kind: default_parameter, field: name}
+      - inside: {kind: typed_default_parameter, field: name}
+rule:
+  kind: identifier
+  matches: local-name
+  # A record's field is no local: it is read through the record.
+  not:
+    inside:
+      kind: class_definition
+      stopBy: {kind: function_definition}
+  pattern: $N
+  inside:
+    kind: module
+    stopBy: end
+    has:
+      any:
+        - kind: import_from_statement
+        - kind: import_statement
+      has:
+        kind: dotted_name
+        pattern: $N
+        stopBy: end
+        # `from enum import StrEnum` binds StrEnum, not enum.
+        not: {inside: {kind: import_from_statement, field: module_name}}

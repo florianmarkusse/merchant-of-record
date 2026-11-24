@@ -247,6 +247,6 @@ async def authenticate(
     matches = hmac.compare_digest(_sha256(secret), row.secret_sha256)
     if not matches or row.env != env or row.state != KeyState.ACTIVE:
         return None
-    merchant = await read_merchant(conn, row.merchant_id)
-    assert merchant is not None, "a key's merchant exists: a foreign key says so"
-    return Authenticated(key_id, merchant)
+    seller = await read_merchant(conn, row.merchant_id)
+    assert seller is not None, "a key's merchant exists: a foreign key says so"
+    return Authenticated(key_id, seller)

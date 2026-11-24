@@ -573,13 +573,13 @@ class MerchantOut(msgspec.Struct, frozen=True, kw_only=True):
     support_email: str | None
 
 
-def merchant_out(merchant: Merchant) -> bytes:
+def merchant_out(seller: Merchant) -> bytes:
     return msgspec.json.encode(
         MerchantOut(
-            id=public_id(MERCHANT_PREFIX, merchant.id),
+            id=public_id(MERCHANT_PREFIX, seller.id),
             object="merchant",
-            display_name=merchant.display_name,
-            kyb_state=merchant.kyb_state,
-            support_email=merchant.support_email,
+            display_name=seller.display_name,
+            kyb_state=seller.kyb_state,
+            support_email=seller.support_email,
         )
     )

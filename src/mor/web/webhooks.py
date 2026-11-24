@@ -11,13 +11,13 @@ from datetime import datetime
 from starlette.requests import Request
 from starlette.responses import Response
 
+import mor.payments.inbound
+import mor.psp.registry
 from mor.db.connect import connect
 from mor.echo import registry
 from mor.echo.fake_client import SIGNATURE_HEADER
 from mor.echo.inbound import inbound_account, store_inbox
 from mor.echo.port import EventMode
-from mor.payments.inbound import store_inbox as store_psp_inbox
-from mor.psp import registry as psp_registry
 from mor.psp.accounts import read_psp_account
 from mor.psp.port import InboundMode, StatusMode
 
@@ -57,10 +57,10 @@ async def psp_webhook(request: Request, database_url: str, now: datetime) -> Res
         account = await read_psp_account(conn, account_id)
         if account is None or account.status_mode == StatusMode.POLL:
             return Response(status_code=404)
-        signature = request.headers.get(psp_registry.signature_header(account))
-        if not psp_registry.verify_webhook(account, body, signature):
+        signature = request.headers.get(mor.psp.registry.signature_header(account))
+        if not mor.psp.registry.verify_webhook(account, body, signature):
             return Response(status_code=401)
-        await store_psp_inbox(
+        await mor.payments.inbound.store_inbox(
             conn, account_id, InboundMode(account.status_mode.value), body, None, now
         )
         await conn.commit()

@@ -33,8 +33,7 @@ from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.payments.attempts import Attempt, attempt_of_account, move
-from mor.payments.transitions import Stale as StaleEvent
-from mor.payments.transitions import after_event
+from mor.payments.transitions import StaleEvent, after_event
 from mor.psp import registry
 from mor.psp.accounts import read_psp_account
 from mor.psp.port import (

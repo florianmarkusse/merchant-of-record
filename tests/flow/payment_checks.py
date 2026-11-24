@@ -30,24 +30,43 @@ from tests.helpers import ENV, TEST_URL, crash, local_consumer
 # --- after every action -------------------------------------------------------
 
 
+@dataclass(frozen=True, kw_only=True)
+class _SessionCounts:
+    id: uuid.UUID
+    state: str
+    open_count: int
+    person: int
+    orders: int
+    ending: int
+
+
 async def check_sessions_match_their_attempts(conn: Connection) -> None:
-    cur = await conn.execute(
-        """
-        SELECT s.id, s.state::text,
-          (SELECT count(*) FROM payment_attempt a WHERE a.session_id = s.id
-             AND a.state IN ('requested', 'action_required', 'authorised',
-                             'cancelling')),
-          (SELECT count(*) FROM payment_attempt a WHERE a.session_id = s.id
-             AND a.state = 'needs_person'),
-          (SELECT count(*) FROM order_ o WHERE o.session_id = s.id),
-          (SELECT count(*) FROM outbox_delivery d
-            JOIN payment_attempt a ON a.id = d.aggregate_id
-            WHERE a.session_id = s.id AND d.handled_at IS NULL
-              AND d.consumer IN ('session_payment_ended', 'order_create'))
-        FROM checkout_session s
-        """
-    )
-    for session_id, state, open_count, person, orders, ending in await cur.fetchall():
+    async with conn.cursor(row_factory=class_row(_SessionCounts)) as cur:
+        await cur.execute(
+            """
+            SELECT s.id, s.state::text AS state,
+              (SELECT count(*) FROM payment_attempt a WHERE a.session_id = s.id
+                 AND a.state IN ('requested', 'action_required', 'authorised',
+                                 'cancelling')) AS open_count,
+              (SELECT count(*) FROM payment_attempt a WHERE a.session_id = s.id
+                 AND a.state = 'needs_person') AS person,
+              (SELECT count(*) FROM order_ o WHERE o.session_id = s.id) AS orders,
+              (SELECT count(*) FROM outbox_delivery d
+                JOIN payment_attempt a ON a.id = d.aggregate_id
+                WHERE a.session_id = s.id AND d.handled_at IS NULL
+                  AND d.consumer IN ('session_payment_ended', 'order_create'))
+                AS ending
+            FROM checkout_session s
+            """
+        )
+        sessions = await cur.fetchall()
+    for counted in sessions:
+        session_id = counted.id
+        state = counted.state
+        open_count = counted.open_count
+        person = counted.person
+        orders = counted.orders
+        ending = counted.ending
         match state:
             case "paying":
                 # Or its attempt has ended and the session's own step, back
@@ -89,16 +108,31 @@ async def check_orders_are_booked(conn: Connection) -> None:
     assert booked == ordered
 
 
+@dataclass(frozen=True, kw_only=True)
+class _ChargeRow:
+    reference: str
+    state: str | None
+    charged: int
+    amount: int | None
+
+
 async def check_the_psp_charged_nothing_twice_or_unseen(conn: Connection) -> None:
-    cur = await conn.execute(
-        """
-        SELECT c.reference, a.state::text, c.amount_minor, a.amount_minor
-        FROM fake_vendor.psp_fake_charge c
-        LEFT JOIN payment_attempt a ON a.id::text = c.reference
-        """
-    )
+    async with conn.cursor(row_factory=class_row(_ChargeRow)) as cur:
+        await cur.execute(
+            """
+            SELECT c.reference, a.state::text AS state, c.amount_minor AS charged,
+                   a.amount_minor AS amount
+            FROM fake_vendor.psp_fake_charge c
+            LEFT JOIN payment_attempt a ON a.id::text = c.reference
+            """
+        )
+        charges = await cur.fetchall()
     references: set[str] = set()
-    for reference, state, charged, amount in await cur.fetchall():
+    for charge in charges:
+        reference = charge.reference
+        state = charge.state
+        charged = charge.charged
+        amount = charge.amount
         assert reference not in references, f"{reference} charged twice"
         references.add(reference)
         assert state is not None, f"a charge for no attempt: {reference}"
@@ -125,20 +159,30 @@ async def check_one_psp_payment_per_attempt(conn: Connection) -> None:
     assert await cur.fetchall() == []
 
 
+@dataclass(frozen=True)
+class _SeriesRow:
+    code: str
+    next_number: int
+    numbers: list[int]
+
+
 async def check_invoice_numbers(conn: Connection) -> None:
     """Per series 1…n, no gap and no repeat, and the counter one past the
     last; each invoice for exactly what its payment captured."""
-    cur = await conn.execute(
-        """
-        SELECT s.code, s.next_number,
-          coalesce((SELECT array_agg(i.number ORDER BY i.number)
-                    FROM invoice i WHERE i.series = s.code), '{}')
-        FROM invoice_series s
-        """
-    )
-    for code, next_number, numbers in await cur.fetchall():
-        assert numbers == list(range(1, len(numbers) + 1)), (code, numbers)
-        assert next_number == len(numbers) + 1, (code, next_number)
+    async with conn.cursor(row_factory=class_row(_SeriesRow)) as series_cur:
+        await series_cur.execute(
+            """
+            SELECT s.code, s.next_number,
+              coalesce((SELECT array_agg(i.number ORDER BY i.number)
+                        FROM invoice i WHERE i.series = s.code), '{}') AS numbers
+            FROM invoice_series s
+            """
+        )
+        all_series = await series_cur.fetchall()
+    for series in all_series:
+        numbers = series.numbers
+        assert numbers == list(range(1, len(numbers) + 1)), (series.code, numbers)
+        assert series.next_number == len(numbers) + 1, series
     cur = await conn.execute(
         """
         SELECT i.number_text FROM invoice i
@@ -268,6 +312,16 @@ EXCEPTION_OF_FAULT = {
 }
 
 
+@dataclass(frozen=True, kw_only=True)
+class _SettledLineRow:
+    id: str
+    fault: str | None
+    type: str
+    state: str | None
+    kind: str | None
+    attempt_state: str | None
+
+
 async def check_settlement_drained(conn: Connection) -> None:
     """Everything the fake settled is in our books, each line once and as
     its fault says (docs/plan-payments.md §7.1): a clean line booked, a
@@ -278,16 +332,25 @@ async def check_settlement_drained(conn: Connection) -> None:
     holds what the orders put in, less the fees booked and the nets the
     fake paid out, plus the rounding booked (in SGD, where the fake's
     units are ours)."""
-    cur = await conn.execute(
-        """
-        SELECT f.id, f.fault, f.type, l.state::text, x.kind::text, a.state::text
-        FROM fake_vendor.psp_fake_settlement_line f
-        LEFT JOIN settlement_line l ON l.vendor_line_id = f.id
-        LEFT JOIN settlement_exception x ON x.line_id = l.id
-        LEFT JOIN payment_attempt a ON a.id::text = f.reference
-        """
-    )
-    for line_id, fault, line_type, state, kind, attempt_state in await cur.fetchall():
+    async with conn.cursor(row_factory=class_row(_SettledLineRow)) as lines_cur:
+        await lines_cur.execute(
+            """
+            SELECT f.id, f.fault, f.type, l.state::text AS state,
+                   x.kind::text AS kind, a.state::text AS attempt_state
+            FROM fake_vendor.psp_fake_settlement_line f
+            LEFT JOIN settlement_line l ON l.vendor_line_id = f.id
+            LEFT JOIN settlement_exception x ON x.line_id = l.id
+            LEFT JOIN payment_attempt a ON a.id::text = f.reference
+            """
+        )
+        settled_lines = await lines_cur.fetchall()
+    for settled in settled_lines:
+        line_id = settled.id
+        fault = settled.fault
+        line_type = settled.type
+        state = settled.state
+        kind = settled.kind
+        attempt_state = settled.attempt_state
         assert state is not None, f"settled line {line_id} never stored"
         if attempt_state == "needs_person":
             assert (state, kind) == ("exception", "not_captured"), line_id

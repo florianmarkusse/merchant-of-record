@@ -68,7 +68,7 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
         sessions: list[uuid.UUID] = []
         async with await connect(database_url) as conn:
             await load_market(conn, live_market(), "test", ACTOR, NOW)
-            merchant = await create_merchant(
+            seller = await create_merchant(
                 conn, "Test Shop Co.", "Test Shop", "VN", 100, ACTOR, NOW
             )
             await create_courier_account(
@@ -97,7 +97,7 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
             for _ in range(2):
                 session = await create_session(
                     conn,
-                    merchant.id,
+                    seller.id,
                     SessionDraft(
                         lines=(line,),
                         parcel=PARCEL,

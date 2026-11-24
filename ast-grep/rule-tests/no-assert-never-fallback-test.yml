@@ -1,0 +1,15 @@
+id: no-assert-never-fallback
+valid:
+  - |
+    match state:
+        case State.OPEN:
+            pass
+        case _:
+            raise WrongFact(state)
+invalid:
+  - |
+    match state:
+        case State.OPEN:
+            pass
+        case _:
+            assert_never(state)

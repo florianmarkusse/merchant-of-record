@@ -1,0 +1,30 @@
+id: no-domain-name-local
+language: python
+severity: error
+message: >-
+  No local or parameter named payment, merchant, invoice or ledger (AGENTS.md, decided 24-Nov-2026): name the value by its role (seller, paid_invoice), not with a _row or _record suffix.
+files:
+  - src/**/*.py
+  - tests/**/*.py
+utils:
+  local-name:
+    any:
+      - inside: {kind: assignment, field: left}
+      - inside: {kind: pattern_list, inside: {kind: assignment, field: left}}
+      - inside: {kind: for_statement, field: left}
+      - inside: {kind: pattern_list, inside: {kind: for_statement, field: left}}
+      - inside: {kind: parameters}
+      - all:
+          - inside: {kind: typed_parameter}
+          - not: {inside: {kind: type, stopBy: end}}
+      - inside: {kind: default_parameter, field: name}
+      - inside: {kind: typed_default_parameter, field: name}
+rule:
+  kind: identifier
+  matches: local-name
+  # A record's field is no local: it is read through the record.
+  not:
+    inside:
+      kind: class_definition
+      stopBy: {kind: function_definition}
+  regex: ^(payment|merchant|invoice|ledger)$

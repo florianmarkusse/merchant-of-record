@@ -1,0 +1,10 @@
+id: strftime-only-in-dates
+language: python
+severity: error
+message: Format dates with mor.dates, the one helper per audience; no inline strftime.
+files:
+  - src/**/*.py
+ignores:
+  - src/mor/dates.py
+rule:
+  pattern: $X.strftime($$$)

@@ -24,14 +24,16 @@ SECTION_HEADINGS: dict[InvoiceSection, str | None] = {
 }
 
 
-def _row(invoice: Invoice, line: InvoiceLine) -> htpy.Node:
+def _row(tax_invoice: Invoice, line: InvoiceLine) -> htpy.Node:
     description: list[htpy.Node] = [line.description]
     if line.rule_text is not None:
         description.append(htpy.span(class_="rule")[line.rule_text])
     return htpy.tr[
         htpy.td[description],
         htpy.td(class_="num")["" if line.quantity is None else str(line.quantity)],
-        htpy.td(class_="num")[money_text(Money(line.amount_minor, invoice.currency))],
+        htpy.td(class_="num")[
+            money_text(Money(line.amount_minor, tax_invoice.currency))
+        ],
     ]
 
 
@@ -43,40 +45,44 @@ def _address(lines: list[str | None]) -> htpy.Node:
     return htpy.address[shown]
 
 
-def invoice_body(invoice: Invoice) -> htpy.Node:
+def invoice_body(tax_invoice: Invoice) -> htpy.Node:
     rows: list[htpy.Node] = []
     for section in InvoiceSection:
         heading = SECTION_HEADINGS[section]
         in_section: list[htpy.Node] = []
-        for line in invoice.lines:
+        for line in tax_invoice.lines:
             if line.section == section:
-                in_section.append(_row(invoice, line))
+                in_section.append(_row(tax_invoice, line))
         if not in_section:
             continue
         if heading is not None:
             rows.append(htpy.tr(class_="section")[htpy.th(colspan="3")[heading]])
         rows.extend(in_section)
     registration: htpy.Node = None
-    if invoice.seller_tax_label is not None:
-        registration = htpy.p[f"{invoice.seller_tax_label}: {invoice.seller_tax_id}"]
-    buyer = invoice.buyer
+    if tax_invoice.seller_tax_label is not None:
+        registration = htpy.p[
+            f"{tax_invoice.seller_tax_label}: {tax_invoice.seller_tax_id}"
+        ]
+    buyer = tax_invoice.buyer
     return htpy.article(class_="invoice")[
-        htpy.h1["Invoice ", invoice.number_text],
+        htpy.h1["Invoice ", tax_invoice.number_text],
         htpy.dl(class_="facts")[
             htpy.dt["Invoice number"],
-            htpy.dd[invoice.number_text],
+            htpy.dd[tax_invoice.number_text],
             htpy.dt["Date of issue"],
-            htpy.dd[format_day(invoice.issued_at.date())],
+            htpy.dd[format_day(tax_invoice.issued_at.date())],
             htpy.dt["Paid"],
-            htpy.dd[format_day(invoice.paid_at.date())],
+            htpy.dd[format_day(tax_invoice.paid_at.date())],
         ],
         htpy.section(class_="parties")[
             htpy.div[
                 htpy.h2["Seller"],
-                _address([invoice.seller_name, invoice.seller_address]),
+                _address([tax_invoice.seller_name, tax_invoice.seller_address]),
                 registration,
                 # "Co., Ltd." ends the sentence itself.
-                htpy.p[f"Sold on behalf of {invoice.merchant_legal_name.rstrip('.')}."],
+                htpy.p[
+                    f"Sold on behalf of {tax_invoice.merchant_legal_name.rstrip('.')}."
+                ],
             ],
             htpy.div[
                 htpy.h2["Buyer"],
@@ -98,7 +104,7 @@ def invoice_body(invoice: Invoice) -> htpy.Node:
                 htpy.tr[
                     htpy.th["Description"],
                     htpy.th(class_="num")["Qty"],
-                    htpy.th(class_="num")[f"Amount ({invoice.currency.value})"],
+                    htpy.th(class_="num")[f"Amount ({tax_invoice.currency.value})"],
                 ]
             ],
             htpy.tbody[rows],
@@ -106,7 +112,7 @@ def invoice_body(invoice: Invoice) -> htpy.Node:
                 htpy.tr(class_="total")[
                     htpy.th(colspan="2")["Total paid"],
                     htpy.td(class_="num")[
-                        money_text(Money(invoice.total_minor, invoice.currency))
+                        money_text(Money(tax_invoice.total_minor, tax_invoice.currency))
                     ],
                 ]
             ],
@@ -117,7 +123,7 @@ def invoice_body(invoice: Invoice) -> htpy.Node:
     ]
 
 
-def invoice_document(invoice: Invoice, for_pdf: bool) -> str:
+def invoice_document(tax_invoice: Invoice, for_pdf: bool) -> str:
     """The whole document. The page links the stylesheet; the PDF is given
     it by WeasyPrint, which may fetch nothing."""
     stylesheet: htpy.Node = None
@@ -129,9 +135,9 @@ def invoice_document(invoice: Invoice, for_pdf: bool) -> str:
             htpy.meta(name="viewport", content="width=device-width, initial-scale=1"),
             htpy.meta(name="robots", content="noindex"),
             htpy.link(rel="icon", href="data:,"),
-            htpy.title[f"Invoice {invoice.number_text}"],
+            htpy.title[f"Invoice {tax_invoice.number_text}"],
             stylesheet,
         ],
-        htpy.body[invoice_body(invoice)],
+        htpy.body[invoice_body(tax_invoice)],
     ]
     return str(page)

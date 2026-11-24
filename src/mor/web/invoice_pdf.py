@@ -14,8 +14,8 @@ from mor.invoices.records import Invoice
 from mor.web.invoice_html import INVOICE_CSS, invoice_document
 
 
-def invoice_pdf(invoice: Invoice) -> bytes:
+def invoice_pdf(tax_invoice: Invoice) -> bytes:
     fetcher = URLFetcher(allowed_protocols=())
     stylesheet = CSS(string=INVOICE_CSS.read_text(), url_fetcher=fetcher)
-    document = HTML(string=invoice_document(invoice, True), url_fetcher=fetcher)
+    document = HTML(string=invoice_document(tax_invoice, True), url_fetcher=fetcher)
     return document.write_pdf(stylesheets=[stylesheet])

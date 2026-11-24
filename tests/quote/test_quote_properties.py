@@ -18,8 +18,7 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from fractions import Fraction
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies
 
 from mor.couriers.records import (
     FinishedLookup,
@@ -101,17 +100,17 @@ def _lookups(destinations: tuple[str, ...]) -> dict[RateQuestion, VendorLookup]:
 RESEARCH_PLACES = ("SG", "TH")
 RESEARCH_LOOKUPS = _lookups(RESEARCH_PLACES)
 
-lines = st.lists(
-    st.builds(
+lines = strategies.lists(
+    strategies.builds(
         QuoteLine,
-        category=st.just("apparel"),
-        hs_code=st.sampled_from(HS_CODES),
-        origin=st.just("VN"),
-        quantity=st.integers(min_value=1, max_value=20),
-        unit_price=st.builds(
+        category=strategies.just("apparel"),
+        hs_code=strategies.sampled_from(HS_CODES),
+        origin=strategies.just("VN"),
+        quantity=strategies.integers(min_value=1, max_value=20),
+        unit_price=strategies.builds(
             Money,
-            amount_minor=st.integers(min_value=0, max_value=50_000_000),
-            currency=st.sampled_from(PRICED_IN),
+            amount_minor=strategies.integers(min_value=0, max_value=50_000_000),
+            currency=strategies.sampled_from(PRICED_IN),
         ),
     ),
     min_size=1,
@@ -119,18 +118,18 @@ lines = st.lists(
 )
 # Mostly parcels the cards price (up to 2 kg in the synthetic set, 30 kg
 # in the research cards), now and then one no card takes.
-parcels = st.builds(
+parcels = strategies.builds(
     Parcel,
-    weight_g=st.one_of(
-        st.integers(min_value=1, max_value=2_000),
-        st.integers(min_value=1, max_value=40_000),
+    weight_g=strategies.one_of(
+        strategies.integers(min_value=1, max_value=2_000),
+        strategies.integers(min_value=1, max_value=40_000),
     ),
-    length_mm=st.integers(min_value=10, max_value=400),
-    width_mm=st.integers(min_value=10, max_value=300),
-    height_mm=st.integers(min_value=5, max_value=200),
+    length_mm=strategies.integers(min_value=10, max_value=400),
+    width_mm=strategies.integers(min_value=10, max_value=300),
+    height_mm=strategies.integers(min_value=5, max_value=200),
 )
 # From the research fee rules' start; the synthetic cards start 01-Jan-2026.
-days = st.dates(min_value=date(2026, 11, 1), max_value=date(2027, 6, 30))
+days = strategies.dates(min_value=date(2026, 11, 1), max_value=date(2027, 6, 30))
 days_start = date(2026, 11, 18)
 
 
@@ -172,7 +171,7 @@ def _check(market: MarketSet, request: QuoteRequest, quote: Quote) -> None:
 
 
 @given(
-    destination=st.sampled_from(("SG", "SG", "TH", "TH", "DE")),
+    destination=strategies.sampled_from(("SG", "SG", "TH", "TH", "DE")),
     order=lines,
     parcel=parcels,
     on=days,
@@ -189,7 +188,7 @@ def test_any_order_on_the_synthetic_set_quotes_consistently_or_is_refused(
 
 
 @given(
-    destination=st.sampled_from(RESEARCH_PLACES),
+    destination=strategies.sampled_from(RESEARCH_PLACES),
     order=lines,
     parcel=parcels,
     on=days,
@@ -205,12 +204,12 @@ def test_any_order_on_the_research_files_quotes_consistently_or_is_refused(
         _check(RESEARCH, request, result)
 
 
-carrier_parts = st.lists(
-    st.builds(
+carrier_parts = strategies.lists(
+    strategies.builds(
         PricePart,
-        kind=st.sampled_from(PricePartKind),
-        name=st.sampled_from(("freight", "fuel", "peak")),
-        amount_minor=st.integers(min_value=0, max_value=5_000_000),
+        kind=strategies.sampled_from(PricePartKind),
+        name=strategies.sampled_from(("freight", "fuel", "peak")),
+        amount_minor=strategies.integers(min_value=0, max_value=5_000_000),
     ),
     min_size=1,
     max_size=4,
@@ -218,11 +217,11 @@ carrier_parts = st.lists(
 
 
 @given(
-    destination=st.sampled_from(("SG", "TH")),
+    destination=strategies.sampled_from(("SG", "TH")),
     order=lines,
     parcel=parcels,
     parts=carrier_parts,
-    currency=st.sampled_from((Currency.SGD, Currency.VND, Currency.USD)),
+    currency=strategies.sampled_from((Currency.SGD, Currency.VND, Currency.USD)),
 )
 def test_any_carrier_price_quotes_consistently_with_each_part_charged(
     destination: str,

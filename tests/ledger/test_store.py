@@ -36,7 +36,7 @@ def _sgd(amount_minor: int) -> Money:
     return Money(amount_minor, Currency.SGD)
 
 
-def _capture(key: str, merchant: Account = MERCHANT_1) -> JournalEntry:
+def _capture(key: str, merchant_account: Account = MERCHANT_1) -> JournalEntry:
     """A synthetic SGD capture shaped like plan-architecture.md §9: goods
     SGD 100.00 to the merchant, fee and margin on top, shipping, 9% GST."""
     return build_entry(
@@ -46,7 +46,7 @@ def _capture(key: str, merchant: Account = MERCHANT_1) -> JournalEntry:
         actor=SYSTEM,
         lines=[
             debit(CLEARING, _sgd(13_386)),
-            credit(merchant, _sgd(10_000)),
+            credit(merchant_account, _sgd(10_000)),
             credit(PSP_FEE, _sgd(340)),
             credit(MARGIN, _sgd(500)),
             credit(SHIPPING, _sgd(1_440)),

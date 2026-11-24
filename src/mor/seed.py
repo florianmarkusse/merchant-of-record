@@ -446,10 +446,10 @@ async def seed_merchant(
     legal_name, display_name = SANDBOX_MERCHANT
     merchant_id: uuid.UUID | None = None
     approved = False
-    for merchant in await merchants(conn):
-        if merchant.legal_name == legal_name:
-            merchant_id = merchant.id
-            approved = merchant.kyb_state == KybState.APPROVED
+    for seller in await merchants(conn):
+        if seller.legal_name == legal_name:
+            merchant_id = seller.id
+            approved = seller.kyb_state == KybState.APPROVED
     if merchant_id is None:
         created = await create_merchant(
             conn,

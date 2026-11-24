@@ -1,0 +1,5 @@
+id: commit-only-in-callers
+valid:
+  - "async with conn.transaction(): pass"
+invalid:
+  - await conn.commit()

@@ -15,7 +15,7 @@ from typing import LiteralString
 import httpx2
 
 from mor.audit import Actor, ActorKind
-from mor.checkout import addresses as f
+from mor.checkout import addresses
 from mor.checkout.addresses import parse_address
 from mor.checkout.flow import submit_address
 from mor.checkout.quotes import MadeQuote, read_quote
@@ -51,13 +51,13 @@ ACTOR = Actor(ActorKind.SYSTEM, "test")
 PARCEL = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
 SECRET = "whsec-test"
 SG_ADDRESS = {
-    f.NAME: "Tan Mei Ling",
-    f.EMAIL: "mei@example.test",
-    f.PHONE: "9123 4567",
-    f.LINE1: "1 Example Road",
-    f.CITY: "Singapore",
-    f.POSTCODE: "123456",
-    f.COUNTRY: "SG",
+    addresses.NAME: "Tan Mei Ling",
+    addresses.EMAIL: "mei@example.test",
+    addresses.PHONE: "9123 4567",
+    addresses.LINE1: "1 Example Road",
+    addresses.CITY: "Singapore",
+    addresses.POSTCODE: "123456",
+    addresses.COUNTRY: "SG",
 }
 
 
@@ -97,10 +97,10 @@ async def make_shop(
     """The merchant, the market, and one PSP account routed by default."""
     async with await connect(url) as conn:
         await load_market(conn, quote_market(), "test", ACTOR, NOW)
-        merchant = await create_merchant(
+        seller = await create_merchant(
             conn, "Test Shop Co.", "Test Shop", "VN", 100, ACTOR, NOW
         )
-        await set_kyb_state(conn, merchant.id, KybState.APPROVED, ACTOR, NOW)
+        await set_kyb_state(conn, seller.id, KybState.APPROVED, ACTOR, NOW)
         account = await create_psp_account(
             conn,
             name,
@@ -134,7 +134,7 @@ async def make_shop(
         },
     )
     assert response.status_code == 204, response.text
-    return Shop(merchant.id, account)
+    return Shop(seller.id, account)
 
 
 async def quoted_session(

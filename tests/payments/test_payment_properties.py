@@ -8,8 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from fractions import Fraction
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies
 
 from mor.audit import Actor, ActorKind
 from mor.checkout.quotes import MadeQuote, QuoteInputs, StoredOption
@@ -22,7 +21,7 @@ from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode
 from mor.orders.posting import capture_entry
-from mor.payments.transitions import AttemptState, Stale, after_event
+from mor.payments.transitions import AttemptState, StaleEvent, after_event
 from mor.psp.fake_client import (
     decode_events,
     from_provider_amount,
@@ -61,7 +60,7 @@ def test_every_state_and_event_has_an_answer_that_only_moves_forward() -> None:
     for state in AttemptState:
         for kind in KINDS:
             answer = after_event(state, kind)
-            if isinstance(answer, Stale):
+            if isinstance(answer, StaleEvent):
                 continue
             assert answer not in NEVER_BY_EVENT, (state, kind)
             assert RANK[answer] > RANK[state], (state, kind, answer)
@@ -69,7 +68,7 @@ def test_every_state_and_event_has_an_answer_that_only_moves_forward() -> None:
 
 def test_a_capture_is_never_undone_by_a_later_event() -> None:
     for kind in KINDS:
-        assert isinstance(after_event(AttemptState.CAPTURED, kind), Stale)
+        assert isinstance(after_event(AttemptState.CAPTURED, kind), StaleEvent)
 
 
 def _part(
@@ -97,17 +96,19 @@ TAX_KINDS = (
 )
 
 
-@st.composite
-def _paid_quotes(draw: st.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
+@strategies.composite
+def _paid_quotes(draw: strategies.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
     """A quote option in SGD whose parts sum to its total, for lines priced
     in SGD or in other currencies."""
-    count = draw(st.integers(1, 4))
+    count = draw(strategies.integers(1, 4))
     lines: list[SoldLine] = []
     goods: list[Part] = []
     for number in range(count):
-        currency = draw(st.sampled_from((Currency.SGD, Currency.USD, Currency.VND)))
-        price = Money(draw(st.integers(0, 10**7)), currency)
-        quantity = draw(st.integers(1, 5))
+        currency = draw(
+            strategies.sampled_from((Currency.SGD, Currency.USD, Currency.VND))
+        )
+        price = Money(draw(strategies.integers(0, 10**7)), currency)
+        quantity = draw(strategies.integers(1, 5))
         lines.append(
             SoldLine(
                 name="Item",
@@ -120,19 +121,26 @@ def _paid_quotes(draw: st.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ...]]:
                 ),
             )
         )
-        goods.append(_part(PartKind.GOODS, draw(st.integers(0, 10**8)), number, None))
+        goods.append(
+            _part(PartKind.GOODS, draw(strategies.integers(0, 10**8)), number, None)
+        )
     for kind in (PartKind.PSP_FEE, PartKind.FX, PartKind.MOR_MARGIN):
-        goods.append(_part(kind, draw(st.integers(0, 10**6)), None, None))
+        goods.append(_part(kind, draw(strategies.integers(0, 10**6)), None, None))
     option_parts: list[Part] = []
     for kind in draw(
-        st.lists(
-            st.sampled_from(SHIPPING_KINDS + (PartKind.DUTY_PAID_FEE,)), max_size=4
+        strategies.lists(
+            strategies.sampled_from(SHIPPING_KINDS + (PartKind.DUTY_PAID_FEE,)),
+            max_size=4,
         )
     ):
-        option_parts.append(_part(kind, draw(st.integers(0, 10**6)), None, None))
-    for kind in draw(st.lists(st.sampled_from(TAX_KINDS), max_size=4)):
-        collector = draw(st.sampled_from((Collector.BORDER, Collector.SELLER)))
-        option_parts.append(_part(kind, draw(st.integers(0, 10**6)), None, collector))
+        option_parts.append(
+            _part(kind, draw(strategies.integers(0, 10**6)), None, None)
+        )
+    for kind in draw(strategies.lists(strategies.sampled_from(TAX_KINDS), max_size=4)):
+        collector = draw(strategies.sampled_from((Collector.BORDER, Collector.SELLER)))
+        option_parts.append(
+            _part(kind, draw(strategies.integers(0, 10**6)), None, collector)
+        )
     total = sum(part.amount.amount_minor for part in goods + option_parts)
     if total == 0:
         option_parts.append(_part(PartKind.FREIGHT, 1, None, None))
@@ -169,13 +177,13 @@ def test_the_capture_entry_balances_and_pays_the_merchant_exactly(
     paid: tuple[MadeQuote, tuple[SoldLine, ...]],
 ) -> None:
     quote, lines = paid
-    merchant = uuid.uuid7()
+    merchant_id = uuid.uuid7()
     entry = capture_entry(
         uuid.uuid7(),
         quote,
         0,
         lines,
-        merchant,
+        merchant_id,
         uuid.uuid7(),
         "SG",
         "carrier",
@@ -207,16 +215,16 @@ def test_invoice_lines_sum_to_the_total_and_its_goods_lines_to_the_items(
 ) -> None:
     quote, lines = paid
     option = quote.options[0]
-    invoice = invoice_lines(quote, 0, lines)
-    assert sum(line.amount_minor for line in invoice) == option.total_minor
-    goods = [line for line in invoice if line.section == InvoiceSection.GOODS]
+    billed = invoice_lines(quote, 0, lines)
+    assert sum(line.amount_minor for line in billed) == option.total_minor
+    goods = [line for line in billed if line.section == InvoiceSection.GOODS]
     assert len(goods) == len(lines)
     assert sum(line.amount_minor for line in goods) == sum(
         part.amount.amount_minor for part in quote.goods
     )
     for line in goods:
         assert line.amount_minor >= 0
-    shipping = [line for line in invoice if line.section == InvoiceSection.SHIPPING]
+    shipping = [line for line in billed if line.section == InvoiceSection.SHIPPING]
     assert len(shipping) == 1
     # Each duty and tax on its own line, in the section of who collects it.
     for collector, section in (
@@ -224,19 +232,19 @@ def test_invoice_lines_sum_to_the_total_and_its_goods_lines_to_the_items(
         (Collector.BORDER, InvoiceSection.BORDER),
     ):
         parts = [part for part in option.parts if part.collector == collector]
-        shown = [line for line in invoice if line.section == section]
+        shown = [line for line in billed if line.section == section]
         assert [line.amount_minor for line in shown] == [
             part.amount.amount_minor for part in parts
         ]
 
 
-@given(st.integers(0, 10**12), st.sampled_from(list(Currency)))
+@given(strategies.integers(0, 10**12), strategies.sampled_from(list(Currency)))
 def test_fake_psp_amounts_round_trip(amount: int, currency: Currency) -> None:
     money = Money(amount, currency)
     assert from_provider_amount(to_provider_amount(money), currency.value) == money
 
 
-@given(st.integers(0, 10**12).filter(lambda n: n % 100 != 0))
+@given(strategies.integers(0, 10**12).filter(lambda n: n % 100 != 0))
 def test_a_fraction_of_a_rupiah_is_refused_not_rounded(amount: int) -> None:
     assert isinstance(from_provider_amount(amount, "IDR"), UndecodableBody)
 

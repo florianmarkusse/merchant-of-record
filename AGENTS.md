@@ -116,7 +116,11 @@ this project.
   in `vulture_whitelist.py`) and `npx tsc`; pyright in strict mode. Ruff
   also bans APIs we do not use (`TID251` in `pyproject.toml`, each with
   its reason). The formatter decides every layout: no `fmt: skip` or
-  `fmt: off` (`tests/test_no_format_skips.py`).
+  `fmt: off` (`tests/test_no_format_skips.py`). What ruff cannot say is
+  an ast-grep rule (`sgconfig.yml`, `ast-grep/rules/`, each with examples
+  in `ast-grep/rule-tests/`), run by `tests/test_ast_grep_rules.py`;
+  ast-grep is a dev dependency, so `uv run ast-grep scan` shows a rule's
+  cases.
   `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
   the invoice PDF; it also needs Pango from the system). `scripts/` holds
   PEP 723 scripts with their own dependencies (`uv run scripts/markets.py

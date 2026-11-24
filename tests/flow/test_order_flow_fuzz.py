@@ -25,8 +25,7 @@ from collections import Counter
 from collections.abc import Coroutine
 from datetime import timedelta
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     initialize,
@@ -122,10 +121,12 @@ class OrderFlow(RuleBasedStateMachine):
     # --- the deep start --------------------------------------------------
 
     @initialize(
-        status_mode=st.sampled_from(list(StatusMode)),
-        capture_mode=st.sampled_from(list(CaptureMode)),
-        guard=st.sampled_from((DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)),
-        count=st.integers(1, 3),
+        status_mode=strategies.sampled_from(list(StatusMode)),
+        capture_mode=strategies.sampled_from(list(CaptureMode)),
+        guard=strategies.sampled_from(
+            (DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)
+        ),
+        count=strategies.integers(1, 3),
     )
     def approved_payments(
         self,
@@ -179,8 +180,8 @@ class OrderFlow(RuleBasedStateMachine):
 
     # --- actions ---------------------------------------------------------
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidate = self._draw(data, None)
         if candidate is None:
             return
@@ -191,17 +192,17 @@ class OrderFlow(RuleBasedStateMachine):
     def the_worker_catches_up(self) -> None:
         self.run(catch_up(self.worker, self.http, self.now))
 
-    @rule(data=st.data())
-    def crash_inside_a_local_step(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def crash_inside_a_local_step(self, data: strategies.DataObject) -> None:
         candidate = self._draw(data, Local)
         if candidate is None:
             return
         self.met.add(f"crash in {candidate.consumer.value}")
         self.run(crash_in_a_local_step(candidate, self.now))
 
-    @rule(data=st.data(), with_call=st.booleans())
+    @rule(data=strategies.data(), with_call=strategies.booleans())
     def crash_around_an_effects_call(
-        self, data: st.DataObject, with_call: bool
+        self, data: strategies.DataObject, with_call: bool
     ) -> None:
         candidate = self._draw(data, Effect)
         if candidate is None:
@@ -213,23 +214,25 @@ class OrderFlow(RuleBasedStateMachine):
         )
 
     @precondition(lambda self: self.run(self._captures_due()) != [])
-    @rule(data=st.data(), with_call=st.booleans())
-    def crash_around_a_capture(self, data: st.DataObject, with_call: bool) -> None:
+    @rule(data=strategies.data(), with_call=strategies.booleans())
+    def crash_around_a_capture(
+        self, data: strategies.DataObject, with_call: bool
+    ) -> None:
         """Only drawn while a capture is due: its moment is short, and the
         lost capture is the case the duplicate guard exists for."""
-        candidate = data.draw(st.sampled_from(self.run(self._captures_due())))
+        candidate = data.draw(strategies.sampled_from(self.run(self._captures_due())))
         self.met.add("crash around a capture")
         self.run(
             crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
         )
 
-    @rule(data=st.data())
-    def a_consumer_meets_its_fact_again(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def a_consumer_meets_its_fact_again(self, data: strategies.DataObject) -> None:
         """See payment_checks.meet_again."""
         handled = self.run(handled_locally(self.worker))
         if not handled:
             return
-        chosen = data.draw(st.sampled_from(handled))
+        chosen = data.draw(strategies.sampled_from(handled))
         self.met.add(f"met again: {chosen.consumer}")
         self.run(meet_again(chosen, self.now))
 
@@ -244,7 +247,7 @@ class OrderFlow(RuleBasedStateMachine):
         )
         assert response.status_code == 200
 
-    @rule(seconds=st.integers(min_value=0, max_value=600))
+    @rule(seconds=strategies.integers(min_value=0, max_value=600))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -263,14 +266,14 @@ class OrderFlow(RuleBasedStateMachine):
     # --- helpers ---------------------------------------------------------
 
     def _draw(
-        self, data: st.DataObject, kind: type[Local] | type[Effect] | None
+        self, data: strategies.DataObject, kind: type[Local] | type[Effect] | None
     ) -> Candidate | None:
         found = self.run(find_candidates(self.worker, self.now, 50))
         if kind is not None:
             found = [c for c in found if isinstance(consumer_kind(c.consumer), kind)]
         if not found:
             return None
-        return data.draw(st.sampled_from(found))
+        return data.draw(strategies.sampled_from(found))
 
     async def _captures_due(self) -> list[Candidate]:
         found: list[Candidate] = []

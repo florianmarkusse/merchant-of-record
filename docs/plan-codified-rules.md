@@ -3,9 +3,17 @@
 Status: §2.2 and §2.3 built 24-Nov-2026 (ruff's `DTZ`, `A` and banned
 APIs in `pyproject.toml`; `kw_only` on all 179 records of 4 or more
 fields, checked by `tests/test_records_kw_only.py`). §2.1 built
-24-Nov-2026 (`tests/messaging/test_fact_schemas.py`). Next: §2.4, after
-the messaging refactor
-(`plan-architecture.md` §16). The open rules in §2.4 were decided
+24-Nov-2026 (`tests/messaging/test_fact_schemas.py`). §2.4 under way
+24-Nov-2026: built, with their cases fixed, `no-import-alias`,
+`no-domain-name-local`, `no-local-named-after-import`, `no-tuple-rows`
+(echo's files excluded as transitional), `strftime-only-in-dates`,
+`commit-only-in-callers`, `asynccontextmanager-returns-asyncgenerator`,
+`no-assert-never-fallback` (scoped to `src/` and `tests/`: `scripts/` is
+outside pyright, where the fallback is the only check). Open:
+`fetchone()` and an assert (35 cases, most in tests), reflection in
+`src/mor/markets/changes.py` (a decision: explicit field lists per
+record, or an exception), and the provider-by-name rule, whose one case
+is echo's (transitional). The rules in §2.4 were decided
 on 24-Nov-2026 (shadowing, import aliases, two-column rows), and
 `AGENTS.md` Code Style says them.
 

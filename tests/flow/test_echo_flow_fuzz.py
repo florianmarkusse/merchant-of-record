@@ -30,8 +30,7 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import LiteralString
 
-from hypothesis import settings
-from hypothesis import strategies as st
+from hypothesis import settings, strategies
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -135,7 +134,10 @@ class EchoFlow(RuleBasedStateMachine):
 
     # --- actions ---------------------------------------------------------
 
-    @rule(provider=st.sampled_from(EchoProvider), mode=st.sampled_from(MODES))
+    @rule(
+        provider=strategies.sampled_from(EchoProvider),
+        mode=strategies.sampled_from(MODES),
+    )
     def create_job(self, provider: EchoProvider, mode: EventMode) -> None:
         account_id = self.accounts[(provider, mode)]
 
@@ -154,17 +156,17 @@ class EchoFlow(RuleBasedStateMachine):
         self.manual[job_id] = set()
 
     @rule(
-        data=st.data(),
-        kind=st.sampled_from([None, EventKind.CONFIRMED, EventKind.ARCHIVED]),
-        push=st.sampled_from(["once", "twice", "bad_signature"]),
+        data=strategies.data(),
+        kind=strategies.sampled_from([None, EventKind.CONFIRMED, EventKind.ARCHIVED]),
+        push=strategies.sampled_from(["once", "twice", "bad_signature"]),
     )
     def vendor_releases_an_event(
-        self, data: st.DataObject, kind: EventKind | None, push: str
+        self, data: strategies.DataObject, kind: EventKind | None, push: str
     ) -> None:
         echoed = self.run(self._vendor_echo_ids())
         if not echoed:
             return
-        job_id = data.draw(st.sampled_from(sorted(echoed)))
+        job_id = data.draw(strategies.sampled_from(sorted(echoed)))
         body: dict[str, str] = {"push": push}
         if kind is not None:
             body["kind"] = kind.value
@@ -172,26 +174,28 @@ class EchoFlow(RuleBasedStateMachine):
         response = self.run(self.control.post(f"{url}/events/release", json=body))
         assert response.status_code in (200, 409), response.text
 
-    @rule(provider=st.sampled_from(EchoProvider))
+    @rule(provider=strategies.sampled_from(EchoProvider))
     def vendor_cuts_a_report(self, provider: EchoProvider) -> None:
         account_id = self.accounts[(provider, EventMode.FILE)]
         url = f"{self.base_urls[account_id]}/reports/cut"
         response = self.run(self.control.post(url))
         assert response.status_code == 200
 
-    @rule(data=st.data())
-    def vendor_redelivers_failed_webhooks(self, data: st.DataObject) -> None:
-        provider = data.draw(st.sampled_from(EchoProvider))
-        mode = data.draw(st.sampled_from(sorted(PUSHED)))
+    @rule(data=strategies.data())
+    def vendor_redelivers_failed_webhooks(self, data: strategies.DataObject) -> None:
+        provider = data.draw(strategies.sampled_from(EchoProvider))
+        mode = data.draw(strategies.sampled_from(sorted(PUSHED)))
         account_id = self.accounts[(provider, mode)]
         url = f"{self.base_urls[account_id]}/events/redeliver"
         response = self.run(self.control.post(url))
         assert response.status_code == 200
 
     @precondition(lambda self: len(self.jobs) > 0)
-    @rule(data=st.data(), kind=st.sampled_from(EventKind))
-    def a_person_records_an_event(self, data: st.DataObject, kind: EventKind) -> None:
-        job_id = data.draw(st.sampled_from(sorted(self.jobs)))
+    @rule(data=strategies.data(), kind=strategies.sampled_from(EventKind))
+    def a_person_records_an_event(
+        self, data: strategies.DataObject, kind: EventKind
+    ) -> None:
+        job_id = data.draw(strategies.sampled_from(sorted(self.jobs)))
 
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
@@ -204,8 +208,8 @@ class EchoFlow(RuleBasedStateMachine):
         self.run(step())
         self.manual[job_id].add(kind)
 
-    @rule(data=st.data())
-    def run_a_delivery(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def run_a_delivery(self, data: strategies.DataObject) -> None:
         candidate = self._draw_candidate(data)
         if candidate is None:
             return
@@ -220,8 +224,10 @@ class EchoFlow(RuleBasedStateMachine):
         that way, 17-Nov-2026)."""
         self.run(self._catch_up())
 
-    @rule(data=st.data(), with_call=st.booleans())
-    def crash_between_commits(self, data: st.DataObject, with_call: bool) -> None:
+    @rule(data=strategies.data(), with_call=strategies.booleans())
+    def crash_between_commits(
+        self, data: strategies.DataObject, with_call: bool
+    ) -> None:
         """A crash at each commit boundary. Effect consumers: commit
         `prepare`, maybe make the call, die before `complete`. Local ones:
         run the step, die before COMMIT. Marks the aggregate as one whose
@@ -249,9 +255,9 @@ class EchoFlow(RuleBasedStateMachine):
         self.run(step())
 
     @rule(
-        provider=st.sampled_from(EchoProvider),
-        fault=st.sampled_from(FAULTS),
-        operation=st.sampled_from(["send", "events"]),
+        provider=strategies.sampled_from(EchoProvider),
+        fault=strategies.sampled_from(FAULTS),
+        operation=strategies.sampled_from(["send", "events"]),
     )
     def script_a_fault(
         self, provider: EchoProvider, fault: str, operation: str
@@ -278,16 +284,16 @@ class EchoFlow(RuleBasedStateMachine):
         self.network.refuse_next += 1
 
     @precondition(lambda self: len(self.jobs) > 0)
-    @rule(data=st.data())
-    def redeliver_a_handled_message(self, data: st.DataObject) -> None:
+    @rule(data=strategies.data())
+    def redeliver_a_handled_message(self, data: strategies.DataObject) -> None:
         handled = self.run(self._handled())
         if not handled:
             return
-        candidate = data.draw(st.sampled_from(handled))
+        candidate = data.draw(strategies.sampled_from(handled))
         result = self.run(run_one(self.worker, self.http, ENV, candidate, self.now))
         assert result == Skipped("already_handled"), result
 
-    @rule(seconds=st.integers(min_value=0, max_value=600))
+    @rule(seconds=strategies.integers(min_value=0, max_value=600))
     def clock_moves(self, seconds: int) -> None:
         self.now += timedelta(seconds=seconds)
 
@@ -481,11 +487,11 @@ class EchoFlow(RuleBasedStateMachine):
                 reachable[job_id].add(EventKind(kind))
         return reachable
 
-    def _draw_candidate(self, data: st.DataObject) -> Candidate | None:
+    def _draw_candidate(self, data: strategies.DataObject) -> Candidate | None:
         candidates = self.run(find_candidates(self.worker, self.now, 50))
         if not candidates:
             return None
-        return data.draw(st.sampled_from(candidates))
+        return data.draw(strategies.sampled_from(candidates))
 
     async def _handled(self) -> list[Candidate]:
         cur = await self.worker.execute(

@@ -5,8 +5,7 @@ test: real ones live in the registrations table."""
 from datetime import date
 from fractions import Fraction
 
-from hypothesis import example, given
-from hypothesis import strategies as st
+from hypothesis import example, given, strategies
 
 from mor.markets.fx import FxMissing, convert_minor, rate
 from mor.markets.records import Charge, MarketSet, PreferenceCondition
@@ -137,7 +136,7 @@ def test_an_unconfirmed_exchange_rate_is_not_used() -> None:
     assert tax_paths(market, rules, order, ON) == FxMissing(Currency.USD, Currency.SGD)
 
 
-@given(minor=st.integers(min_value=0, max_value=10**9))
+@given(minor=strategies.integers(min_value=0, max_value=10**9))
 @example(minor=40000)  # the limit itself: inside the up_to band
 @example(minor=40001)
 def test_every_sg_order_takes_exactly_the_band_its_value_falls_in(minor: int) -> None:
@@ -239,7 +238,7 @@ def test_a_rate_is_found_through_a_chain_of_rates() -> None:
     assert rate(market, Currency.SGD, Currency.VND) == 1 / expected
 
 
-@given(minor=st.integers(min_value=0, max_value=10**12))
+@given(minor=strategies.integers(min_value=0, max_value=10**12))
 def test_converting_there_and_back_gives_the_amount_exactly(minor: int) -> None:
     market = _market()
     there = convert_minor(market, Money(minor, Currency.VND), Currency.SGD)

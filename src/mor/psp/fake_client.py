@@ -273,10 +273,10 @@ async def find_payments(
         return UndecodableBody(str(error))
     found: list[ProviderPayment] = []
     for raw in answer.payments:
-        payment = _payment(raw)
-        if isinstance(payment, UndecodableBody):
-            return payment
-        found.append(payment)
+        psp_payment = _payment(raw)
+        if isinstance(psp_payment, UndecodableBody):
+            return psp_payment
+        found.append(psp_payment)
     return Found(tuple(found))
 
 

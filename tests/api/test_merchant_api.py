@@ -74,12 +74,12 @@ async def _shop(
     async with await connect(url) as conn:
         if market is not None:
             await load_market(conn, market, "test", ACTOR, NOW)
-        merchant = await create_merchant(
+        seller = await create_merchant(
             conn, f"{name} Co.", name, "VN", daily_vendor_asks, ACTOR, NOW
         )
-        key = await create_api_key(conn, merchant.id, KeyEnv.TEST, NOW)
+        key = await create_api_key(conn, seller.id, KeyEnv.TEST, NOW)
         await conn.commit()
-    return Shop(merchant, key.text)
+    return Shop(seller, key.text)
 
 
 async def _call(

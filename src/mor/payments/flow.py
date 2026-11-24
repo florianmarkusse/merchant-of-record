@@ -54,8 +54,7 @@ from mor.payments.attempts import (
 )
 from mor.payments.inbound import store_inbox
 from mor.payments.records import PspOperation
-from mor.payments.transitions import OPEN_STATES, AttemptState, after_event
-from mor.payments.transitions import Stale as StaleEvent
+from mor.payments.transitions import OPEN_STATES, AttemptState, StaleEvent, after_event
 from mor.psp import registry
 from mor.psp.accounts import read_psp_account, route_for
 from mor.psp.port import (
@@ -402,16 +401,16 @@ async def apply_payment(
     conn: Connection,
     attempt: Attempt,
     account: PspAccount,
-    payment: ProviderPayment,
+    psp_payment: ProviderPayment,
     now: datetime,
     reason: str | None = None,
 ) -> Done:
     """The payment as the PSP showed it in an answer, by the same table as
     its events: an answer and a webhook racing each other end alike."""
     attempt = await record_payment(
-        conn, attempt, payment.provider_payment_id, payment.action, now
+        conn, attempt, psp_payment.provider_payment_id, psp_payment.action, now
     )
-    kind = _event_kind(payment.status)
+    kind = _event_kind(psp_payment.status)
     if kind is None:
         if attempt.state != AttemptState.REQUESTED:
             return Done(Stale())
@@ -420,7 +419,7 @@ async def apply_payment(
     target = after_event(attempt.state, kind)
     if isinstance(target, StaleEvent):
         return Done(Stale())
-    await move(conn, attempt, target, account, now, reason, payment.amount)
+    await move(conn, attempt, target, account, now, reason, psp_payment.amount)
     return Done(Applied())
 
 
@@ -698,10 +697,10 @@ async def _capture_looked_up(
 ) -> Done | RetryLater:
     match result:
         case Found(payments=payments):
-            for payment in payments:
-                if payment.provider_payment_id != attempt.provider_payment_id:
+            for psp_payment in payments:
+                if psp_payment.provider_payment_id != attempt.provider_payment_id:
                     continue
-                if payment.status == PaymentStatus.AUTHORISED:
+                if psp_payment.status == PaymentStatus.AUTHORISED:
                     # Still authorised proves nothing: the capture may be on
                     # its way. A person decides.
                     return await _needs_person(
@@ -714,7 +713,7 @@ async def _capture_looked_up(
                 await _finish_request(
                     conn, request_id, VendorRequestState.SUCCEEDED, now
                 )
-                return await apply_payment(conn, attempt, account, payment, now)
+                return await apply_payment(conn, attempt, account, psp_payment, now)
             return await _needs_person(
                 conn, attempt, account, "the PSP does not show the payment", now
             )
