@@ -36,8 +36,13 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
-from mor.duties.lookups import create_vendor_account, request_duty_rate
+from mor.duties.lookups import (
+    NoVendorAccount,
+    create_vendor_account,
+    request_duty_rate,
+)
 from mor.duties.port import DutyProvider, RateQuestion
+from mor.ids import DutyLookupId
 from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.messaging.delivery import (
@@ -101,7 +106,7 @@ class DutyLookupFlow(RuleBasedStateMachine):
         self.control = wired.control
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
         self.run(self._set_up())
-        self.lookups: dict[RateQuestion, uuid.UUID] = {}
+        self.lookups: dict[RateQuestion, DutyLookupId] = {}
         # What was scripted; what was used is that minus what still waits
         # (fault_kinds_waiting, network.refuse_next), so the bounds below
         # stay tight however many are scripted.
@@ -133,11 +138,11 @@ class DutyLookupFlow(RuleBasedStateMachine):
 
     @rule(question=strategies.sampled_from(QUESTIONS))
     def ask_about_a_combination(self, question: RateQuestion) -> None:
-        async def step() -> uuid.UUID:
+        async def step() -> DutyLookupId:
             async with await connect(TEST_URL) as conn:
                 asked = await request_duty_rate(conn, "acme", question, ACTOR, self.now)
                 await conn.commit()
-            assert isinstance(asked, uuid.UUID)
+            assert not isinstance(asked, NoVendorAccount)
             return asked
 
         lookup_id = self.run(step())

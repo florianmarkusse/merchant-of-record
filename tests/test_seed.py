@@ -19,7 +19,7 @@ from mor.merchants.store import authenticate
 from mor.messaging.worker import Failed, drain_once
 from mor.seed import (
     DEFAULT_PSP,
-    SeededAccount,
+    SeededEchoAccount,
     SeedInProd,
     base_url,
     seed_accounts,
@@ -38,7 +38,7 @@ NOW = datetime(2026, 11, 17, 9, 30, tzinfo=UTC)
 SELF_URL = "http://mor"
 
 
-async def _seed(url: str, wired: Wired) -> list[SeededAccount]:
+async def _seed(url: str, wired: Wired) -> list[SeededEchoAccount]:
     settings = Settings(ENV, url, SELF_URL)
     async with await connect(url) as conn:
         seeded = await seed_accounts(conn, settings, NOW)

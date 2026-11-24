@@ -17,6 +17,7 @@ from psycopg.rows import class_row
 from mor.db.connect import connect
 from mor.db.fetch import one_value
 from mor.fakes.psp import HELD_BACK_MINOR
+from mor.ids import SettlementLineId, SettlementPayoutId
 from mor.ledger.account import (
     PayoutInTransit,
     PspClearing,
@@ -579,11 +580,13 @@ def test_a_line_and_a_payout_met_again_book_nothing_more(database_url: str) -> N
         await _read_settlement(setup)
         entries = await count_rows(setup.url, "SELECT count(*) FROM journal_entry")
         async with await connect(setup.url) as conn:
-            line_id = await one_value(
-                conn, "SELECT id FROM settlement_line", None, uuid.UUID
+            line_id = SettlementLineId(
+                await one_value(conn, "SELECT id FROM settlement_line", None, uuid.UUID)
             )
-            payout_id = await one_value(
-                conn, "SELECT id FROM settlement_payout", None, uuid.UUID
+            payout_id = SettlementPayoutId(
+                await one_value(
+                    conn, "SELECT id FROM settlement_payout", None, uuid.UUID
+                )
             )
             account_id = setup.shop.account.id
             line_fact = SettlementLineReceivedV1(

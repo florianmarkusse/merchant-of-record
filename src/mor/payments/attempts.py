@@ -13,6 +13,13 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.checkout.records import LockedSession
 from mor.db.connect import Connection
+from mor.ids import (
+    CheckoutSessionId,
+    PaymentAttemptId,
+    PspAccountId,
+    PspRouteId,
+    QuoteId,
+)
 from mor.messaging.facts import (
     Fact,
     PaymentActionRequiredV1,
@@ -38,12 +45,12 @@ FLOW = Actor(ActorKind.SYSTEM, "payments")
 
 @dataclass(frozen=True, kw_only=True)
 class Attempt:
-    id: uuid.UUID
-    session_id: uuid.UUID
-    quote_id: uuid.UUID
+    id: PaymentAttemptId
+    session_id: CheckoutSessionId
+    quote_id: QuoteId
     option_no: int
-    psp_account_id: uuid.UUID
-    route_id: uuid.UUID
+    psp_account_id: PspAccountId
+    route_id: PspRouteId
     method: PaymentMethod
     amount: Money
     return_url: str
@@ -64,12 +71,12 @@ LockedAttempt = NewType("LockedAttempt", Attempt)
 
 @dataclass(frozen=True, kw_only=True)
 class _Row:
-    id: uuid.UUID
-    session_id: uuid.UUID
-    quote_id: uuid.UUID
+    id: PaymentAttemptId
+    session_id: CheckoutSessionId
+    quote_id: QuoteId
     option_no: int
-    psp_account_id: uuid.UUID
-    route_id: uuid.UUID
+    psp_account_id: PspAccountId
+    route_id: PspRouteId
     method: PaymentMethod
     amount_minor: int
     currency: Currency
@@ -110,20 +117,20 @@ def _attempt(row: _Row) -> Attempt:
 async def insert_attempt(
     conn: Connection,
     session: LockedSession,
-    quote_id: uuid.UUID,
+    quote_id: QuoteId,
     option_no: int,
     account: PspAccount,
-    route_id: uuid.UUID,
+    route_id: PspRouteId,
     method: PaymentMethod,
     amount: Money,
     return_url: str,
     actor: Actor,
     now: datetime,
-) -> uuid.UUID:
+) -> PaymentAttemptId:
     """A new attempt, `requested`, with the fact that starts the call. The
     one-open index refuses a second one for the session; the caller holds
     the session's lock and has checked."""
-    attempt_id = uuid.uuid7()
+    attempt_id = PaymentAttemptId(uuid.uuid7())
     await conn.execute(
         """
         INSERT INTO payment_attempt
@@ -161,7 +168,7 @@ async def insert_attempt(
     return attempt_id
 
 
-async def lock_attempt(conn: Connection, attempt_id: uuid.UUID) -> LockedAttempt:
+async def lock_attempt(conn: Connection, attempt_id: PaymentAttemptId) -> LockedAttempt:
     async with conn.cursor(row_factory=class_row(_Row)) as cur:
         await cur.execute(
             """
@@ -180,7 +187,9 @@ async def lock_attempt(conn: Connection, attempt_id: uuid.UUID) -> LockedAttempt
     return LockedAttempt(_attempt(row))
 
 
-async def read_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt | None:
+async def read_attempt(
+    conn: Connection, attempt_id: PaymentAttemptId
+) -> Attempt | None:
     """Without a lock: for a step that reads another aggregate's attempt."""
     async with conn.cursor(row_factory=class_row(_Row)) as cur:
         await cur.execute(
@@ -197,7 +206,9 @@ async def read_attempt(conn: Connection, attempt_id: uuid.UUID) -> Attempt | Non
     return None if row is None else _attempt(row)
 
 
-async def session_attempts(conn: Connection, session_id: uuid.UUID) -> list[Attempt]:
+async def session_attempts(
+    conn: Connection, session_id: CheckoutSessionId
+) -> list[Attempt]:
     """Oldest first; the last is the newest."""
     async with conn.cursor(row_factory=class_row(_Row)) as cur:
         await cur.execute(
@@ -219,11 +230,11 @@ async def session_attempts(conn: Connection, session_id: uuid.UUID) -> list[Atte
 
 
 async def attempt_of_account(
-    conn: Connection, account_id: uuid.UUID, reference: str
-) -> uuid.UUID | None:
+    conn: Connection, account_id: PspAccountId, reference: str
+) -> PaymentAttemptId | None:
     """Our attempt a PSP's reference names, if it is this account's."""
     try:
-        attempt_id = uuid.UUID(reference)
+        attempt_id = PaymentAttemptId(uuid.UUID(reference))
     except ValueError:
         return None
     cur = await conn.execute(

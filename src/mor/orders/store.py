@@ -1,7 +1,6 @@
 """Orders in the database (docs/plan-payments.md §5, §6.1). Persistence
 functions take the connection first and never commit."""
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import NewType
@@ -9,17 +8,25 @@ from typing import NewType
 from psycopg.rows import class_row
 
 from mor.db.connect import Connection
+from mor.ids import (
+    CheckoutAddressId,
+    CheckoutSessionId,
+    MerchantId,
+    OrderId,
+    PaymentAttemptId,
+    QuoteId,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Order:
-    id: uuid.UUID
-    session_id: uuid.UUID
-    attempt_id: uuid.UUID
-    merchant_id: uuid.UUID
-    quote_id: uuid.UUID
+    id: OrderId
+    session_id: CheckoutSessionId
+    attempt_id: PaymentAttemptId
+    merchant_id: MerchantId
+    quote_id: QuoteId
     option_no: int
-    address_id: uuid.UUID
+    address_id: CheckoutAddressId
     paid_at: datetime
     buyer_token: str  # the order page's link: a bearer token
 
@@ -45,7 +52,9 @@ async def order_by_token(conn: Connection, buyer_token: str) -> Order | None:
         return await cur.fetchone()
 
 
-async def order_by_session(conn: Connection, session_id: uuid.UUID) -> Order | None:
+async def order_by_session(
+    conn: Connection, session_id: CheckoutSessionId
+) -> Order | None:
     async with conn.cursor(row_factory=class_row(Order)) as cur:
         await cur.execute(
             """
@@ -59,7 +68,7 @@ async def order_by_session(conn: Connection, session_id: uuid.UUID) -> Order | N
 
 
 async def read_order(
-    conn: Connection, merchant_id: uuid.UUID, order_id: uuid.UUID
+    conn: Connection, merchant_id: MerchantId, order_id: OrderId
 ) -> Order | None:
     """The merchant's own order; another merchant's reads as none."""
     async with conn.cursor(row_factory=class_row(Order)) as cur:
@@ -74,7 +83,7 @@ async def read_order(
         return await cur.fetchone()
 
 
-async def lock_order(conn: Connection, order_id: uuid.UUID) -> LockedOrder | None:
+async def lock_order(conn: Connection, order_id: OrderId) -> LockedOrder | None:
     """The order under its row lock, for a step that adds to it."""
     async with conn.cursor(row_factory=class_row(Order)) as cur:
         await cur.execute(

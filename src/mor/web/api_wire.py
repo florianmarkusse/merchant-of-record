@@ -9,7 +9,6 @@ field v1 does not take (`tax_behavior`) is an error, not ignored.
 
 import hashlib
 import re
-import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -31,6 +30,7 @@ from mor.checkout.records import (
 )
 from mor.couriers.records import Parcel
 from mor.dates import format_instant
+from mor.ids import OrderId
 from mor.markets.records import MarketSet
 from mor.merchants.records import KybState, Merchant
 from mor.money.amount import Money
@@ -38,11 +38,10 @@ from mor.money.currency import Currency
 from mor.orders.records import OrderState
 from mor.orders.store import Order
 from mor.public_ids import (
-    MERCHANT_PREFIX,
-    ORDER_PREFIX,
-    QUOTE_PREFIX,
-    SESSION_PREFIX,
-    public_id,
+    merchant_public_id,
+    order_public_id,
+    quote_public_id,
+    session_public_id,
 )
 
 
@@ -358,7 +357,7 @@ class QuoteOut(msgspec.Struct, frozen=True, kw_only=True):
 
 
 def quote_out(stored: StoredQuote) -> QuoteOut:
-    quote_id = public_id(QUOTE_PREFIX, stored.id)
+    quote_id = quote_public_id(stored.id)
     match stored:
         case MadeQuote():
             options: list[QuoteOptionOut] = []
@@ -414,16 +413,16 @@ def session_out(
     self_url: str,
     ship_to_country: str | None,
     quote: StoredQuote | None,
-    order_id: uuid.UUID | None,
+    order_id: OrderId | None,
 ) -> bytes:
     """A session as the API shows it; times through `format_instant`."""
-    session_id = public_id(SESSION_PREFIX, session.id)
+    session_id = session_public_id(session.id)
     lines = _lines_out(session.lines)
     parcel = session.parcel
     out = SessionOut(
         id=session_id,
         object="checkout_session",
-        merchant=public_id(MERCHANT_PREFIX, session.merchant_id),
+        merchant=merchant_public_id(session.merchant_id),
         state=session.state,
         url=f"{self_url}/c/{session_id}",
         created_at=format_instant(session.created_at),
@@ -441,7 +440,7 @@ def session_out(
         lines=lines,
         ship_to_country=ship_to_country,
         quote=None if quote is None else quote_out(quote),
-        order_id=None if order_id is None else public_id(ORDER_PREFIX, order_id),
+        order_id=None if order_id is None else order_public_id(order_id),
     )
     return msgspec.json.encode(out)
 
@@ -523,10 +522,10 @@ def order_out(
     if option.transit is not None:
         low, high = option.transit
     out = OrderOut(
-        id=public_id(ORDER_PREFIX, order.id),
+        id=order_public_id(order.id),
         object="order",
-        merchant=public_id(MERCHANT_PREFIX, order.merchant_id),
-        checkout_session=public_id(SESSION_PREFIX, order.session_id),
+        merchant=merchant_public_id(order.merchant_id),
+        checkout_session=session_public_id(order.session_id),
         merchant_reference=session.merchant_reference,
         state=OrderState.PAID,
         paid_at=format_instant(order.paid_at),
@@ -576,7 +575,7 @@ class MerchantOut(msgspec.Struct, frozen=True, kw_only=True):
 def merchant_out(seller: Merchant) -> bytes:
     return msgspec.json.encode(
         MerchantOut(
-            id=public_id(MERCHANT_PREFIX, seller.id),
+            id=merchant_public_id(seller.id),
             object="merchant",
             display_name=seller.display_name,
             kyb_state=seller.kyb_state,

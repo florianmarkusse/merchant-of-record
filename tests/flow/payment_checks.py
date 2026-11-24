@@ -13,6 +13,7 @@ from psycopg.rows import class_row
 
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_row
+from mor.ids import CheckoutSessionId
 from mor.messaging import consumers
 from mor.messaging.delivery import (
     Candidate,
@@ -33,7 +34,7 @@ from tests.helpers import ENV, TEST_URL, crash, local_consumer
 
 @dataclass(frozen=True, kw_only=True)
 class _SessionCounts:
-    id: uuid.UUID
+    id: CheckoutSessionId
     state: str
     open_count: int
     person: int

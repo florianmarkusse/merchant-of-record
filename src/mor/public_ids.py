@@ -1,21 +1,58 @@
-"""Ids as the API and the command line show them: a prefix and the
-uuid7 in hex (`cs_…`, `mer_…`). The database keeps the uuid. uuid7 has 74
-random bits, enough for a session link that is its own bearer token."""
+"""Ids as the API, the buyer's links and the command line show them: a
+prefix and the uuid7 in hex (`cs_…`, `mer_…`). The database keeps the uuid.
+uuid7 has 74 random bits, enough for a session link that is its own bearer
+token. One pair of functions per id type, so a prefix cannot be put on
+another kind of id."""
 
 import uuid
 
-
-SESSION_PREFIX = "cs_"
-MERCHANT_PREFIX = "mer_"
-QUOTE_PREFIX = "qt_"
-ORDER_PREFIX = "ord_"
+from mor.ids import CheckoutSessionId, MerchantId, OrderId, QuoteId
 
 
-def public_id(prefix: str, value: uuid.UUID) -> str:
-    return f"{prefix}{value.hex}"
+_SESSION_PREFIX = "cs_"
+_MERCHANT_PREFIX = "mer_"
+_QUOTE_PREFIX = "qt_"
+_ORDER_PREFIX = "ord_"
 
 
-def parse_id(prefix: str, text: str) -> uuid.UUID | None:
+def session_public_id(session_id: CheckoutSessionId) -> str:
+    return f"{_SESSION_PREFIX}{session_id.hex}"
+
+
+def merchant_public_id(merchant_id: MerchantId) -> str:
+    return f"{_MERCHANT_PREFIX}{merchant_id.hex}"
+
+
+def quote_public_id(quote_id: QuoteId) -> str:
+    return f"{_QUOTE_PREFIX}{quote_id.hex}"
+
+
+def order_public_id(order_id: OrderId) -> str:
+    return f"{_ORDER_PREFIX}{order_id.hex}"
+
+
+def parse_session_id(text: str) -> CheckoutSessionId | None:
+    found = _parse(_SESSION_PREFIX, text)
+    if found is None:
+        return None
+    return CheckoutSessionId(found)
+
+
+def parse_merchant_id(text: str) -> MerchantId | None:
+    found = _parse(_MERCHANT_PREFIX, text)
+    if found is None:
+        return None
+    return MerchantId(found)
+
+
+def parse_order_id(text: str) -> OrderId | None:
+    found = _parse(_ORDER_PREFIX, text)
+    if found is None:
+        return None
+    return OrderId(found)
+
+
+def _parse(prefix: str, text: str) -> uuid.UUID | None:
     if not text.startswith(prefix):
         return None
     hex_part = text.removeprefix(prefix)

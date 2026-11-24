@@ -20,7 +20,6 @@ attempt waiting on a person.
 
 import asyncio
 import os
-import uuid
 from collections import Counter
 from collections.abc import Coroutine
 from datetime import timedelta
@@ -38,6 +37,7 @@ from hypothesis.stateful import (
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
+from mor.ids import CheckoutSessionId
 from mor.messaging.delivery import (
     Candidate,
 )
@@ -101,7 +101,7 @@ class OrderFlow(RuleBasedStateMachine):
         self.http = wired.http
         self.control = wired.control
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
-        self.sessions: list[uuid.UUID] = []
+        self.sessions: list[CheckoutSessionId] = []
         self.guard = DuplicateGuard.VENDOR_CONSTRAINT
         self.met: set[str] = set()
 

@@ -24,7 +24,6 @@ Every amount is exact, in the quote currency's minor units; the caller
 rounds each part with a named mode.
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -41,6 +40,7 @@ from mor.couriers.records import (
     PriceState,
 )
 from mor.dates import format_moment
+from mor.ids import ShippingPriceLookupId
 from mor.markets.changes import decimal_text, percent_text
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
@@ -126,7 +126,7 @@ class FromCard:
 class FromCarrier:
     """A price the carrier gave, as we hold it."""
 
-    lookup_id: uuid.UUID
+    lookup_id: ShippingPriceLookupId
     finished_at: datetime
     usable_until: datetime
     carrier_total: Money
@@ -158,7 +158,7 @@ class PriceMissing:
     for the request already open."""
 
     question: PriceQuestion
-    open_id: uuid.UUID | None
+    open_id: ShippingPriceLookupId | None
 
 
 def offers(

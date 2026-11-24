@@ -39,7 +39,7 @@ from mor.merchants.store import (
 )
 from mor.merchants.vendor_asks import take_vendor_asks
 from mor.orders.store import order_by_session, read_order
-from mor.public_ids import ORDER_PREFIX, SESSION_PREFIX, parse_id
+from mor.public_ids import parse_order_id, parse_session_id
 from mor.quote.build import (
     InputsMissing,
     Quote,
@@ -168,7 +168,7 @@ async def get_checkout_session(request: Request, settings: Settings) -> Response
         auth = await _authenticated(conn, request, settings)
         if auth is None:
             return error_response(AUTH_FAILED)
-        session_id = parse_id(SESSION_PREFIX, request.path_params["session_id"])
+        session_id = parse_session_id(request.path_params["session_id"])
         if session_id is None:
             return error_response(not_found)
         session = await read_session(conn, auth.merchant.id, session_id)
@@ -203,7 +203,7 @@ async def get_order(request: Request, settings: Settings) -> Response:
         auth = await _authenticated(conn, request, settings)
         if auth is None:
             return error_response(AUTH_FAILED)
-        order_id = parse_id(ORDER_PREFIX, request.path_params["order_id"])
+        order_id = parse_order_id(request.path_params["order_id"])
         if order_id is None:
             return error_response(not_found)
         order = await read_order(conn, auth.merchant.id, order_id)

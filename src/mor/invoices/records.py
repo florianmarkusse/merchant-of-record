@@ -2,11 +2,11 @@
 merchant named, never re-derived and never changed (docs/plan-payments.md
 §6, §6.1)."""
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from mor.ids import InvoiceId, OrderId
 from mor.money.currency import Currency
 
 
@@ -55,8 +55,8 @@ class Series:
 
 @dataclass(frozen=True, kw_only=True)
 class Invoice:
-    id: uuid.UUID
-    order_id: uuid.UUID
+    id: InvoiceId
+    order_id: OrderId
     series: str
     number: int  # gapless within its series
     number_text: str  # as printed, stored whole: `INV-2026-000001`

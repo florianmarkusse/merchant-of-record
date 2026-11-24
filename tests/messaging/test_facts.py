@@ -3,6 +3,7 @@ from typing import get_args
 
 from hypothesis import given, strategies
 
+from mor.ids import ProbeId
 from mor.messaging.facts import (
     Aggregate,
     AggregateType,
@@ -49,7 +50,7 @@ def test_any_bytes_decode_to_a_fact_or_undecodable(
 
 
 def test_unknown_field_or_version_is_undecodable() -> None:
-    probe_id = uuid.uuid7()
+    probe_id = ProbeId(uuid.uuid7())
     extra = b'{"probe_id": "%s", "note": "x"}' % str(probe_id).encode()
     result = decode(MessageType.PROBE_STARTED, 1, extra)
     assert isinstance(result, UndecodableFact)
@@ -61,7 +62,7 @@ def test_unknown_field_or_version_is_undecodable() -> None:
 
 
 def test_probe_facts_belong_to_their_probe() -> None:
-    probe_id = uuid.uuid7()
+    probe_id = ProbeId(uuid.uuid7())
     assert aggregate_of(ProbeEchoedV1(probe_id=probe_id)) == Aggregate(
         AggregateType.PROBE, probe_id
     )

@@ -21,13 +21,13 @@ when it is a plain percentage without a note (a note may be a preference
 the vendor applied without checking our conditions).
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
 from typing import Literal
 
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
+from mor.ids import DutyLookupId
 from mor.markets.records import (
     USABLE_STATUSES,
     Charge,
@@ -71,7 +71,7 @@ class FromBandRow:
 
 @dataclass(frozen=True)
 class FromVendor:
-    lookup_id: uuid.UUID
+    lookup_id: DutyLookupId
     vendor: str
     answer: StoredAnswer
 
@@ -106,19 +106,19 @@ class AskVendor:
 
 @dataclass(frozen=True)
 class VendorWaiting:
-    lookup_id: uuid.UUID
+    lookup_id: DutyLookupId
 
 
 @dataclass(frozen=True)
 class VendorUnknownCode:
-    lookup_id: uuid.UUID
+    lookup_id: DutyLookupId
 
 
 @dataclass(frozen=True)
 class VendorNeedsPerson:
     """The vendor answered, but not in a way the rule may use."""
 
-    lookup_id: uuid.UUID
+    lookup_id: DutyLookupId
     reason: Literal["undecodable", "no_charge", "formula", "note"]
     detail: str
 

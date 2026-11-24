@@ -71,7 +71,7 @@ from mor.money.currency import Currency
 from mor.orders.store import order_by_session
 from mor.payments.attempts import session_attempts
 from mor.psp.accounts import read_psp_account
-from mor.public_ids import SESSION_PREFIX, parse_id
+from mor.public_ids import parse_session_id
 from mor.quote.build import (
     InputsMissing,
     LineRateRefused,
@@ -487,7 +487,7 @@ async def sessions_page(database_url: str, now: datetime) -> Response:
 
 
 async def session_page(request: Request, database_url: str) -> Response:
-    session_id = parse_id(SESSION_PREFIX, request.path_params["session_id"])
+    session_id = parse_session_id(request.path_params["session_id"])
     if session_id is None:
         return Response("no such session", status_code=404)
     async with await connect(database_url) as conn:

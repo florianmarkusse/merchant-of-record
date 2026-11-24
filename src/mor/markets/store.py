@@ -10,6 +10,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
+from mor.ids import MarketLoadId
 from mor.markets.records import (
     Amount,
     Band,
@@ -65,7 +66,7 @@ LOAD_LOCK = "markets:load"
 
 @dataclass(frozen=True, kw_only=True)
 class LoadRow:
-    id: uuid.UUID
+    id: MarketLoadId
     content_sha256: str
     git_commit: str
     loaded_at: datetime
@@ -73,7 +74,7 @@ class LoadRow:
 
 @dataclass(frozen=True)
 class Loaded:
-    load_id: uuid.UUID
+    load_id: MarketLoadId
     previous: LoadRow | None
 
 
@@ -81,7 +82,7 @@ class Loaded:
 class Unchanged:
     """The files hold exactly what the latest load holds: nothing written."""
 
-    load_id: uuid.UUID
+    load_id: MarketLoadId
 
 
 async def latest_load(conn: Connection) -> LoadRow | None:
@@ -96,7 +97,7 @@ async def latest_load(conn: Connection) -> LoadRow | None:
 
 @dataclass(frozen=True)
 class MarketInForce:
-    load_id: uuid.UUID
+    load_id: MarketLoadId
     market: MarketSet
 
 
@@ -139,7 +140,7 @@ async def load_market(
     sha = content_sha256(market)
     if previous is not None and previous.content_sha256 == sha:
         return Unchanged(previous.id)
-    load_id = uuid.uuid7()
+    load_id = MarketLoadId(uuid.uuid7())
     await conn.execute(
         "INSERT INTO market_load"
         " (id, content_sha256, git_commit, loaded_at, actor_kind, actor_id)"
@@ -150,7 +151,9 @@ async def load_market(
     return Loaded(load_id, previous)
 
 
-async def _insert_rows(conn: Connection, load_id: uuid.UUID, market: MarketSet) -> None:
+async def _insert_rows(
+    conn: Connection, load_id: MarketLoadId, market: MarketSet
+) -> None:
     async with conn.cursor() as cur:
         await cur.executemany(
             "INSERT INTO market_category (load_id, category, label)"
@@ -171,7 +174,7 @@ async def _insert_rows(conn: Connection, load_id: uuid.UUID, market: MarketSet) 
             " VALUES (%s, %s, %s, %s)",
             [(load_id, g.code, g.label, g.kind.value) for g in market.groups],
         )
-        members: list[tuple[uuid.UUID, str, str]] = []
+        members: list[tuple[MarketLoadId, str, str]] = []
         for group in market.groups:
             for iso2 in group.members:
                 members.append((load_id, group.code, iso2))
@@ -250,7 +253,7 @@ def _denominator(value: Fraction | None) -> int | None:
 
 
 async def _insert_shipping(
-    conn: Connection, load_id: uuid.UUID, market: MarketSet
+    conn: Connection, load_id: MarketLoadId, market: MarketSet
 ) -> None:
     async with conn.cursor() as cur:
         await cur.executemany(
@@ -428,7 +431,7 @@ async def _insert_shipping(
         )
 
 
-def _hs_params(load_id: uuid.UUID, hs: HsRate) -> tuple[object, ...]:
+def _hs_params(load_id: MarketLoadId, hs: HsRate) -> tuple[object, ...]:
     agreement: str | None = None
     conditions: list[str] = []
     if hs.preference is not None:
@@ -454,7 +457,7 @@ def _hs_params(load_id: uuid.UUID, hs: HsRate) -> tuple[object, ...]:
     )
 
 
-def _landed_params(load_id: uuid.UUID, rate: LandedRate) -> tuple[object, ...]:
+def _landed_params(load_id: MarketLoadId, rate: LandedRate) -> tuple[object, ...]:
     limit_minor: int | None = None
     limit_currency: str | None = None
     limit_basis: str | None = None
@@ -512,7 +515,7 @@ def _landed_params(load_id: uuid.UUID, rate: LandedRate) -> tuple[object, ...]:
 # columns, then turned into its domain record with keyword arguments.
 
 
-async def read_market(conn: Connection, load_id: uuid.UUID) -> MarketSet:
+async def read_market(conn: Connection, load_id: MarketLoadId) -> MarketSet:
     """The complete set of one load, sorted by key (landed rates by their
     line in the file). Its content hash is the stored one, never recomputed
     from this order."""
@@ -582,7 +585,7 @@ class _GroupRow:
     members: list[str]
 
 
-async def _read_groups(conn: Connection, load_id: uuid.UUID) -> tuple[Group, ...]:
+async def _read_groups(conn: Connection, load_id: MarketLoadId) -> tuple[Group, ...]:
     async with conn.cursor(row_factory=class_row(_GroupRow)) as cur:
         await cur.execute(
             "SELECT g.code, g.label, g.kind,"
@@ -630,7 +633,9 @@ class _LandedRow:
     source_url: str
 
 
-async def _read_landed(conn: Connection, load_id: uuid.UUID) -> tuple[LandedRate, ...]:
+async def _read_landed(
+    conn: Connection, load_id: MarketLoadId
+) -> tuple[LandedRate, ...]:
     async with conn.cursor(row_factory=class_row(_LandedRow)) as cur:
         await cur.execute(
             "SELECT line_no, country_iso2, group_code, category, charge,"
@@ -701,7 +706,7 @@ class _FxRow:
     source: str
 
 
-async def _read_fx_rates(conn: Connection, load_id: uuid.UUID) -> tuple[FxRate, ...]:
+async def _read_fx_rates(conn: Connection, load_id: MarketLoadId) -> tuple[FxRate, ...]:
     async with conn.cursor(row_factory=class_row(_FxRow)) as cur:
         await cur.execute(
             "SELECT base_currency, quote_currency, rate_numerator,"
@@ -743,7 +748,7 @@ class _HsRow:
     source_url: str
 
 
-async def _read_hs_rates(conn: Connection, load_id: uuid.UUID) -> tuple[HsRate, ...]:
+async def _read_hs_rates(conn: Connection, load_id: MarketLoadId) -> tuple[HsRate, ...]:
     async with conn.cursor(row_factory=class_row(_HsRow)) as cur:
         await cur.execute(
             "SELECT line_no, country_iso2, group_code, hs_prefix, charge,"
@@ -794,7 +799,7 @@ class _Shipping:
     fees: tuple[FeeRule, ...]
 
 
-async def _read_shipping(conn: Connection, load_id: uuid.UUID) -> _Shipping:
+async def _read_shipping(conn: Connection, load_id: MarketLoadId) -> _Shipping:
     async with conn.cursor(row_factory=class_row(RateCard)) as cur:
         await cur.execute(
             "SELECT code, service, currency, effective_from, effective_to, fuel,"
@@ -844,7 +849,9 @@ class _ServiceRow:
     status: ResearchStatus
 
 
-async def _read_services(conn: Connection, load_id: uuid.UUID) -> tuple[Service, ...]:
+async def _read_services(
+    conn: Connection, load_id: MarketLoadId
+) -> tuple[Service, ...]:
     async with conn.cursor(row_factory=class_row(_ServiceRow)) as cur:
         await cur.execute(
             "SELECT code, provider, name, origin_iso2, tier, duties_paid,"
@@ -884,7 +891,7 @@ class _CardRateRow:
 
 
 async def _read_card_rates(
-    conn: Connection, load_id: uuid.UUID
+    conn: Connection, load_id: MarketLoadId
 ) -> tuple[CardRate, ...]:
     async with conn.cursor(row_factory=class_row(_CardRateRow)) as cur:
         await cur.execute(
@@ -930,7 +937,7 @@ class _SurchargeRow:
 
 
 async def _read_surcharges(
-    conn: Connection, load_id: uuid.UUID
+    conn: Connection, load_id: MarketLoadId
 ) -> tuple[Surcharge, ...]:
     async with conn.cursor(row_factory=class_row(_SurchargeRow)) as cur:
         await cur.execute(
@@ -976,7 +983,7 @@ class _TransitRow:
     status: ResearchStatus
 
 
-async def _read_transit(conn: Connection, load_id: uuid.UUID) -> tuple[Transit, ...]:
+async def _read_transit(conn: Connection, load_id: MarketLoadId) -> tuple[Transit, ...]:
     async with conn.cursor(row_factory=class_row(_TransitRow)) as cur:
         await cur.execute(
             "SELECT service, country_iso2, group_code, days_min, days_max, status"
@@ -1010,7 +1017,7 @@ class _RouteRow:
 
 
 async def _read_routes(
-    conn: Connection, load_id: uuid.UUID
+    conn: Connection, load_id: MarketLoadId
 ) -> tuple[ShippingRoute, ...]:
     async with conn.cursor(row_factory=class_row(_RouteRow)) as cur:
         await cur.execute(
@@ -1049,7 +1056,7 @@ class _FeeRow:
     source: str
 
 
-async def _read_fees(conn: Connection, load_id: uuid.UUID) -> tuple[FeeRule, ...]:
+async def _read_fees(conn: Connection, load_id: MarketLoadId) -> tuple[FeeRule, ...]:
     async with conn.cursor(row_factory=class_row(_FeeRow)) as cur:
         await cur.execute(
             "SELECT line_no, component, country_iso2, group_code, rate_numerator,"

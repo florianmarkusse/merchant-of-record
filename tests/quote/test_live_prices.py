@@ -17,6 +17,7 @@ from mor.couriers.records import (
     PriceState,
     StoredPrice,
 )
+from mor.ids import ShippingPriceLookupId
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.quote.build import (
@@ -70,7 +71,7 @@ def _held(
     usable_until: datetime = NOW + timedelta(hours=1),
 ) -> PriceHeld:
     finished = FinishedLookup(
-        id=uuid.uuid7(),
+        id=ShippingPriceLookupId(uuid.uuid7()),
         state=state,
         calls=1,
         detail=None,
@@ -95,7 +96,7 @@ def test_a_live_route_waits_for_the_carrier_then_quotes_with_its_parts() -> None
     assert build_quote(market, request, {}, {}) == InputsMissing(
         asks=(), waiting=(), price_asks=(TO_SG,), price_waiting=()
     )
-    open_id = uuid.uuid7()
+    open_id = ShippingPriceLookupId(uuid.uuid7())
     waiting = {TO_SG: PriceHeld(None, open_id)}
     assert build_quote(market, request, {}, waiting) == InputsMissing(
         asks=(), waiting=(), price_asks=(), price_waiting=(open_id,)

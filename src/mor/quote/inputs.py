@@ -3,7 +3,6 @@ carrier prices we hold for its questions, and asking for what is missing
 (docs/plan-quote.md §4 and §5). Asking only writes rows and facts; the
 worker makes the calls, so no handler calls a vendor."""
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -16,6 +15,7 @@ from mor.db.connect import Connection
 from mor.duties.lookups import NoVendorAccount, read_lookup, request_duty_rate
 from mor.duties.port import RateQuestion
 from mor.duties.records import LookupState, VendorLookup
+from mor.ids import DutyLookupId, ShippingPriceLookupId
 from mor.markets.records import DutyMode, MarketSet, PriceSource
 from mor.quote.build import InputsMissing, QuoteRequest
 from mor.quote.shipping import price_question, routes_to
@@ -77,8 +77,8 @@ class Asked:
     """The lookups now answering what was missing: asked here, or already
     open."""
 
-    duty_lookups: tuple[uuid.UUID, ...]
-    price_lookups: tuple[uuid.UUID, ...]
+    duty_lookups: tuple[DutyLookupId, ...]
+    price_lookups: tuple[ShippingPriceLookupId, ...]
 
 
 async def ask_missing(

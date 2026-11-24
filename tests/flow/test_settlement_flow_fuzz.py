@@ -30,7 +30,6 @@ for, with `psp_clearing` holding exactly what the fake has not paid out.
 import asyncio
 import os
 import random
-import uuid
 from collections import Counter
 from collections.abc import Coroutine
 from dataclasses import dataclass
@@ -50,6 +49,7 @@ from psycopg.rows import class_row
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_row, one_value
 from mor.fakes.psp import CUT_FAULTS, CutFault
+from mor.ids import CheckoutSessionId
 from mor.messaging.delivery import (
     Candidate,
 )
@@ -150,7 +150,7 @@ class SettlementFlow(RuleBasedStateMachine):
         self.http = wired.http
         self.control = wired.control
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
-        self.sessions: list[uuid.UUID] = []
+        self.sessions: list[CheckoutSessionId] = []
         self.guard = DuplicateGuard.VENDOR_CONSTRAINT
         self.settlement_interval = timedelta(hours=1)
         self.met: set[str] = set()

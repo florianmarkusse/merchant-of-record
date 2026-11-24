@@ -15,6 +15,7 @@ from mor.audit import Actor
 from mor.config import Environment
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
+from mor.ids import MerchantId
 from mor.merchants.records import (
     Authenticated,
     KeyEnv,
@@ -58,7 +59,7 @@ async def create_merchant(
     actor: Actor,
     now: datetime,
 ) -> Merchant:
-    merchant_id = uuid.uuid7()
+    merchant_id = MerchantId(uuid.uuid7())
     await conn.execute(
         """
         INSERT INTO merchant
@@ -89,7 +90,7 @@ async def create_merchant(
     )
 
 
-async def read_merchant(conn: Connection, merchant_id: uuid.UUID) -> Merchant | None:
+async def read_merchant(conn: Connection, merchant_id: MerchantId) -> Merchant | None:
     async with conn.cursor(row_factory=class_row(Merchant)) as cur:
         await cur.execute(
             """
@@ -116,7 +117,7 @@ async def merchants(conn: Connection) -> list[Merchant]:
 
 async def set_kyb_state(
     conn: Connection,
-    merchant_id: uuid.UUID,
+    merchant_id: MerchantId,
     state: KybState,
     actor: Actor,
     now: datetime,
@@ -144,7 +145,7 @@ async def set_kyb_state(
     return True
 
 
-async def kyb_state_for_pay(conn: Connection, merchant_id: uuid.UUID) -> KybState:
+async def kyb_state_for_pay(conn: Connection, merchant_id: MerchantId) -> KybState:
     """The state a pay step decides on, held `FOR SHARE` until it commits:
     a KYB change waits for it, and it waits for a KYB change."""
     return await one_value(
@@ -157,7 +158,7 @@ async def kyb_state_for_pay(conn: Connection, merchant_id: uuid.UUID) -> KybStat
 
 async def set_support_email(
     conn: Connection,
-    merchant_id: uuid.UUID,
+    merchant_id: MerchantId,
     support_email: str | None,
     actor: Actor,
     now: datetime,
@@ -175,7 +176,7 @@ async def set_support_email(
 
 
 async def create_api_key(
-    conn: Connection, merchant_id: uuid.UUID, env: KeyEnv, now: datetime
+    conn: Connection, merchant_id: MerchantId, env: KeyEnv, now: datetime
 ) -> NewKey:
     """A new key for the merchant. Its text is returned once; only the
     SHA-256 of its secret is stored."""
@@ -204,7 +205,7 @@ async def revoke_api_key(conn: Connection, key_id: str, now: datetime) -> bool:
     return await cur.fetchone() is not None
 
 
-async def merchant_has_key(conn: Connection, merchant_id: uuid.UUID) -> bool:
+async def merchant_has_key(conn: Connection, merchant_id: MerchantId) -> bool:
     cur = await conn.execute(
         "SELECT 1 FROM api_key WHERE merchant_id = %s AND state = 'active'",
         (merchant_id,),
@@ -214,7 +215,7 @@ async def merchant_has_key(conn: Connection, merchant_id: uuid.UUID) -> bool:
 
 @dataclass(frozen=True, kw_only=True)
 class _KeyRow:
-    merchant_id: uuid.UUID
+    merchant_id: MerchantId
     env: KeyEnv
     secret_sha256: bytes
     state: KeyState

@@ -1,11 +1,11 @@
 """What we ask a carrier for a price and what we hold of its answers, as
 plain records the pure quote reads (docs/plan-quote.md §4, 4c-2)."""
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from mor.ids import CourierAccountId, MarketLoadId, ShippingPriceLookupId
 from mor.money.amount import Money
 from mor.provider_accounts import ProviderAccountKind
 
@@ -49,7 +49,7 @@ class PriceExpiry(StrEnum):
 
 @dataclass(frozen=True, kw_only=True)
 class CourierAccount:
-    id: uuid.UUID
+    id: CourierAccountId
     carrier: str
     provider: CourierProvider
     kind: ProviderAccountKind
@@ -89,7 +89,7 @@ class OwnPrice:
     the carrier answered, in the carrier's currency: freight, the
     surcharges that always apply, and fuel."""
 
-    load_id: uuid.UUID
+    load_id: MarketLoadId
     rate_card: str
     total: Money
 
@@ -108,7 +108,7 @@ class FinishedLookup:
     needs a person (`detail`). `usable_until` is worked out when it is read,
     by the account's rule in force then (`usable_until`)."""
 
-    id: uuid.UUID
+    id: ShippingPriceLookupId
     state: PriceState
     calls: int
     detail: str | None
@@ -123,7 +123,7 @@ class PriceHeld:
     request still open, if any."""
 
     latest: FinishedLookup | None
-    open_id: uuid.UUID | None
+    open_id: ShippingPriceLookupId | None
 
 
 def usable_until(

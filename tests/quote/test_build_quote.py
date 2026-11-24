@@ -10,6 +10,7 @@ from fractions import Fraction
 from mor.couriers.records import Parcel
 from mor.duties.port import RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
+from mor.ids import DutyLookupId
 from mor.markets.records import Charge, Collector, FeeComponent
 from mor.markets.rules import NotOpen
 from mor.money.amount import Money
@@ -151,7 +152,7 @@ def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
         asks=(VendorAsk("acme", T_SHIRT),), waiting=()
     )
     asked = VendorLookup(
-        id=uuid.uuid7(),
+        id=DutyLookupId(uuid.uuid7()),
         vendor="acme",
         state=LookupState.REQUESTED,
         calls=1,

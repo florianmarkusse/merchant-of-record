@@ -28,7 +28,6 @@ Each run's reach is recorded (reach.py).
 
 import asyncio
 import os
-import uuid
 from collections import Counter
 from collections.abc import Coroutine
 from datetime import timedelta
@@ -48,6 +47,7 @@ from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
 from mor.fakes.psp import QR_LIFETIME
+from mor.ids import CheckoutSessionId
 from mor.messaging.delivery import (
     Candidate,
 )
@@ -110,8 +110,8 @@ class PaymentFlow(RuleBasedStateMachine):
         self.http = wired.http
         self.control = wired.control
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
-        self.sessions: list[uuid.UUID] = []
-        self.options: dict[uuid.UUID, str] = {}
+        self.sessions: list[CheckoutSessionId] = []
+        self.options: dict[CheckoutSessionId, str] = {}
         # The clock's jumps past a quote's hold or a session's life wait
         # for a first attempt: early, they leave nothing to pay for the
         # rest of the run (docs/plan-architecture.md §10).

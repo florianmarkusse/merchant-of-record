@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from mor.audit import Actor
+from mor.ids import JournalEntryId
 from mor.ledger.account import Account
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -25,7 +26,7 @@ class Line:
 
 @dataclass(frozen=True, kw_only=True)
 class JournalEntry:
-    id: uuid.UUID
+    id: JournalEntryId
     idempotency_key: str
     description: str
     effective_at: datetime
@@ -76,7 +77,7 @@ def build_entry(
         if total != 0:
             raise UnbalancedEntry(f"{idempotency_key}: {currency} is off by {total}")
     return JournalEntry(
-        id=uuid.uuid7(),
+        id=JournalEntryId(uuid.uuid7()),
         idempotency_key=idempotency_key,
         description=description,
         effective_at=effective_at,

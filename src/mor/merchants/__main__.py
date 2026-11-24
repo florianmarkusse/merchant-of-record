@@ -31,7 +31,7 @@ from mor.merchants.store import (
     revoke_api_key,
     set_kyb_state,
 )
-from mor.public_ids import MERCHANT_PREFIX, parse_id, public_id
+from mor.public_ids import merchant_public_id, parse_merchant_id
 
 
 OPERATOR = Actor(ActorKind.STAFF, "cli")
@@ -71,17 +71,17 @@ async def _main(argv: list[str]) -> int:
                     now,
                 )
                 await conn.commit()
-                print(public_id(MERCHANT_PREFIX, seller.id))
+                print(merchant_public_id(seller.id))
             case "list":
                 for seller in await merchants(conn):
                     print(
-                        public_id(MERCHANT_PREFIX, seller.id),
+                        merchant_public_id(seller.id),
                         seller.display_name,
                         f"({seller.legal_name})",
                         f"kyb {seller.kyb_state}",
                     )
             case "key":
-                merchant_id = parse_id(MERCHANT_PREFIX, args.merchant)
+                merchant_id = parse_merchant_id(args.merchant)
                 if (
                     merchant_id is None
                     or await read_merchant(conn, merchant_id) is None
@@ -101,7 +101,7 @@ async def _main(argv: list[str]) -> int:
                 await conn.commit()
                 print(f"revoked {args.key_id}")
             case "kyb":
-                merchant_id = parse_id(MERCHANT_PREFIX, args.merchant)
+                merchant_id = parse_merchant_id(args.merchant)
                 state = KybState(args.state)
                 if merchant_id is None or not await set_kyb_state(
                     conn, merchant_id, state, OPERATOR, now

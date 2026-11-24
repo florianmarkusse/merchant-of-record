@@ -32,6 +32,7 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
+from mor.ids import ProbeId
 from mor.messaging.delivery import (
     Candidate,
     Skipped,
@@ -52,7 +53,7 @@ from tests.helpers import ENV, NO_HTTP, TEST_URL, crash, empty_tables, local_con
 
 @dataclass(frozen=True)
 class _ProbeRow:
-    id: uuid.UUID
+    id: ProbeId
     state: str
 
 
@@ -83,7 +84,7 @@ class ProbeFlow(RuleBasedStateMachine):
         self.now = T0
         # The model: the furthest state each probe was seen in. States
         # only move forward.
-        self.seen: dict[uuid.UUID, ProbeState] = {}
+        self.seen: dict[ProbeId, ProbeState] = {}
 
     def run[T](self, step: Coroutine[object, object, T]) -> T:
         return self.loop.run_until_complete(step)
@@ -99,7 +100,7 @@ class ProbeFlow(RuleBasedStateMachine):
 
     @rule()
     def start(self) -> None:
-        async def step() -> uuid.UUID:
+        async def step() -> ProbeId:
             async with await connect(TEST_URL) as conn:
                 probe_id = await start_probe(conn, ACTOR, self.now)
                 await conn.commit()
@@ -211,23 +212,23 @@ class ProbeFlow(RuleBasedStateMachine):
 
     # --- queries ---------------------------------------------------------
 
-    async def _states(self) -> dict[uuid.UUID, ProbeState]:
+    async def _states(self) -> dict[ProbeId, ProbeState]:
         cur = await self.worker.cursor(row_factory=class_row(_ProbeRow)).execute(
             "SELECT id, state::text AS state FROM probe"
         )
-        states: dict[uuid.UUID, ProbeState] = {}
+        states: dict[ProbeId, ProbeState] = {}
         for probe in await cur.fetchall():
             states[probe.id] = ProbeState(probe.state)
         return states
 
-    async def _echo_counts(self) -> dict[uuid.UUID, int]:
+    async def _echo_counts(self) -> dict[ProbeId, int]:
         cur = await self.worker.cursor(row_factory=class_row(_EchoCount)).execute(
             "SELECT aggregate_id, count(*) AS count FROM outbox"
             " WHERE message_type = 'probe_echoed' GROUP BY aggregate_id"
         )
-        counts: dict[uuid.UUID, int] = {}
+        counts: dict[ProbeId, int] = {}
         for echoed in await cur.fetchall():
-            counts[echoed.aggregate_id] = echoed.count
+            counts[ProbeId(echoed.aggregate_id)] = echoed.count
         return counts
 
     async def _advisory_locks(self) -> int:

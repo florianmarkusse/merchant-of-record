@@ -18,6 +18,7 @@ from mor.echo import registry
 from mor.echo.fake_client import SIGNATURE_HEADER
 from mor.echo.inbound import inbound_account, store_inbox
 from mor.echo.port import EventMode
+from mor.ids import PspAccountId
 from mor.psp.accounts import read_psp_account
 from mor.psp.port import InboundMode, StatusMode
 
@@ -49,7 +50,7 @@ async def echo_webhook(request: Request, database_url: str, now: datetime) -> Re
 async def psp_webhook(request: Request, database_url: str, now: datetime) -> Response:
     """A PSP's webhook (docs/plan-payments.md §4): verify, store raw, 200."""
     try:
-        account_id = uuid.UUID(request.path_params["account_id"])
+        account_id = PspAccountId(uuid.UUID(request.path_params["account_id"]))
     except ValueError:
         return Response(status_code=404)
     body = await request.body()

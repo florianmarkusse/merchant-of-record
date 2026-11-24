@@ -15,7 +15,7 @@ from mor.dates import format_moment
 from mor.money.amount import Money
 from mor.orders.store import Order
 from mor.payments.attempts import Attempt
-from mor.public_ids import ORDER_PREFIX, QUOTE_PREFIX, SESSION_PREFIX, public_id
+from mor.public_ids import order_public_id, quote_public_id, session_public_id
 from mor.quote.build import Part
 from mor.quote.groups import group_of
 from mor.web.api_estimates import collected_by
@@ -28,7 +28,7 @@ SESSIONS_PAGE = "/staff/markets/sessions"
 def render_sessions_page(rows: list[SessionSummary], now: datetime) -> str:
     body: list[htpy.Node] = []
     for row in rows:
-        session_id = public_id(SESSION_PREFIX, row.id)
+        session_id = session_public_id(row.id)
         body.append(
             htpy.tr[
                 htpy.td[htpy.a(href=f"{SESSIONS_PAGE}/{session_id}")[session_id]],
@@ -175,7 +175,7 @@ def _order(order: Order | None, invoice_number: str | None) -> htpy.Node:
     return htpy.p[
         "Order ",
         htpy.a(href=f"/o/{order.buyer_token}", rel="noreferrer")[
-            public_id(ORDER_PREFIX, order.id)
+            order_public_id(order.id)
         ],
         f", paid {format_moment(order.paid_at)}; invoice"
         f" {invoice_number or 'not issued yet'}.",
@@ -206,7 +206,7 @@ def render_session_page(
     sections: list[htpy.Node] = []
     for quote in quotes:
         heading = (
-            f"{public_id(QUOTE_PREFIX, quote.id)} for"
+            f"{quote_public_id(quote.id)} for"
             f" {countries.get(quote.address_id.hex, '?')}"
         )
         match quote:
@@ -214,7 +214,7 @@ def render_session_page(
                 sections.append(htpy.section[htpy.h3[heading], _made(quote)])
             case RefusedQuote():
                 sections.append(htpy.section[htpy.h3[heading], _refused(quote)])
-    session_id = public_id(SESSION_PREFIX, session.id)
+    session_id = session_public_id(session.id)
     return staff_page(
         f"Session {session_id}",
         SESSIONS_PAGE,

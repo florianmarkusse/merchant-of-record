@@ -11,7 +11,6 @@ the price finish and builds again with it (the foreign key from its wait
 row alone would lock the lookup only after the state was read)."""
 
 import asyncio
-import uuid
 from datetime import UTC, datetime, timedelta
 
 import mor.couriers.prices
@@ -23,6 +22,7 @@ from mor.checkout.sessions import create_session, session_by_id
 from mor.couriers.prices import PriceCall, create_courier_account
 from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import connect
+from mor.ids import CheckoutSessionId, ShippingPriceLookupId
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import finish_delivery
@@ -65,7 +65,7 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
 ) -> None:
     async def body() -> None:
         wired = wire(database_url, lambda: NOW)
-        sessions: list[uuid.UUID] = []
+        sessions: list[CheckoutSessionId] = []
         async with await connect(database_url) as conn:
             await load_market(conn, live_market(), "test", ACTOR, NOW)
             seller = await create_merchant(
@@ -128,7 +128,7 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
                 if found.consumer == ConsumerName.SHIPPING_PRICE_ASK
             ]
             assert await try_lock_aggregate(worker, candidate)
-            lookup_id = candidate.aggregate_id
+            lookup_id = ShippingPriceLookupId(candidate.aggregate_id)
             async with worker.transaction():
                 prepared = await mor.couriers.prices.prepare_rate(
                     worker, lookup_id, NOW

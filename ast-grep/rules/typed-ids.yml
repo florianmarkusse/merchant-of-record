@@ -1,0 +1,55 @@
+id: typed-ids
+language: python
+severity: error
+message: >-
+  Give the id its own type from mor.ids (MerchantId, PspAccountId, ...), so
+  pyright refuses one where another belongs; wrap it where it is made or
+  parsed (`OrderId(uuid.uuid7())`). A bare uuid.UUID is only for generic
+  messaging code: a message, an aggregate of any kind.
+files:
+  - src/**/*.py
+  - tests/**/*.py
+ignores:
+  - src/mor/ids.py
+  # The one parse behind the typed parse_*_id functions.
+  - src/mor/public_ids.py
+  # Generic messaging: messages and aggregates of every kind.
+  - src/mor/messaging/delivery.py
+  - src/mor/messaging/store.py
+  # Transitional, with the echo flow (docs/README.md, slice 6): its ids
+  # stay bare until it is removed, and these ignores go with it.
+  - src/mor/echo/**
+  - src/mor/web/sandbox.py
+  - tests/echo/**
+  - tests/flow/test_echo_flow_fuzz.py
+  - tests/web/test_sandbox.py
+rule:
+  kind: type
+  regex: '\buuid\.UUID\b'
+  not:
+    any:
+      # A message's or an aggregate's id, in any record or function.
+      - inside:
+          any:
+            - kind: typed_parameter
+            - kind: typed_default_parameter
+            - kind: assignment
+          has:
+            kind: identifier
+            regex: ^(message_id|aggregate_id)$
+      # The generic aggregate (mor.messaging.facts) and, transitional with
+      # the echo flow, its facts and seeded accounts.
+      - inside:
+          stopBy: end
+          kind: class_definition
+          has:
+            field: name
+            regex: ^(Aggregate$|Echo|SeededEcho)
+      # Transitional, with the echo flow: the parameters named after it.
+      - inside:
+          any:
+            - kind: typed_parameter
+            - kind: assignment
+          has:
+            kind: identifier
+            regex: ^echo_

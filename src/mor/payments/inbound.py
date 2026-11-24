@@ -24,6 +24,7 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
+from mor.ids import PspAccountId, PspInboxId
 from mor.messaging.facts import (
     PaymentEventsWantedV1,
     PspEventReceivedV1,
@@ -61,7 +62,7 @@ class UnknownReference(Exception):
 
 @dataclass(frozen=True)
 class Stored:
-    inbox_id: uuid.UUID
+    inbox_id: PspInboxId
 
 
 @dataclass(frozen=True)
@@ -72,7 +73,7 @@ class AlreadyStored:
 
 async def store_inbox(
     conn: Connection,
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     mode: InboundMode,
     body: bytes,
     request_ref: str | None,
@@ -83,7 +84,7 @@ async def store_inbox(
     (the payout a page of lines belongs to); None for what the PSP sends
     on its own. Insert, and a conflict means stored already. Never
     commits."""
-    inbox_id = uuid.uuid7()
+    inbox_id = PspInboxId(uuid.uuid7())
     cur = await conn.execute(
         """
         INSERT INTO psp_inbox

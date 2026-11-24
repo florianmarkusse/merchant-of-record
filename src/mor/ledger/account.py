@@ -7,9 +7,10 @@ In the database an account is its kind and a text scope (`journal_line`),
 made by `kind_of` and `scope_of`; nothing reads an account back from them.
 """
 
-import uuid
 from dataclasses import dataclass
 from enum import StrEnum
+
+from mor.ids import MerchantId, PspAccountId
 
 
 class AccountKind(StrEnum):
@@ -35,7 +36,7 @@ class AccountKind(StrEnum):
 class PspClearing:
     """What a PSP holds for us from captures, until it pays out."""
 
-    psp_account_id: uuid.UUID
+    psp_account_id: PspAccountId
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ class ShippingPayable:
 
 @dataclass(frozen=True)
 class MerchantPayable:
-    merchant_id: uuid.UUID
+    merchant_id: MerchantId
 
 
 @dataclass(frozen=True)
@@ -73,7 +74,7 @@ class PspFeeCollected:
 class PspFeeVariance:
     """The real fee less the estimate, ours."""
 
-    psp_account_id: uuid.UUID
+    psp_account_id: PspAccountId
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,7 @@ class CourierVariance:
 class Reserve:
     """A rolling reserve held back from a merchant's payouts."""
 
-    merchant_id: uuid.UUID
+    merchant_id: MerchantId
 
 
 @dataclass(frozen=True)
@@ -107,7 +108,7 @@ class Rounding:
     """A PSP's rounding of a payout's net to our units
     (docs/plan-payments.md §7)."""
 
-    psp_account_id: uuid.UUID
+    psp_account_id: PspAccountId
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,7 @@ class PayoutInTransit:
     """What a PSP says it paid out and our bank has not shown yet
     (docs/plan-payments.md §7)."""
 
-    psp_account_id: uuid.UUID
+    psp_account_id: PspAccountId
 
 
 type Account = (

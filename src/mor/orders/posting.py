@@ -21,12 +21,12 @@ credited its price exactly, so the merchant is never short; the
 conversion's rounding sits in `fx_position`.
 """
 
-import uuid
 from datetime import datetime
 
 from mor.audit import Actor
 from mor.checkout.quotes import MadeQuote
 from mor.checkout.records import SoldLine
+from mor.ids import MerchantId, PaymentAttemptId, PspAccountId
 from mor.ledger.account import (
     Account,
     DutiesPayable,
@@ -46,7 +46,7 @@ from mor.quote.build import Part
 from mor.quote.groups import PartKind
 
 
-def capture_key(attempt_id: uuid.UUID) -> str:
+def capture_key(attempt_id: PaymentAttemptId) -> str:
     return f"capture:{attempt_id}"
 
 
@@ -54,7 +54,7 @@ def _account_of(
     part: Part,
     lines: tuple[SoldLine, ...],
     quote_currency: Currency,
-    merchant_id: uuid.UUID,
+    merchant_id: MerchantId,
     country: str,
     courier: str,
 ) -> Account:
@@ -89,12 +89,12 @@ def _account_of(
 
 
 def capture_entry(
-    attempt_id: uuid.UUID,
+    attempt_id: PaymentAttemptId,
     quote: MadeQuote,
     option_no: int,
     lines: tuple[SoldLine, ...],
-    merchant_id: uuid.UUID,
-    psp_account_id: uuid.UUID,
+    merchant_id: MerchantId,
+    psp_account_id: PspAccountId,
     country: str,
     courier: str,
     captured_at: datetime,

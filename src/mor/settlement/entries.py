@@ -21,13 +21,13 @@ otherwise the gap stays in `psp_clearing` and the payout stays open.
 """
 
 import math
-import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
 
 from mor.audit import Actor
+from mor.ids import PspAccountId
 from mor.ledger.account import (
     Account,
     PayoutInTransit,
@@ -48,15 +48,15 @@ def to_minor(exact: Fraction) -> int:
     return round_fraction(exact, ROUNDING)
 
 
-def line_key(account_id: uuid.UUID, vendor_line_id: str) -> str:
+def line_key(account_id: PspAccountId, vendor_line_id: str) -> str:
     return f"settlement:{account_id}:{vendor_line_id}"
 
 
-def payout_key(account_id: uuid.UUID, vendor_payout_id: str) -> str:
+def payout_key(account_id: PspAccountId, vendor_payout_id: str) -> str:
     return f"payout:{account_id}:{vendor_payout_id}"
 
 
-def rounding_key(account_id: uuid.UUID, vendor_payout_id: str, number: int) -> str:
+def rounding_key(account_id: PspAccountId, vendor_payout_id: str, number: int) -> str:
     """The `number`th change to a payout's rounding, counted from 1."""
     return f"payout-rounding:{account_id}:{vendor_payout_id}:{number}"
 
@@ -70,7 +70,7 @@ def _post(lines: list[Line], account: Account, amount: Money) -> None:
 
 
 def line_entry(
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     vendor_line_id: str,
     estimate: Money,
     fee: Money,
@@ -144,7 +144,7 @@ def check_net(reported: Fraction, lines: Sequence[LineAmounts]) -> AddedUp | Net
 
 
 def payout_entry(
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     vendor_payout_id: str,
     net: Money,
     effective_at: datetime,
@@ -173,7 +173,7 @@ def payout_entry(
 
 
 def rounding_entry(
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     vendor_payout_id: str,
     number: int,
     change: Money,

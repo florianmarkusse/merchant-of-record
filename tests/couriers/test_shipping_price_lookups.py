@@ -4,7 +4,6 @@ combination, a price held while usable by the account's rule, every call
 counted, our own card's price stored beside the carrier's."""
 
 import asyncio
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -34,6 +33,7 @@ from mor.couriers.records import (
     PriceState,
 )
 from mor.db.connect import Connection, connect
+from mor.ids import ShippingPriceLookupId
 from mor.markets.store import Loaded, load_market
 from mor.messaging.worker import drain_once
 from mor.money.amount import Money
@@ -84,11 +84,11 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
             await wired.control.aclose()
 
 
-async def _ask(setup: Setup, now: datetime = NOW) -> uuid.UUID:
+async def _ask(setup: Setup, now: datetime = NOW) -> ShippingPriceLookupId:
     async with await connect(setup.url) as conn:
         asked = await request_shipping_price(conn, TO_SG, ACTOR, now)
         await conn.commit()
-    assert isinstance(asked, uuid.UUID)
+    assert not isinstance(asked, NoCourierAccount)
     return asked
 
 
@@ -111,7 +111,7 @@ async def _carrier_calls(setup: Setup) -> int:
     return await count_rows(setup.url, "SELECT count(*) FROM fake_vendor.courier_call")
 
 
-async def _facts(setup: Setup, lookup_id: uuid.UUID) -> list[str]:
+async def _facts(setup: Setup, lookup_id: ShippingPriceLookupId) -> list[str]:
     async with await connect(setup.url) as conn:
         cur = await conn.execute(
             "SELECT message_type::text FROM outbox WHERE aggregate_id = %s"

@@ -3,7 +3,6 @@ duty vendor in-process (docs/plan-quote.md §3, 4b-2): asked once per
 combination, every call counted, each answer stored beside our own row."""
 
 import asyncio
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -28,6 +27,7 @@ from mor.duties.port import DutyProvider, RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
 from mor.fakes.duty import make_app
 from mor.fakes.hang import hang_a_minute
+from mor.ids import DutyLookupId
 from mor.markets.records import Charge
 from mor.markets.source import parse
 from mor.markets.store import load_market
@@ -71,11 +71,11 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
         await body(Setup(url=url, http=http, network=network, worker=worker))
 
 
-async def _ask(setup: Setup, question: RateQuestion = T_SHIRT) -> uuid.UUID:
+async def _ask(setup: Setup, question: RateQuestion = T_SHIRT) -> DutyLookupId:
     async with await connect(setup.url) as conn:
         asked = await request_duty_rate(conn, "acme", question, ACTOR, NOW)
         await conn.commit()
-    assert isinstance(asked, uuid.UUID)
+    assert not isinstance(asked, NoVendorAccount)
     return asked
 
 
@@ -97,7 +97,7 @@ async def _vendor_calls(setup: Setup) -> int:
     return await count_rows(setup.url, "SELECT count(*) FROM fake_vendor.duty_call")
 
 
-async def _facts(setup: Setup, lookup_id: uuid.UUID) -> list[str]:
+async def _facts(setup: Setup, lookup_id: DutyLookupId) -> list[str]:
     async with await connect(setup.url) as conn:
         cur = await conn.execute(
             "SELECT message_type::text FROM outbox WHERE aggregate_id = %s"

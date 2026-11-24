@@ -6,7 +6,6 @@ and address here is made up."""
 
 import html
 import re
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -22,6 +21,7 @@ from mor.checkout.records import AfterPayment, Customs, SessionDraft, SoldLine
 from mor.checkout.sessions import create_session, session_by_id
 from mor.couriers.records import Parcel
 from mor.db.connect import connect
+from mor.ids import CheckoutSessionId, MerchantId
 from mor.markets.store import load_market
 from mor.merchants.records import KybState
 from mor.merchants.store import create_merchant, set_kyb_state
@@ -86,7 +86,7 @@ class Wiring:
 
 @dataclass(frozen=True)
 class Shop:
-    merchant_id: uuid.UUID
+    merchant_id: MerchantId
     account: PspAccount
 
 
@@ -138,11 +138,11 @@ async def make_shop(
 
 async def quoted_session(
     url: str,
-    merchant_id: uuid.UUID,
+    merchant_id: MerchantId,
     price: Money,
     now: datetime = NOW,
     after_payment: AfterPayment = AfterPayment.OUR_PAGE,
-) -> tuple[uuid.UUID, str]:
+) -> tuple[CheckoutSessionId, str]:
     """A session quoted for the Singapore address: its id and the
     cheapest option's key."""
     async with await connect(url) as conn:
@@ -187,7 +187,7 @@ class Setup:
     wired: Wired
     clock: list[datetime]
     shop: Shop
-    session_id: uuid.UUID
+    session_id: CheckoutSessionId
     option: str
 
     @property

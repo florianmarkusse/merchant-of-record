@@ -1,9 +1,10 @@
 """Merchants and their API keys (docs/plan-quote.md §5, 4d-1)."""
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+
+from mor.ids import MerchantId
 
 
 DEFAULT_DAILY_VENDOR_ASKS = 100  # decided 19-Nov-2026
@@ -21,7 +22,7 @@ class KybState(StrEnum):
 
 @dataclass(frozen=True, kw_only=True)
 class Merchant:
-    id: uuid.UUID
+    id: MerchantId
     legal_name: str
     display_name: str  # what buyers see
     country: str

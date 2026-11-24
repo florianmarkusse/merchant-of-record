@@ -46,6 +46,7 @@ from mor.couriers.records import (
     usable_until,
 )
 from mor.db.connect import Connection
+from mor.ids import CourierAccountId, MarketLoadId, ShippingPriceLookupId
 from mor.markets.store import latest_load, read_market
 from mor.messaging.facts import (
     ShippingPriceFoundV1,
@@ -87,7 +88,7 @@ class PriceCall:
 
 @dataclass(frozen=True, kw_only=True)
 class _AccountRow:
-    id: uuid.UUID
+    id: CourierAccountId
     carrier: str
     provider: CourierProvider
     kind: ProviderAccountKind
@@ -99,7 +100,7 @@ class _AccountRow:
 
 @dataclass(frozen=True, kw_only=True)
 class _LookupRow:
-    id: uuid.UUID
+    id: ShippingPriceLookupId
     carrier: str
     service: str
     origin: str
@@ -115,7 +116,7 @@ class _LookupRow:
     currency: Currency | None
     finished_at: datetime | None
     carrier_valid_until: datetime | None
-    own_load_id: uuid.UUID | None
+    own_load_id: MarketLoadId | None
     own_rate_card: str | None
     own_total_minor: int | None
     own_currency: Currency | None
@@ -133,8 +134,8 @@ async def create_courier_account(
     timeout: timedelta,
     price_valid_for: timedelta,
     price_expiry: PriceExpiry,
-) -> uuid.UUID:
-    account_id = uuid.uuid7()
+) -> CourierAccountId:
+    account_id = CourierAccountId(uuid.uuid7())
     await conn.execute(
         """
         INSERT INTO courier_account
@@ -200,7 +201,7 @@ async def set_price_rule(
 
 async def request_shipping_price(
     conn: Connection, question: PriceQuestion, actor: Actor, now: datetime
-) -> uuid.UUID | NoCourierAccount:
+) -> ShippingPriceLookupId | NoCourierAccount:
     """The lookup that serves this question at `now`: the newest finished
     one while usable, else the open request, opened here if there is none.
     Insert first; a conflict means another request is open, and that one is
@@ -239,7 +240,7 @@ async def request_shipping_price(
     )
     row = await cur.fetchone()
     if row is not None:
-        lookup_id: uuid.UUID = row[0]
+        lookup_id: ShippingPriceLookupId = row[0]
         await append_fact(
             conn, ShippingPriceNeededV1(shipping_price_lookup_id=lookup_id), actor, now
         )
@@ -282,7 +283,7 @@ async def read_price(conn: Connection, question: PriceQuestion) -> PriceHeld:
             ),
         )
         rows = await cur.fetchall()
-    open_id: uuid.UUID | None = None
+    open_id: ShippingPriceLookupId | None = None
     newest: _LookupRow | None = None
     for row in rows:
         if row.state == PriceState.REQUESTED:
@@ -345,7 +346,9 @@ async def _finished(
     )
 
 
-async def _lock_lookup(conn: Connection, lookup_id: uuid.UUID) -> _LookupRow:
+async def _lock_lookup(
+    conn: Connection, lookup_id: ShippingPriceLookupId
+) -> _LookupRow:
     async with conn.cursor(row_factory=class_row(_LookupRow)) as cur:
         await cur.execute(
             """
@@ -382,7 +385,7 @@ def _question(row: _LookupRow) -> PriceQuestion:
 
 
 async def prepare_rate(
-    conn: Connection, lookup_id: uuid.UUID, now: datetime
+    conn: Connection, lookup_id: ShippingPriceLookupId, now: datetime
 ) -> NoCall | PriceCall:
     lookup = await _lock_lookup(conn, lookup_id)
     if lookup.state != PriceState.REQUESTED:
@@ -409,7 +412,7 @@ async def ask_rate(
 
 async def complete_rate(
     conn: Connection,
-    lookup_id: uuid.UUID,
+    lookup_id: ShippingPriceLookupId,
     call: PriceCall,
     result: QuoteRateResult,
     now: datetime,
@@ -457,7 +460,7 @@ async def complete_rate(
 
 async def _finish(
     conn: Connection,
-    lookup_id: uuid.UUID,
+    lookup_id: ShippingPriceLookupId,
     state: PriceState,
     detail: str | None,
     now: datetime,
@@ -478,7 +481,7 @@ async def _store_price(
     """The price and its parts, beside our own card's price for the same
     service, lane and parcel in the load in force (in the carrier's
     currency, rounded up as shipping is), when one can price it."""
-    own_load_id: uuid.UUID | None = None
+    own_load_id: MarketLoadId | None = None
     own_card: str | None = None
     own_total: int | None = None
     load = await latest_load(conn)
@@ -539,7 +542,7 @@ async def _store_price(
 class LivePriceRow:
     """One carrier answer for a person: its price beside our card's."""
 
-    lookup_id: uuid.UUID
+    lookup_id: ShippingPriceLookupId
     question: PriceQuestion
     state: PriceState
     calls: int

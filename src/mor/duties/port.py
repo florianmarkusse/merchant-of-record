@@ -9,12 +9,12 @@ its `taxes[]` the import tax.
 """
 
 import re
-import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 from fractions import Fraction
 
+from mor.ids import DutyVendorAccountId
 from mor.markets.records import Charge
 from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import CallFailure
@@ -29,7 +29,7 @@ class DutyProvider(StrEnum):
 
 @dataclass(frozen=True, kw_only=True)
 class DutyVendorAccount:
-    id: uuid.UUID
+    id: DutyVendorAccountId
     vendor_name: str
     provider: DutyProvider
     kind: ProviderAccountKind

@@ -41,6 +41,7 @@ from mor.echo.inbound import JobNotFound, record_manual_event
 from mor.echo.port import EchoProvider, EventKind, EventMode
 from mor.echo.records import EchoEventSource, EchoJobState
 from mor.fakes.psp import CUT_FAULTS
+from mor.ids import PspAccountId
 from mor.psp.port import SettlementMode
 from mor.web.forms import read_form, same_origin
 
@@ -118,7 +119,7 @@ class EventRow:
 
 @dataclass(frozen=True)
 class PspRow:
-    id: uuid.UUID
+    id: PspAccountId
     name: str
     settlement_mode: SettlementMode
 

@@ -157,6 +157,14 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   `fetchone()` and an assert; a function that changes a row it read
   takes the row's `Locked…` type, made only by its `lock_*` function; no
   import aliases; no local named after a domain name, module or builtin.
+- Every id has its own `NewType` in `mor.ids` (`MerchantId`,
+  `PspAccountId`), named after its table, so pyright refuses one id where
+  another belongs (decided 24-Nov-2026). It gets its type where it is made
+  (`OrderId(uuid.uuid7())`), read (the record's field) or parsed (a path
+  parameter, `mor.public_ids`), and passes through unchanged elsewhere. A
+  bare `uuid.UUID` is only for generic messaging code (a message, an
+  aggregate of any kind); the `typed-ids` ast-grep rule refuses it
+  elsewhere, except in the echo flow until it is retired.
 - Name a value by its role (`seller`, `paid_invoice`), not with a `_row`
   or `_record` suffix. Where two modules clash (the many `flow` modules
   in `mor.messaging.consumers`), import by dotted path (`import

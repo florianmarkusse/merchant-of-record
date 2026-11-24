@@ -7,6 +7,7 @@ import pytest
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import connect
+from mor.ids import JournalEntryId, MerchantId, PspAccountId
 from mor.ledger.account import (
     Account,
     MerchantPayable,
@@ -31,11 +32,11 @@ from mor.money.currency import Currency
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
 SYSTEM = Actor(ActorKind.SYSTEM, "test")
 
-CLEARING = PspClearing(uuid.uuid7())
+CLEARING = PspClearing(PspAccountId(uuid.uuid7()))
 GST_SG = TaxPayable("SG")
 SHIPPING = ShippingPayable("fake_courier")
-MERCHANT_1 = MerchantPayable(uuid.uuid7())
-MERCHANT_2 = MerchantPayable(uuid.uuid7())
+MERCHANT_1 = MerchantPayable(MerchantId(uuid.uuid7()))
+MERCHANT_2 = MerchantPayable(MerchantId(uuid.uuid7()))
 PSP_FEE = PspFeeCollected()
 MARGIN = RevenueMorMargin()
 
@@ -148,7 +149,7 @@ def test_same_key_from_two_connections_at_once_records_once(
     assert asyncio.run(_balance(database_url, CLEARING)) == _sgd(13_386)
 
 
-def _raw_entry_sql(entry_id: uuid.UUID) -> bytes:
+def _raw_entry_sql(entry_id: JournalEntryId) -> bytes:
     return (
         "INSERT INTO journal_entry (id, idempotency_key, description,"
         " effective_at, recorded_at, actor_kind, actor_id)"
@@ -157,7 +158,7 @@ def _raw_entry_sql(entry_id: uuid.UUID) -> bytes:
     ).encode()
 
 
-def _raw_line_sql(entry_id: uuid.UUID, line_no: int, amount: int) -> bytes:
+def _raw_line_sql(entry_id: JournalEntryId, line_no: int, amount: int) -> bytes:
     return (
         "INSERT INTO journal_line (entry_id, line_no, account_kind,"
         " account_scope, amount_minor, currency)"
@@ -167,7 +168,7 @@ def _raw_line_sql(entry_id: uuid.UUID, line_no: int, amount: int) -> bytes:
 
 def test_database_refuses_an_unbalanced_entry_at_commit(database_url: str) -> None:
     # Bypassing build_entry, as a buggy code path or a hand-written fix would.
-    entry_id = uuid.uuid7()
+    entry_id = JournalEntryId(uuid.uuid7())
     with pytest.raises(psycopg.errors.RaiseException, match="does not balance"):
         asyncio.run(
             _execute_and_commit(
@@ -184,7 +185,11 @@ def test_database_refuses_an_entry_without_lines_at_commit(
     database_url: str,
 ) -> None:
     with pytest.raises(psycopg.errors.RaiseException, match="needs at least 2"):
-        asyncio.run(_execute_and_commit(database_url, _raw_entry_sql(uuid.uuid7())))
+        asyncio.run(
+            _execute_and_commit(
+                database_url, _raw_entry_sql(JournalEntryId(uuid.uuid7()))
+            )
+        )
 
 
 def test_database_refuses_changing_or_deleting_recorded_entries(

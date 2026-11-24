@@ -7,6 +7,7 @@ import pytest
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
+from mor.ids import ProbeId
 from mor.messaging.delivery import (
     Candidate,
     Ran,
@@ -40,19 +41,19 @@ NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
 CLI = Actor(ActorKind.SYSTEM, "test")
 
 
-async def _start(url: str) -> uuid.UUID:
+async def _start(url: str) -> ProbeId:
     async with await connect(url) as conn:
         probe_id = await start_probe(conn, CLI, NOW)
         await conn.commit()
     return probe_id
 
 
-async def _state(url: str, probe_id: uuid.UUID) -> ProbeState | None:
+async def _state(url: str, probe_id: ProbeId) -> ProbeState | None:
     async with await connect(url) as conn:
         return await probe_state(conn, probe_id)
 
 
-def _echo_candidate(message_id: uuid.UUID, probe_id: uuid.UUID) -> Candidate:
+def _echo_candidate(message_id: uuid.UUID, probe_id: ProbeId) -> Candidate:
     return Candidate(
         message_id=message_id,
         consumer=ConsumerName.PROBE_ECHO,

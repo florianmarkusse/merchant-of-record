@@ -7,7 +7,6 @@ here is made up."""
 import asyncio
 import html
 import re
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -30,6 +29,7 @@ from mor.checkout.sessions import create_session, session_by_id
 from mor.couriers.prices import create_courier_account
 from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import connect
+from mor.ids import CheckoutSessionId
 from mor.markets.records import MarketSet
 from mor.markets.store import load_market
 from mor.merchants.records import KeyEnv, KybState
@@ -85,7 +85,7 @@ class Setup:
     url: str
     wired: Wired
     clock: list[datetime]
-    session_id: uuid.UUID
+    session_id: CheckoutSessionId
     key: str
 
     @property

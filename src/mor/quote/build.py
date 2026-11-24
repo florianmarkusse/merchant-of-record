@@ -26,7 +26,6 @@ difference is the rounding remainder, booked when the order is paid
 (slice 5). The parts sum to the total exactly.
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 from fractions import Fraction
@@ -34,6 +33,7 @@ from fractions import Fraction
 from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
+from mor.ids import DutyLookupId, ShippingPriceLookupId
 from mor.markets.changes import BASE_WORDS, percent_text
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
@@ -215,9 +215,9 @@ class InputsMissing:
     (`waiting`, `price_waiting`), then quote again."""
 
     asks: tuple[VendorAsk, ...]
-    waiting: tuple[uuid.UUID, ...]
+    waiting: tuple[DutyLookupId, ...]
     price_asks: tuple[PriceQuestion, ...] = ()
-    price_waiting: tuple[uuid.UUID, ...] = ()
+    price_waiting: tuple[ShippingPriceLookupId, ...] = ()
 
 
 type QuoteResult = Quote | QuoteRefusal | InputsMissing
@@ -307,9 +307,9 @@ def build_quote(
     options: list[ShippingOption] = []
     not_offered: list[NotOffered] = []
     asks: list[VendorAsk] = []
-    waiting: list[uuid.UUID] = []
+    waiting: list[DutyLookupId] = []
     price_asks: list[PriceQuestion] = []
-    price_waiting: list[uuid.UUID] = []
+    price_waiting: list[ShippingPriceLookupId] = []
     for offer in offers(
         market,
         destination,
@@ -469,7 +469,7 @@ def _charges(
     total_goods = sum(line_goods, Fraction(0))
     parts: list[Part] = []
     asks: list[VendorAsk] = []
-    waiting: list[uuid.UUID] = []
+    waiting: list[DutyLookupId] = []
     parcel_rows: set[int] = set()  # per-parcel rows already charged
     for index, line in enumerate(request.lines):
         line_paths = paths[line.category]

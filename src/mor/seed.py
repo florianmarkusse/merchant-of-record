@@ -54,6 +54,7 @@ from mor.duties.port import DutyProvider
 from mor.echo.flow import create_echo_account
 from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
+from mor.ids import MerchantId
 from mor.markets.records import PriceSource
 from mor.markets.store import latest_load, read_market
 from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, KybState, NewKey
@@ -110,7 +111,7 @@ class FakeUnreachable:
 
 
 @dataclass(frozen=True, kw_only=True)
-class SeededAccount:
+class SeededEchoAccount:
     account_id: uuid.UUID
     base_url: str
     event_mode: EventMode
@@ -134,13 +135,13 @@ def base_url(self_url: str, provider: EchoProvider, mode: EventMode) -> str:
 
 async def _seed_account(
     conn: Connection, url: str, provider: EchoProvider, mode: EventMode, now: datetime
-) -> SeededAccount:
+) -> SeededEchoAccount:
     cur = await conn.execute(
         "SELECT id, webhook_secret FROM echo_account WHERE base_url = %s", (url,)
     )
     row = await cur.fetchone()
     if row is not None:
-        return SeededAccount(
+        return SeededEchoAccount(
             account_id=row[0],
             base_url=url,
             event_mode=mode,
@@ -159,7 +160,7 @@ async def _seed_account(
     )
     if mode == EventMode.FILE:
         await start_report_schedule(conn, account_id, SEEDER, now)
-    return SeededAccount(
+    return SeededEchoAccount(
         account_id=account_id,
         base_url=url,
         event_mode=mode,
@@ -170,14 +171,14 @@ async def _seed_account(
 
 async def seed_accounts(
     conn: Connection, settings: Settings, now: datetime
-) -> list[SeededAccount] | SeedInProd:
+) -> list[SeededEchoAccount] | SeedInProd:
     """Our side of the seed, in the caller's transaction. Never commits."""
     if settings.environment == Environment.PROD:
         return SeedInProd()
     await conn.execute(
         "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (SEED_LOCK,)
     )
-    seeded: list[SeededAccount] = []
+    seeded: list[SeededEchoAccount] = []
     for provider in EchoProvider:
         for mode in EventMode:
             url = base_url(settings.self_url, provider, mode)
@@ -366,7 +367,7 @@ async def set_fake_duty_rates(
 
 
 async def subscribe_webhooks(
-    http: httpx2.AsyncClient, settings: Settings, seeded: list[SeededAccount]
+    http: httpx2.AsyncClient, settings: Settings, seeded: list[SeededEchoAccount]
 ) -> FakeUnreachable | None:
     """The vendor side: register each push account's webhook at the fake,
     as one would on a vendor's dashboard."""
@@ -444,7 +445,7 @@ async def seed_merchant(
     if settings.environment == Environment.PROD:
         return SeedInProd()
     legal_name, display_name = SANDBOX_MERCHANT
-    merchant_id: uuid.UUID | None = None
+    merchant_id: MerchantId | None = None
     approved = False
     for seller in await merchants(conn):
         if seller.legal_name == legal_name:

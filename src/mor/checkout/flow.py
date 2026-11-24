@@ -49,6 +49,15 @@ from mor.config import Environment
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
 from mor.duties.records import LookupState
+from mor.ids import (
+    CheckoutAddressId,
+    CheckoutSessionId,
+    DutyLookupId,
+    MarketLoadId,
+    PaymentAttemptId,
+    QuoteId,
+    ShippingPriceLookupId,
+)
 from mor.markets.store import load_in_force
 from mor.messaging.facts import (
     CheckoutSessionExpiredV1,
@@ -95,12 +104,12 @@ LIVE_STATES = (
 
 @dataclass(frozen=True)
 class Quoted:
-    quote_id: uuid.UUID
+    quote_id: QuoteId
 
 
 @dataclass(frozen=True)
 class Refused:
-    quote_id: uuid.UUID
+    quote_id: QuoteId
     code: str
 
 
@@ -162,13 +171,13 @@ def _quote_request(
 async def _refuse(
     conn: Connection,
     session: LockedSession,
-    address_id: uuid.UUID,
-    load_id: uuid.UUID,
+    address_id: CheckoutAddressId,
+    load_id: MarketLoadId,
     refusal: Refusal,
     actor: Actor,
     now: datetime,
 ) -> Refused:
-    quote_id = uuid.uuid7()
+    quote_id = QuoteId(uuid.uuid7())
     await store_refused(
         conn,
         RefusedQuote(
@@ -196,7 +205,7 @@ async def _refuse(
 async def _wait(
     conn: Connection,
     session: LockedSession,
-    address_id: uuid.UUID,
+    address_id: CheckoutAddressId,
     asked: Asked,
 ) -> Waiting:
     for lookup_id in asked.duty_lookups:
@@ -219,10 +228,10 @@ async def _wait(
     return Waiting()
 
 
-def _inputs(quote: Quote, lookups_used: list[uuid.UUID]) -> QuoteInputs:
+def _inputs(quote: Quote, lookups_used: list[DutyLookupId]) -> QuoteInputs:
     """The answered duty lookups the quote read, and the carrier prices
     its options charge; sorted, as they are read back."""
-    prices: set[uuid.UUID] = set()
+    prices: set[ShippingPriceLookupId] = set()
     for option in quote.options:
         if option.live is not None:
             prices.add(option.live.lookup_id)
@@ -232,7 +241,7 @@ def _inputs(quote: Quote, lookups_used: list[uuid.UUID]) -> QuoteInputs:
 async def _attempt(
     conn: Connection,
     session: LockedSession,
-    address_id: uuid.UUID,
+    address_id: CheckoutAddressId,
     country: str,
     environment: Environment,
     actor: Actor,
@@ -255,11 +264,11 @@ async def _attempt(
                     return await _refuse(
                         conn, session, address_id, loaded.load_id, offered, actor, now
                     )
-                answered: list[uuid.UUID] = []
+                answered: list[DutyLookupId] = []
                 for lookup in lookups.values():
                     if lookup.state == LookupState.ANSWERED:
                         answered.append(lookup.id)
-                quote_id = uuid.uuid7()
+                quote_id = QuoteId(uuid.uuid7())
                 made = stored_from(
                     offered,
                     quote_id,
@@ -323,7 +332,7 @@ def _over(session: CheckoutSession, now: datetime) -> bool:
 
 async def submit_address(
     conn: Connection,
-    session_id: uuid.UUID,
+    session_id: CheckoutSessionId,
     address: Address,
     environment: Environment,
     now: datetime,
@@ -352,7 +361,10 @@ async def submit_address(
 
 
 async def refresh_quote(
-    conn: Connection, session_id: uuid.UUID, environment: Environment, now: datetime
+    conn: Connection,
+    session_id: CheckoutSessionId,
+    environment: Environment,
+    now: datetime,
 ) -> RefreshResult:
     """Quote the same address again once its quote no longer holds. Never
     commits."""
@@ -481,7 +493,7 @@ async def expire_session(
 async def end_payment(
     conn: Connection,
     session: LockedSession | None,
-    ended: uuid.UUID,
+    ended: PaymentAttemptId,
     now: datetime,
 ) -> ConsumerOutcome:
     """Consumer `session_payment_ended`: an attempt ended without money

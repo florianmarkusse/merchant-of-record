@@ -37,6 +37,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.couriers.prices import (
+    NoCourierAccount,
     create_courier_account,
     read_price,
     request_shipping_price,
@@ -51,6 +52,7 @@ from mor.couriers.records import (
 )
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
+from mor.ids import ShippingPriceLookupId
 from mor.messaging.delivery import (
     Candidate,
     Skipped,
@@ -130,7 +132,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
         self.run(self._set_up())
         # The model: the request each question has open, as an ask saw it.
-        self.open: dict[PriceQuestion, uuid.UUID] = {}
+        self.open: dict[PriceQuestion, ShippingPriceLookupId] = {}
         self.scripted: dict[str, int] = {}
         self.refusals_scripted = 0
         self.counted_crashes = 0
@@ -160,7 +162,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
             async with await connect(TEST_URL) as conn:
                 asked = await request_shipping_price(conn, question, ACTOR, self.now)
                 await conn.commit()
-                assert isinstance(asked, uuid.UUID)
+                assert not isinstance(asked, NoCourierAccount)
                 held = await read_price(conn, question)
             if held.open_id == asked:
                 known = self.open.get(question)
@@ -355,7 +357,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
             )
             await conn.commit()
 
-    async def _is_open(self, lookup_id: uuid.UUID) -> bool:
+    async def _is_open(self, lookup_id: ShippingPriceLookupId) -> bool:
         state = await one_value(
             self.worker,
             "SELECT state FROM shipping_price_lookup WHERE id = %s",

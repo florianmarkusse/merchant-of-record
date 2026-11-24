@@ -1,10 +1,10 @@
-import uuid
 from dataclasses import dataclass
 
 from psycopg.rows import class_row
 
 from mor.db.connect import Connection
 from mor.db.fetch import one_row, one_value
+from mor.ids import JournalEntryId
 from mor.ledger.account import Account, kind_of, scope_of
 from mor.ledger.entry import JournalEntry
 from mor.money.amount import Money
@@ -18,7 +18,7 @@ class IdempotencyKeyReused(Exception):
 
 @dataclass(frozen=True)
 class Recorded:
-    entry_id: uuid.UUID
+    entry_id: JournalEntryId
 
 
 @dataclass(frozen=True)
@@ -26,12 +26,12 @@ class AlreadyRecorded:
     """The same entry was recorded before under this key (a retry, a
     redelivered message); nothing was written."""
 
-    entry_id: uuid.UUID
+    entry_id: JournalEntryId
 
 
 @dataclass(frozen=True)
 class _Comparison:
-    id: uuid.UUID
+    id: JournalEntryId
     same: bool
 
 

@@ -5,7 +5,6 @@ immutable, with every part exact and rounded, and the inputs it used.
 stored; `read_quote` gives the same record back, which a property checks.
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
@@ -14,6 +13,14 @@ from psycopg.rows import class_row
 
 from mor.checkout.records import QuoteState
 from mor.db.connect import Connection
+from mor.ids import (
+    CheckoutAddressId,
+    CheckoutSessionId,
+    DutyLookupId,
+    MarketLoadId,
+    QuoteId,
+    ShippingPriceLookupId,
+)
 from mor.markets.records import Collector, ServiceTier, Standing
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -40,16 +47,16 @@ class StoredOption:
 class QuoteInputs:
     """The vendor answers the quote used."""
 
-    duty_lookups: tuple[uuid.UUID, ...]
-    price_lookups: tuple[uuid.UUID, ...]
+    duty_lookups: tuple[DutyLookupId, ...]
+    price_lookups: tuple[ShippingPriceLookupId, ...]
 
 
 @dataclass(frozen=True, kw_only=True)
 class MadeQuote:
-    id: uuid.UUID
-    session_id: uuid.UUID
-    address_id: uuid.UUID
-    load_id: uuid.UUID
+    id: QuoteId
+    session_id: CheckoutSessionId
+    address_id: CheckoutAddressId
+    load_id: MarketLoadId
     made_at: datetime
     valid_until: datetime
     currency: Currency
@@ -62,10 +69,10 @@ class MadeQuote:
 
 @dataclass(frozen=True, kw_only=True)
 class RefusedQuote:
-    id: uuid.UUID
-    session_id: uuid.UUID
-    address_id: uuid.UUID
-    load_id: uuid.UUID
+    id: QuoteId
+    session_id: CheckoutSessionId
+    address_id: CheckoutAddressId
+    load_id: MarketLoadId
     made_at: datetime
     code: RefusalCode
     message: str
@@ -82,10 +89,10 @@ def _in_quote_currency(part: Part, currency: Currency) -> Part:
 
 def stored_from(
     quote: Quote,
-    quote_id: uuid.UUID,
-    session_id: uuid.UUID,
-    address_id: uuid.UUID,
-    load_id: uuid.UUID,
+    quote_id: QuoteId,
+    session_id: CheckoutSessionId,
+    address_id: CheckoutAddressId,
+    load_id: MarketLoadId,
     made_at: datetime,
     valid_until: datetime,
     inputs: QuoteInputs,
@@ -132,7 +139,7 @@ def stored_from(
 
 async def _insert_part(
     conn: Connection,
-    quote_id: uuid.UUID,
+    quote_id: QuoteId,
     option_no: int | None,
     part_no: int,
     part: Part,
@@ -264,10 +271,10 @@ async def store_refused(conn: Connection, refused: RefusedQuote) -> None:
 
 @dataclass(frozen=True, kw_only=True)
 class _QuoteRow:
-    id: uuid.UUID
-    session_id: uuid.UUID
-    address_id: uuid.UUID
-    market_load_id: uuid.UUID
+    id: QuoteId
+    session_id: CheckoutSessionId
+    address_id: CheckoutAddressId
+    market_load_id: MarketLoadId
     state: QuoteState
     made_at: datetime
     currency: Currency | None
@@ -298,8 +305,8 @@ class _PartRow:
 
 @dataclass(frozen=True)
 class _QuoteInputRow:
-    duty_lookup_id: uuid.UUID | None
-    shipping_price_lookup_id: uuid.UUID | None
+    duty_lookup_id: DutyLookupId | None
+    shipping_price_lookup_id: ShippingPriceLookupId | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -345,7 +352,7 @@ def _part(row: _PartRow, currency: Currency) -> Part:
     )
 
 
-async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | None:
+async def read_quote(conn: Connection, quote_id: QuoteId) -> StoredQuote | None:
     async with conn.cursor(row_factory=class_row(_QuoteRow)) as cur:
         await cur.execute(
             """
@@ -446,8 +453,8 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
             (quote_id,),
         )
         inputs = await cur.fetchall()
-    duty_lookups: list[uuid.UUID] = []
-    price_lookups: list[uuid.UUID] = []
+    duty_lookups: list[DutyLookupId] = []
+    price_lookups: list[ShippingPriceLookupId] = []
     for quote_input in inputs:
         if quote_input.duty_lookup_id is not None:
             duty_lookups.append(quote_input.duty_lookup_id)
@@ -471,7 +478,7 @@ async def read_quote(conn: Connection, quote_id: uuid.UUID) -> StoredQuote | Non
     )
 
 
-async def read_made_quote(conn: Connection, quote_id: uuid.UUID) -> MadeQuote:
+async def read_made_quote(conn: Connection, quote_id: QuoteId) -> MadeQuote:
     """A quote that a payment, an order or an invoice was made from: those
     only ever point at a made quote, so anything else is a bug."""
     quote = await read_quote(conn, quote_id)
@@ -482,7 +489,9 @@ async def read_made_quote(conn: Connection, quote_id: uuid.UUID) -> MadeQuote:
             raise AssertionError(f"quote {quote_id} is not a made quote: {quote!r}")
 
 
-async def session_quotes(conn: Connection, session_id: uuid.UUID) -> list[StoredQuote]:
+async def session_quotes(
+    conn: Connection, session_id: CheckoutSessionId
+) -> list[StoredQuote]:
     """Every quote of a session, newest first: for the staff page."""
     cur = await conn.execute(
         "SELECT id FROM quote WHERE session_id = %s ORDER BY id DESC", (session_id,)

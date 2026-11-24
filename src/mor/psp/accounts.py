@@ -10,6 +10,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
+from mor.ids import MerchantId, PspAccountId, PspRouteId
 from mor.messaging.guard import DuplicateGuard
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.port import (
@@ -24,7 +25,7 @@ from mor.psp.port import (
 
 @dataclass(frozen=True, kw_only=True)
 class _AccountRow:
-    id: uuid.UUID
+    id: PspAccountId
     name: str
     provider: PspProvider
     kind: ProviderAccountKind
@@ -82,7 +83,7 @@ async def create_psp_account(
     for neither. A real PSP's row can set them apart. Its settlement is read
     once `mor.settlement.fetch.start_settlement_reading` starts it, as the
     seed does. Never commits."""
-    account_id = uuid.uuid7()
+    account_id = PspAccountId(uuid.uuid7())
     method_values: list[str] = []
     for method in methods:
         method_values.append(method.value)
@@ -134,7 +135,7 @@ async def create_psp_account(
 
 
 async def read_psp_account(
-    conn: Connection, account_id: uuid.UUID
+    conn: Connection, account_id: PspAccountId
 ) -> PspAccount | None:
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
@@ -169,15 +170,15 @@ async def psp_account_by_name(conn: Connection, name: str) -> PspAccount | None:
 
 async def add_route(
     conn: Connection,
-    account_id: uuid.UUID,
-    merchant_id: uuid.UUID | None,
+    account_id: PspAccountId,
+    merchant_id: MerchantId | None,
     buyer_country: str | None,
     effective_from: datetime,
     actor: Actor,
     now: datetime,
-) -> uuid.UUID:
+) -> PspRouteId:
     """A new routing row; rows are never changed. Never commits."""
-    route_id = uuid.uuid7()
+    route_id = PspRouteId(uuid.uuid7())
     await conn.execute(
         """
         INSERT INTO psp_route
@@ -201,12 +202,12 @@ async def add_route(
 
 @dataclass(frozen=True)
 class Routed:
-    route_id: uuid.UUID
+    route_id: PspRouteId
     account: PspAccount
 
 
 async def route_for(
-    conn: Connection, merchant_id: uuid.UUID, buyer_country: str, now: datetime
+    conn: Connection, merchant_id: MerchantId, buyer_country: str, now: datetime
 ) -> Routed | None:
     """The account for a payment: among rows in force that match, the most
     specific (merchant and country, merchant, country, neither), then the
@@ -234,5 +235,5 @@ async def route_for(
 
 @dataclass(frozen=True)
 class _RouteRow:
-    id: uuid.UUID
-    psp_account_id: uuid.UUID
+    id: PspRouteId
+    psp_account_id: PspAccountId

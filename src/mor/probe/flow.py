@@ -17,6 +17,7 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
+from mor.ids import ProbeId
 from mor.messaging.facts import ProbeEchoedV1, ProbeStartedV1
 from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
 from mor.messaging.store import append_fact
@@ -42,8 +43,8 @@ def after_finish(state: ProbeState) -> ProbeState | Stale:
             return Stale()
 
 
-async def start_probe(conn: Connection, actor: Actor, now: datetime) -> uuid.UUID:
-    probe_id = uuid.uuid7()
+async def start_probe(conn: Connection, actor: Actor, now: datetime) -> ProbeId:
+    probe_id = ProbeId(uuid.uuid7())
     await conn.execute(
         "INSERT INTO probe (id, state, created_at) VALUES (%s, 'started', %s)",
         (probe_id, now),
@@ -52,7 +53,7 @@ async def start_probe(conn: Connection, actor: Actor, now: datetime) -> uuid.UUI
     return probe_id
 
 
-async def probe_state(conn: Connection, probe_id: uuid.UUID) -> ProbeState | None:
+async def probe_state(conn: Connection, probe_id: ProbeId) -> ProbeState | None:
     cur = await conn.execute("SELECT state FROM probe WHERE id = %s", (probe_id,))
     row = await cur.fetchone()
     if row is None:
@@ -64,11 +65,11 @@ async def probe_state(conn: Connection, probe_id: uuid.UUID) -> ProbeState | Non
 class LockedProbe:
     """A probe's row, read under its row lock."""
 
-    id: uuid.UUID
+    id: ProbeId
     state: ProbeState
 
 
-async def lock_probe(conn: Connection, probe_id: uuid.UUID) -> LockedProbe:
+async def lock_probe(conn: Connection, probe_id: ProbeId) -> LockedProbe:
     async with conn.cursor(row_factory=class_row(LockedProbe)) as cur:
         await cur.execute(
             "SELECT id, state FROM probe WHERE id = %s FOR UPDATE", (probe_id,)

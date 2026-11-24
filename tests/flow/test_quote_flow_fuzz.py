@@ -20,7 +20,6 @@ session is still quoting, and no delivery is open.
 
 import asyncio
 import os
-import uuid
 from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 
@@ -50,6 +49,7 @@ from mor.couriers.prices import create_courier_account
 from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
+from mor.ids import CheckoutSessionId
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import (
@@ -132,7 +132,7 @@ class QuoteFlow(RuleBasedStateMachine):
         self.http = wired.http
         self.control = wired.control
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
-        self.sessions: list[uuid.UUID] = self.run(self._set_up())
+        self.sessions: list[CheckoutSessionId] = self.run(self._set_up())
         self.given = 0
 
     def run[T](self, step: Coroutine[object, object, T]) -> T:
@@ -367,7 +367,7 @@ class QuoteFlow(RuleBasedStateMachine):
 
     # --- helpers ---------------------------------------------------------
 
-    async def _set_up(self) -> list[uuid.UUID]:
+    async def _set_up(self) -> list[CheckoutSessionId]:
         async with await connect(TEST_URL) as conn:
             await load_market(conn, live_market(), "fuzz", ACTOR, T0)
             seller = await create_merchant(
@@ -383,7 +383,7 @@ class QuoteFlow(RuleBasedStateMachine):
                 timedelta(hours=6),
                 PriceExpiry.CARRIER_FIRST,
             )
-            sessions: list[uuid.UUID] = []
+            sessions: list[CheckoutSessionId] = []
             for parcel in PARCELS:
                 line = SoldLine(
                     name="Linen shirt",

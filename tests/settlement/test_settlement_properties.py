@@ -13,6 +13,7 @@ from hypothesis import given, strategies
 
 from mor.audit import Actor, ActorKind
 from mor.fakes.psp import payout_amount
+from mor.ids import PspAccountId
 from mor.ledger.account import (
     Account,
     PayoutInTransit,
@@ -46,7 +47,7 @@ from mor.settlement.entries import (
 from mor.vendor_failures import UndecodableBody
 
 
-ACCOUNT = uuid.UUID("01a1fac0-0000-7000-8000-000000000001")
+ACCOUNT = PspAccountId(uuid.UUID("01a1fac0-0000-7000-8000-000000000001"))
 WHEN = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "test")
 CLEARING = PspClearing(ACCOUNT)

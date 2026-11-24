@@ -30,6 +30,14 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
 from mor.db.fetch import one_row, one_value
+from mor.ids import (
+    OrderId,
+    PaymentAttemptId,
+    PspAccountId,
+    PspInboxId,
+    SettlementLineId,
+    SettlementPayoutId,
+)
 from mor.ledger.account import AccountKind
 from mor.ledger.store import record_entry
 from mor.messaging.facts import (
@@ -81,7 +89,7 @@ ENDED_OTHERWISE = (
 async def record_document(
     conn: Connection,
     account: PspAccount,
-    inbox_id: uuid.UUID,
+    inbox_id: PspInboxId,
     mode: SettlementInbound,
     body: bytes,
     request_ref: str | None,
@@ -136,7 +144,7 @@ async def record_document(
     for line in document.lines:
         # The attempt a reference names never changes: kept from the start,
         # so an attempt's lines are booked in the order they were stored.
-        attempt_id: uuid.UUID | None = None
+        attempt_id: PaymentAttemptId | None = None
         if line.line_type == LineType.CAPTURE:
             attempt_id = await attempt_of_account(conn, account.id, line.reference)
         cur = await conn.execute(
@@ -194,8 +202,8 @@ async def record_document(
 
 @dataclass(frozen=True, kw_only=True)
 class LockedLine:
-    id: uuid.UUID
-    account_id: uuid.UUID
+    id: SettlementLineId
+    account_id: PspAccountId
     vendor_line_id: str
     type: LineType
     vendor_type: str
@@ -218,14 +226,14 @@ _LINE_SELECT = """
 """
 
 
-async def lock_line(conn: Connection, line_id: uuid.UUID) -> LockedLine:
+async def lock_line(conn: Connection, line_id: SettlementLineId) -> LockedLine:
     async with conn.cursor(row_factory=class_row(LockedLine)) as cur:
         await cur.execute(_LINE_SELECT + " WHERE l.id = %s FOR UPDATE OF l", (line_id,))
         return await one_row(cur, f"settlement line {line_id}")
 
 
 async def _lock_pending_lines(
-    conn: Connection, attempt_id: uuid.UUID
+    conn: Connection, attempt_id: PaymentAttemptId
 ) -> list[LockedLine]:
     """An attempt's lines not settled yet, in the order they were stored,
     which is the order the PSP published them."""
@@ -262,7 +270,7 @@ async def _exception(
 
 
 async def _estimate(
-    conn: Connection, attempt_id: uuid.UUID, currency: Currency
+    conn: Connection, attempt_id: PaymentAttemptId, currency: Currency
 ) -> Money:
     """The PSP fee the capture booked as collected: what was booked, not
     recomputed from the quote."""
@@ -380,7 +388,7 @@ async def _settle(
 
 @dataclass(frozen=True)
 class _LineStateRow:
-    attempt_id: uuid.UUID | None
+    attempt_id: PaymentAttemptId | None
     state: LineState
 
 
@@ -394,7 +402,7 @@ class PendingFor:
     """The line names its attempt: book it with the attempt's other
     pending lines, under the attempt's lock."""
 
-    attempt_id: uuid.UUID
+    attempt_id: PaymentAttemptId
 
 
 @dataclass(frozen=True)
@@ -405,7 +413,7 @@ class Unmatched:
 type LineBooking = AlreadyBooked | PendingFor | Unmatched
 
 
-async def line_booking(conn: Connection, line_id: uuid.UUID) -> LineBooking:
+async def line_booking(conn: Connection, line_id: SettlementLineId) -> LineBooking:
     """What booking a received line needs locked, for the table to lock it.
     Read without a lock: a line's attempt is set when it is stored and
     never updated, and its state only moves forward, which the locked step
@@ -423,11 +431,12 @@ async def line_booking(conn: Connection, line_id: uuid.UUID) -> LineBooking:
     return Unmatched()
 
 
-async def order_attempt(conn: Connection, order_id: uuid.UUID) -> uuid.UUID:
+async def order_attempt(conn: Connection, order_id: OrderId) -> PaymentAttemptId:
     """The order's attempt, which never changes."""
-    return await one_value(
+    found = await one_value(
         conn, "SELECT attempt_id FROM order_ WHERE id = %s", (order_id,), uuid.UUID
     )
+    return PaymentAttemptId(found)
 
 
 async def book_unmatched_line(
@@ -488,8 +497,8 @@ async def settle_pending(
 
 @dataclass(frozen=True, kw_only=True)
 class LockedPayout:
-    id: uuid.UUID
-    account_id: uuid.UUID
+    id: SettlementPayoutId
+    account_id: PspAccountId
     vendor_payout_id: str
     currency: Currency
     net_numerator: int
@@ -508,7 +517,7 @@ _PAYOUT_SELECT = """
 """
 
 
-async def lock_payout(conn: Connection, payout_id: uuid.UUID) -> LockedPayout:
+async def lock_payout(conn: Connection, payout_id: SettlementPayoutId) -> LockedPayout:
     async with conn.cursor(row_factory=class_row(LockedPayout)) as cur:
         await cur.execute(_PAYOUT_SELECT + " WHERE id = %s FOR UPDATE", (payout_id,))
         return await one_row(cur, f"settlement payout {payout_id}")
@@ -541,7 +550,7 @@ async def book_payout(
 
 @dataclass(frozen=True)
 class PayoutKey:
-    account_id: uuid.UUID
+    account_id: PspAccountId
     vendor_payout_id: str
 
 

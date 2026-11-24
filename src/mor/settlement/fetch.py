@@ -21,7 +21,6 @@ once by the PSP's own id. Decoding is the inbox's, in any order: nothing
 here waits for a page to be decoded.
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -32,6 +31,7 @@ from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
+from mor.ids import PspAccountId
 from mor.messaging.facts import PspSettlementDueV1
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater
 from mor.messaging.store import append_fact
@@ -126,7 +126,7 @@ class _Cursor:
 
 
 async def start_settlement_reading(
-    conn: Connection, account_id: uuid.UUID, actor: Actor, now: datetime
+    conn: Connection, account_id: PspAccountId, actor: Actor, now: datetime
 ) -> bool:
     """An account's first look, now; each look schedules the next. The
     cursor's insert is the guard: an account already reading is left as
@@ -144,7 +144,7 @@ async def start_settlement_reading(
     return True
 
 
-async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
+async def _lock_cursor(conn: Connection, account_id: PspAccountId) -> _Cursor:
     async with conn.cursor(row_factory=class_row(_Cursor)) as cur:
         await cur.execute(
             """
@@ -161,7 +161,7 @@ async def _lock_cursor(conn: Connection, account_id: uuid.UUID) -> _Cursor:
 
 
 async def prepare_fetch(
-    conn: Connection, account_id: uuid.UUID, now: datetime
+    conn: Connection, account_id: PspAccountId, now: datetime
 ) -> NoCall | SettlementCall:
     account = await read_psp_account(conn, account_id)
     assert account is not None, f"no psp account {account_id}"
@@ -205,7 +205,7 @@ async def read_settlement(
 
 async def complete_fetch(
     conn: Connection,
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     call: SettlementCall,
     answer: SettlementAnswer,
     now: datetime,
@@ -234,7 +234,7 @@ def _retry(failure: Unavailable | OutcomeUnknown | UndecodableBody) -> RetryLate
             return RetryLater(f"settlement answer: {detail}")
 
 
-async def _look_now(conn: Connection, account_id: uuid.UUID, now: datetime) -> None:
+async def _look_now(conn: Connection, account_id: PspAccountId, now: datetime) -> None:
     """There is more to read: the next look now, in a delivery of its own."""
     await append_fact(
         conn, PspSettlementDueV1(psp_account_id=account_id), SCHEDULER, now
@@ -255,7 +255,7 @@ async def _look_later(conn: Connection, account: PspAccount, now: datetime) -> N
 
 async def _listed(
     conn: Connection,
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     list_call: ListCall,
     result: SettlementListResult | UndecodableBody,
     now: datetime,
@@ -284,7 +284,7 @@ async def _listed(
             return _retry(result)
 
 
-async def _read_whole(conn: Connection, account_id: uuid.UUID, name: str) -> None:
+async def _read_whole(conn: Connection, account_id: PspAccountId, name: str) -> None:
     """The pending report or payout is read: on to the next."""
     await conn.execute(
         """
@@ -299,7 +299,7 @@ async def _read_whole(conn: Connection, account_id: uuid.UUID, name: str) -> Non
 
 async def _file_fetched(
     conn: Connection,
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     file_call: FileCall,
     result: SettlementFileResult | UndecodableBody,
     now: datetime,
@@ -318,7 +318,7 @@ async def _file_fetched(
 
 async def _payout_fetched(
     conn: Connection,
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     payout_call: PayoutCall,
     result: PayoutResult | UndecodableBody,
     now: datetime,
@@ -353,7 +353,7 @@ async def _payout_fetched(
 
 async def _lines_fetched(
     conn: Connection,
-    account_id: uuid.UUID,
+    account_id: PspAccountId,
     lines_call: LinesCall,
     result: LinesResult | UndecodableBody,
     now: datetime,

@@ -8,7 +8,6 @@ first commits, then finds the row: so no "in progress" state is ever
 stored, and a crash rolls back the row with the work.
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -16,6 +15,7 @@ from psycopg.rows import class_row
 
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
+from mor.ids import MerchantId
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class _StoredRow:
 
 async def claim_key(
     conn: Connection,
-    merchant_id: uuid.UUID,
+    merchant_id: MerchantId,
     key: str,
     request_sha256: bytes,
     now: datetime,
@@ -85,7 +85,7 @@ async def claim_key(
 
 
 async def store_response(
-    conn: Connection, merchant_id: uuid.UUID, key: str, status: int, response: bytes
+    conn: Connection, merchant_id: MerchantId, key: str, status: int, response: bytes
 ) -> None:
     """The answer to replay for this key. Never commits."""
     await conn.execute(

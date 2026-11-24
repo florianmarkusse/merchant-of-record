@@ -26,6 +26,7 @@ from starlette.responses import HTMLResponse, RedirectResponse, Response
 from mor.audit import Actor, ActorKind
 from mor.dates import format_moment
 from mor.db.connect import connect
+from mor.ids import PspAccountId, SettlementExceptionId
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.settlement.records import Reconciliation
@@ -178,7 +179,7 @@ def _age(age: timedelta) -> str:
     return f"{age.seconds // 60} min"
 
 
-def _exception_rows(account_id: uuid.UUID, found: list[ExceptionRow]) -> htpy.Node:
+def _exception_rows(account_id: PspAccountId, found: list[ExceptionRow]) -> htpy.Node:
     if not found:
         return htpy.p(class_="muted")["No exceptions."]
     rows: list[htpy.Node] = []
@@ -253,9 +254,9 @@ def render_account(
     )
 
 
-def _account_id(request: Request) -> uuid.UUID | None:
+def _account_id(request: Request) -> PspAccountId | None:
     try:
-        return uuid.UUID(request.path_params["account_id"])
+        return PspAccountId(uuid.UUID(request.path_params["account_id"]))
     except ValueError:
         return None
 
@@ -285,7 +286,9 @@ async def resolve(request: Request, database_url: str, now: datetime) -> Respons
         return Response("cross-site POST refused", status_code=403)
     account_id = _account_id(request)
     try:
-        exception_id = uuid.UUID(request.path_params["exception_id"])
+        exception_id = SettlementExceptionId(
+            uuid.UUID(request.path_params["exception_id"])
+        )
     except ValueError:
         return Response("no such exception", status_code=404)
     if account_id is None:

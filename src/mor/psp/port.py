@@ -8,12 +8,12 @@ call ends in a value: the answer, a documented refusal, `Unavailable`
 `UndecodableBody` (an answer its API does not document).
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from fractions import Fraction
 
+from mor.ids import PspAccountId
 from mor.messaging.guard import DuplicateGuard
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -77,7 +77,7 @@ class PaymentMethod(StrEnum):
 
 @dataclass(frozen=True, kw_only=True)
 class PspAccount:
-    id: uuid.UUID
+    id: PspAccountId
     name: str
     provider: PspProvider
     kind: ProviderAccountKind

@@ -1,13 +1,13 @@
 """Checkout sessions and what was sold (plan-merchant-surfaces §3;
 docs/plan-quote.md §5, 4d-1)."""
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import NewType
 
 from mor.couriers.records import Parcel
+from mor.ids import CheckoutAddressId, CheckoutSessionId, MerchantId, QuoteId
 from mor.money.amount import Money
 
 
@@ -82,8 +82,8 @@ class SessionDraft:
 
 @dataclass(frozen=True, kw_only=True)
 class CheckoutSession:
-    id: uuid.UUID
-    merchant_id: uuid.UUID
+    id: CheckoutSessionId
+    merchant_id: MerchantId
     state: SessionState
     lines: tuple[SoldLine, ...]
     parcel: Parcel
@@ -93,8 +93,8 @@ class CheckoutSession:
     after_payment: AfterPayment
     created_at: datetime
     expires_at: datetime
-    address_id: uuid.UUID | None  # the newest address given
-    quote_id: uuid.UUID | None  # its quote, once made or refused
+    address_id: CheckoutAddressId | None  # the newest address given
+    quote_id: QuoteId | None  # its quote, once made or refused
 
 
 # A row read under its row lock (`SELECT … FOR UPDATE`), made only by

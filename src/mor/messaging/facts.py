@@ -21,6 +21,22 @@ import msgspec
 
 from mor.echo.port import EventKind
 from mor.echo.records import EchoEventSource
+from mor.ids import (
+    CheckoutAddressId,
+    CheckoutSessionId,
+    DutyLookupId,
+    InvoiceId,
+    MerchantId,
+    OrderId,
+    PaymentAttemptId,
+    ProbeId,
+    PspAccountId,
+    PspInboxId,
+    QuoteId,
+    SettlementLineId,
+    SettlementPayoutId,
+    ShippingPriceLookupId,
+)
 from mor.psp.port import PspEventKind
 
 
@@ -104,14 +120,14 @@ class ProbeStartedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.PROBE_STARTED
     schema_version: ClassVar[int] = 1
 
-    probe_id: uuid.UUID
+    probe_id: ProbeId
 
 
 class ProbeEchoedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.PROBE_ECHOED
     schema_version: ClassVar[int] = 1
 
-    probe_id: uuid.UUID
+    probe_id: ProbeId
 
 
 class EchoJobRequestedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -224,14 +240,14 @@ class DutyRateNeededV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_NEEDED
     schema_version: ClassVar[int] = 1
 
-    duty_lookup_id: uuid.UUID
+    duty_lookup_id: DutyLookupId
 
 
 class DutyRateFoundV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_FOUND
     schema_version: ClassVar[int] = 1
 
-    duty_lookup_id: uuid.UUID
+    duty_lookup_id: DutyLookupId
 
 
 class DutyRateUnknownCodeV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -240,7 +256,7 @@ class DutyRateUnknownCodeV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_UNKNOWN_CODE
     schema_version: ClassVar[int] = 1
 
-    duty_lookup_id: uuid.UUID
+    duty_lookup_id: DutyLookupId
 
 
 class DutyRateNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -249,7 +265,7 @@ class DutyRateNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_NEEDS_PERSON
     schema_version: ClassVar[int] = 1
 
-    duty_lookup_id: uuid.UUID
+    duty_lookup_id: DutyLookupId
     detail: str
 
 
@@ -262,7 +278,7 @@ class DutyRateDisagreedV1(
     message_type: ClassVar[MessageType] = MessageType.DUTY_RATE_DISAGREED
     schema_version: ClassVar[int] = 1
 
-    duty_lookup_id: uuid.UUID
+    duty_lookup_id: DutyLookupId
     charge: str
     vendor_rate: str
     own_rate: str
@@ -276,14 +292,14 @@ class ShippingPriceNeededV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_NEEDED
     schema_version: ClassVar[int] = 1
 
-    shipping_price_lookup_id: uuid.UUID
+    shipping_price_lookup_id: ShippingPriceLookupId
 
 
 class ShippingPriceFoundV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_FOUND
     schema_version: ClassVar[int] = 1
 
-    shipping_price_lookup_id: uuid.UUID
+    shipping_price_lookup_id: ShippingPriceLookupId
 
 
 class ShippingPriceNotServedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -292,7 +308,7 @@ class ShippingPriceNotServedV1(msgspec.Struct, frozen=True, forbid_unknown_field
     message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_NOT_SERVED
     schema_version: ClassVar[int] = 1
 
-    shipping_price_lookup_id: uuid.UUID
+    shipping_price_lookup_id: ShippingPriceLookupId
     detail: str
 
 
@@ -304,7 +320,7 @@ class ShippingPriceNeedsPersonV1(
     message_type: ClassVar[MessageType] = MessageType.SHIPPING_PRICE_NEEDS_PERSON
     schema_version: ClassVar[int] = 1
 
-    shipping_price_lookup_id: uuid.UUID
+    shipping_price_lookup_id: ShippingPriceLookupId
     detail: str
 
 
@@ -314,8 +330,8 @@ class CheckoutSessionCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_field
     message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_CREATED
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
-    merchant_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
+    merchant_id: MerchantId
 
 
 class QuoteRequestedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -324,24 +340,24 @@ class QuoteRequestedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.QUOTE_REQUESTED
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
-    address_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
+    address_id: CheckoutAddressId
 
 
 class QuoteMadeV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.QUOTE_MADE
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
-    quote_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
+    quote_id: QuoteId
 
 
 class QuoteRefusedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.QUOTE_REFUSED
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
-    quote_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
+    quote_id: QuoteId
     code: str
 
 
@@ -351,8 +367,8 @@ class QuoteInputsArrivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tr
     message_type: ClassVar[MessageType] = MessageType.QUOTE_INPUTS_ARRIVED
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
-    address_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
+    address_id: CheckoutAddressId
 
 
 class CheckoutSessionExpiryDueV1(
@@ -363,14 +379,14 @@ class CheckoutSessionExpiryDueV1(
     message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_EXPIRY_DUE
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
 
 
 class CheckoutSessionExpiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_EXPIRED
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
 
 
 class PaymentAttemptCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -379,8 +395,8 @@ class PaymentAttemptCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_ATTEMPT_CREATED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
-    checkout_session_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
+    checkout_session_id: CheckoutSessionId
 
 
 class PaymentActionRequiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -389,7 +405,7 @@ class PaymentActionRequiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_ACTION_REQUIRED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
 
 
 class PaymentAuthorisedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -398,7 +414,7 @@ class PaymentAuthorisedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tru
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_AUTHORISED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
 
 
 class PaymentCapturedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -407,16 +423,16 @@ class PaymentCapturedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True)
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_CAPTURED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
-    checkout_session_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
+    checkout_session_id: CheckoutSessionId
 
 
 class PaymentDeclinedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_DECLINED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
-    checkout_session_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
+    checkout_session_id: CheckoutSessionId
     reason: str
 
 
@@ -424,16 +440,16 @@ class PaymentExpiredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_EXPIRED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
-    checkout_session_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
+    checkout_session_id: CheckoutSessionId
 
 
 class PaymentCancelledV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_CANCELLED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
-    checkout_session_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
+    checkout_session_id: CheckoutSessionId
 
 
 class PaymentNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -443,8 +459,8 @@ class PaymentNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tr
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_NEEDS_PERSON
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
-    checkout_session_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
+    checkout_session_id: CheckoutSessionId
     detail: str
 
 
@@ -454,7 +470,7 @@ class PaymentCancelWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_CANCEL_WANTED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
 
 
 class PaymentPollDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -464,7 +480,7 @@ class PaymentPollDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_POLL_DUE
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
 
 
 class PaymentEventsWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -473,7 +489,7 @@ class PaymentEventsWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     message_type: ClassVar[MessageType] = MessageType.PAYMENT_EVENTS_WANTED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
 
 
 class PspInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -482,8 +498,8 @@ class PspInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.PSP_INBOX_STORED
     schema_version: ClassVar[int] = 1
 
-    psp_account_id: uuid.UUID
-    inbox_id: uuid.UUID
+    psp_account_id: PspAccountId
+    inbox_id: PspInboxId
 
 
 class PspEventReceivedV1(
@@ -495,14 +511,14 @@ class PspEventReceivedV1(
     message_type: ClassVar[MessageType] = MessageType.PSP_EVENT_RECEIVED
     schema_version: ClassVar[int] = 1
 
-    payment_attempt_id: uuid.UUID
+    payment_attempt_id: PaymentAttemptId
     vendor_event_id: str
     provider_payment_id: str
     kind: PspEventKind
     amount_minor: int
     currency: str
     occurred_at: datetime
-    inbox_id: uuid.UUID
+    inbox_id: PspInboxId
 
 
 class CheckoutSessionCompletedV1(
@@ -511,8 +527,8 @@ class CheckoutSessionCompletedV1(
     message_type: ClassVar[MessageType] = MessageType.CHECKOUT_SESSION_COMPLETED
     schema_version: ClassVar[int] = 1
 
-    checkout_session_id: uuid.UUID
-    order_id: uuid.UUID
+    checkout_session_id: CheckoutSessionId
+    order_id: OrderId
 
 
 class OrderPaidV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -521,9 +537,9 @@ class OrderPaidV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.ORDER_PAID
     schema_version: ClassVar[int] = 1
 
-    order_id: uuid.UUID
-    checkout_session_id: uuid.UUID
-    merchant_id: uuid.UUID
+    order_id: OrderId
+    checkout_session_id: CheckoutSessionId
+    merchant_id: MerchantId
 
 
 class InvoiceIssuedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -533,9 +549,9 @@ class InvoiceIssuedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     message_type: ClassVar[MessageType] = MessageType.INVOICE_ISSUED
     schema_version: ClassVar[int] = 1
 
-    invoice_id: uuid.UUID
-    order_id: uuid.UUID
-    merchant_id: uuid.UUID
+    invoice_id: InvoiceId
+    order_id: OrderId
+    merchant_id: MerchantId
 
 
 class PspSettlementDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -545,7 +561,7 @@ class PspSettlementDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True
     message_type: ClassVar[MessageType] = MessageType.PSP_SETTLEMENT_DUE
     schema_version: ClassVar[int] = 1
 
-    psp_account_id: uuid.UUID
+    psp_account_id: PspAccountId
 
 
 class SettlementLineReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -555,8 +571,8 @@ class SettlementLineReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_field
     message_type: ClassVar[MessageType] = MessageType.SETTLEMENT_LINE_RECEIVED
     schema_version: ClassVar[int] = 1
 
-    settlement_line_id: uuid.UUID
-    psp_account_id: uuid.UUID
+    settlement_line_id: SettlementLineId
+    psp_account_id: PspAccountId
 
 
 class SettlementPayoutReportedV1(
@@ -568,8 +584,8 @@ class SettlementPayoutReportedV1(
     message_type: ClassVar[MessageType] = MessageType.SETTLEMENT_PAYOUT_REPORTED
     schema_version: ClassVar[int] = 1
 
-    settlement_payout_id: uuid.UUID
-    psp_account_id: uuid.UUID
+    settlement_payout_id: SettlementPayoutId
+    psp_account_id: PspAccountId
 
 
 type Fact = (

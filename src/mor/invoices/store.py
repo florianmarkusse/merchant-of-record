@@ -23,6 +23,7 @@ from mor.checkout.sessions import read_address, session_by_id
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
 from mor.entity import ENTITY, registration_for
+from mor.ids import InvoiceId, OrderId
 from mor.invoices.lines import invoice_lines
 from mor.invoices.numbering import SERIES, number_text, series_for
 from mor.invoices.records import (
@@ -89,7 +90,7 @@ async def issue_invoice(
     assert total == option.total_minor, (total, option.total_minor)
     series, number = await _take_number(conn, series_for(ENTITY, address.country))
     registration = registration_for(ENTITY, address.country)
-    invoice_id = uuid.uuid7()
+    invoice_id = InvoiceId(uuid.uuid7())
     await conn.execute(
         """
         INSERT INTO invoice
@@ -156,8 +157,8 @@ async def issue_invoice(
 
 @dataclass(frozen=True, kw_only=True)
 class _InvoiceRow:
-    id: uuid.UUID
-    order_id: uuid.UUID
+    id: InvoiceId
+    order_id: OrderId
     series: str
     number: int
     number_text: str
@@ -179,7 +180,7 @@ class _InvoiceRow:
     buyer_country: str
 
 
-async def invoice_for_order(conn: Connection, order_id: uuid.UUID) -> Invoice | None:
+async def invoice_for_order(conn: Connection, order_id: OrderId) -> Invoice | None:
     """The order's invoice, once issued."""
     async with conn.cursor(row_factory=class_row(_InvoiceRow)) as cur:
         await cur.execute(

@@ -7,7 +7,6 @@ of 20-Nov-2026): a correcting entry is made by hand.
 Persistence functions take the connection first and never commit.
 """
 
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
@@ -16,6 +15,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
+from mor.ids import PspAccountId, SettlementExceptionId
 from mor.money.currency import Currency
 from mor.psp.port import SettlementMode
 from mor.settlement.records import ExceptionKind, Reconciliation
@@ -33,7 +33,7 @@ class Balance:
 
 @dataclass(frozen=True, kw_only=True)
 class AccountSummary:
-    id: uuid.UUID
+    id: PspAccountId
     name: str
     settlement_mode: SettlementMode
     last_read: str | None
@@ -44,7 +44,7 @@ class AccountSummary:
 
 @dataclass(frozen=True, kw_only=True)
 class _AccountRow:
-    id: uuid.UUID
+    id: PspAccountId
     name: str
     settlement_mode: SettlementMode
     last_read: str | None
@@ -52,7 +52,7 @@ class _AccountRow:
     open_payouts: int
 
 
-async def _balances(conn: Connection, account_id: uuid.UUID) -> tuple[Balance, ...]:
+async def _balances(conn: Connection, account_id: PspAccountId) -> tuple[Balance, ...]:
     async with conn.cursor(row_factory=class_row(Balance)) as cur:
         await cur.execute(
             """
@@ -109,7 +109,7 @@ async def account_summaries(conn: Connection) -> list[AccountSummary]:
 
 
 async def account_summary(
-    conn: Connection, account_id: uuid.UUID
+    conn: Connection, account_id: PspAccountId
 ) -> AccountSummary | None:
     for summary in await account_summaries(conn):
         if summary.id == account_id:
@@ -141,7 +141,7 @@ class PayoutRow:
 
 
 async def payouts_of(
-    conn: Connection, account_id: uuid.UUID, limit: int
+    conn: Connection, account_id: PspAccountId, limit: int
 ) -> list[PayoutRow]:
     """Open ones first, the longest open first; then the newest."""
     async with conn.cursor(row_factory=class_row(PayoutRow)) as cur:
@@ -170,7 +170,7 @@ async def payouts_of(
 
 @dataclass(frozen=True, kw_only=True)
 class ExceptionRow:
-    id: uuid.UUID
+    id: SettlementExceptionId
     kind: ExceptionKind
     detail: str
     created_at: datetime
@@ -180,7 +180,9 @@ class ExceptionRow:
     resolved_at: datetime | None
 
 
-async def exceptions_of(conn: Connection, account_id: uuid.UUID) -> list[ExceptionRow]:
+async def exceptions_of(
+    conn: Connection, account_id: PspAccountId
+) -> list[ExceptionRow]:
     """Open ones first, then the newest."""
     async with conn.cursor(row_factory=class_row(ExceptionRow)) as cur:
         await cur.execute(
@@ -224,8 +226,8 @@ type ResolveResult = Resolved | AlreadyResolved | NoSuchException | EmptyNote
 
 async def resolve_exception(
     conn: Connection,
-    account_id: uuid.UUID,
-    exception_id: uuid.UUID,
+    account_id: PspAccountId,
+    exception_id: SettlementExceptionId,
     note: str,
     actor: Actor,
     now: datetime,

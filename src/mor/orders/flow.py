@@ -18,6 +18,7 @@ from mor.checkout.records import LockedSession, SessionState
 from mor.checkout.sessions import read_address, set_session_state
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
+from mor.ids import MarketLoadId, OrderId
 from mor.ledger.store import record_entry
 from mor.messaging.facts import (
     CheckoutSessionCompletedV1,
@@ -35,7 +36,7 @@ from mor.payments.transitions import AttemptState
 ACTOR = Actor(ActorKind.SYSTEM, "order_create")
 
 
-async def _courier(conn: Connection, load_id: uuid.UUID, service: str) -> str:
+async def _courier(conn: Connection, load_id: MarketLoadId, service: str) -> str:
     return await one_value(
         conn,
         "SELECT provider FROM shipping_service WHERE load_id = %s AND code = %s",
@@ -56,7 +57,7 @@ async def create_order(
     attempt = await read_attempt(conn, attempt_id)
     assert attempt is not None and attempt.state == AttemptState.CAPTURED
     quote = await read_made_quote(conn, attempt.quote_id)
-    order_id = uuid.uuid7()
+    order_id = OrderId(uuid.uuid7())
     cur = await conn.execute(
         """
         INSERT INTO order_

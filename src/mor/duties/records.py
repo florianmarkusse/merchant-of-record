@@ -1,11 +1,11 @@
 """What we hold of a vendor lookup, as plain records the pure tax rule
 reads (docs/plan-quote.md §3, 4b-2)."""
 
-import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
 
+from mor.ids import DutyLookupId
 from mor.markets.records import Charge
 
 
@@ -34,7 +34,7 @@ class StoredAnswer:
 
 @dataclass(frozen=True, kw_only=True)
 class VendorLookup:
-    id: uuid.UUID
+    id: DutyLookupId
     vendor: str
     state: LookupState
     calls: int

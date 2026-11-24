@@ -37,6 +37,7 @@ from mor.duties.port import (
     VendorRates,
 )
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
+from mor.ids import DutyLookupId, DutyVendorAccountId, MarketLoadId
 from mor.markets.records import Charge, MarketSet
 from mor.markets.store import latest_load, read_market
 from mor.messaging.facts import (
@@ -77,7 +78,7 @@ class AskCall:
 
 @dataclass(frozen=True, kw_only=True)
 class _LookupRow:
-    id: uuid.UUID
+    id: DutyLookupId
     vendor_name: str
     destination: str
     origin: str
@@ -89,7 +90,7 @@ class _LookupRow:
 
 @dataclass(frozen=True, kw_only=True)
 class _AccountRow:
-    id: uuid.UUID
+    id: DutyVendorAccountId
     vendor_name: str
     provider: DutyProvider
     kind: ProviderAccountKind
@@ -117,8 +118,8 @@ async def create_vendor_account(
     kind: ProviderAccountKind,
     base_url: str,
     timeout: timedelta,
-) -> uuid.UUID:
-    account_id = uuid.uuid7()
+) -> DutyVendorAccountId:
+    account_id = DutyVendorAccountId(uuid.uuid7())
     await conn.execute(
         """
         INSERT INTO duty_vendor_account
@@ -165,7 +166,7 @@ async def request_duty_rate(
     question: RateQuestion,
     actor: Actor,
     now: datetime,
-) -> uuid.UUID | NoVendorAccount:
+) -> DutyLookupId | NoVendorAccount:
     """The lookup for this combination, asked for the first time if new.
     Insert first; a conflict means it was asked before, and that lookup is
     the answer. Never commits."""
@@ -192,11 +193,11 @@ async def request_duty_rate(
     )
     row = await cur.fetchone()
     if row is not None:
-        lookup_id: uuid.UUID = row[0]
+        lookup_id: DutyLookupId = row[0]
         await append_fact(conn, DutyRateNeededV1(duty_lookup_id=lookup_id), actor, now)
         return lookup_id
     # The insert conflicted, so the lookup exists.
-    return await one_value(
+    found = await one_value(
         conn,
         """
         SELECT id FROM duty_lookup
@@ -205,6 +206,7 @@ async def request_duty_rate(
         (vendor_name, question.destination, question.origin, question.hs_code),
         uuid.UUID,
     )
+    return DutyLookupId(found)
 
 
 async def read_lookup(
@@ -270,7 +272,7 @@ def _fraction(numerator: int | None, denominator: int | None) -> Fraction | None
     return Fraction(numerator, denominator)
 
 
-async def _lock_lookup(conn: Connection, lookup_id: uuid.UUID) -> _LookupRow:
+async def _lock_lookup(conn: Connection, lookup_id: DutyLookupId) -> _LookupRow:
     async with conn.cursor(row_factory=class_row(_LookupRow)) as cur:
         await cur.execute(
             """
@@ -290,7 +292,7 @@ async def _lock_lookup(conn: Connection, lookup_id: uuid.UUID) -> _LookupRow:
 
 
 async def prepare_ask(
-    conn: Connection, lookup_id: uuid.UUID, now: datetime
+    conn: Connection, lookup_id: DutyLookupId, now: datetime
 ) -> NoCall | AskCall:
     lookup = await _lock_lookup(conn, lookup_id)
     if lookup.state != LookupState.REQUESTED:
@@ -315,7 +317,7 @@ async def ask(
 
 async def complete_ask(
     conn: Connection,
-    lookup_id: uuid.UUID,
+    lookup_id: DutyLookupId,
     call: AskCall,
     result: AskResult,
     now: datetime,
@@ -350,7 +352,7 @@ async def complete_ask(
 
 async def _set_state(
     conn: Connection,
-    lookup_id: uuid.UUID,
+    lookup_id: DutyLookupId,
     state: LookupState,
     detail: str | None,
     now: datetime,
@@ -361,7 +363,9 @@ async def _set_state(
     )
 
 
-async def _market_in_force(conn: Connection) -> tuple[uuid.UUID, MarketSet] | None:
+async def _market_in_force(
+    conn: Connection,
+) -> tuple[MarketLoadId, MarketSet] | None:
     load = await latest_load(conn)
     if load is None:
         return None
@@ -376,7 +380,7 @@ async def _store_answers(
     in_force = await _market_in_force(conn)
     line = Line(lookup.hs_code, lookup.origin, frozenset())
     for rate in rates.rates:
-        load_id: uuid.UUID | None = None
+        load_id: MarketLoadId | None = None
         own_rate: Fraction | None = None
         own_line_no: int | None = None
         if in_force is not None:

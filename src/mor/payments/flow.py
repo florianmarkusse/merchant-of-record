@@ -34,6 +34,7 @@ from mor.checkout.records import SessionState
 from mor.checkout.sessions import lock_session, read_address, set_session_state
 from mor.config import Environment
 from mor.db.connect import Connection
+from mor.ids import CheckoutSessionId, PaymentAttemptId, PspRequestId
 from mor.merchants.records import KybState
 from mor.merchants.store import kyb_state_for_pay
 from mor.messaging.facts import (
@@ -86,7 +87,7 @@ from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
 @dataclass(frozen=True)
 class Paying:
-    attempt_id: uuid.UUID
+    attempt_id: PaymentAttemptId
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ class NotPayable:
 
 async def pay(
     conn: Connection,
-    session_id: uuid.UUID,
+    session_id: CheckoutSessionId,
     option_key: str,
     method_text: str,
     return_url: str,
@@ -185,13 +186,13 @@ class NotCancellable:
 
 
 async def pay_another_way(
-    conn: Connection, session_id: uuid.UUID, actor: Actor, now: datetime
+    conn: Connection, session_id: CheckoutSessionId, actor: Actor, now: datetime
 ) -> CancelAsked | NotCancellable:
     """Under the open attempt's lock: only an attempt waiting on the buyer
     can be cancelled. The session stays `paying` until the PSP has
     answered, so switching methods can never charge twice. Never
     commits."""
-    attempt_id: uuid.UUID | None = None
+    attempt_id: PaymentAttemptId | None = None
     for attempt in await session_attempts(conn, session_id):
         if attempt.state in OPEN_STATES:
             attempt_id = attempt.id
@@ -211,7 +212,7 @@ async def pay_another_way(
 @dataclass(frozen=True)
 class CreateCall:
     account: PspAccount
-    request_id: uuid.UUID
+    request_id: PspRequestId
     request: PaymentRequest
 
 
@@ -220,7 +221,7 @@ class FindCall:
     """Guard `none` after an answer was lost: look only, never resend."""
 
     account: PspAccount
-    request_id: uuid.UUID
+    request_id: PspRequestId
     reference: str
     operation: Literal[PspOperation.CREATE, PspOperation.CAPTURE]
 
@@ -228,7 +229,7 @@ class FindCall:
 @dataclass(frozen=True, kw_only=True)
 class CaptureCall:
     account: PspAccount
-    request_id: uuid.UUID
+    request_id: PspRequestId
     provider_payment_id: str
     amount: Money
     key: str
@@ -237,7 +238,7 @@ class CaptureCall:
 @dataclass(frozen=True)
 class CancelCall:
     account: PspAccount
-    request_id: uuid.UUID
+    request_id: PspRequestId
     provider_payment_id: str
 
 
@@ -286,14 +287,14 @@ async def _find(
 
 @dataclass(frozen=True, kw_only=True)
 class _Request:
-    id: uuid.UUID
+    id: PspRequestId
     number: int
     idempotency_key: str
     state: VendorRequestState
 
 
 async def _latest_request(
-    conn: Connection, attempt_id: uuid.UUID, operation: PspOperation
+    conn: Connection, attempt_id: PaymentAttemptId, operation: PspOperation
 ) -> _Request | None:
     async with conn.cursor(row_factory=class_row(_Request)) as cur:
         await cur.execute(
@@ -309,12 +310,12 @@ async def _latest_request(
 
 async def _new_request(
     conn: Connection,
-    attempt_id: uuid.UUID,
+    attempt_id: PaymentAttemptId,
     operation: PspOperation,
     number: int,
     now: datetime,
 ) -> _Request:
-    request_id = uuid.uuid7()
+    request_id = PspRequestId(uuid.uuid7())
     key = f"pay:{attempt_id}:{operation}:{number}"
     await conn.execute(
         """
@@ -340,7 +341,7 @@ async def _new_request(
     )
 
 
-async def _mark_sent(conn: Connection, request_id: uuid.UUID) -> None:
+async def _mark_sent(conn: Connection, request_id: PspRequestId) -> None:
     """The committed "we are about to ask" mark, before any call."""
     await conn.execute(
         "UPDATE psp_request SET state = %s, sends = sends + 1 WHERE id = %s",
@@ -350,7 +351,7 @@ async def _mark_sent(conn: Connection, request_id: uuid.UUID) -> None:
 
 async def _finish_request(
     conn: Connection,
-    request_id: uuid.UUID,
+    request_id: PspRequestId,
     state: Literal[VendorRequestState.SUCCEEDED, VendorRequestState.REFUSED],
     now: datetime,
     result: str | None = None,
@@ -364,7 +365,7 @@ async def _finish_request(
     )
 
 
-async def _unsend_request(conn: Connection, request_id: uuid.UUID) -> None:
+async def _unsend_request(conn: Connection, request_id: PspRequestId) -> None:
     """The PSP said the call did nothing (Unavailable): the request goes back
     to `not_sent`, and the retry sends it with the same key."""
     await conn.execute(
@@ -441,7 +442,7 @@ async def _needs_person(
 
 
 async def prepare_create(
-    conn: Connection, attempt_id: uuid.UUID, now: datetime
+    conn: Connection, attempt_id: PaymentAttemptId, now: datetime
 ) -> NoCall | CreateCall | FindCall:
     attempt = await lock_attempt(conn, attempt_id)
     if attempt.state != AttemptState.REQUESTED:
@@ -502,7 +503,7 @@ async def send_create(
 
 async def complete_create(
     conn: Connection,
-    attempt_id: uuid.UUID,
+    attempt_id: PaymentAttemptId,
     call: CreateCall | FindCall,
     answer: CreateSent | Looked,
     now: datetime,
@@ -522,7 +523,7 @@ async def _created(
     conn: Connection,
     attempt: LockedAttempt,
     account: PspAccount,
-    request_id: uuid.UUID,
+    request_id: PspRequestId,
     result: CreateResult,
     now: datetime,
 ) -> Done | RetryLater:
@@ -550,7 +551,7 @@ async def _create_looked_up(
     conn: Connection,
     attempt: LockedAttempt,
     account: PspAccount,
-    request_id: uuid.UUID,
+    request_id: PspRequestId,
     result: FindResult,
     now: datetime,
 ) -> Done | RetryLater:
@@ -584,7 +585,7 @@ async def _create_looked_up(
 
 
 async def prepare_capture(
-    conn: Connection, attempt_id: uuid.UUID, now: datetime
+    conn: Connection, attempt_id: PaymentAttemptId, now: datetime
 ) -> NoCall | CaptureCall | FindCall:
     """Capture at once after authorisation (answer 3 of 19-Nov-2026), but
     never once the buyer chose another way."""
@@ -646,7 +647,7 @@ async def send_capture(
 
 async def complete_capture(
     conn: Connection,
-    attempt_id: uuid.UUID,
+    attempt_id: PaymentAttemptId,
     call: CaptureCall | FindCall,
     answer: CaptureSent | Looked,
     now: datetime,
@@ -666,7 +667,7 @@ async def _captured(
     conn: Connection,
     attempt: LockedAttempt,
     account: PspAccount,
-    request_id: uuid.UUID,
+    request_id: PspRequestId,
     result: CaptureResult,
     now: datetime,
 ) -> Done | RetryLater:
@@ -696,7 +697,7 @@ async def _capture_looked_up(
     conn: Connection,
     attempt: LockedAttempt,
     account: PspAccount,
-    request_id: uuid.UUID,
+    request_id: PspRequestId,
     result: FindResult,
     now: datetime,
 ) -> Done | RetryLater:
@@ -734,7 +735,7 @@ async def _capture_looked_up(
 
 
 async def prepare_cancel(
-    conn: Connection, attempt_id: uuid.UUID, now: datetime
+    conn: Connection, attempt_id: PaymentAttemptId, now: datetime
 ) -> NoCall | CancelCall:
     """A cancel moves no money and cancelling twice leaves it cancelled, so
     it is always sent again after a lost answer."""
@@ -764,7 +765,7 @@ async def send_cancel(
 
 async def complete_cancel(
     conn: Connection,
-    attempt_id: uuid.UUID,
+    attempt_id: PaymentAttemptId,
     cancel: CancelCall,
     result: CancelResult,
     now: datetime,
@@ -799,7 +800,7 @@ async def complete_cancel(
 
 
 async def prepare_poll(
-    conn: Connection, attempt_id: uuid.UUID, now: datetime
+    conn: Connection, attempt_id: PaymentAttemptId, now: datetime
 ) -> NoCall | PollCall:
     """A fetch only reads at the PSP: no request row, no guard. Not once
     the attempt has an end, whatever started it."""
@@ -820,7 +821,7 @@ async def fetch_events(
 
 async def complete_poll(
     conn: Connection,
-    attempt_id: uuid.UUID,
+    attempt_id: PaymentAttemptId,
     poll: PollCall,
     result: FetchResult,
     now: datetime,
@@ -846,7 +847,7 @@ async def complete_poll(
 
 async def complete_fetch(
     conn: Connection,
-    attempt_id: uuid.UUID,
+    attempt_id: PaymentAttemptId,
     poll: PollCall,
     result: FetchResult,
     now: datetime,

@@ -15,6 +15,7 @@ from mor.echo.flow import create_echo_account, create_echo_job
 from mor.echo.port import EchoProvider
 from mor.fakes.echo import make_app
 from mor.fakes.hang import hang_a_minute
+from mor.ids import PaymentAttemptId
 from mor.messaging.delivery import (
     Ran,
     Skipped,
@@ -272,7 +273,7 @@ def test_a_webhook_is_applied_while_the_capture_call_is_out(
                 # The capture: prepared, the call made (the fake pushes the
                 # `captured` webhook during it), no `complete` yet.
                 assert await try_lock_aggregate(capturing, capture)
-                attempt_id = capture.aggregate_id
+                attempt_id = PaymentAttemptId(capture.aggregate_id)
                 async with capturing.transaction():
                     prepared = await mor.payments.flow.prepare_capture(
                         capturing, attempt_id, now

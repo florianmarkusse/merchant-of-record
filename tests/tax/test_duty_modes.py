@@ -10,6 +10,7 @@ from hypothesis import given, strategies
 
 from mor.duties.port import percent_formula
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
+from mor.ids import DutyLookupId
 from mor.markets.records import Charge, MarketSet
 from mor.markets.rules import Open, country_rules
 from mor.markets.source import SourceError, parse
@@ -33,7 +34,7 @@ from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
 
 ON = date(2026, 11, 18)
 TH_HS = "TH,6109,duty,,,,30,,secondary,WTO,https://example.test,,,\n"
-LOOKUP_ID = uuid.UUID("01900000-0000-7000-8000-000000000001")
+LOOKUP_ID = DutyLookupId(uuid.UUID("01900000-0000-7000-8000-000000000001"))
 T_SHIRT = Line("610910", "VN", frozenset())
 
 

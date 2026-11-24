@@ -23,12 +23,17 @@ The checks that run after every change (ruff, pyright strict, vulture,
 
 ## Next, in this order
 
-1. **5c-2, the bank statement**: designed first. A fake bank and the
+1. **Typed string ids**: `NewType`s in `mor.ids` for the codes and vendor
+   ids still passed as `str`: `CountryCode`, `CarrierCode` (one name,
+   `carrier`, where the code says `courier` today), `HsCode`, the PSP's
+   payment, payout, line and event ids, and `IdempotencyKey`. No check
+   can enforce these; review does.
+2. **5c-2, the bank statement**: designed first. A fake bank and the
    import of its statements, matching each PSP payout to its credit,
    moving it from `payout_in_transit` to `bank:{entity}`, and flagging a
    payout whose credit arrived but whose lines do not add up
    (`plan-payments.md` §1, §7).
-2. **5c-3**: the fake PSP's card fields and the Playwright smoke suite
+3. **5c-3**: the fake PSP's card fields and the Playwright smoke suite
    (`plan-architecture.md` §10).
 
 Then the slices of the whole flow (`plan-architecture.md` §2), each
@@ -36,7 +41,8 @@ designed first where it adds tables or message shapes:
 
 6. Shipments against the fake courier in every mode: booking, tracking,
    milestones (`plan-architecture.md` §7, §9; `plan-logistics.md`). The
-   echo flow is retired with it.
+   echo flow is retired with it, and with it the echo ignores of the
+   `typed-ids` ast-grep rule.
 7. Courier invoice import and its ledger entries.
 8. Returns and refunds, chargebacks (`plan-psp-integration.md` §5).
 9. Payout release and payout runs against the fake rail

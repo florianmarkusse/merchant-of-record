@@ -32,6 +32,7 @@ from mor.couriers.records import (
 )
 from mor.duties.port import RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
+from mor.ids import DutyLookupId, ShippingPriceLookupId
 from mor.markets.fx import convert_minor
 from mor.markets.load import MARKETS_DIR
 from mor.markets.records import Charge, Collector, MarketSet
@@ -67,7 +68,7 @@ def _lookups(destinations: tuple[str, ...]) -> dict[RateQuestion, VendorLookup]:
                 continue
             question = RateQuestion(destination, "VN", hs_code)
             lookups[question] = VendorLookup(
-                id=uuid.uuid7(),
+                id=DutyLookupId(uuid.uuid7()),
                 vendor="zonos",
                 state=LookupState.ANSWERED,
                 calls=1,
@@ -241,7 +242,7 @@ def test_any_carrier_price_quotes_consistently_with_each_part_charged(
     )
     held = PriceHeld(
         FinishedLookup(
-            id=uuid.uuid7(),
+            id=ShippingPriceLookupId(uuid.uuid7()),
             state=PriceState.ANSWERED,
             calls=1,
             detail=None,

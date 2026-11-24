@@ -13,6 +13,15 @@ from hypothesis import given, strategies
 from mor.audit import Actor, ActorKind
 from mor.checkout.quotes import MadeQuote, QuoteInputs, StoredOption
 from mor.checkout.records import Customs, SoldLine
+from mor.ids import (
+    CheckoutAddressId,
+    CheckoutSessionId,
+    MarketLoadId,
+    MerchantId,
+    PaymentAttemptId,
+    PspAccountId,
+    QuoteId,
+)
 from mor.invoices.lines import invoice_lines
 from mor.invoices.records import InvoiceSection
 from mor.ledger.account import MerchantPayable
@@ -156,10 +165,10 @@ def _paid_quotes(draw: strategies.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ..
         parts=tuple(option_parts),
     )
     quote = MadeQuote(
-        id=uuid.uuid7(),
-        session_id=uuid.uuid7(),
-        address_id=uuid.uuid7(),
-        load_id=uuid.uuid7(),
+        id=QuoteId(uuid.uuid7()),
+        session_id=CheckoutSessionId(uuid.uuid7()),
+        address_id=CheckoutAddressId(uuid.uuid7()),
+        load_id=MarketLoadId(uuid.uuid7()),
         made_at=NOW,
         valid_until=NOW,
         currency=Currency.SGD,
@@ -177,14 +186,14 @@ def test_the_capture_entry_balances_and_pays_the_merchant_exactly(
     paid: tuple[MadeQuote, tuple[SoldLine, ...]],
 ) -> None:
     quote, lines = paid
-    merchant_id = uuid.uuid7()
+    merchant_id = MerchantId(uuid.uuid7())
     entry = capture_entry(
-        uuid.uuid7(),
+        PaymentAttemptId(uuid.uuid7()),
         quote,
         0,
         lines,
         merchant_id,
-        uuid.uuid7(),
+        PspAccountId(uuid.uuid7()),
         "SG",
         "carrier",
         NOW,

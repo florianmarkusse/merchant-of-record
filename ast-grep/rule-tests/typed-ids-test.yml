@@ -1,0 +1,20 @@
+id: typed-ids
+valid:
+  - "def read_merchant(conn: Connection, merchant_id: MerchantId) -> Merchant | None: ..."
+  - "order_id = OrderId(uuid.uuid7())"
+  - "found = OrderId(uuid.UUID(text))"
+  - |
+    class Candidate:
+        message_id: uuid.UUID
+        aggregate_id: uuid.UUID
+  - |
+    class Aggregate:
+        type: AggregateType
+        id: uuid.UUID
+invalid:
+  - "def read_merchant(conn: Connection, merchant_id: uuid.UUID) -> Merchant | None: ..."
+  - "def create_order(conn: Connection) -> uuid.UUID: ..."
+  - |
+    class Order:
+        id: uuid.UUID
+  - "lookups: list[uuid.UUID] = []"
