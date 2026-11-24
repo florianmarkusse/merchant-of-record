@@ -75,6 +75,14 @@ no database and no environment; `now` is an argument.
 
 ## 3. Layout
 
+Language (decided 05-Nov-2026): Python with pyright strict. The team is
+fast in it, its libraries cover PSP crypto, JWE, PDF and PostgreSQL, and
+pyright strict checks closed sets and exhaustive `match`. C was ruled out
+because an internet-facing payment service parses untrusted input all day
+and would need its HTTP, JSON, JWT and HTML layers built or vetted by
+hand. Rust stays the alternative if Python's lack of runtime type checks
+ever becomes the bottleneck.
+
 `mor` stays the placeholder package name. Folders, not a list of every
 file; the ones for slices not built yet are where their code will go:
 

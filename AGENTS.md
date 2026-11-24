@@ -13,57 +13,37 @@ and wins where the two differ.
   refunds and chargebacks. We then pay the merchant out, minus tax and fees.
   Early stage: expect the project's shape to change, and keep this file
   current as it does.
-- Decided so far (03-Nov-2026): PostgreSQL, data-oriented code, server-rendered
-  HTML, message-oriented design from the start (see Messaging).
-- Language: Python with strict static type checking (decided 05-Nov-2026:
-  the team is fast in it, its libraries cover PSP crypto, JWE, PDF and
-  PostgreSQL, and pyright strict checks closed sets and exhaustive `match`.
-  C was ruled out because an internet-facing payment service parses
-  untrusted input all day and would need its HTTP, JSON, JWT and HTML
-  layers built or vetted by hand. Rust stays the alternative if Python's
-  lack of runtime type checks ever becomes the bottleneck).
-
+- Python with pyright strict (decided 05-Nov-2026; why not C or Rust:
+  `docs/plan-architecture.md` §3).
 - Where to start: `docs/README.md` says what is built, what comes next
   and which document holds what. `docs/plan-architecture.md` is the design
   for the whole flow. A plan describes the design as it is now: a change
   rewrites the plan it changes and updates the decisions it overturns;
   there are no amendment pages, and what comes next lives only in the
   README.
-- Decided 19-Nov-2026: the test setup may route chosen merchants to a
-  real vendor's sandbox next to the fakes, once that vendor's module
-  exists; every provider account is `fake`, `sandbox` or `live`, and the
-  registry refuses a kind the environment does not allow
-  (`docs/plan-architecture.md` §6).
-- Decided 17-Nov-2026: the duplicate guard for anything a vendor sends is
-  the vendor's own id (event id, notice id, file name), never a hash of
-  the bytes; the inbox's body hash only means "these bytes are stored
-  already" (`docs/plan-messaging.md` §7).
-- Decided 16-Nov-2026: local databases `mor_dev` and `mor_test` on the
-  PostgreSQL 18 cluster, reached over peer auth as the developer's own
-  role (`postgresql:///mor_dev`), no dedicated role locally. Ids are
-  uuid7, made in code (`uuid.uuid7()`), so they sort by time and code
-  knows an id before inserting.
-- Decided 15-Nov-2026, with the reasons in `docs/plan-architecture.md`
-  (locks and constraints guard, time only triggers, as in the shared
-  conventions):
-  - After a vendor call with no answer, the operation's duplicate guard
-    decides (`vendor_constraint`, `compensable`, `none`), never a lookup
-    alone and never a clock (§5).
-  - Inbound is push, poll or file as capability data, on one path (§5).
-  - Providers are picked by a registry with an exhaustive `match`. The
-    fakes are fake vendors over HTTP, inside the dev web server under
-    `/_fake/`, and offer every integration mode (§6).
-  - Shipping price and duty rates come from switchable sources, our own
-    tables or a provider, per lane (§8).
+- The design's decisions and their reasons are in the plans. Those that
+  shape everyday code (§ is `docs/plan-architecture.md`):
   - The merchant receives exactly the price it names. Named fee
     components (estimated PSP fee, FX, our margin), shipping, tax and
     duty are added on top; the buyer sees them inside the item price.
     Merchant prices are tax-exclusive (§8).
+  - After a vendor call with no answer, the operation's duplicate guard
+    decides (`vendor_constraint`, `compensable`, `none`), never a lookup
+    alone and never a clock (§5).
+  - The duplicate guard for anything a vendor sends is the vendor's own
+    id (event id, notice id, file name), never a hash of the bytes
+    (`docs/plan-messaging.md` §7).
+  - Every provider account is `fake`, `sandbox` or `live`, and the
+    registry refuses a kind the environment does not allow. The fakes
+    are fake vendors over HTTP inside the dev web server, under `/_fake/`
+    (§6).
   - We pay every carrier bill; a person attributes each difference to us
     or to the merchant by cause (§9).
-  - The flow is fuzzed with Hypothesis: pure properties, the whole flow
-    as a state machine against the test database and the fakes, and a
-    real-concurrency suite (§10).
+- Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
+  reached over peer auth as the developer's own role
+  (`postgresql:///mor_dev`), no dedicated role locally (decided
+  16-Nov-2026). Ids are uuid7, made in code (`uuid.uuid7()`), so they
+  sort by time and code knows an id before inserting.
 
 ### Chosen Stack
 
@@ -83,27 +63,22 @@ this project.
   - Web: Starlette with plain handlers; the request is an argument, never
     hidden global state. HTML: htpy (typed functions, escaped by default).
   - Database: psycopg 3 (async) with hand-written SQL, rows read into
-    frozen dataclasses. Migrations are run by a small runner of our own.
-    Database enums load as our StrEnums (decided 21-Nov-2026): `connect`
-    registers each pair in `mor.db.enums`, so a flat row reads straight
-    into its domain record with `class_row`, with no `::text` cast and no
-    mirror row class. Every database enum has a StrEnum in that table
-    (decided 23-Nov-2026: a `Literal` read as text was unchecked at
-    runtime); `tests/db/test_enums.py` fails on an enum missing there or
-    on values that differ. Code writes a state as its member, passed as a
-    parameter, not as a quoted label in SQL; a filter in a `WHERE` may
-    keep the label. `numeric` is only for whole numbers that can outgrow
-    `bigint`, with a CHECK that its scale is 0; `connect` reads it as an
-    `int` (`mor.db.numeric`, decided 24-Nov-2026), never as `Decimal`.
+    frozen dataclasses; migrations run by a small runner of our own.
+    Every database enum loads as its StrEnum through `mor.db.enums`
+    (decided 21-Nov-2026), so `class_row` reads a row straight into its
+    domain record; `tests/db/test_enums.py` keeps that table complete.
+    Code writes a state as its member, passed as a parameter, not as a
+    quoted label in SQL; a filter in a `WHERE` may keep the label.
+    `numeric` is only for whole numbers that can outgrow `bigint`, with a
+    CHECK that its scale is 0, read as an `int` (`mor.db.numeric`), never
+    as `Decimal`.
   - Parsing at the edges: msgspec. Every input (API body, webhook, form,
     settlement file) is decoded into a typed, frozen record at the edge
     before anything else sees it, because Python does not check types at
     runtime.
-  - Outgoing HTTP: httpx2 (decided 17-Nov-2026), Pydantic's maintained
-    fork of httpx 0.28.1 with the same API under `import httpx2`. httpx
-    itself has had no release since 06-Dec-2024 and lists no Python 3.14
-    support. This reads the conventions' "httpx for outgoing HTTP" as
-    this fork. Crypto: `cryptography` and joserfc (HMAC,
+  - Outgoing HTTP: httpx2, the maintained fork of httpx, which is what
+    the conventions' "httpx" means here (decided 17-Nov-2026; why:
+    `docs/plan-messaging.md` §11). Crypto: `cryptography` and joserfc (HMAC,
     JWT/JWE). Invoices as PDF: WeasyPrint, from the same HTML functions.
   - Money: `int` minor units with a currency enum; exact rates as
     `fractions.Fraction`. Never `float` or `Decimal` for amounts.
@@ -113,18 +88,11 @@ this project.
   the other projects). Run `npm install` once; the Stop hook runs `npx
   tsc` from then on. Every page works without them: a script only
   improves a form or table the server already handles.
-- Checks: the shared hooks run them (conventions `AGENTS.md`, Hooks);
-  this project's extras, `uv run vulture` and `npx tsc`, are in
-  `.claude/checks.sh`. Vulture was set up 23-Nov-2026, with its settings in
-  `pyproject.toml` and reviewed false positives, each with its reason, in
-  `vulture_whitelist.py`. pyright runs in strict mode. Ruff
-  also bans APIs we do not use (`TID251` in `pyproject.toml`, each with
-  its reason). The formatter decides every layout: no `fmt: skip` or
-  `fmt: off` (`tests/test_no_format_skips.py`). What ruff cannot say is
-  an ast-grep rule (`sgconfig.yml`, `ast-grep/rules/`, each with examples
-  in `ast-grep/rule-tests/`), run by `tests/test_ast_grep_rules.py`;
-  ast-grep is a dev dependency, so `uv run ast-grep scan` shows a rule's
-  cases.
+- Checks: the shared hooks run them; this project's extras (vulture,
+  `npx tsc`) are in `.claude/checks.sh`, vulture's reviewed false
+  positives in `vulture_whitelist.py`. A rule ruff cannot say becomes an
+  ast-grep rule (`ast-grep/rules/`, examples in `ast-grep/rule-tests/`;
+  `uv run ast-grep scan` shows its cases). A failing check says why.
   `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
   the invoice PDF; it also needs Pango from the system). `scripts/` holds
   PEP 723 scripts with their own dependencies (`uv run scripts/markets.py
@@ -180,43 +148,25 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   is a closed set of states, not booleans. A closed set that is a value
   we switch on is a `StrEnum` (or a `Literal` when it never reaches the
   database), never a bare `str`.
-- A `match` over a closed set lists every case and has no `case _:
-  assert_never(...)` fallback (decided 23-Nov-2026): pyright's
-  `reportMatchNotExhaustive` refuses a missing case, and a value outside
-  its type cannot get past the edges. `case _:` stays only where it does
-  real work (a `WrongFact` for a fact routing never sends).
+- Checks enforce these, and each says why when it fails: a `match` over
+  a closed set lists every case with no `assert_never` fallback (`case
+  _:` only where it does real work); a record of 4 or more fields is
+  `kw_only` and built with keywords; a query of two or more columns is
+  read with `class_row`, never as a tuple, and a single column with
+  `one_value`; a read that must find a row uses `mor.db.fetch`, not
+  `fetchone()` and an assert; a function that changes a row it read
+  takes the row's `Locked…` type, made only by its `lock_*` function; no
+  import aliases; no local named after a domain name, module or builtin.
+- Name a value by its role (`seller`, `paid_invoice`), not with a `_row`
+  or `_record` suffix. Where two modules clash (the many `flow` modules
+  in `mor.messaging.consumers`), import by dotted path (`import
+  mor.payments.flow`).
 - `assert` is for what other code guarantees (a foreign key, a CHECK, a
   row the caller locked), to narrow a type; anything a request or a
-  vendor can cause is a returned value. A read that must find a row uses
-  `mor.db.fetch` (`one_row`, `one_value`), not `fetchone()` and an
-  assert. A check that a state cannot occur is a `match` with one case
-  per state and a comment on why the impossible ones are impossible.
-- A record of 4 or more fields is built with keyword arguments, and a
-  query of two or more columns is read with `class_row` into a row record
-  named after its columns, never unpacked from a tuple, also not a
-  two-column row in a `for` (decided 23-Nov-2026, the two-column case
-  24-Nov-2026: pyright sees tuple rows as `Any`, and two positional ints
-  can swap unnoticed). A single column is read with `one_value`. Such a
-  record says `kw_only=True`, so pyright refuses a positional build;
-  `tests/test_records_kw_only.py` fails on one that does not.
-- A function that changes a row it read takes the row as its `Locked…`
-  type (`LockedAttempt`, `LockedSession`, `LockedOrder`, or a record of
-  its own such as `LockedLine`), made only by the row's `lock_*`
-  function (decided 24-Nov-2026): pyright then refuses a read-then-write
-  without the row lock (ast-grep `locked-row-made-by-its-lock`).
-- Errors as values covers declined card, tax rule missing, PSP timeout.
-- No shadowing (decided 24-Nov-2026: one name meaning two things is
-  confusing): no local or parameter named after a domain name
-  (`payment`, `merchant`, `invoice`, `ledger`), a package or module, or
-  a builtin. Name the value by its role (`seller`, `paid_invoice`), not
-  with a `_row` or `_record` suffix.
-- No import aliases, project or third-party, with no exceptions
-  (decided 24-Nov-2026): `from hypothesis import strategies`, then
-  `strategies.integers()`, not `as st`. Where two modules or names
-  clash (the many `flow` modules in `mor.messaging.consumers`), import
-  the module by its dotted path (`import mor.payments.flow`, its
-  functions called through that full path), as the shared conventions
-  show.
+  vendor can cause is a returned value, such as a declined card, a
+  missing tax rule or a PSP timeout. A check that a state cannot occur
+  is a `match` with one case per state and a comment on why the
+  impossible ones are impossible.
 - Timestamps: local time only at the edge, for display and for
   tax-point rules that name a local date. Inside the process every moment
   is aware UTC (decided 20-Nov-2026): a vendor's timestamp is decoded as
@@ -251,7 +201,8 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   stored with the entry that used it.
 - Rounding is explicit. Every operation that divides (tax, fees, FX, splits)
   names its rounding mode, and where a remainder can appear it is booked
-  somewhere, never dropped.
+  somewhere, never dropped. Verify rounding, tax and FX against realistic
+  synthetic data.
 
 ## Messaging
 
@@ -276,19 +227,6 @@ commands.
   constraint, and never expires. Financial records are appended, never
   updated in place or deleted. Every state change records who or what
   made it and when.
-- Payment providers (Stripe, Xendit, 2C2P, Adyen, …) follow the shared
-  External Services rules: one module each, one registry, the fake PSP
-  outside prod.
 - Compliance and licensing (KYC/KYB of merchants, payment licences per
   country, data residency) shape the design. When a feature touches them,
   say so in its design and do not assume an answer.
-
-## Agent Workflow
-
-- Verify against realistic synthetic data, especially for rounding,
-  tax and FX.
-
-## Operational Rules
-
-Detailed operational rules go in `.ai/rules/` as the project grows, and are
-linked from here.
