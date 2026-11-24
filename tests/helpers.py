@@ -13,6 +13,10 @@ from starlette.types import Receive, Scope, Send
 import mor.fakes.app
 import mor.web.main
 from mor.config import Environment, Settings
+from mor.db.connect import connect
+from mor.messaging.delivery import (
+    Candidate,
+)
 from mor.messaging.routing import (
     Effect,
     EffectConsumer,
@@ -20,7 +24,9 @@ from mor.messaging.routing import (
     LocalConsumer,
     consumer_kind,
 )
-from mor.messaging.worker import Candidate
+from mor.messaging.worker import (
+    run_one,
+)
 
 
 # The suite's own databases on the local cluster, reached over peer auth as
@@ -97,20 +103,41 @@ def _no_outside_calls(request: httpx2.Request) -> httpx2.Response:
 NO_HTTP = httpx2.AsyncClient(transport=httpx2.MockTransport(_no_outside_calls))
 
 
+class WorkerCrash(BaseException):
+    """The worker's process dying in the middle of a call. Not an
+    `Exception`, so the worker's own failure handling never sees it, as it
+    would not see a killed process."""
+
+
+# When the network kills the worker: before the request leaves (the vendor
+# never hears of it) or after the vendor answered (its work done, the
+# answer lost).
+type CrashPoint = Literal["before_send", "after_answer"]
+
+
 class RefusingTransport(httpx2.AsyncBaseTransport):
     """The network between us and the fakes: the fakes' app in-process,
-    plus "connection refused" on demand, which no app can produce. A fake of
-    the network, not of our code. Inherits because httpx2 transports must."""
+    plus "connection refused" and a worker's crash on demand, which no app
+    can produce. A fake of the network, not of our code. Inherits because
+    httpx2 transports must."""
 
     def __init__(self, inner: httpx2.AsyncBaseTransport) -> None:
         self.inner = inner
         self.refuse_next = 0
+        self.crash_next: CrashPoint | None = None
 
     async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         if self.refuse_next > 0:
             self.refuse_next -= 1
             raise httpx2.ConnectError("connection refused", request=request)
-        return await self.inner.handle_async_request(request)
+        if self.crash_next == "before_send":
+            self.crash_next = None
+            raise WorkerCrash
+        response = await self.inner.handle_async_request(request)
+        if self.crash_next == "after_answer":
+            self.crash_next = None
+            raise WorkerCrash
+        return response
 
 
 async def time_out_at_once() -> None:
@@ -188,6 +215,31 @@ async def crash(conn: psycopg.AsyncConnection[tuple[object, ...]]) -> None:
                 return
             await asyncio.sleep(0.01)
     raise AssertionError(f"backend {pid} still alive 5 s after close")
+
+
+async def crash_around_a_call(
+    candidate: Candidate,
+    with_call: bool,
+    http: httpx2.AsyncClient,
+    network: RefusingTransport,
+    now: datetime,
+) -> bool:
+    """A worker runs the delivery and dies at its first vendor call: before
+    the request is sent, or (`with_call`) after the vendor answered. Its
+    committed steps stay; its advisory lock goes with its connection. True
+    if it died; False if the delivery called no vendor (it ran to its end,
+    or was busy, not due or handled)."""
+    network.crash_next = "after_answer" if with_call else "before_send"
+    crashing = await connect(TEST_URL, autocommit=True)
+    try:
+        try:
+            await run_one(crashing, http, ENV, candidate, now)
+        except WorkerCrash:
+            return True
+        return False
+    finally:
+        network.crash_next = None
+        await crash(crashing)
 
 
 def local_consumer(candidate: Candidate) -> LocalConsumer:

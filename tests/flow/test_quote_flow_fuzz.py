@@ -52,16 +52,14 @@ from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import Connection, connect
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
-from mor.messaging import consumers
+from mor.messaging.delivery import (
+    Candidate,
+)
 from mor.messaging.routing import Effect, consumer_kind
 from mor.messaging.worker import (
-    Candidate,
     Failed,
-    Prepared,
     find_candidates,
-    prepare_delivery,
     run_one,
-    try_lock_aggregate,
 )
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -71,7 +69,7 @@ from tests.helpers import (
     TEST_URL,
     VENDOR_TIMEOUT,
     crash,
-    effect_consumer,
+    crash_around_a_call,
     empty_tables,
     wire,
 )
@@ -220,20 +218,9 @@ class QuoteFlow(RuleBasedStateMachine):
         ):
             return
 
-        async def step() -> None:
-            crashing = await connect(TEST_URL, autocommit=True)
-            try:
-                assert await try_lock_aggregate(crashing, candidate)
-                async with crashing.transaction():
-                    prepared = await prepare_delivery(
-                        crashing, candidate, effect_consumer(candidate), self.now
-                    )
-                if with_call and isinstance(prepared, Prepared):
-                    await consumers.call(self.http, ENV, prepared.call)
-            finally:
-                await crash(crashing)
-
-        self.run(step())
+        self.run(
+            crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
+        )
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
     @rule(fault=st.sampled_from(FAULTS))

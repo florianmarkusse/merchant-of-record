@@ -38,26 +38,23 @@ from mor.duties.lookups import create_vendor_account, request_duty_rate
 from mor.duties.port import DutyProvider, RateQuestion
 from mor.markets.source import parse
 from mor.markets.store import load_market
-from mor.messaging import consumers
+from mor.messaging.delivery import (
+    Candidate,
+    Skipped,
+)
 from mor.messaging.facts import AggregateType
 from mor.messaging.routing import ConsumerName, Effect, consumer_kind
 from mor.messaging.worker import (
-    Candidate,
     Failed,
-    Prepared,
-    Skipped,
     find_candidates,
-    prepare_delivery,
     run_one,
-    try_lock_aggregate,
 )
 from mor.provider_accounts import ProviderAccountKind
 from tests.helpers import (
     ENV,
     TEST_URL,
     VENDOR_TIMEOUT,
-    crash,
-    effect_consumer,
+    crash_around_a_call,
     empty_tables,
     wire,
 )
@@ -156,21 +153,10 @@ class DutyLookupFlow(RuleBasedStateMachine):
         if not isinstance(consumer_kind(candidate.consumer), Effect):
             return  # a local step has no call to crash around
 
-        async def step() -> bool:
-            crashing = await connect(TEST_URL, autocommit=True)
-            try:
-                assert await try_lock_aggregate(crashing, candidate)
-                async with crashing.transaction():
-                    prepared = await prepare_delivery(
-                        crashing, candidate, effect_consumer(candidate), self.now
-                    )
-                if with_call and isinstance(prepared, Prepared):
-                    await consumers.call(self.http, ENV, prepared.call)
-                return isinstance(prepared, Prepared)
-            finally:
-                await crash(crashing)
-
-        if self.run(step()):
+        crashed = crash_around_a_call(
+            candidate, with_call, self.http, self.network, self.now
+        )
+        if self.run(crashed):
             self.counted_crashes += 1
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)

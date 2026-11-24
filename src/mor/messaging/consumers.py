@@ -1,30 +1,55 @@
-"""The dispatch tables: each consumer is plain functions, picked by an
-exhaustive `match`. A local consumer has `handle`; an effect consumer has
-`prepare`, `call` and `complete` (plan-architecture.md §5). The kind is in
-the consumer's type (`mor.messaging.routing`), so neither table can be
-asked for a consumer of the other kind.
+"""The table: each consumer is plain functions, picked by an exhaustive
+`match` on its name. The kind is in the consumer's type
+(`mor.messaging.routing`), so neither kind can be asked for the other's.
 
+Being reworked (plan-messaging-rework.md §3.3): each case narrows the
+fact to what the consumer needs (`expect`), and an effect consumer's three
+steps run through `run_steps`. Converted so far: `duty_rate_ask`. The
+others still go through `prepare`, `call` and `complete` below, where
 `call` returns an answer record holding the call and what the vendor said
-to it, so `complete` is picked by the answer alone, and each module's
-`complete` matches exactly the results its call can get."""
+to it, so `complete` is picked by the answer alone."""
 
+from dataclasses import dataclass
 from datetime import datetime
 
 import httpx2
 
+import mor.duties.lookups
 from mor.checkout import flow as checkout_flow
 from mor.config import Environment
 from mor.couriers import prices as courier_prices
 from mor.db.connect import Connection
-from mor.duties import lookups as duty_lookups
 from mor.echo import flow as echo_flow
 from mor.echo import inbound as echo_inbound
 from mor.echo import reports as echo_reports
 from mor.echo import tracking as echo_tracking
 from mor.invoices import store as invoice_store
-from mor.messaging.facts import Fact
-from mor.messaging.outcome import ConsumerOutcome, NoCall, StepResult
-from mor.messaging.routing import ConsumerName, EffectConsumer, LocalConsumer
+from mor.messaging.delivery import (
+    MAX_EFFECT_STEPS,
+    Candidate,
+    Deferred,
+    Ran,
+    Skipped,
+    defer_delivery,
+    finish_delivery,
+    open_delivery,
+    run_steps,
+)
+from mor.messaging.facts import DutyRateNeededV1, Fact
+from mor.messaging.outcome import (
+    Again,
+    ConsumerOutcome,
+    Done,
+    NoCall,
+    RetryLater,
+    StepResult,
+)
+from mor.messaging.routing import (
+    ConsumerName,
+    EffectConsumer,
+    LocalConsumer,
+    WrongFact,
+)
 from mor.orders import flow as order_flow
 from mor.payments import flow as payment_flow
 from mor.payments import inbound as payment_inbound
@@ -37,7 +62,6 @@ type EffectCall = (
     echo_flow.EchoCall
     | echo_tracking.FetchEventsCall
     | echo_reports.ReportCall
-    | duty_lookups.AskCall
     | courier_prices.PriceCall
     | payment_flow.PaymentCall
     | settlement_fetch.SettlementCall
@@ -46,11 +70,52 @@ type EffectAnswer = (
     echo_flow.EchoAnswer
     | echo_tracking.FetchEventsAnswer
     | echo_reports.ReportAnswer
-    | duty_lookups.AskAnswer
     | courier_prices.PriceAnswer
     | payment_flow.PaymentAnswer
     | settlement_fetch.SettlementAnswer
 )
+
+
+def expect[F](fact: Fact, record: type[F]) -> F:
+    """The fact as the one record its consumer gets; any other is a bug in
+    routing."""
+    if not isinstance(fact, record):
+        raise WrongFact(f"expected {record.__name__}, got {fact!r}")
+    return fact
+
+
+async def run_effect(
+    conn: Connection,
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    candidate: Candidate,
+    consumer: EffectConsumer,
+    fact: Fact,
+    now: datetime,
+) -> Ran | Skipped | Deferred:
+    """An effect consumer's whole run, its delivery opened and its
+    aggregate's advisory lock held by the worker."""
+    match consumer:
+        case ConsumerName.DUTY_RATE_ASK:
+            lookup_id = expect(fact, DutyRateNeededV1).duty_lookup_id
+            return await run_steps(
+                conn,
+                http,
+                environment,
+                candidate,
+                lookup_id,
+                now,
+                prepare=mor.duties.lookups.prepare_ask,
+                call=mor.duties.lookups.ask,
+                complete=mor.duties.lookups.complete_ask,
+            )
+        # Transitional: the consumers not converted to run_steps yet. Goes
+        # once they all are (plan-messaging-rework.md §3.3); no prod data
+        # depends on it.
+        case _:
+            return await _run_unconverted(
+                conn, http, environment, candidate, consumer, now
+            )
 
 
 async def handle(
@@ -108,7 +173,7 @@ async def prepare(
         case ConsumerName.ECHO_REPORT_FETCH:
             return await echo_reports.prepare_reports(conn, fact, now)
         case ConsumerName.DUTY_RATE_ASK:
-            return await duty_lookups.prepare(conn, fact, now)
+            raise AssertionError("duty_rate_ask runs through run_steps")
         case ConsumerName.SHIPPING_PRICE_ASK:
             return await courier_prices.prepare(conn, fact, now)
         case ConsumerName.PSP_PAYMENT_CREATE:
@@ -135,8 +200,6 @@ async def call(
             return await echo_tracking.call_poll(http, environment, effect_call)
         case echo_reports.ListReportsCall() | echo_reports.FetchReportCall():
             return await echo_reports.call_reports(http, environment, effect_call)
-        case duty_lookups.AskCall():
-            return await duty_lookups.call(http, environment, effect_call)
         case courier_prices.PriceCall():
             return await courier_prices.call(http, environment, effect_call)
         case (
@@ -168,8 +231,6 @@ async def complete(
             return await echo_tracking.complete_poll(conn, fact, answer, now)
         case echo_reports.ListReportsAnswer() | echo_reports.FetchReportAnswer():
             return await echo_reports.complete_reports(conn, fact, answer, now)
-        case duty_lookups.AskAnswer():
-            return await duty_lookups.complete(conn, fact, answer, now)
         case courier_prices.PriceAnswer():
             return await courier_prices.complete(conn, fact, answer, now)
         case (
@@ -187,3 +248,75 @@ async def complete(
             | settlement_fetch.LinesAnswer()
         ):
             return await settlement_fetch.complete_fetch(conn, fact, answer, now)
+
+
+# --- transitional: the effect driver for consumers not on run_steps yet ----
+# Goes with `prepare`, `call` and `complete` above once every effect
+# consumer runs through run_steps (plan-messaging-rework.md §3.3).
+
+
+@dataclass(frozen=True)
+class Prepared:
+    """An effect consumer's `prepare` committed a call to make."""
+
+    fact: Fact
+    call: EffectCall
+
+
+async def prepare_delivery(
+    conn: Connection, candidate: Candidate, consumer: EffectConsumer, now: datetime
+) -> Prepared | Ran | Skipped:
+    """An effect consumer's first transaction. Never commits."""
+    fact = await open_delivery(conn, candidate, now)
+    if isinstance(fact, Skipped):
+        return fact
+    prepared = await prepare(conn, consumer, fact, now)
+    if isinstance(prepared, NoCall):
+        await finish_delivery(conn, candidate, now)
+        return Ran(prepared.outcome)
+    return Prepared(fact, prepared)
+
+
+async def complete_delivery(
+    conn: Connection,
+    candidate: Candidate,
+    fact: Fact,
+    answer: EffectAnswer,
+    now: datetime,
+) -> Ran | Deferred | Again:
+    """An effect consumer's last transaction. Never commits."""
+    step = await complete(conn, fact, answer, now)
+    match step:
+        case Done(outcome=outcome):
+            await finish_delivery(conn, candidate, now)
+            return Ran(outcome)
+        case RetryLater(reason=reason):
+            not_before = await defer_delivery(conn, candidate, reason, now)
+            return Deferred(reason, not_before)
+        case Again():
+            return step
+
+
+async def _run_unconverted(
+    conn: Connection,
+    http: httpx2.AsyncClient,
+    environment: Environment,
+    candidate: Candidate,
+    consumer: EffectConsumer,
+    now: datetime,
+) -> Ran | Skipped | Deferred:
+    """prepare (commit), call with no transaction open, complete (commit),
+    again while `complete` asks for it."""
+    for _ in range(MAX_EFFECT_STEPS):
+        async with conn.transaction():
+            prepared = await prepare_delivery(conn, candidate, consumer, now)
+        if not isinstance(prepared, Prepared):
+            return prepared
+        answer = await call(http, environment, prepared.call)
+        async with conn.transaction():
+            completed = await complete_delivery(
+                conn, candidate, prepared.fact, answer, now
+            )
+        if not isinstance(completed, Again):
+            return completed
+    raise AssertionError(f"{candidate} did not finish in {MAX_EFFECT_STEPS} steps")

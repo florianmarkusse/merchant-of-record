@@ -1,9 +1,9 @@
 # Messaging rework: easier to follow, same guarantees
 
-Status: 23-Nov-2026: §1, §3.1 and §3.2 built but not committed: they
-break settlement's payout check, which relied on page order
-(`plan-settlement-reconciliation.md` §1). That plan lands first; then
-these, then §3.3. Amends `plan-messaging.md` and the worker loop in
+Status: 24-Nov-2026: §1, §3.1 and §3.2 built (commit 83a9a04). §3.3,
+the one table for every consumer, agreed 24-Nov-2026: the test seam and
+`duty_rate_ask` built 24-Nov-2026 (§1); next, the other effects.
+Amends `plan-messaging.md` and the worker loop in
 `plan-architecture.md` §5.
 
 The user reviewed the messaging core and found it reliable but hard to
@@ -27,6 +27,24 @@ when following a fact through the code.
   (`test_an_earlier_attempts_end_met_again_leaves_the_open_one_paying`).
   The payment fuzzer's meet-again rule could reach this but did not: a
   second attempt open while the first's end is met again is rare there.
+
+- 24-Nov-2026, §3.3 begun. The test seam: `RefusingTransport`
+  (`tests/helpers.py`) crashes the worker before a request is sent or
+  after its answer came, and `crash_around_a_call` runs the real
+  `run_one`; every fuzzer that crashed around a call uses it (the echo
+  ones keep the old helpers until echo is converted). Measured on the
+  duty and payment fuzzers: both crash points fire for every effect
+  consumer they reach. Then `duty_rate_ask`: `mor.messaging.delivery`
+  (the delivery plumbing out of `worker.py`, and `run_steps`), the table's
+  `run_effect` and `expect`, and `prepare_ask`, `ask`, `complete_ask` in
+  `src/mor/duties/lookups.py`. Measured: the consumer went from 36 to 23
+  lines (its `_lookup_id` and `AskAnswer` gone); `run_steps` is 30 lines
+  of code. Pyright refuses a call step that takes a connection or a
+  prepare step that takes the HTTP client (tried on a throwaway file).
+  The suite passes, and the duty fuzzer passed 600 runs on the soak
+  profile (it records no reach milestones). The other effects still run
+  through the old driver, moved into `consumers.py` and marked
+  transitional, so `consumers.py` is larger until they move.
 
 ## 2. Decided: drop ordering per consumer and aggregate
 
@@ -112,82 +130,131 @@ it."
 - `outbox_delivery.aggregate_type`/`aggregate_id` stay (the worker names
   the lock from them without decoding the fact); no migration.
 
-### 3.3 One place per effect consumer
+### 3.3 Design: one table that narrows, locks and runs (agreed 24-Nov-2026)
 
-Today `prepare` dispatches on the consumer name, `call` and `complete`
-on the call and answer types (`src/mor/messaging/consumers.py`), then
-`payment_flow.complete` matches the answer again and each step re-reads
-the id from the fact.
+Replaces the two separate proposals made on 23-Nov-2026 (one function per
+effect consumer; a declaration of each local consumer's lock), which
+turned out to be one change. Still decided: the worker locks a local
+consumer's row before any of its code runs (option 1 of three; a fuzzer
+rule and an ast-grep rule were rejected).
 
-Proposed: each effect consumer is one function that reads top to bottom,
-owning its transactions, and the worker calls it by one `match` on the
-consumer name:
+**Today**, a fact goes through four places before anything happens:
+`consumers.handle` or `consumers.prepare` picks a function by consumer
+name; that function matches the fact again to find its id (26 `raise
+WrongFact`, 10 `_x_id(fact)` helpers) and locks its row somewhere inside;
+for an effect, `consumers.call` and `consumers.complete` dispatch a second
+time on the call and answer records, and `payment_flow.complete` matches
+the answer a third time.
+
+**The table**: `mor.messaging.consumers`, one `match` on the consumer
+name per kind. Each case does, in this order, what today is spread out:
+
+1. **Narrow** the fact to what the consumer needs (an id, or the typed
+   fact when it carries data) with `expect(fact, Record)`, an `isinstance`
+   check that raises `WrongFact`; a consumer that gets several fact types
+   matches them in its case. This is the only place that raises
+   `WrongFact`: consumer functions take ids and typed facts, never `Fact`.
+2. **Lock** (local consumers): the row the consumer changes, with the
+   module's existing lock function, passed to the consumer as an
+   argument. Where the row is found through another (a settlement line's
+   attempt), the lookup reads a column that never changes and sits in the
+   same case. A consumer that locks nothing says why in a comment on its
+   case (the inbox decoders read an inbox row that never changes;
+   `quote_wait_notify` only appends facts).
+3. **Run** it: a local consumer in the worker's transaction; an effect
+   consumer through `run_steps`.
+
+**An effect consumer is three functions**, side by side in its module,
+each given only what it may use:
 
 ```python
-async def run_capture(conn, http, environment, delivery, fact, now) -> EffectEnd:
-    attempt_id = _authorised_id(fact)
-    while True:
-        async with conn.transaction():
-            prepared = await prepare_capture(conn, attempt_id, now)
-            if isinstance(prepared, NoCall):
-                return await finish_delivery(conn, delivery, prepared.outcome, now)
-        result = await registry.capture(http, environment, ...)  # no transaction
-        async with conn.transaction():
-            step = await complete_capture(conn, attempt_id, prepared, result, now)
-            match step:
-                case Done(outcome=outcome):
-                    return await finish_delivery(conn, delivery, outcome, now)
-                case RetryLater(reason=reason):
-                    return await defer_delivery(conn, delivery, reason, now)
-                case Again():
-                    pass
+async def prepare_ask(conn, lookup_id, now) -> NoCall | AskCall          # database only
+async def ask(http, environment, call: AskCall) -> RatesResult           # vendor only
+async def complete_ask(conn, lookup_id, call, result, now) -> StepResult  # database only
+
+case ConsumerName.DUTY_RATE_ASK:
+    lookup_id = expect(fact, DutyRateNeededV1).duty_lookup_id
+    return await run_steps(conn, http, environment, candidate, lookup_id, now,
+                           prepare=mor.duties.lookups.prepare_ask,
+                           call=mor.duties.lookups.ask,
+                           complete=mor.duties.lookups.complete_ask)
 ```
 
-- Gone: `consumers.prepare/call/complete`, the `EffectCall`/`EffectAnswer`
-  unions, the `*Answer` records (the result is passed directly), the
-  worker's `prepare_delivery`, `complete_delivery`, `run_effect` and
-  `Prepared`, and `payment_flow.complete`'s second match.
-- Kept: the worker's advisory lock around the call to `run_*`, and
-  `finish_delivery`/`defer_delivery` (today `_finish_delivery`,
-  `_defer`) as plain functions the consumer calls in its last
-  transaction, so the effect and `handled_at` still commit together.
-- Risks: the transaction boundaries are written in each consumer, so one
-  could call a vendor inside a transaction; and a consumer could forget
-  `finish_delivery`. Against the first, `registry` calls go through a
-  check that the worker's connection has no open transaction; against
-  the second, `EffectEnd` is `Handled | Deferred`, records only those two
-  functions return.
-- Size (shared conventions, Duplication): the dispatch and driver code
-  that goes is about 230 lines (consumers.py 80, worker 75, payment
-  call/complete 55, answer records); 11 drivers of about 20 lines each
-  come in. About even; the gain is that one function shows a consumer's
-  whole run. Converted first: `duty_rate_ask`, measured, then the rest;
-  the echo consumers are transitional and go last (or with the echo
-  flow).
+`run_steps` (`mor.messaging.delivery`) is generic over the subject, the
+call and the vendor's result, so pyright checks the three fit together.
+It owns every transaction: `prepare` in one (a `NoCall` ends the delivery
+there), the call with none open, `complete` in a new one that also ends
+or defers the delivery, and `prepare` again while `complete` says
+`Again` (a payment's duplicate to cancel, a settlement file per
+listing), with the bound the worker has today.
 
-### 3.3b The lock each local consumer takes, applied by the worker
+**Why by design, not by a check**: no row lock can be held across a
+vendor call, because no code has a connection and the HTTP client at
+once except `run_steps`. The call function gets no connection; the steps
+get no HTTP client. A runtime check (every registry call asserting no
+open transaction) was considered and dropped: with this shape it has
+nothing left to catch.
 
-Decided 23-Nov-2026 (option 1 of three): a note saying which row each
-consumer locks is easy to forget, so it becomes a declaration the worker
-applies. Next to `consumer_kind` (`src/mor/messaging/routing.py`), an
-exhaustive `match` maps every local consumer to the row it locks (the
-attempt, the session, the payout, …) or to "reads only rows that never
-change" (the inbox decoders). pyright refuses a new consumer without
-one. The worker locks that row before any of the consumer's code runs,
-so the lock cannot be forgotten. To design with §3.3: for some consumers
-the row is found from the fact with a lookup (a settlement line's
-attempt, a line's payout), and that mapping should live in the same one
-place per consumer §3.3 asks for. Rejected: declared and checked only by
-a fuzzer rule (proves the row is locked, not that it is locked before
-reading), and an ast-grep rule on `UPDATE` without `FOR UPDATE` (text,
-not meaning).
+**The worker** keeps what it does now and loses the effect driver and
+its dispatch: it picks due deliveries, opens one (the delivery's row
+lock, `handled_at`, `not_before`, decoding), and calls the table's local
+case in the same transaction or, holding the aggregate's advisory lock,
+its effect case. For an effect it opens the delivery in a short
+transaction of its own: the advisory lock keeps every other worker off
+the delivery until `run_steps` ends it, as it does across commits today.
+The delivery plumbing the table needs (`Candidate`, opening, finishing,
+deferring, `run_steps`) moves from `worker.py` to
+`mor.messaging.delivery`, so the table does not import the worker.
+
+**Gone**: `consumers.prepare`, `call` and `complete`; the `EffectCall`
+and `EffectAnswer` unions and every `*Answer` record (`run_steps` hands
+the call and the result to `complete`); the worker's `prepare_delivery`,
+`complete_delivery`, `run_effect` and `Prepared`;
+`payment_flow.complete`'s second match; the `_x_id(fact)` helpers and the
+`WrongFact` checks inside consumer modules. `NoCall`, `Done`,
+`RetryLater` and `Again` stay as the steps' results.
+
+**Tests**: the fuzzers crash a worker between an effect's commits by
+calling `prepare_delivery` and `consumers.call` themselves. Instead, the
+tests' network (`RefusingTransport`, `tests/helpers.py`), which already
+refuses connections on demand, can crash the worker before a request is
+sent or after its answer came back; the crash helpers run the real
+`run_one` and then close the connection as a dead worker would. Fault in
+the network, the code path real, and the same for converted and
+unconverted consumers, so the tests move first.
+
+**Rules applied**: explicit over clever (one `match`, jump-to-definition
+lands on what runs); data-oriented (plain functions taking what they
+need: ids, typed facts, locked rows); locks, not clocks (row locks only
+inside a step's transaction, the advisory lock across the vendor call);
+errors as values (vendor results matched in `complete`).
+
+**Size**: about 230 lines of dispatch go (consumers.py 80, worker 75,
+payment call/complete 55, answer records); `run_steps` (about 30) and
+the 16 local cases' lock lines come in. Measured on the first
+conversion.
+
+**Order of building**: the test seam first. Then `duty_rate_ask`, with
+`run_steps` and `mor.messaging.delivery`, the other consumers still on
+the old path; measured (lines, the suite, the duty fuzzer's reach). Then
+the other effects (shipping price, the five payment consumers,
+settlement fetch), then the 16 local consumers' locks into the table,
+then the old dispatch removed. The echo consumers are transitional:
+converted last, or retired with the echo flow if the shipment slice
+comes first. No fact changes shape, so the fact-schema snapshot guards
+each step.
+
+**Open**: whether a locked row gets a type of its own (`Locked[Attempt]`)
+so a consumer cannot be handed one from `read_attempt`. Proposed: no; the
+table is the one place that calls the consumer, so review sees it.
 
 ### 3.4 Order of work
 
 1. §3.1 and §3.2 together (worker, `aggregate_of`'s docstring, the
    `messaging.md` line, the worker loop in `plan-architecture.md` §5
    step 3, the concurrent case), then a soak run.
-2. §3.3 on `duty_rate_ask`, line count compared, then the rest.
+2. §3.3 on `duty_rate_ask`, measured, then the rest in the order §3.3
+   gives.
 
 ### 3.5 Smaller items
 

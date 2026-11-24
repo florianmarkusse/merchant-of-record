@@ -25,13 +25,15 @@ from mor.db.connect import connect
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
 from mor.messaging import consumers
-from mor.messaging.routing import ConsumerName
-from mor.messaging.worker import (
+from mor.messaging.consumers import (
     Prepared,
     complete_delivery,
+    prepare_delivery,
+)
+from mor.messaging.routing import ConsumerName
+from mor.messaging.worker import (
     drain_once,
     find_candidates,
-    prepare_delivery,
     try_lock_aggregate,
     unlock_aggregate,
 )

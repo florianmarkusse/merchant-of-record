@@ -13,19 +13,18 @@ from psycopg.rows import class_row
 
 from mor.db.connect import Connection, connect
 from mor.messaging import consumers
+from mor.messaging.delivery import (
+    Candidate,
+)
 from mor.messaging.facts import AggregateType, MessageType, UndecodableFact, decode
 from mor.messaging.routing import ConsumerName, Local, consumer_kind
 from mor.messaging.worker import (
-    Candidate,
     Failed,
-    Prepared,
     find_candidates,
     handle_delivery,
-    prepare_delivery,
     run_one,
-    try_lock_aggregate,
 )
-from tests.helpers import ENV, TEST_URL, crash, effect_consumer, local_consumer
+from tests.helpers import ENV, TEST_URL, crash, local_consumer
 
 
 # --- after every action -------------------------------------------------------
@@ -383,24 +382,6 @@ async def crash_in_a_local_step(candidate: Candidate, now: datetime) -> None:
                 raise _CrashBeforeCommit
         except _CrashBeforeCommit:
             pass
-    finally:
-        await crash(crashing)
-
-
-async def crash_around_a_call(
-    candidate: Candidate, with_call: bool, http: httpx2.AsyncClient, now: datetime
-) -> None:
-    """An effect's `prepare` committed, then the worker gone, before its
-    call or after it."""
-    crashing = await connect(TEST_URL, autocommit=True)
-    try:
-        assert await try_lock_aggregate(crashing, candidate)
-        async with crashing.transaction():
-            prepared = await prepare_delivery(
-                crashing, candidate, effect_consumer(candidate), now
-            )
-        if with_call and isinstance(prepared, Prepared):
-            await consumers.call(http, ENV, prepared.call)
     finally:
         await crash(crashing)
 

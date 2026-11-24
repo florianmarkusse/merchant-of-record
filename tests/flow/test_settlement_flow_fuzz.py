@@ -48,9 +48,16 @@ from hypothesis.stateful import (
 
 from mor.db.connect import Connection, connect
 from mor.fakes.psp import CUT_FAULTS, CutFault
+from mor.messaging.delivery import (
+    Candidate,
+)
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.routing import ConsumerName, Effect, Local, consumer_kind
-from mor.messaging.worker import Candidate, Failed, find_candidates, run_one
+from mor.messaging.worker import (
+    Failed,
+    find_candidates,
+    run_one,
+)
 from mor.payments.flow import Paying, pay
 from mor.psp.port import CaptureMode, SettlementMode, StatusMode
 from mor.settlement.fetch import start_settlement_reading
@@ -61,12 +68,11 @@ from tests.flow.payment_checks import (
     check_drained,
     check_every_action,
     check_settlement_drained,
-    crash_around_a_call,
     crash_in_a_local_step,
     handled_locally,
     meet_again,
 )
-from tests.helpers import ENV, TEST_URL, empty_tables, wire
+from tests.helpers import ENV, TEST_URL, crash_around_a_call, empty_tables, wire
 from tests.payments.support import (
     ACTOR,
     NOW,
@@ -122,6 +128,7 @@ class SettlementFlow(RuleBasedStateMachine):
         self.run(empty_tables(TEST_URL))
         self.now = T0
         wired = wire(TEST_URL, lambda: self.now)
+        self.network = wired.network
         self.http = wired.http
         self.control = wired.control
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
@@ -260,7 +267,9 @@ class SettlementFlow(RuleBasedStateMachine):
             return
         if candidate.consumer == ConsumerName.PSP_SETTLEMENT_FETCH:
             self.met.add("crash around a settlement read")
-        self.run(crash_around_a_call(candidate, with_call, self.http, self.now))
+        self.run(
+            crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
+        )
 
     @precondition(lambda self: self.run(self._settlement_steps_due()) != [])
     @rule(data=st.data())

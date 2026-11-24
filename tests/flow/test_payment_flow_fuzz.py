@@ -48,9 +48,16 @@ from mor.checkout.flow import QUOTE_VALID_FOR, refresh_quote
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
 from mor.fakes.psp import QR_LIFETIME
+from mor.messaging.delivery import (
+    Candidate,
+)
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.routing import Effect, Local, consumer_kind
-from mor.messaging.worker import Candidate, Failed, find_candidates, run_one
+from mor.messaging.worker import (
+    Failed,
+    find_candidates,
+    run_one,
+)
 from mor.payments.flow import Paying, pay, pay_another_way
 from mor.psp.port import CaptureMode, StatusMode
 from tests.flow import reach
@@ -58,10 +65,9 @@ from tests.flow.payment_checks import (
     catch_up,
     check_drained,
     check_every_action,
-    crash_around_a_call,
     crash_in_a_local_step,
 )
-from tests.helpers import ENV, TEST_URL, empty_tables, wire
+from tests.helpers import ENV, TEST_URL, crash_around_a_call, empty_tables, wire
 from tests.payments.support import (
     ACTOR,
     NOW,
@@ -328,7 +334,9 @@ class PaymentFlow(RuleBasedStateMachine):
             consumer_kind(candidate.consumer), Effect
         ):
             return
-        self.run(crash_around_a_call(candidate, with_call, self.http, self.now))
+        self.run(
+            crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
+        )
 
     @rule(data=st.data())
     def crash_inside_a_local_step(self, data: st.DataObject) -> None:

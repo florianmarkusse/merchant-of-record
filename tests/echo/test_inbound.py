@@ -19,7 +19,14 @@ from mor.echo.inbound import JobNotFound, record_manual_event, store_inbox
 from mor.echo.port import EchoProvider, EventKind, EventMode
 from mor.echo.reports import start_report_schedule
 from mor.fakes.hang import hang_a_minute
-from mor.messaging.worker import Deferred, Failed, RunResult, drain_once
+from mor.messaging.delivery import (
+    Deferred,
+)
+from mor.messaging.worker import (
+    Failed,
+    RunResult,
+    drain_once,
+)
 from mor.web.main import Fakes, FakesInProd, make_app
 from tests.helpers import ENV, NO_HTTP, Wired, wire
 

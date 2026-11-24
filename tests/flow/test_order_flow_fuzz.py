@@ -38,10 +38,12 @@ from hypothesis.stateful import (
 
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import Connection, connect
+from mor.messaging.delivery import (
+    Candidate,
+)
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.routing import ConsumerName, Effect, Local, consumer_kind
 from mor.messaging.worker import (
-    Candidate,
     Failed,
     find_candidates,
     run_one,
@@ -53,12 +55,11 @@ from tests.flow.payment_checks import (
     catch_up,
     check_drained,
     check_every_action,
-    crash_around_a_call,
     crash_in_a_local_step,
     handled_locally,
     meet_again,
 )
-from tests.helpers import ENV, TEST_URL, empty_tables, wire
+from tests.helpers import ENV, TEST_URL, crash_around_a_call, empty_tables, wire
 from tests.payments.support import (
     ACTOR,
     NOW,
@@ -96,6 +97,7 @@ class OrderFlow(RuleBasedStateMachine):
         self.run(empty_tables(TEST_URL))
         self.now = T0
         wired = wire(TEST_URL, lambda: self.now)
+        self.network = wired.network
         self.http = wired.http
         self.control = wired.control
         self.worker: Connection = self.run(connect(TEST_URL, autocommit=True))
@@ -206,7 +208,9 @@ class OrderFlow(RuleBasedStateMachine):
             return
         if candidate.consumer == ConsumerName.PSP_PAYMENT_CAPTURE:
             self.met.add("crash around a capture")
-        self.run(crash_around_a_call(candidate, with_call, self.http, self.now))
+        self.run(
+            crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
+        )
 
     @precondition(lambda self: self.run(self._captures_due()) != [])
     @rule(data=st.data(), with_call=st.booleans())
@@ -215,7 +219,9 @@ class OrderFlow(RuleBasedStateMachine):
         lost capture is the case the duplicate guard exists for."""
         candidate = data.draw(st.sampled_from(self.run(self._captures_due())))
         self.met.add("crash around a capture")
-        self.run(crash_around_a_call(candidate, with_call, self.http, self.now))
+        self.run(
+            crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
+        )
 
     @rule(data=st.data())
     def a_consumer_meets_its_fact_again(self, data: st.DataObject) -> None:

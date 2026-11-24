@@ -15,18 +15,22 @@ from mor.echo.port import EchoProvider
 from mor.fakes.echo import make_app
 from mor.fakes.hang import hang_a_minute
 from mor.messaging import consumers
+from mor.messaging.consumers import (
+    Prepared,
+    complete_delivery,
+    prepare_delivery,
+)
+from mor.messaging.delivery import (
+    Ran,
+    Skipped,
+)
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.routing import ConsumerName
 from mor.messaging.worker import (
     Failed,
-    Prepared,
-    Ran,
     RunResult,
-    Skipped,
-    complete_delivery,
     drain_once,
     find_candidates,
-    prepare_delivery,
     run_one,
     try_lock_aggregate,
     unlock_aggregate,

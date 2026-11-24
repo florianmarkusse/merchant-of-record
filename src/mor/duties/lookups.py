@@ -8,9 +8,10 @@
 The unique key on (vendor, destination, origin, HS code) is the "ask once"
 guard. A lookup is a read, so asking again after a lost answer is safe
 and needs no duplicate guard; each call is counted before it is made, so
-every billed call shows. `prepare` and `complete` run in the worker's
-transactions under the lookup's row lock and never commit; `call` runs
-with no transaction open.
+every billed call shows. The consumer is three steps, run by
+`mor.messaging.delivery.run_steps`: `prepare_ask` and `complete_ask` in
+its transactions under the lookup's row lock (they never commit), `ask`
+with no transaction open and no connection.
 """
 
 import uuid
@@ -44,10 +45,8 @@ from mor.messaging.facts import (
     DutyRateNeededV1,
     DutyRateNeedsPersonV1,
     DutyRateUnknownCodeV1,
-    Fact,
 )
 from mor.messaging.outcome import Applied, Done, NoCall, RetryLater, Stale
-from mor.messaging.routing import WrongFact
 from mor.messaging.store import append_fact
 from mor.provider_accounts import ProviderAccountKind
 from mor.tax.line_rates import Line, own_standard_row
@@ -67,17 +66,10 @@ class NoVendorAccount:
 
 @dataclass(frozen=True)
 class AskCall:
+    """What `prepare_ask` committed to ask, for `ask`."""
+
     account: DutyVendorAccount
-    lookup_id: uuid.UUID
     question: RateQuestion
-
-
-@dataclass(frozen=True)
-class AskAnswer:
-    """The call and what the vendor said to it, from `call` to `complete`."""
-
-    call: AskCall
-    result: AskResult
 
 
 # --- rows -----------------------------------------------------------------
@@ -294,19 +286,13 @@ async def _lock_lookup(conn: Connection, lookup_id: uuid.UUID) -> _LookupRow:
     return row
 
 
-def _lookup_id(fact: Fact) -> uuid.UUID:
-    match fact:
-        case DutyRateNeededV1(duty_lookup_id=lookup_id):
-            return lookup_id
-        case _:
-            raise WrongFact(f"duty_rate_ask got {fact!r}")
+# --- the consumer duty_rate_ask: prepare_ask, ask, complete_ask -------------
 
 
-# --- prepare, call, complete ----------------------------------------------
-
-
-async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | AskCall:
-    lookup = await _lock_lookup(conn, _lookup_id(fact))
+async def prepare_ask(
+    conn: Connection, lookup_id: uuid.UUID, now: datetime
+) -> NoCall | AskCall:
+    lookup = await _lock_lookup(conn, lookup_id)
     if lookup.state != LookupState.REQUESTED:
         return NoCall(Stale())
     account = await vendor_account(conn, lookup.vendor_name)
@@ -318,22 +304,23 @@ async def prepare(conn: Connection, fact: Fact, now: datetime) -> NoCall | AskCa
         (now, lookup.id),
     )
     question = RateQuestion(lookup.destination, lookup.origin, lookup.hs_code)
-    return AskCall(account, lookup.id, question)
+    return AskCall(account, question)
 
 
-async def call(
-    http: httpx2.AsyncClient, environment: Environment, ask: AskCall
-) -> AskAnswer:
-    result = await registry.ask_rates(http, environment, ask.account, ask.question)
-    return AskAnswer(ask, result)
+async def ask(
+    http: httpx2.AsyncClient, environment: Environment, call: AskCall
+) -> AskResult:
+    return await registry.ask_rates(http, environment, call.account, call.question)
 
 
-async def complete(
-    conn: Connection, fact: Fact, answer: AskAnswer, now: datetime
+async def complete_ask(
+    conn: Connection,
+    lookup_id: uuid.UUID,
+    call: AskCall,
+    result: AskResult,
+    now: datetime,
 ) -> Done | RetryLater:
-    lookup = await _lock_lookup(conn, _lookup_id(fact))
-    assert lookup.id == answer.call.lookup_id
-    result = answer.result
+    lookup = await _lock_lookup(conn, lookup_id)
     if lookup.state != LookupState.REQUESTED:
         return Done(Stale())
     match result:

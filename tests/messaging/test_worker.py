@@ -7,15 +7,17 @@ import pytest
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
+from mor.messaging.delivery import (
+    Candidate,
+    Ran,
+    Skipped,
+)
 from mor.messaging.facts import AggregateType, ProbeStartedV1
 from mor.messaging.outcome import Applied, Stale
 from mor.messaging.routing import ConsumerName
 from mor.messaging.store import append_fact
 from mor.messaging.worker import (
-    Candidate,
     Failed,
-    Ran,
-    Skipped,
     drain_once,
     find_candidates,
     handle_delivery,

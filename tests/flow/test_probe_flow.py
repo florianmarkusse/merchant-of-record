@@ -30,13 +30,15 @@ from hypothesis.stateful import (
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection, connect
+from mor.messaging.delivery import (
+    Candidate,
+    Skipped,
+)
 from mor.messaging.facts import AggregateType, ProbeStartedV1
 from mor.messaging.routing import ConsumerName
 from mor.messaging.store import append_fact
 from mor.messaging.worker import (
-    Candidate,
     Failed,
-    Skipped,
     find_candidates,
     handle_delivery,
     run_one,
