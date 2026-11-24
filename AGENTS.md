@@ -110,12 +110,14 @@ this project.
 - Frontend (decided 18-Nov-2026): the staff pages' stylesheet is
   `static/css/staff.css`; scripts are strict TypeScript in `ts/`, compiled
   by `tsc` into git-ignored `static/js/` (no bundler, no framework, as in
-  the other projects). Run `npm install` once, then `npx tsc` after
-  changing a `.ts` file. Every page works without them: a script only
+  the other projects). Run `npm install` once; the Stop hook runs `npx
+  tsc` from then on. Every page works without them: a script only
   improves a form or table the server already handles.
-- Checks: the shared order plus `uv run vulture` (set up 23-Nov-2026;
-  settings in `pyproject.toml`, reviewed false positives with their reason
-  in `vulture_whitelist.py`) and `npx tsc`; pyright in strict mode. Ruff
+- Checks: the shared hooks run them (conventions `AGENTS.md`, Hooks);
+  this project's extras, `uv run vulture` and `npx tsc`, are in
+  `.claude/checks.sh`. Vulture was set up 23-Nov-2026, with its settings in
+  `pyproject.toml` and reviewed false positives, each with its reason, in
+  `vulture_whitelist.py`. pyright runs in strict mode. Ruff
   also bans APIs we do not use (`TID251` in `pyproject.toml`, each with
   its reason). The formatter decides every layout: no `fmt: skip` or
   `fmt: off` (`tests/test_no_format_skips.py`). What ruff cannot say is
