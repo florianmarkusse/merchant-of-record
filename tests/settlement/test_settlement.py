@@ -17,7 +17,12 @@ from psycopg.rows import class_row
 from mor.db.connect import connect
 from mor.db.fetch import one_value
 from mor.fakes.psp import HELD_BACK_MINOR
-from mor.ledger.account import Account, AccountKind
+from mor.ledger.account import (
+    PayoutInTransit,
+    PspClearing,
+    PspFeeCollected,
+    PspFeeVariance,
+)
 from mor.ledger.store import balance
 from mor.messaging.consumers import run_local
 from mor.messaging.facts import SettlementLineReceivedV1, SettlementPayoutReportedV1
@@ -96,11 +101,12 @@ async def _read_settlement(setup: Setup) -> None:
     await drain(setup)
 
 
-async def _balance(setup: Setup, kind: AccountKind) -> int:
+async def _balance(
+    setup: Setup, kind: type[PspClearing | PayoutInTransit | PspFeeVariance]
+) -> int:
+    """The balance in SGD of the shop's PSP account's `kind` account."""
     async with await connect(setup.url) as conn:
-        found = await balance(
-            conn, Account(kind, str(setup.shop.account.id)), Currency.SGD
-        )
+        found = await balance(conn, kind(setup.shop.account.id), Currency.SGD)
     return found.amount_minor
 
 
@@ -188,14 +194,12 @@ def test_a_cut_settles_every_payment_once_and_clears_psp_clearing(
         assert await _reconciliations(setup) == ["balanced"]
         captured = 3 * (await attempts_of(setup))[0].amount.amount_minor
         fees, estimates = await _fees(setup)
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == 0
-        assert await _balance(setup, AccountKind.PAYOUT_IN_TRANSIT) == captured - fees
+        assert await _balance(setup, PspClearing) == 0
+        assert await _balance(setup, PayoutInTransit) == captured - fees
         # The estimate cleared, the difference is ours.
-        assert await _balance(setup, AccountKind.PSP_FEE_VARIANCE) == fees - estimates
+        assert await _balance(setup, PspFeeVariance) == fees - estimates
         async with await connect(setup.url) as conn:
-            collected = await balance(
-                conn, Account(AccountKind.PSP_FEE_COLLECTED), Currency.SGD
-            )
+            collected = await balance(conn, PspFeeCollected(), Currency.SGD)
         assert collected == Money(0, Currency.SGD)
 
         # Read again: nothing new, nothing booked twice.
@@ -262,7 +266,7 @@ def test_a_net_that_does_not_add_up_is_booked_as_paid_and_shown_open(
         assert await _line_states(setup) == ["booked"]
         # The PSP paid one dollar less than its lines: booked as paid, the
         # gap stays in psp_clearing, and the payout is open by that much.
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == 100
+        assert await _balance(setup, PspClearing) == 100
         assert await _reconciliations(setup) == ["open"]
         assert await _differences(setup) == [-100]
 
@@ -283,7 +287,7 @@ def test_a_balance_transfer_holds_part_of_one_payout_for_the_next(
         await _read_settlement(setup)
         assert await _reconciliations(setup) == ["balanced"]
         # Held back at the PSP: still in psp_clearing.
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == HELD_BACK_MINOR
+        assert await _balance(setup, PspClearing) == HELD_BACK_MINOR
 
         await _pay(setup)
         await _cut(setup)
@@ -297,7 +301,7 @@ def test_a_balance_transfer_holds_part_of_one_payout_for_the_next(
             "counted",
             "counted",
         ]
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == 0
+        assert await _balance(setup, PspClearing) == 0
 
     asyncio.run(with_setup(database_url, _wiring(SettlementMode.FILE), body))
 
@@ -326,14 +330,14 @@ def test_a_payout_whose_lines_are_not_listed_yet_waits_open(
         assert await _line_states(setup) == []
         assert await _reconciliations(setup) == ["open"]
         captured = (await attempts_of(setup))[0].amount.amount_minor
-        net = await _balance(setup, AccountKind.PAYOUT_IN_TRANSIT)
+        net = await _balance(setup, PayoutInTransit)
         assert 0 < net < captured
         assert await _differences(setup) == [net]
 
         await _read_settlement(setup)
         assert await _line_states(setup) == ["booked"]
         assert await _reconciliations(setup) == ["balanced"]
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == 0
+        assert await _balance(setup, PspClearing) == 0
 
     asyncio.run(with_setup(database_url, _wiring(SettlementMode.API), body))
 
@@ -347,7 +351,7 @@ def test_a_payment_settled_again_in_a_later_batch_is_an_exception(
         await _start_reading(setup)
         await _cut(setup)
         await _read_settlement(setup)
-        in_transit = await _balance(setup, AccountKind.PAYOUT_IN_TRANSIT)
+        in_transit = await _balance(setup, PayoutInTransit)
 
         await _cut(setup, "settled_again")
         await _read_settlement(setup)
@@ -356,8 +360,8 @@ def test_a_payment_settled_again_in_a_later_batch_is_an_exception(
         assert await _line_states(setup) == ["booked", "exception"]
         # Its payout is booked as the PSP paid it; the money it took from
         # psp_clearing a second time is the gap the exception names.
-        paid_again = await _balance(setup, AccountKind.PAYOUT_IN_TRANSIT) - in_transit
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == -paid_again
+        paid_again = await _balance(setup, PayoutInTransit) - in_transit
+        assert await _balance(setup, PspClearing) == -paid_again
 
     asyncio.run(with_setup(database_url, _wiring(SettlementMode.API), body))
 
@@ -391,7 +395,7 @@ def test_settlement_ahead_of_our_books_waits_for_the_order(database_url: str) ->
         assert await session_state(setup) == "completed"
         assert await _line_states(setup) == ["booked"]
         assert await _exceptions(setup) == []
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == 0
+        assert await _balance(setup, PspClearing) == 0
 
     wiring = _wiring(SettlementMode.FILE, StatusMode.POLL)
     asyncio.run(with_setup(database_url, wiring, body))
@@ -491,7 +495,7 @@ def test_a_payout_and_its_pages_add_up_in_whatever_order_they_are_decoded(
         assert await _exceptions(setup) == []
         assert await _line_states(setup) == ["booked", "booked", "booked"]
         assert await _reconciliations(setup) == ["balanced"]
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == 0
+        assert await _balance(setup, PspClearing) == 0
 
     asyncio.run(with_setup(database_url, _wiring(SettlementMode.API), body))
 
@@ -627,7 +631,7 @@ def test_a_failing_read_is_tried_again_and_reads_once(database_url: str) -> None
         setup.clock[0] += timedelta(minutes=30)
         await drain(setup)
         assert await _line_states(setup) == ["booked"]
-        assert await _balance(setup, AccountKind.PSP_CLEARING) == 0
+        assert await _balance(setup, PspClearing) == 0
 
     asyncio.run(with_setup(database_url, _wiring(SettlementMode.API), body))
 

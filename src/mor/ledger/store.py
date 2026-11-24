@@ -1,14 +1,12 @@
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 
 from psycopg.rows import class_row
 
-from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
 from mor.db.fetch import one_row, one_value
-from mor.ledger.account import Account, AccountKind
-from mor.ledger.entry import JournalEntry, Line
+from mor.ledger.account import Account, kind_of, scope_of
+from mor.ledger.entry import JournalEntry
 from mor.money.amount import Money
 from mor.money.currency import Currency
 
@@ -31,21 +29,10 @@ class AlreadyRecorded:
     entry_id: uuid.UUID
 
 
-@dataclass(frozen=True, kw_only=True)
-class _EntryRow:
+@dataclass(frozen=True)
+class _Comparison:
     id: uuid.UUID
-    description: str
-    effective_at: datetime
-    actor_kind: ActorKind
-    actor_id: str
-
-
-@dataclass(frozen=True, kw_only=True)
-class _LineRow:
-    account_kind: AccountKind
-    account_scope: str
-    amount_minor: int
-    currency: Currency
+    same: bool
 
 
 async def record_entry(
@@ -84,8 +71,8 @@ async def record_entry(
             {
                 "entry_id": entry.id,
                 "line_no": line_no,
-                "kind": line.account.kind.value,
-                "scope": line.account.scope,
+                "kind": kind_of(line.account).value,
+                "scope": scope_of(line.account),
                 "amount_minor": line.amount.amount_minor,
                 "currency": line.amount.currency.value,
             }
@@ -108,41 +95,61 @@ async def record_entry(
 async def _compare_with_recorded(
     conn: Connection, entry: JournalEntry
 ) -> AlreadyRecorded:
-    async with conn.cursor(row_factory=class_row(_EntryRow)) as cur:
+    """The entry recorded under this key must be this one: the same
+    description, moments, actor and lines (line numbers included). The
+    lines are compared in the database, both ways with `EXCEPT`."""
+    line_nos: list[int] = []
+    kinds: list[str] = []
+    scopes: list[str] = []
+    amounts: list[int] = []
+    currencies: list[str] = []
+    for line_no, line in enumerate(entry.lines, start=1):
+        line_nos.append(line_no)
+        kinds.append(kind_of(line.account).value)
+        scopes.append(scope_of(line.account))
+        amounts.append(line.amount.amount_minor)
+        currencies.append(line.amount.currency.value)
+    async with conn.cursor(row_factory=class_row(_Comparison)) as cur:
         await cur.execute(
             """
-            SELECT id, description, effective_at, actor_kind, actor_id
-            FROM journal_entry WHERE idempotency_key = %(key)s
+            WITH given AS (
+              SELECT * FROM unnest(
+                %(line_nos)s::int[], %(kinds)s::account_kind[],
+                %(scopes)s::text[], %(amounts)s::bigint[],
+                %(currencies)s::currency[]
+              ) AS g (line_no, account_kind, account_scope, amount_minor,
+                      currency)
+            ), stored AS (
+              SELECT l.line_no, l.account_kind, l.account_scope,
+                     l.amount_minor, l.currency
+              FROM journal_line l JOIN journal_entry e ON e.id = l.entry_id
+              WHERE e.idempotency_key = %(key)s
+            )
+            SELECT e.id,
+                   e.description = %(description)s
+                   AND e.effective_at = %(effective_at)s
+                   AND e.actor_kind = %(actor_kind)s::actor_kind
+                   AND e.actor_id = %(actor_id)s
+                   AND NOT EXISTS (SELECT * FROM given EXCEPT SELECT * FROM stored)
+                   AND NOT EXISTS (SELECT * FROM stored EXCEPT SELECT * FROM given)
+                     AS same
+            FROM journal_entry e WHERE e.idempotency_key = %(key)s
             """,
-            {"key": entry.idempotency_key},
+            {
+                "key": entry.idempotency_key,
+                "description": entry.description,
+                "effective_at": entry.effective_at,
+                "actor_kind": entry.actor.kind.value,
+                "actor_id": entry.actor.id,
+                "line_nos": line_nos,
+                "kinds": kinds,
+                "scopes": scopes,
+                "amounts": amounts,
+                "currencies": currencies,
+            },
         )
         recorded = await one_row(cur, f"journal entry {entry.idempotency_key}")
-
-    async with conn.cursor(row_factory=class_row(_LineRow)) as cur:
-        await cur.execute(
-            """
-            SELECT account_kind, account_scope, amount_minor, currency
-            FROM journal_line WHERE entry_id = %(entry_id)s ORDER BY line_no
-            """,
-            {"entry_id": recorded.id},
-        )
-        line_rows = await cur.fetchall()
-    recorded_lines: list[Line] = []
-    for row in line_rows:
-        recorded_lines.append(
-            Line(
-                Account(row.account_kind, row.account_scope),
-                Money(row.amount_minor, row.currency),
-            )
-        )
-
-    same = (
-        recorded.description == entry.description
-        and recorded.effective_at == entry.effective_at
-        and Actor(recorded.actor_kind, recorded.actor_id) == entry.actor
-        and tuple(recorded_lines) == entry.lines
-    )
-    if not same:
+    if not recorded.same:
         raise IdempotencyKeyReused(entry.idempotency_key)
     return AlreadyRecorded(recorded.id)
 
@@ -159,8 +166,8 @@ async def balance(conn: Connection, account: Account, currency: Currency) -> Mon
           AND currency = %(currency)s
         """,
         {
-            "kind": account.kind.value,
-            "scope": account.scope,
+            "kind": kind_of(account).value,
+            "scope": scope_of(account),
             "currency": currency.value,
         },
         int,

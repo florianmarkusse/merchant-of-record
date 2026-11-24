@@ -14,7 +14,7 @@ import pytest
 from mor.checkout.flow import QUOTE_VALID_FOR
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import connect
-from mor.ledger.account import Account, AccountKind
+from mor.ledger.account import FxPosition, MerchantPayable, PspClearing
 from mor.ledger.store import balance
 from mor.messaging.facts import PaymentDeclinedV1
 from mor.messaging.guard import DuplicateGuard
@@ -85,12 +85,12 @@ def test_card_payment_completes_the_session_with_one_order_and_its_entry(
         async with await connect(setup.url) as conn:
             clearing = await balance(
                 conn,
-                Account(AccountKind.PSP_CLEARING, str(setup.shop.account.id)),
+                PspClearing(setup.shop.account.id),
                 Currency.SGD,
             )
             merchant_balance = await balance(
                 conn,
-                Account(AccountKind.MERCHANT_PAYABLE, str(setup.shop.merchant_id)),
+                MerchantPayable(setup.shop.merchant_id),
                 Currency.SGD,
             )
         assert clearing == attempt.amount
@@ -465,15 +465,11 @@ def test_goods_priced_in_another_currency_convert_through_fx_position(
         async with await connect(setup.url) as conn:
             merchant_balance = await balance(
                 conn,
-                Account(AccountKind.MERCHANT_PAYABLE, str(setup.shop.merchant_id)),
+                MerchantPayable(setup.shop.merchant_id),
                 Currency.USD,
             )
-            usd_side = await balance(
-                conn, Account(AccountKind.FX_POSITION), Currency.USD
-            )
-            sgd_side = await balance(
-                conn, Account(AccountKind.FX_POSITION), Currency.SGD
-            )
+            usd_side = await balance(conn, FxPosition(), Currency.USD)
+            sgd_side = await balance(conn, FxPosition(), Currency.SGD)
         # Exactly the merchant's price, 2 × 18.00 USD, in its own currency.
         assert merchant_balance == Money(-3600, Currency.USD)
         assert usd_side == Money(3600, Currency.USD)

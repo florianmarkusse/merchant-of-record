@@ -28,7 +28,14 @@ from datetime import datetime
 from fractions import Fraction
 
 from mor.audit import Actor
-from mor.ledger.account import Account, AccountKind
+from mor.ledger.account import (
+    Account,
+    PayoutInTransit,
+    PspClearing,
+    PspFeeCollected,
+    PspFeeVariance,
+    Rounding,
+)
 from mor.ledger.entry import JournalEntry, Line, build_entry, credit, debit
 from mor.money.amount import Money
 from mor.money.rounding import RoundingMode, round_fraction
@@ -76,15 +83,15 @@ def line_entry(
     currency = fee.currency
     assert estimate.currency == currency
     lines: list[Line] = []
-    _post(lines, Account(AccountKind.PSP_FEE_COLLECTED), estimate)
+    _post(lines, PspFeeCollected(), estimate)
     _post(
         lines,
-        Account(AccountKind.PSP_CLEARING, str(account_id)),
+        PspClearing(account_id),
         Money(-fee.amount_minor, currency),
     )
     _post(
         lines,
-        Account(AccountKind.PSP_FEE_VARIANCE, str(account_id)),
+        PspFeeVariance(account_id),
         Money(fee.amount_minor - estimate.amount_minor, currency),
     )
     if not lines:
@@ -147,10 +154,10 @@ def payout_entry(
     """The net leaves `psp_clearing` for the way to our bank, as reported.
     None for a payout of nothing."""
     lines: list[Line] = []
-    _post(lines, Account(AccountKind.PAYOUT_IN_TRANSIT, str(account_id)), net)
+    _post(lines, PayoutInTransit(account_id), net)
     _post(
         lines,
-        Account(AccountKind.PSP_CLEARING, str(account_id)),
+        PspClearing(account_id),
         Money(-net.amount_minor, net.currency),
     )
     if not lines:
@@ -179,10 +186,10 @@ def rounding_entry(
     the lines, so `psp_clearing` gets it back from `rounding`. None for no
     change."""
     lines: list[Line] = []
-    _post(lines, Account(AccountKind.PSP_CLEARING, str(account_id)), change)
+    _post(lines, PspClearing(account_id), change)
     _post(
         lines,
-        Account(AccountKind.ROUNDING, str(account_id)),
+        Rounding(account_id),
         Money(-change.amount_minor, change.currency),
     )
     if not lines:

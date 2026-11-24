@@ -27,7 +27,17 @@ from datetime import datetime
 from mor.audit import Actor
 from mor.checkout.quotes import MadeQuote
 from mor.checkout.records import SoldLine
-from mor.ledger.account import Account, AccountKind
+from mor.ledger.account import (
+    Account,
+    DutiesPayable,
+    FxPosition,
+    MerchantPayable,
+    PspClearing,
+    PspFeeCollected,
+    RevenueMorMargin,
+    ShippingPayable,
+    TaxPayable,
+)
 from mor.ledger.entry import JournalEntry, Line, build_entry
 from mor.markets.records import Collector
 from mor.money.amount import Money
@@ -52,16 +62,16 @@ def _account_of(
         case PartKind.GOODS:
             assert part.line is not None, "a goods part names its line"
             if lines[part.line].unit_price.currency == quote_currency:
-                return Account(AccountKind.MERCHANT_PAYABLE, str(merchant_id))
-            return Account(AccountKind.FX_POSITION)
+                return MerchantPayable(merchant_id)
+            return FxPosition()
         case PartKind.PSP_FEE:
-            return Account(AccountKind.PSP_FEE_COLLECTED)
+            return PspFeeCollected()
         case PartKind.FX | PartKind.MOR_MARGIN:
-            return Account(AccountKind.REVENUE_MOR_MARGIN)
+            return RevenueMorMargin()
         case PartKind.FREIGHT | PartKind.SURCHARGE | PartKind.FUEL:
-            return Account(AccountKind.SHIPPING_PAYABLE, courier)
+            return ShippingPayable(courier)
         case PartKind.DUTY_PAID_FEE:
-            return Account(AccountKind.DUTIES_PAYABLE, courier)
+            return DutiesPayable(courier)
         case (
             PartKind.DUTY
             | PartKind.ADDITIONAL_DUTY
@@ -71,9 +81,9 @@ def _account_of(
         ):
             match part.collector:
                 case Collector.BORDER:
-                    return Account(AccountKind.DUTIES_PAYABLE, courier)
+                    return DutiesPayable(courier)
                 case Collector.SELLER:
-                    return Account(AccountKind.TAX_PAYABLE, country)
+                    return TaxPayable(country)
                 case None:
                     raise AssertionError(f"{part.kind} part without a collector")
 
@@ -102,7 +112,7 @@ def capture_entry(
         sums[key] = sums.get(key, 0) + amount.amount_minor
 
     post(
-        Account(AccountKind.PSP_CLEARING, str(psp_account_id)),
+        PspClearing(psp_account_id),
         Money(option.total_minor, currency),
     )
     parts: list[Part] = []
@@ -116,9 +126,9 @@ def capture_entry(
         if price.currency == currency:
             continue
         exact = Money(price.amount_minor * line.quantity, price.currency)
-        post(Account(AccountKind.FX_POSITION), exact)
+        post(FxPosition(), exact)
         post(
-            Account(AccountKind.MERCHANT_PAYABLE, str(merchant_id)),
+            MerchantPayable(merchant_id),
             Money(-exact.amount_minor, exact.currency),
         )
     entry_lines: list[Line] = []

@@ -7,7 +7,15 @@ import pytest
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import connect
-from mor.ledger.account import Account, AccountKind
+from mor.ledger.account import (
+    Account,
+    MerchantPayable,
+    PspClearing,
+    PspFeeCollected,
+    RevenueMorMargin,
+    ShippingPayable,
+    TaxPayable,
+)
 from mor.ledger.entry import JournalEntry, build_entry, credit, debit
 from mor.ledger.store import (
     AlreadyRecorded,
@@ -23,13 +31,13 @@ from mor.money.currency import Currency
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
 SYSTEM = Actor(ActorKind.SYSTEM, "test")
 
-CLEARING = Account(AccountKind.PSP_CLEARING)
-GST_SG = Account(AccountKind.TAX_PAYABLE, "SG")
-SHIPPING = Account(AccountKind.SHIPPING_PAYABLE, "fake_courier")
-MERCHANT_1 = Account(AccountKind.MERCHANT_PAYABLE, "merchant-1")
-MERCHANT_2 = Account(AccountKind.MERCHANT_PAYABLE, "merchant-2")
-PSP_FEE = Account(AccountKind.PSP_FEE_COLLECTED)
-MARGIN = Account(AccountKind.REVENUE_MOR_MARGIN)
+CLEARING = PspClearing(uuid.uuid7())
+GST_SG = TaxPayable("SG")
+SHIPPING = ShippingPayable("fake_courier")
+MERCHANT_1 = MerchantPayable(uuid.uuid7())
+MERCHANT_2 = MerchantPayable(uuid.uuid7())
+PSP_FEE = PspFeeCollected()
+MARGIN = RevenueMorMargin()
 
 
 def _sgd(amount_minor: int) -> Money:
@@ -194,3 +202,19 @@ def test_database_refuses_changing_or_deleting_recorded_entries(
             asyncio.run(_execute_and_commit(database_url, statement))
 
     assert asyncio.run(_balance(database_url, CLEARING)) == _sgd(13_386)
+
+
+def test_same_key_with_another_description_is_a_bug(database_url: str) -> None:
+    first = _capture("capture-1")
+    asyncio.run(_record_and_commit(database_url, first))
+    other = build_entry(
+        idempotency_key="capture-1",
+        description="another capture",
+        effective_at=NOW,
+        actor=SYSTEM,
+        lines=list(first.lines),
+        now=NOW,
+    )
+
+    with pytest.raises(IdempotencyKeyReused):
+        asyncio.run(_record_and_commit(database_url, other))

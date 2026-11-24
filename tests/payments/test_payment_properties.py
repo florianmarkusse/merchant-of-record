@@ -15,7 +15,7 @@ from mor.checkout.quotes import MadeQuote, QuoteInputs, StoredOption
 from mor.checkout.records import Customs, SoldLine
 from mor.invoices.lines import invoice_lines
 from mor.invoices.records import InvoiceSection
-from mor.ledger.account import AccountKind
+from mor.ledger.account import MerchantPayable
 from mor.markets.records import Collector, ServiceTier, Standing
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -197,7 +197,7 @@ def test_the_capture_entry_balances_and_pays_the_merchant_exactly(
     for line in entry.lines:
         currency = line.amount.currency
         totals[currency] = totals.get(currency, 0) + line.amount.amount_minor
-        if line.account.kind == AccountKind.MERCHANT_PAYABLE:
+        if isinstance(line.account, MerchantPayable):
             owed[currency] = owed.get(currency, 0) - line.amount.amount_minor
     assert set(totals.values()) <= {0}
     for currency in (Currency.USD, Currency.VND):

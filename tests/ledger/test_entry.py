@@ -1,9 +1,10 @@
+import uuid
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from mor.audit import Actor, ActorKind
-from mor.ledger.account import Account, AccountKind
+from mor.ledger.account import MerchantPayable, PspClearing
 from mor.ledger.entry import Line, UnbalancedEntry, build_entry, credit, debit
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -11,8 +12,8 @@ from mor.money.currency import Currency
 
 NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
 SYSTEM = Actor(ActorKind.SYSTEM, "test")
-CLEARING = Account(AccountKind.PSP_CLEARING)
-MERCHANT = Account(AccountKind.MERCHANT_PAYABLE, "merchant-1")
+CLEARING = PspClearing(uuid.uuid7())
+MERCHANT = MerchantPayable(uuid.uuid7())
 
 
 def _sgd(amount_minor: int) -> Money:

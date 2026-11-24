@@ -13,7 +13,14 @@ from hypothesis import given, strategies
 
 from mor.audit import Actor, ActorKind
 from mor.fakes.psp import payout_amount
-from mor.ledger.account import AccountKind
+from mor.ledger.account import (
+    Account,
+    PayoutInTransit,
+    PspClearing,
+    PspFeeCollected,
+    PspFeeVariance,
+    Rounding,
+)
 from mor.ledger.entry import JournalEntry
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -42,12 +49,17 @@ from mor.vendor_failures import UndecodableBody
 ACCOUNT = uuid.UUID("01a1fac0-0000-7000-8000-000000000001")
 WHEN = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "test")
+CLEARING = PspClearing(ACCOUNT)
+PSP_FEE = PspFeeCollected()
+FEE_VARIANCE = PspFeeVariance(ACCOUNT)
+IN_TRANSIT = PayoutInTransit(ACCOUNT)
+ROUNDING = Rounding(ACCOUNT)
 
 
-def _on(entry: JournalEntry, kind: AccountKind) -> int:
+def _on(entry: JournalEntry, account: Account) -> int:
     total = 0
     for line in entry.lines:
-        if line.account.kind == kind:
+        if line.account == account:
             total += line.amount.amount_minor
     return total
 
@@ -72,9 +84,9 @@ def test_a_line_clears_its_estimate_and_books_the_gap_as_ours(
         assert entry is None
         return
     assert entry is not None  # build_entry refuses an unbalanced one
-    assert _on(entry, AccountKind.PSP_FEE_COLLECTED) == estimate
-    assert _on(entry, AccountKind.PSP_CLEARING) == -fee
-    assert _on(entry, AccountKind.PSP_FEE_VARIANCE) == fee - estimate
+    assert _on(entry, PSP_FEE) == estimate
+    assert _on(entry, CLEARING) == -fee
+    assert _on(entry, FEE_VARIANCE) == fee - estimate
 
 
 _lines = strategies.lists(
@@ -111,9 +123,9 @@ def test_a_net_rounded_either_way_adds_up_and_clears_what_its_lines_left(
     rounded = 0
     for entry in (payout, rounding):
         if entry is not None:
-            clearing += _on(entry, AccountKind.PSP_CLEARING)
-            in_transit += _on(entry, AccountKind.PAYOUT_IN_TRANSIT)
-            rounded += _on(entry, AccountKind.ROUNDING)
+            clearing += _on(entry, CLEARING)
+            in_transit += _on(entry, IN_TRANSIT)
+            rounded += _on(entry, ROUNDING)
     assert in_transit == reported
     # Together, exactly what the booked lines left in psp_clearing goes out.
     assert clearing == -left
@@ -133,8 +145,8 @@ def test_a_rounding_change_and_its_reversal_leave_nothing(change: int) -> None:
         return
     assert there is not None and back is not None
     assert there.idempotency_key != back.idempotency_key
-    for kind in (AccountKind.PSP_CLEARING, AccountKind.ROUNDING):
-        assert _on(there, kind) + _on(back, kind) == 0
+    for account in (CLEARING, ROUNDING):
+        assert _on(there, account) + _on(back, account) == 0
 
 
 @given(lines=_lines, off=strategies.integers(1, 10**6), below=strategies.booleans())
@@ -153,8 +165,8 @@ def test_a_payout_is_booked_as_reported(net: int) -> None:
         assert entry is None
         return
     assert entry is not None
-    assert _on(entry, AccountKind.PAYOUT_IN_TRANSIT) == net
-    assert _on(entry, AccountKind.PSP_CLEARING) == -net
+    assert _on(entry, IN_TRANSIT) == net
+    assert _on(entry, CLEARING) == -net
 
 
 @given(net=strategies.integers(-(10**12), 10**12))

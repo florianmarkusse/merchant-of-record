@@ -23,17 +23,12 @@ The checks that run after every change (ruff, pyright strict, vulture,
 
 ## Next, in this order
 
-1. **The ledger's typed account scopes**: a typed scope per account kind
-   (`MerchantPayable(merchant_id)`, `TaxPayable(country)`) instead of a
-   bare `str`, and `_compare_with_recorded` (`src/mor/ledger/store.py`) as
-   one query comparing the lines. Just before 5c-2, which adds
-   `bank:{entity}`.
-2. **5c-2, the bank statement**: designed first. A fake bank and the
+1. **5c-2, the bank statement**: designed first. A fake bank and the
    import of its statements, matching each PSP payout to its credit,
    moving it from `payout_in_transit` to `bank:{entity}`, and flagging a
    payout whose credit arrived but whose lines do not add up
    (`plan-payments.md` §1, §7).
-3. **5c-3**: the fake PSP's card fields and the Playwright smoke suite
+2. **5c-3**: the fake PSP's card fields and the Playwright smoke suite
    (`plan-architecture.md` §10).
 
 Then the slices of the whole flow (`plan-architecture.md` §2), each
