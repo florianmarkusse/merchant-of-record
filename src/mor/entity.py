@@ -1,7 +1,7 @@
 """The selling entity: who the buyer buys from, as the invoice and the
 buyer's pages name it (docs/plan-payments.md §6). Plain data, in one
 place. Every value is a placeholder until the entity is decided
-(plan-psp-integration §11) and registered; what a tax invoice must show
+(plan-psp-integration.md §10) and registered; what a tax invoice must show
 per country waits for an adviser (docs/plan-payments.md §9)."""
 
 from dataclasses import dataclass

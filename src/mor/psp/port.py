@@ -1,5 +1,5 @@
 """The PSP port: our records and result unions, no provider words
-(docs/plan-payments.md §3; plan-psp-integration §4, §5).
+(docs/plan-payments.md §3).
 
 A provider module translates these to and from its API, converts amounts
 to and from its own minor units, and never touches our database. Every

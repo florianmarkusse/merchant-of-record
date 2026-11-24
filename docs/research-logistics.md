@@ -102,7 +102,7 @@ of the seven slices, so the UNVERIFIED items are the first ones to check.
 | Returns | Refund without return below a threshold (about US$40, or when return shipping is more than 40% of the price). Above it: a local return address or hub (Janio, Boxme or ZigZag), then a monthly consolidated shipment to VN or local liquidation. Integrator return labels for high-value goods and for outside SEA | Single return parcels to VN cost US$15–40 and need customs paperwork each | Asendia e-PAQ Returns (local return addresses) for the EU, UK and US later |
 
 Why one module per provider still holds: each provider above is one courier
-module behind the interface from §6.5 of `plan-psp-integration.md`. One
+module behind the courier port of `plan-architecture.md` §6 and §7. One
 place chooses a provider per lane, from `(origin, destination, weight band,
 service level)`. An orchestrator, if we add one later, is one more module,
 and its quotes carry the underlying carrier as data. One carrier account

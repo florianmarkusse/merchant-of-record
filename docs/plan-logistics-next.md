@@ -1,53 +1,23 @@
-# Plan: logistics, next steps
+# Carrier sourcing: findings and next steps
 
-Status: written 07-Nov-2026, to pick up later. The data is in
-`docs/markets/` (see `plan-markets-data.md`); run
+Status: the carrier-sourcing worklist, until the first carrier is chosen
+(`plan-logistics.md` §2, §8b). The data is in `docs/markets/`
+(`plan-markets-data.md`): which rate cards are loaded and from what
+source is `rate_cards.csv` and `providers.csv`, and every question sent
+to a provider, with its status, is `questions.csv`. Run
 `uv run scripts/markets.py build` and open `docs/markets.html` for the
 current comparison.
 
-## Where we are (07-Nov-2026)
+Findings so far, all on list prices (no account discount yet):
 
-Rates loaded, all list prices (no account discount):
-
-| Provider | Service(s) | Source | Status |
-|---|---|---|---|
-| DHL Express | Express Worldwide | 2026 VN rate guide (PDF) | verified |
-| UPS | Worldwide Express Saver, Expedited | 2026 VN rate guide (PDF) | verified |
-| UPS | Worldwide Economy (US only) | 2025 guide | verified, old |
-| FedEx | International Priority, International Economy | 2026 VN export tariff (PDF) | verified |
-| FedEx | IP, IE and FICP promo (VN account rates) | 2026 promo PDFs, saved 10-Nov-2026 | verified; FICP zones assumed equal to IP |
-| J&T Express VN | international express | 2024 card, MY/CN confirmed by April 2026 sheet | verified |
-| J&T Express VN | international express, quoted lanes (SG at two speeds) | quote in reply to q06, saved 14-Nov-2026 | verified; includes fuel and VAT; no validity date |
-| VIO ePacket (YunExpress network) | main routes, US-Saver, Extra | vioepacket.com, from 01-Nov-2026 | verified |
-| Vietnam Post EMS | EMS | third-party read of the calculator, DE 1 kg re-checked | secondary |
-
-Fuel is stored as this week's percentage (DHL 50%, FedEx 52.25%, UPS
-52.75% for 09-Nov-2026 to 15-Nov-2026); VIO includes fuel; J&T's is
-monthly and unknown.
-
-J&T's 14-Nov-2026 quote includes fuel and VAT. At 0.5 kg it costs
-US$ 10 to SG, 17-25 to KR, AU, TH and MY/PH/ID, 27-36 to GB, JP and US, and
-42-54 to the EU: cheap to SG, about the 2024 card plus 45-50% elsewhere in
-Asia and the US, and dear to the EU. Still duties unpaid; follow-up q45
-asks validity, DDP, API, transit and the sheet's oddities
-(`sources/jt_intl/README.md`).
-
-Indicative 0.5 kg list prices (US$, before fuel): VIO 7-16, J&T 16-26,
-DHL 54-73, UPS 62-95, FedEx IP 89-121. For light parcels the economy
-lines win by far; the open question for them is duty-paid delivery.
-
-Quote requests sent on 07-Nov-2026 (`questions.csv`, status `sent`):
-
-| Question | Provider | Channel |
-|---|---|---|
-| q01 | DHL Express VN | email |
-| q04 | Janio | website benchmark form (LaaS) |
-| q05 | Boxme | boxme.asia contact form |
-| q06 | J&T International | contact@jet-logistics.com |
-| q07 | Asendia VN | duong.nguyen@asendia.com |
-| q08 | VIO ePacket | WhatsApp / admin@vioshipping.com |
-
-FedEx (q02) and UPS (q03) are held until we have business accounts.
+- Indicative 0.5 kg prices (US$, before fuel): VIO 7-16, J&T 16-26, DHL
+  54-73, UPS 62-95, FedEx IP 89-121. For light parcels the economy lines
+  win by far; the open question for them is duty-paid delivery.
+- J&T's 14-Nov-2026 quote (fuel and VAT included, duties unpaid) costs
+  at 0.5 kg US$10 to SG, 17-25 to KR, AU, TH and MY/PH/ID, 27-36 to GB,
+  JP and US, and 42-54 to the EU: cheap to SG, dear to the EU
+  (`sources/jt_intl/README.md`; follow-up q45).
+- FedEx (q02) and UPS (q03) wait until we have business accounts.
 
 ## Next steps
 
@@ -58,9 +28,8 @@ Vietnam normally needs a registered company with a Vietnamese tax code.
 The holder also decides whose EU IOSS and UK VAT numbers go on the
 shipments, and whether FedEx's 2.5% third-party billing surcharge
 applies (when a non-VN entity pays). Options: a VN entity, a SG entity
-paying through third-party billing, or none yet. This is a company
-decision, not only a logistics one; record it in AGENTS.md or a plan
-when made.
+paying through third-party billing, or none yet. It is part of the
+entity decision (`plan-psp-integration.md` §10).
 
 ### 2. Open business accounts at DHL, FedEx and UPS
 

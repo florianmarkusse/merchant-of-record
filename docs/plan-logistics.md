@@ -1,18 +1,14 @@
-# Plan: first logistics integration
+# Logistics: countries, the tax path rule, carriers and returns
 
-Status: second draft (06-Nov-2026, §4 revised 08-Nov-2026). The first
-draft capped order values under every duty-free limit, which did not fit
-merchants selling at US$80–2,000 worldwide. `docs/plan-architecture.md`
-(§7 to §9; §12 lists what it changes here) wins where they differ, and
-`docs/plan-quote.md` built the tax path rule of §4 and the country rows
-of §3. Still the design input for shipments, returns (§5), registrations
-(§8) and launch (§8b, §9).
+Status: input for the shipment, returns and registrations slices and for
+launch (§8, §8b, §9). The country rows (§3) and the tax path rule (§4)
+are built (`plan-quote.md` §2, §3); the shipment's records, tables,
+booking, tracking, courier invoice and who bears a difference are in
+`plan-architecture.md` §7 to §9.
 
 Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
-(including the new `07-keycaps-ceramics-lacquer.md`),
-`docs/research/logistics/08-regulations-la-kh-mm.md`,
-`docs/plan-psp-integration.md` §6.5 and `docs/plan-merchant-surfaces.md`
-§3–5.
+(including `07-keycaps-ceramics-lacquer.md`) and
+`docs/research/logistics/08-regulations-la-kh-mm.md`.
 
 ## 1. How it works: one order from start to finish
 
@@ -37,8 +33,8 @@ Example: a buyer in Singapore orders CNES shoes for US$350.
 | 7. Export | DHL | DHL declares the export to VN customs as the merchant's customs agent, and flies the box to Singapore |
 | 8. Import | DHL | SG customs charges 9% GST. DHL pays it and delivers. The buyer pays nothing at the door |
 | 9. Tracking | us ← DHL | We poll DHL's tracking API (DHL Express has no tracking webhooks). The events move our shipment to `delivered` |
-| 10. Payout | us → merchant | After delivery plus the payout delay, the merchant's balance is released: US$350 minus our fee |
-| 11. Invoice | DHL → us | Monthly invoice per waybill: freight, the GST paid, the duty-paid fee. We match each line to its shipment. A difference from our estimate goes to the merchant's balance (decided 04-Nov-2026) |
+| 10. Payout | us → merchant | After delivery plus the payout delay, the merchant's balance is released: its US$350 in full (our fee was charged on top) |
+| 11. Invoice | DHL → us | Monthly invoice per waybill: freight, the GST paid, the duty-paid fee. We match each line to its shipment. A difference from our estimate is ours until a person attributes it by cause (`plan-architecture.md` §9) |
 
 **The same order to the UK at £95 (keycaps)** differs in one step. Below
 £135, UK law makes the foreign seller charge VAT at checkout. In step 3 we
@@ -68,12 +64,12 @@ duty, §4). That is the whole tax logic of v1 (§4).
    `BorderPaid`) and the duty path (`NotDue` or `BorderPaid`) (§4).
 3. **Duty source.** A vendor API (Zonos in estimate mode at about US$2 per
    order; Easyship Taxes & Duties was ruled out on 10-Nov-2026 because it has
-   no tax records for parcels shipping from Vietnam) behind an
-   interface, with a mock. Used only when either path is `BorderPaid`.
+   no tax records for parcels shipping from Vietnam) behind the duty
+   port, with a fake. Used only when either path is `BorderPaid`.
 4. **One integrator module: DHL or FedEx, decided on quotes** (decided
    06-Nov-2026). Rates, shipment with label and commercial invoice
    (duties billed to us), pickup, tracking (DHL by polling, FedEx by
-   signed webhooks), return label, invoice import. Plus the mock
+   signed webhooks), return label, invoice import. Plus the fake
    courier, which stays the default in dev and tests.
    - **Express and a cheaper service where the carrier has one** (decided
      06-Nov-2026: express is not always what the buyer prefers). DHL VN
@@ -123,9 +119,8 @@ review), NG, and every comprehensively sanctioned country.
 ## 4. The tax path rule
 
 Indirect tax and import duty are decided separately (decided 08-Nov-2026:
-the earlier single `TaxPath` assumed every order takes exactly one path,
-but seller schemes cover only VAT/GST, never duty. A cheap order can have
-its VAT collected by us and still owe duty at the border, e.g. an EU order
+seller schemes cover only VAT/GST, never duty. A cheap order can have its
+VAT collected by us and still owe duty at the border, e.g. an EU order
 under IOSS that pays the €3 flat duty, so one order needs both answers).
 
 ```python
@@ -334,59 +329,34 @@ its own return rules. The merchant can be more generous, never less.
   payouts and DHL's export declaration numbers. Our merchant statement
   lists all three per period.
 
-## 7. Modules, data, messages, ledger
+## 7. What the shipment slice adds beyond the architecture
 
-```
-couriers/port.py      records and the CourierModule protocol
-couriers/mock.py      default in dev and tests
-couriers/dhl.py or couriers/fedex.py   first real courier, whichever wins the quotes
-couriers/routing.py   the one place that picks a courier and service per lane
-duties/port.py, duties/mock.py, duties/<vendor>.py
-markets/rows.py       the country table (§3, §4), effective-dated
-markets/tax_path.py   the rule in §4
-shipments.py, returns.py
-```
+The port, tables, booking, tracking, courier invoice and ledger entries
+are `plan-architecture.md` §7 to §9. On top of them:
 
-Courier port operations: `quote`, `book` (label, commercial invoice,
-duties billed to us), `book_pickup`, `cancel`, `decode_event` (a webhook
-or one polled page, the same inbox messages either way), `import_invoice`,
-`book_return`, `capabilities`. Every result is a union of records: ok, a
-typed refusal, or `OutcomeUnknown` after a timeout.
-
-Tables: `shipment` (with the declared customs snapshot and DHL's export
-declaration number), `shipment_event` (append-only, unique on the
-carrier's event id), `courier_request` (idempotency key, unique),
-`courier_inbox`, `courier_invoice_line`, `return_request`, `return_event`.
-SKU and line data as in the surfaces plan, plus box size,
-`product_category`, `food_contact` and `wood_species`.
-
-Shipment states: `created → label_requested → labelled → picked_up →
-in_transit → delivered`, with `label_failed`, `cancelled`,
-`held_at_customs`, `returning_to_sender`, `returned_to_sender` and `lost`.
-Return states: `requested → approved → label_issued → in_transit →
-received → refunded`, with `rejected` and `refunded_without_return`.
-
-Messages (past tense, versioned, ordered per shipment or return):
-`shipment_created`, `shipment_label_booked`, `shipment_label_failed`,
-`shipment_picked_up`, `shipment_delivered`, `shipment_held_at_customs`,
-`shipment_lost`, `courier_invoice_imported`, `return_requested`,
-`return_approved`, `return_received`, `refund_requested`,
-`registration_threshold_approaching`.
-
-Ledger accounts (shown for DHL; one set per courier): `shipping_payable:dhl` and `duties_payable:dhl` (credited
-at payment, debited when the invoice is imported);
-`tax_payable:{country}` for the tax we collect; `merchant_payable` takes
-duty differences, return labels and refunds per contract;
-`courier_variance:dhl` for freight surcharges not in the quote, until we
-decide who pays them. Every DHL amount comes in with an exact FX rate and
-a named rounding mode, and any remainder is booked.
+- **Line data**: as sessions carry it today, plus box size,
+  `product_category` (the product gate, §2), `food_contact` and
+  `wood_species` (`07-keycaps-ceramics-lacquer.md`).
+- **Shipment states**: `created → label_requested → labelled → picked_up
+  → in_transit → delivered`, with `label_failed`, `cancelled`,
+  `held_at_customs`, `returning_to_sender`, `returned_to_sender` and
+  `lost`. **Return states**: `requested → approved → label_issued →
+  in_transit → received → refunded`, with `rejected` and
+  `refunded_without_return`.
+- **Facts**: `shipment_created`, `shipment_label_booked`,
+  `shipment_label_failed`, `shipment_picked_up`, `shipment_delivered`,
+  `shipment_held_at_customs`, `shipment_lost`, `courier_invoice_imported`,
+  `return_requested`, `return_approved`, `return_received`,
+  `refund_requested`, `registration_threshold_approaching`.
+- DHL's export declaration number is stored on every shipment (§5: the
+  re-import of a return).
 
 ## 8. Registrations, per country
 
 What we must register for to sell there legally, as found 06-Nov-2026.
 Compiled from the research files plus a short check; several are
 UNVERIFIED and all need an adviser before launch. Payment licences are in
-`plan-psp-integration.md` §8, not here.
+`plan-psp-integration.md` §9, not here.
 
 **Once, for us:**
 
@@ -476,11 +446,11 @@ needs anything in VN is the open VN adviser question in §6.
 
 ## 10. Project rules this design applies
 
-- Closed sets (`TaxPath`, states, reasons), matched with `assert_never`.
+- Closed sets (the tax paths, states, reasons), matched exhaustively.
 - Errors as values from every courier and duty-source call.
-- Outbox for every outbound call; an inbox keyed on the carrier's event id.
+- Facts for every step; an inbox keyed on the carrier's event id.
 - One module per courier and per duty source, one place that picks by
-  name, and a mock as the default.
+  name, and a fake as the default.
 - Effective-dated country rules, with the version stored on the quote and
   the shipment.
 - An append-only ledger: every charge, variance and refund is its own
@@ -493,9 +463,6 @@ needs anything in VN is the open VN adviser question in §6.
 1. Is this v1 country list right? Most important: register for UK VAT at
    launch, and start the EU representative and registrations now?
 2. One 14-day withdrawal floor for every country (§5)?
-3. Shipping price to the buyer: our DHL contract rate passed through, with
-   a margin, or set by the merchant (who may subsidise it)?
-4. Freight surcharges not in the quote: our cost or the merchant's?
-5. Which two or three merchants from the list do we talk to first? Their
+3. Which two or three merchants from the list do we talk to first? Their
    buyer countries and order sizes decide whether the cheaper SEA lane
    (§9.1) is worth doing early.

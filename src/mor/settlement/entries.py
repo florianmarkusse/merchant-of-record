@@ -13,7 +13,7 @@
       Cr/Dr rounding:{account}           the same
 
 A PSP may count finer than we do (IDR at 2 decimals): a fee is rounded
-here, half-even, the one place that rounds it (plan-psp-integration §4),
+here, half-even, the one place that rounds it (plan-payments.md §7),
 and its exact value is kept on the line. The payout's check is exact,
 never a tolerance: the reported net must be the lines' exact net rounded
 one way or the other to our units. Only then is the difference rounding;

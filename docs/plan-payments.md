@@ -11,7 +11,7 @@ makes the order and its invoice, and books what the PSP settles.
 Out of scope (later slices): refunds and chargebacks (slice 8),
 payouts to merchants (slice 9), merchant webhooks and emails to buyers
 (§11), any real PSP (none is chosen until the entity is decided,
-`plan-psp-integration.md` §11).
+`plan-psp-integration.md` §10).
 
 ## 1. Steps
 

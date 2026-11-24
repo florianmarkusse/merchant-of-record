@@ -5,7 +5,7 @@ database.
 Amounts: the fake counts in ISO 4217 minor units, where IDR has 2 and we
 use 0 (AGENTS.md). Outbound is exact; an inbound amount that is not a
 whole number in our units is not rounded here: it is `UndecodableBody`,
-for a person (plan-psp-integration §4).
+for a person (plan-payments.md §3).
 
 How a call ends:
 - connection refused or no such host: `Unavailable`, it never left;
