@@ -796,17 +796,17 @@ tests that the locks do what layer 2 assumes.
   paid licence). Hypothesis is random rather than coverage-guided, so it
   finds less per hour; the tests need no change if a coverage-guided
   runner is added later.
-- Browser tests come with the checkout's card fields (decided
-  17-Nov-2026): until then every page is plain forms with no JavaScript,
-  tested at the HTTP edge (request in, page and rows out). The checkout
-  is the first page with JavaScript (the PSP's card fields),
-  buyer-facing and lasting, and where a broken browser path loses a
-  payment. It gets a small Playwright smoke suite against the test setup:
-  a few journeys end to end (pay, a declined card, a redirect method)
-  under the prod Content-Security-Policy, failing on any "Refused to
-  load" in the console. It runs beside the soak, not in every
-  `uv run pytest`. Until then each new page is driven once by hand with
-  Playwright before review.
+- Browser tests came with the checkout's card fields (decided
+  17-Nov-2026, built 25-Nov-2026): pages are tested at the HTTP edge
+  (request in, page and rows out), and the checkout, the first page with
+  a PSP's JavaScript and where a broken browser path loses a payment,
+  also in a Playwright smoke suite (`tests_browser/`): its own database,
+  server and worker; card fields approved, declined then paid again, 3-D
+  Secure, the hosted page without JavaScript, QR, and the staff pages;
+  all under the CSP the app sends, failing on any "Refused to" in the
+  console or a page error (`plan-payments.md` §4, card fields). It runs
+  nightly beside the soak, not in every `uv run pytest`. A new page
+  elsewhere is still driven once by hand with Playwright before review.
 
 **Modes.** Each layer 2 run first draws its wiring: for every port, which
 of the fake's modes this run uses (§6). The invariants are the same for

@@ -43,7 +43,12 @@ SELF_URL = "http://mor"
 
 
 async def _seed(url: str, wired: Wired) -> list[SeededEchoAccount]:
-    settings = Settings(ENV, url, SELF_URL)
+    settings = Settings(
+        environment=ENV,
+        database_url=url,
+        self_url=SELF_URL,
+        fake_psp_origin="http://psp.mor",
+    )
     async with await connect(url) as conn:
         seeded = await seed_accounts(conn, settings, NOW)
         assert not isinstance(seeded, SeedInProd)
@@ -76,7 +81,12 @@ def test_the_seed_makes_one_account_per_provider_and_mode_once(
 
 def test_the_seed_is_refused_in_prod(database_url: str) -> None:
     async def body() -> None:
-        settings = Settings(Environment.PROD, database_url, SELF_URL)
+        settings = Settings(
+            environment=Environment.PROD,
+            database_url=database_url,
+            self_url=SELF_URL,
+            fake_psp_origin="http://psp.mor",
+        )
         async with await connect(database_url) as conn:
             assert await seed_accounts(conn, settings, NOW) == SeedInProd()
 
@@ -132,7 +142,12 @@ def test_each_carrier_on_a_live_route_gets_one_account_at_the_fake(
     database_url: str,
 ) -> None:
     async def body() -> None:
-        settings = Settings(ENV, database_url, SELF_URL)
+        settings = Settings(
+            environment=ENV,
+            database_url=database_url,
+            self_url=SELF_URL,
+            fake_psp_origin="http://psp.mor",
+        )
         async with await connect(database_url) as conn:
             await load_market(
                 conn, live_market(), "live", Actor(ActorKind.SYSTEM, "t"), NOW
@@ -151,14 +166,26 @@ def test_each_carrier_on_a_live_route_gets_one_account_at_the_fake(
 
 def test_the_sandbox_merchant_gets_one_key_shown_once(database_url: str) -> None:
     async def body() -> None:
-        settings = Settings(ENV, database_url, SELF_URL)
+        settings = Settings(
+            environment=ENV,
+            database_url=database_url,
+            self_url=SELF_URL,
+            fake_psp_origin="http://psp.mor",
+        )
         async with await connect(database_url) as conn:
             first = await seed_merchant(conn, settings, NOW)
             again = await seed_merchant(conn, settings, NOW)
             assert isinstance(first, NewKey) and again is None
             found = await authenticate(conn, f"Bearer {first.text}", KeyEnv.TEST)
             refused = await seed_merchant(
-                conn, Settings(Environment.PROD, database_url, SELF_URL), NOW
+                conn,
+                Settings(
+                    environment=Environment.PROD,
+                    database_url=database_url,
+                    self_url=SELF_URL,
+                    fake_psp_origin="http://psp.mor",
+                ),
+                NOW,
             )
             await conn.commit()
         assert found is not None and found.merchant.display_name == "Sandbox Shop"
@@ -173,7 +200,12 @@ def test_psp_accounts_are_seeded_once_per_wiring_with_one_default_route(
 ) -> None:
     async def body() -> None:
         wired = wire(database_url, lambda: NOW)
-        settings = Settings(ENV, database_url, SELF_URL)
+        settings = Settings(
+            environment=ENV,
+            database_url=database_url,
+            self_url=SELF_URL,
+            fake_psp_origin="http://psp.mor",
+        )
         try:
             names: set[str] = set()
             for _ in range(2):
@@ -206,7 +238,12 @@ def test_a_bank_account_per_currency_is_seeded_once_with_every_psp_paying_in(
 ) -> None:
     async def body() -> None:
         wired = wire(database_url, lambda: NOW)
-        settings = Settings(ENV, database_url, SELF_URL)
+        settings = Settings(
+            environment=ENV,
+            database_url=database_url,
+            self_url=SELF_URL,
+            fake_psp_origin="http://psp.mor",
+        )
         try:
             psp_count = 0
             bank_count = 0
@@ -252,7 +289,14 @@ def test_the_psp_seed_is_refused_in_prod(database_url: str) -> None:
     async def body() -> None:
         async with await connect(database_url) as conn:
             result = await seed_psp_accounts(
-                conn, Settings(Environment.PROD, database_url, SELF_URL), NOW
+                conn,
+                Settings(
+                    environment=Environment.PROD,
+                    database_url=database_url,
+                    self_url=SELF_URL,
+                    fake_psp_origin="http://psp.mor",
+                ),
+                NOW,
             )
         assert isinstance(result, SeedInProd)
 

@@ -11,15 +11,19 @@ from datetime import datetime
 
 import httpx2
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
+from starlette.types import Lifespan
 
+import mor.psp.registry
 from mor.config import Environment, Settings
 from mor.web import (
     api,
     buyer,
+    csp,
     order_pages,
     sandbox,
     staff_bank,
@@ -44,7 +48,10 @@ class Fakes:
 
 
 def make_app(
-    settings: Settings, fakes: Fakes | None, clock: Callable[[], datetime]
+    settings: Settings,
+    fakes: Fakes | None,
+    clock: Callable[[], datetime],
+    lifespan: Lifespan[Starlette] | None = None,
 ) -> Starlette:
     """`clock` gives the current time, aware UTC: `datetime.now(UTC)` when
     serving, a controlled one in tests, so time is an argument here too."""
@@ -282,4 +289,9 @@ def make_app(
             ]
         )
         routes.extend(fakes.app.routes)
-    return Starlette(routes=routes)
+    header = csp.policy(mor.psp.registry.browser_origins(settings))
+    return Starlette(
+        routes=routes,
+        middleware=[Middleware(csp.with_policy, header=header)],
+        lifespan=lifespan,
+    )

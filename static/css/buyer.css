@@ -156,3 +156,13 @@ footer { color: var(--muted); font-size: 0.85rem; padding-bottom: 2rem; }
 /* The order page's delivery address (src/mor/web/order_html.py): a line each. */
 address { font-style: normal; }
 address span { display: block; }
+
+/* The PSP's card form, in its own frame (docs/plan-payments.md §4). */
+.card-fields iframe {
+  display: block;
+  width: 100%;
+  height: 12rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}

@@ -315,7 +315,12 @@ def test_the_fakes_are_never_mounted_in_prod() -> None:
     fakes = mor.fakes.echo.make_app("postgresql:///unused", NO_HTTP, hang_a_minute)
     with pytest.raises(FakesInProd):
         make_app(
-            Settings(Environment.PROD, "postgresql:///unused", "http://mor"),
+            Settings(
+                environment=Environment.PROD,
+                database_url="postgresql:///unused",
+                self_url="http://mor",
+                fake_psp_origin="http://psp.mor",
+            ),
             Fakes(fakes, NO_HTTP),
             lambda: NOW,
         )

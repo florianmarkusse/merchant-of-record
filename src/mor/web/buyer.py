@@ -46,8 +46,9 @@ from mor.payments.flow import (
     pay,
     pay_another_way,
 )
-from mor.psp.accounts import route_for
-from mor.psp.port import PaymentMethod
+from mor.psp import registry
+from mor.psp.accounts import read_psp_account, route_for
+from mor.psp.port import CardFields, PaymentMethod
 from mor.public_ids import parse_session_id, session_public_id
 from mor.web.buyer_html import BuyerView, address_values, render_buyer_page
 from mor.web.forms import read_form, same_origin
@@ -118,6 +119,7 @@ def _country_names(
 
 async def _view(
     conn: Connection,
+    settings: Settings,
     session: CheckoutSession,
     market: MarketSet,
     now: datetime,
@@ -150,6 +152,12 @@ async def _view(
             if address is not None:
                 values = address_values(address)
     attempt = await _latest_attempt(conn, session.id)
+    card_fields: CardFields | None = None
+    if attempt is not None and attempt.action is not None:
+        if attempt.action.fields_secret is not None:
+            account = await read_psp_account(conn, attempt.psp_account_id)
+            assert account is not None  # a foreign key
+            card_fields = registry.card_fields(settings, account)
     return BuyerView(
         session=session,
         public_id=session_public_id(session.id),
@@ -166,6 +174,7 @@ async def _view(
         methods=methods,
         takes_payments=seller.kyb_state == KybState.APPROVED,
         status=status_text(session, attempt),
+        card_fields=card_fields,
     )
 
 
@@ -187,7 +196,12 @@ async def buyer_page(request: Request, settings: Settings, now: datetime) -> Res
         if market is None:
             return Response("Checkout is not available right now.", status_code=503)
         view = await _view(
-            conn, session, market, now, request.query_params.get("option", "")
+            conn,
+            settings,
+            session,
+            market,
+            now,
+            request.query_params.get("option", ""),
         )
     return HTMLResponse(render_buyer_page(view))
 
@@ -245,7 +259,7 @@ async def post_address(request: Request, settings: Settings, now: datetime) -> R
             return Response("Checkout is not available right now.", status_code=503)
         parsed = parse_address(values, countries_for(market, session, now))
         if isinstance(parsed, dict):
-            view = await _view(conn, session, market, now, "", values, parsed)
+            view = await _view(conn, settings, session, market, now, "", values, parsed)
             return HTMLResponse(render_buyer_page(view), status_code=400)
         result = await submit_address(
             conn, session_id, parsed, settings.environment, now
@@ -260,7 +274,7 @@ async def post_address(request: Request, settings: Settings, now: datetime) -> R
             case TooManyAddresses():
                 await conn.rollback()
                 view = await _view(
-                    conn, session, market, now, "", values, None, TOO_MANY
+                    conn, settings, session, market, now, "", values, None, TOO_MANY
                 )
                 return HTMLResponse(render_buyer_page(view), status_code=429)
             case _:

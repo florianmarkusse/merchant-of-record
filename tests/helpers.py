@@ -184,7 +184,12 @@ def wire(database_url: str, clock: Callable[[], datetime]) -> Wired:
     outgoing = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=our_app))
     fakes = mor.fakes.app.make_app(database_url, outgoing, clock, time_out_at_once)
     app = mor.web.main.make_app(
-        Settings(ENV, database_url, "http://mor"),
+        Settings(
+            environment=ENV,
+            database_url=database_url,
+            self_url="http://mor",
+            fake_psp_origin="http://psp.mor",
+        ),
         mor.web.main.Fakes(fakes, outgoing),
         clock,
     )

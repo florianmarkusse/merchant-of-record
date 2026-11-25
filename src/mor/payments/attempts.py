@@ -87,6 +87,7 @@ class _Row:
     action_kind: ActionKind | None
     action_url: str | None
     action_expires_at: datetime | None
+    action_fields_secret: str | None
     ended_reason: str | None
     created_at: datetime
 
@@ -96,7 +97,12 @@ def _attempt(row: _Row) -> Attempt:
     if row.action_url is not None:
         # A CHECK keeps the kind and the url set together.
         assert row.action_kind is not None
-        action = BuyerAction(row.action_kind, row.action_url, row.action_expires_at)
+        action = BuyerAction(
+            kind=row.action_kind,
+            url=row.action_url,
+            expires_at=row.action_expires_at,
+            fields_secret=row.action_fields_secret,
+        )
     return Attempt(
         id=row.id,
         session_id=row.session_id,
@@ -177,7 +183,8 @@ async def lock_attempt(conn: Connection, attempt_id: PaymentAttemptId) -> Locked
                    method, amount_minor, currency, return_url,
                    state,
                    provider_payment_id, action_kind, action_url,
-                   action_expires_at, ended_reason, created_at
+                   action_expires_at, action_fields_secret, ended_reason,
+                   created_at
             FROM payment_attempt WHERE id = %s FOR UPDATE
             """,
             (attempt_id,),
@@ -198,7 +205,8 @@ async def read_attempt(
             SELECT id, session_id, quote_id, option_no, psp_account_id, route_id,
                    method, amount_minor, currency, return_url,
                    state, provider_payment_id, action_kind, action_url,
-                   action_expires_at, ended_reason, created_at
+                   action_expires_at, action_fields_secret, ended_reason,
+                   created_at
             FROM payment_attempt WHERE id = %s
             """,
             (attempt_id,),
@@ -218,7 +226,8 @@ async def session_attempts(
                    method, amount_minor, currency, return_url,
                    state,
                    provider_payment_id, action_kind, action_url,
-                   action_expires_at, ended_reason, created_at
+                   action_expires_at, action_fields_secret, ended_reason,
+                   created_at
             FROM payment_attempt WHERE session_id = %s ORDER BY id
             """,
             (session_id,),
@@ -264,7 +273,7 @@ async def record_payment(
         """
         UPDATE payment_attempt
         SET provider_payment_id = %s, action_kind = %s, action_url = %s,
-            action_expires_at = %s, updated_at = %s
+            action_expires_at = %s, action_fields_secret = %s, updated_at = %s
         WHERE id = %s
         """,
         (
@@ -272,6 +281,7 @@ async def record_payment(
             None if keep is None else keep.kind,
             None if keep is None else keep.url,
             None if keep is None else keep.expires_at,
+            None if keep is None else keep.fields_secret,
             now,
             attempt.id,
         ),

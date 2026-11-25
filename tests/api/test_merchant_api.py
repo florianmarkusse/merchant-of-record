@@ -92,7 +92,16 @@ async def _call(
     environment: Environment = Environment.TEST,
     now: datetime = NOW,
 ) -> httpx2.Response:
-    app = make_app(Settings(environment, url, "http://mor"), None, lambda: now)
+    app = make_app(
+        Settings(
+            environment=environment,
+            database_url=url,
+            self_url="http://mor",
+            fake_psp_origin="http://psp.mor",
+        ),
+        None,
+        lambda: now,
+    )
     headers: dict[str, str] = {}
     if key is not None:
         headers["authorization"] = f"Bearer {key}"

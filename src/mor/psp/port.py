@@ -127,11 +127,25 @@ class ActionKind(StrEnum):
     QR = "qr"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class BuyerAction:
     kind: ActionKind
     url: str  # the PSP's page; a QR holds what the buyer's app opens
     expires_at: datetime | None
+    # What the PSP's script mounts its card form with on our page; None for
+    # a QR, or a PSP without card fields (docs/plan-payments.md §4).
+    fields_secret: str | None
+
+
+@dataclass(frozen=True)
+class CardFields:
+    """A PSP's card form on our page: its script, and the origins its script
+    and frames come from, which the CSP must allow. `glue` is our own
+    script under static/js/ that mounts it."""
+
+    script_url: str
+    glue: str
+    origins: tuple[str, ...]
 
 
 @dataclass(frozen=True, kw_only=True)

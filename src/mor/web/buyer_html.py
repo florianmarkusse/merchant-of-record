@@ -25,7 +25,7 @@ from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.payments.attempts import Attempt
 from mor.payments.transitions import AttemptState
-from mor.psp.port import ActionKind, PaymentMethod
+from mor.psp.port import ActionKind, CardFields, PaymentMethod
 from mor.quote.build import Part
 from mor.quote.groups import group_of
 from mor.quote.refusals import RefusalCode
@@ -91,6 +91,9 @@ class BuyerView:
     methods: tuple[PaymentMethod, ...]  # what routing offers; none: no route
     takes_payments: bool  # the merchant's KYB is approved
     status: str  # what the waiting script compares (`buyer.status_text`)
+    # The PSP's card form for the newest attempt's action, if it has one
+    # (docs/plan-payments.md §4, card fields).
+    card_fields: CardFields | None
 
 
 METHOD_WORDS: dict[PaymentMethod, str] = {
@@ -117,12 +120,18 @@ def waiting(view: BuyerView) -> bool:
 
 def _page(view: BuyerView, *content: htpy.Node) -> str:
     refresh: htpy.Node = None
-    script: htpy.Node = None
+    scripts: list[htpy.Node] = []
     if waiting(view):
         refresh = htpy.noscript[
             htpy.meta(http_equiv="refresh", content=str(REFRESH_SECONDS))
         ]
-        script = htpy.script(src=static_url("js/waiting.js"), type="module")
+        scripts.append(htpy.script(src=static_url("js/waiting.js"), type="module"))
+    if _shows_card_fields(view) and view.card_fields is not None:
+        # The PSP's script, then our glue that mounts its form.
+        scripts.append(htpy.script(src=view.card_fields.script_url))
+        scripts.append(
+            htpy.script(src=static_url(f"js/{view.card_fields.glue}"), type="module")
+        )
     page = htpy.html(lang="en")[
         htpy.head[
             htpy.meta(charset="utf-8"),
@@ -133,11 +142,13 @@ def _page(view: BuyerView, *content: htpy.Node) -> str:
             # the page's own POST and fail the same-origin check (found on
             # the sandbox, 19-Nov-2026).
             htpy.meta(name="referrer", content="same-origin"),
-            htpy.link(rel="icon", href="data:,"),
+            htpy.link(
+                rel="icon", href=static_url("checkout.svg"), type="image/svg+xml"
+            ),
             refresh,
             htpy.title[f"Checkout · {view.merchant_name}"],
             htpy.link(rel="stylesheet", href=static_url("css/buyer.css")),
-            script,
+            scripts,
         ],
         htpy.body(
             data_status_url=f"/c/{view.public_id}/status",
@@ -409,14 +420,38 @@ def _paying(view: BuyerView, attempt: Attempt | None) -> htpy.Node:
             ],
             _another_way(view),
         ]
+    # With card fields, the PSP's form appears here and our glue hides the
+    # link once it is mounted; without JavaScript, or if the PSP's script
+    # does not load, the link to its page stays.
+    fields: htpy.Node = None
+    if action.fields_secret is not None and view.card_fields is not None:
+        fields = htpy.div(
+            id="card-fields",
+            class_="card-fields",
+            data_secret=action.fields_secret,
+        )
     return htpy.section(class_="paying")[
         total,
-        htpy.p[htpy.a(href=action.url, class_="button")["Continue to payment"]],
+        fields,
+        htpy.p(id="hosted-link")[
+            htpy.a(href=action.url, class_="button")["Continue to payment"]
+        ],
         htpy.p(class_="waiting", role="status")[
             "Once you've paid, this page updates by itself."
         ],
         _another_way(view),
     ]
+
+
+def _shows_card_fields(view: BuyerView) -> bool:
+    """The page shows the PSP's card form: a card attempt waits on the
+    buyer, and its PSP gave a secret for its fields."""
+    attempt = view.attempt
+    if view.session.state != SessionState.PAYING or attempt is None:
+        return False
+    if attempt.state != AttemptState.ACTION_REQUIRED or attempt.action is None:
+        return False
+    return attempt.action.fields_secret is not None
 
 
 def _paid(view: BuyerView) -> htpy.Node:

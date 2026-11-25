@@ -5,7 +5,10 @@ from mor.config import DEFAULT_SELF_URL, Environment, Settings, load_settings
 
 def test_defaults_to_dev_and_the_local_dev_database() -> None:
     assert load_settings({}) == Settings(
-        Environment.DEV, "postgresql:///mor_dev", DEFAULT_SELF_URL
+        environment=Environment.DEV,
+        database_url="postgresql:///mor_dev",
+        self_url=DEFAULT_SELF_URL,
+        fake_psp_origin="http://localhost:8741",
     )
 
 
@@ -18,7 +21,10 @@ def test_reads_environment_and_database_url() -> None:
         }
     )
     assert settings == Settings(
-        Environment.PROD, "postgresql:///other", "http://127.0.0.1:9000"
+        environment=Environment.PROD,
+        database_url="postgresql:///other",
+        self_url="http://127.0.0.1:9000",
+        fake_psp_origin="http://localhost:9000",
     )
 
 

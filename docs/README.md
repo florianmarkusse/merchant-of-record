@@ -15,7 +15,7 @@ Status as of 25-Nov-2026.
 | 2 | Messaging: outbox, deliveries, the worker, the consumer table, effect consumers, inbound on one path; the probe and the echo flow | `plan-messaging.md` |
 | 3 | The test setup on the laptop and the nightly soak | `plan-test-setup.md` |
 | 4 | Market data, the tax path, duty rates and carrier prices from switchable sources, `build_quote`, merchants and the API, the buyer's checkout up to a quote | `plan-quote.md`, `plan-markets-data.md` |
-| 5a–5c-2 | Payments against the fake PSP in every mode, the order, the invoice, settlement with each payout reconciled, the bank: every entry booked, each payout matched to its credit | `plan-payments.md` |
+| 5a–5c-3 | Payments against the fake PSP in every mode, the order, the invoice, settlement with each payout reconciled, the bank: every entry booked, each payout matched to its credit; card fields, the CSP the app sends, the browser smoke suite | `plan-payments.md` |
 
 The checks that run after every change (ruff, pyright strict, vulture,
 `npx tsc`, the ast-grep rules, pytest with the fuzzers) are in
@@ -23,11 +23,9 @@ The checks that run after every change (ruff, pyright strict, vulture,
 
 ## Next, in this order
 
-1. **5c-3**: the fake PSP's card fields and the Playwright smoke suite
-   (`plan-architecture.md` §10).
-
-Then the slices of the whole flow (`plan-architecture.md` §2), each
-designed first where it adds tables or message shapes:
+Slice 5 is done. Then the slices of the whole flow
+(`plan-architecture.md` §2), each designed first where it adds tables or
+message shapes:
 
 6. Shipments against the fake carrier in every mode: booking, tracking,
    milestones (`plan-architecture.md` §7, §9; `plan-logistics.md`). The

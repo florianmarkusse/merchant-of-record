@@ -1,7 +1,6 @@
 # Payments, the order, the invoice and settlement (slice 5)
 
-Status: 5a, 5b, 5c-1 and 5c-2 built (19-Nov to 25-Nov-2026); 5c-3 is
-next (§1).
+Status: built, 5a to 5c-3 (19-Nov to 25-Nov-2026) (§1).
 
 Applies `plan-architecture.md` §2 (stages 3 and 4), §4, §5, §6 and §9
 (the capture entry) to payments against the fake PSP. Slice 4 left the
@@ -32,9 +31,9 @@ payouts to merchants (slice 9), merchant webhooks and emails to buyers
   matched to its credit, which moves it from `payout_in_transit` to
   `bank`; a payout whose credit arrived but whose lines do not add up is
   flagged on the staff settlement page (§7, the bank statement).
-- **5c-3: the browser side**: the fake's card-fields component (the first
-  PSP JavaScript, under the prod CSP) and the Playwright smoke suite
-  (`plan-architecture.md` §10).
+- **5c-3: the browser side** (built 25-Nov-2026): the fake's card
+  fields (the first PSP JavaScript, under the CSP the app sends) and the
+  Playwright smoke suite (§4, card fields; `plan-architecture.md` §10).
 
 The echo flow stays until the shipment slice: it is the only flow that
 exercises the `compensable` guard (money is never `compensable`) and a
@@ -196,6 +195,50 @@ and QR methods cannot hold at all.
   under its open second attempt.
 - The buyer's return from the hosted page proves nothing: the page shows
   "waiting" until the webhook or poll has decided.
+
+**Card fields** (5c-3, decided 25-Nov-2026). Real PSPs put the card
+form on the merchant's page inside their own iframe: Stripe's Payment
+Element mounts from `js.stripe.com` with a `client_secret` made by the
+server, and `confirmPayment` sends the browser to `return_url`, whose
+query parameters are not to be trusted; Adyen's card component and
+Xendit's card session work alike. Stripe's CSP needs `js.stripe.com` in
+`script-src` and `js.stripe.com hooks.stripe.com` in `frame-src`
+(3-D Secure fails silently without the latter). Sources:
+[Stripe security guide](https://docs.stripe.com/security/guide),
+[Stripe confirmPayment](https://docs.stripe.com/js/payment_intents/confirm_payment),
+[Adyen script security](https://docs.adyen.com/development-resources/pci-dss-compliance-guide/script-security),
+[Xendit card sessions](https://docs.xendit.co/docs/cards-save-a-card)
+(read 25-Nov-2026).
+
+- A card payment's create answer carries a `fields_secret` beside the
+  hosted page's URL, stored as `payment_attempt.action_fields_secret`.
+- With JavaScript the buyer sees only the card form on our page; the link
+  to the PSP's hosted page stays for a browser without it, or where the
+  PSP's script does not load (our glue hides the link only once the
+  fields are mounted). A real PSP without a hosted page for the same
+  payment leaves such a buyer the QR method.
+- The PSP's script and frame come from the PSP's origin; the registry
+  names them per provider (`card_fields`), and they join the CSP the app
+  sends (`src/mor/web/csp.py`). Our glue per provider (`ts/`) mounts the
+  fields; nothing else on our page names a provider.
+- The card never touches our page: it is typed and posted inside the
+  PSP's frame. The outcome still comes only from the PSP (webhook or
+  poll); the return to `return_url` shows "waiting".
+- The fake, in Stripe's shape: `GET /_fake/psp/js/fields.js` (its
+  script, `window.FakePsp.mount(element, secret)`) and
+  `/_fake/psp/fields/{secret}` (the frame), served from a different
+  origin than our pages (`FAKE_PSP_BROWSER_ORIGIN`, default
+  `http://localhost:8741` beside `127.0.0.1:8741`), so `'self'` hides no
+  CSP mistake. Test cards by number: `4242…` approves, `4000…0002`
+  declines, `4000…3220` asks for a 3-D Secure challenge (pass or fail).
+  The frame's form posts to the PSP's top-level page, which ends at
+  `return_url`.
+- Browser journeys run in a Playwright smoke suite (`tests_browser/`, not
+  in `uv run pytest`): its own database `mor_smoke`, server and worker on
+  port 8742, every journey under the app's CSP and failing on any
+  "Refused to" console message or page error: card fields approved, a
+  declined card then paying again, 3-D Secure, the hosted page without
+  JavaScript, QR. It runs nightly beside the soak.
 
 **Waiting without reloads**: the waiting pages (quote and payment) keep
 `<meta http-equiv="refresh">` inside `<noscript>`; `ts/waiting.ts` polls
@@ -801,7 +844,9 @@ and `bank_suspense`, scoped by bank account.
 
 - PCI DSS: card data only ever enters the PSP's page or its fields, so we
   stay at the lightest self-assessment. Which questionnaire applies is
-  for the PSP and an assessor, not assumed.
+  for the PSP and an assessor, not assumed. With card fields the PSP's
+  script runs on our page: PCI DSS 4.0's script inventory and change
+  detection (6.4.3, 11.6.1) apply as the PSP's terms will say.
 - Payment licences (MAS PSA and others) for collecting on a merchant's
   behalf, and which entity holds the PSP contract; safeguarding rules
   for funds the PSP holds between capture and payout, and for funds in

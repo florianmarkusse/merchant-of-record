@@ -56,7 +56,7 @@ def create_app() -> Starlette:
         yield
         await outgoing.aclose()
 
-    return Starlette(routes=make_app(settings, fakes, _now).routes, lifespan=lifespan)
+    return make_app(settings, fakes, _now, lifespan)
 
 
 if __name__ == "__main__":

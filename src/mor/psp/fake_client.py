@@ -37,6 +37,7 @@ from mor.psp.port import (
     BuyerAction,
     CancelResult,
     CaptureResult,
+    CardFields,
     CreateResult,
     Declined,
     FetchResult,
@@ -71,10 +72,11 @@ from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 SIGNATURE_HEADER = "Psp-Signature"
 
 
-class _Action(msgspec.Struct, frozen=True):
+class _Action(msgspec.Struct, frozen=True, kw_only=True):
     kind: ActionKind
     url: str
     expires_at: AwareDatetime | None
+    fields_secret: str | None = None
 
 
 class _Payment(msgspec.Struct, frozen=True, kw_only=True):
@@ -122,6 +124,16 @@ class _Thin(msgspec.Struct, frozen=True):
     reference: str
 
 
+def card_fields(origin: str) -> CardFields:
+    """The fake's card form: its script from the origin a browser reaches it
+    on, and our glue that mounts it (ts/psp_fake_fields.ts)."""
+    return CardFields(
+        script_url=f"{origin}/_fake/psp/js/fields.js",
+        glue="psp_fake_fields.js",
+        origins=(origin,),
+    )
+
+
 def _fake_exponent(currency: Currency) -> int:
     """The fake's own table: ISO 4217's."""
     if currency == Currency.IDR:
@@ -167,9 +179,10 @@ def _payment(raw: _Payment) -> ProviderPayment | UndecodableBody:
     if raw.action is not None:
         expires_at = raw.action.expires_at
         action = BuyerAction(
-            raw.action.kind,
-            raw.action.url,
-            None if expires_at is None else to_utc(expires_at),
+            kind=raw.action.kind,
+            url=raw.action.url,
+            expires_at=None if expires_at is None else to_utc(expires_at),
+            fields_secret=raw.action.fields_secret,
         )
     return ProviderPayment(
         provider_payment_id=PspPaymentId(raw.id),

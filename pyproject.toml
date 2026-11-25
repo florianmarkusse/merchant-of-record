@@ -47,7 +47,7 @@ lines-after-imports = 2
 
 [tool.pyright]
 # scripts/ are PEP 723 scripts with their own dependencies; not part of the package.
-include = ["src", "tests", "vulture_whitelist.py"]
+include = ["src", "tests", "tests_browser", "vulture_whitelist.py"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = "error"
@@ -66,6 +66,7 @@ pythonpath = ["."]
 dev = [
     "ast-grep-cli>=0.51.3",
     "hypothesis>=6.170.15",
+    "playwright>=1.65.2",
     "pyright>=1.1.414",
     "pytest>=9.2.0",
     "ruff>=0.17.5",

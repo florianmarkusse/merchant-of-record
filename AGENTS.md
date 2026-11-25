@@ -88,6 +88,12 @@ this project.
   the other projects). Run `npm install` once; the Stop hook runs `npx
   tsc` from then on. Every page works without them: a script only
   improves a form or table the server already handles.
+- The app sends the Content-Security-Policy itself, in every environment,
+  from `src/mor/web/csp.py` (decided 25-Nov-2026, overriding the shared
+  convention that nginx sets it in prod): dev, the browser smoke suite and
+  prod get the same header, so it cannot drift. No inline scripts or
+  `style` attributes; a PSP's origins join the policy through the PSP
+  registry (`docs/plan-payments.md` §4, card fields).
 - Checks: the shared hooks run them, vulture (from `[tool.vulture]`) and
   `npx tsc` (from `tsconfig.json`) included; vulture's reviewed false
   positives are in `vulture_whitelist.py`. A rule ruff cannot say becomes an
@@ -113,6 +119,7 @@ deploy/soak.sh                           # the nightly soak, now; `install` sets
 npx tsc                                  # compile ts/ into static/js/ (after `npm install` once)
 uv run pytest                            # drops and recreates mor_test, then runs the suite
 HYPOTHESIS_PROFILE=soak uv run pytest    # the long property and fuzz run
+uv run pytest tests_browser              # the browser smoke suite: its own mor_smoke, server and worker on 8742
 uv run python -m tests.messaging.fact_schemas  # record a new fact version's shape (never rewrites an existing one)
 ```
 

@@ -26,7 +26,12 @@ SAME_ORIGIN = {"Origin": SELF_URL}
 async def _with_seed(url: str, body: Callable[[Wired], Awaitable[None]]) -> None:
     wired = wire(url, lambda: NOW)
     async with wired.http, wired.control:
-        settings = Settings(ENV, url, SELF_URL)
+        settings = Settings(
+            environment=ENV,
+            database_url=url,
+            self_url=SELF_URL,
+            fake_psp_origin="http://psp.mor",
+        )
         async with await connect(url) as conn:
             seeded = await seed_accounts(conn, settings, NOW)
             assert not isinstance(seeded, SeedInProd)

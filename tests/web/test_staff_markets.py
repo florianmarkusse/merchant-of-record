@@ -47,7 +47,16 @@ async def _load(
 
 
 async def _get(url: str, environment: Environment, path: str) -> httpx2.Response:
-    app = make_app(Settings(environment, url, "http://mor"), None, lambda: NOW)
+    app = make_app(
+        Settings(
+            environment=environment,
+            database_url=url,
+            self_url="http://mor",
+            fake_psp_origin="http://psp.mor",
+        ),
+        None,
+        lambda: NOW,
+    )
     transport = httpx2.ASGITransport(app=app)
     async with httpx2.AsyncClient(transport=transport) as client:
         return await client.get(f"http://mor{path}")
@@ -237,6 +246,8 @@ def test_with_a_parcel_the_check_shows_each_option_and_its_parts(
         # The options on one line each, then how the chosen one is built.
         assert 'data-option="exp_card" aria-current="true">Express</a>' in text
         assert "<h2>How Express comes to 649.28 SGD</h2>" in text
+        # The share bar is SVG: the CSP refuses `style` attributes.
+        assert '<svg class="bar"' in text and "style=" not in text
         assert "= Buyer pays" in text
         assert "fuel rate ended 15-Nov-2026" in text
         # Beside the quote's own currency, for reading (ECB rates in the set).

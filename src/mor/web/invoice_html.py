@@ -134,7 +134,9 @@ def invoice_document(tax_invoice: Invoice, for_pdf: bool) -> str:
             htpy.meta(charset="utf-8"),
             htpy.meta(name="viewport", content="width=device-width, initial-scale=1"),
             htpy.meta(name="robots", content="noindex"),
-            htpy.link(rel="icon", href="data:,"),
+            htpy.link(
+                rel="icon", href=static_url("checkout.svg"), type="image/svg+xml"
+            ),
             htpy.title[f"Invoice {tax_invoice.number_text}"],
             stylesheet,
         ],

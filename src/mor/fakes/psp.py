@@ -28,6 +28,14 @@ A made-up acquirer API, with PSP-side accounts as a path segment
                                  every event again (old ones after new)
     GET  /_fake/psp/pay/{id}     the hosted page: approve, decline, or leave
     POST /_fake/psp/pay/{id}     the buyer's choice; then back to return_url
+    GET  /_fake/psp/js/fields.js the card-fields script, as Stripe's
+                                 js.stripe.com: `FakePsp.mount(element,
+                                 secret)` frames the card form
+    GET  /_fake/psp/fields/{secret}   the card form, in that frame
+    POST /_fake/psp/fields/{secret}   the card, to the PSP's top-level page:
+                                 4242… approves, 4000…0002 declines,
+                                 4000…3220 asks for 3-D Secure; then back to
+                                 return_url (docs/plan-payments.md §4)
     POST /_fake/psp/faults       {"account", "operation", "fault"}: script
                                  the next call of an operation to fail, or
                                  the next create to be declined
@@ -62,6 +70,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Literal, LiteralString
 from urllib.parse import parse_qsl
 
@@ -186,10 +195,12 @@ class FaultBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     fault: Fault
 
 
-class Action(msgspec.Struct, frozen=True):
+class Action(msgspec.Struct, frozen=True, kw_only=True):
     kind: Literal["redirect", "qr"]
     url: str  # the hosted page; a QR holds the same link
     expires_at: datetime | None
+    # A card payment's: what `FakePsp.mount` takes to show the card form.
+    fields_secret: str | None
 
 
 class Payment(msgspec.Struct, frozen=True, kw_only=True):
@@ -358,6 +369,7 @@ def _payment(row: _PaymentRow, base: str) -> Payment:
             kind="qr" if row.method == "qr" else "redirect",
             url=f"{base}/_fake/psp/pay/{row.id}",
             expires_at=row.qr_expires_at,
+            fields_secret=None if row.method == "qr" else fields_secret(row.id),
         )
     return Payment(
         id=row.id,
@@ -483,6 +495,13 @@ class _CutLine:
     fee_minor: int
     fault: CutFault | None
     settles: bool  # a payment settled here for the first time
+
+
+def fields_secret(payment_id: str) -> str:
+    """Made from the payment's id, never at random: a fuzzer's replay meets
+    the same answers. A real PSP's is a secret; the fake's guards
+    nothing."""
+    return f"{payment_id}_secret"
 
 
 def _base(request: Request) -> str:
@@ -1017,6 +1036,128 @@ class _HostedRow:
     return_url: str
 
 
+# Stripe's test card numbers, and what each does here.
+CARD_APPROVES = "4242424242424242"
+CARD_DECLINES = "4000000000000002"
+CARD_ASKS_3DS = "4000000000003220"
+FIELDS_SCRIPT = Path(__file__).resolve().parents[3] / "static/js/fake_psp_fields.js"
+
+
+def _fake_page(title: str, *content: htpy.Node) -> HTMLResponse:
+    page = htpy.html(lang="en")[
+        htpy.head[
+            htpy.meta(charset="utf-8"),
+            htpy.meta(name="viewport", content="width=device-width, initial-scale=1"),
+            htpy.title[title],
+        ],
+        htpy.body[content],
+    ]
+    return HTMLResponse(str(page))
+
+
+async def handle_fields_script() -> Response:
+    """The PSP's script; built from ts/fake_psp_fields.ts by `npx tsc`."""
+    return Response(FIELDS_SCRIPT.read_bytes(), media_type="text/javascript")
+
+
+def _payment_of_secret(secret: str) -> str | None:
+    payment_id = secret.removesuffix("_secret")
+    if fields_secret(payment_id) != secret:
+        return None
+    return payment_id
+
+
+async def handle_fields_form(request: Request, database_url: str) -> Response:
+    """The card form in the PSP's frame. It posts to the PSP's top-level
+    page: the merchant's page never sees the card."""
+    payment_id = _payment_of_secret(request.path_params["secret"])
+    if payment_id is None:
+        return HTMLResponse("No such payment.", status_code=404)
+    async with await _connect(database_url) as conn:
+        cur = await conn.execute(
+            "SELECT 1 FROM psp_fake_payment WHERE id = %s AND method = 'card'",
+            (payment_id,),
+        )
+        if await cur.fetchone() is None:
+            return HTMLResponse("No such payment.", status_code=404)
+    return _fake_page(
+        "Card details",
+        htpy.form(method="post", target="_top")[
+            htpy.p[
+                htpy.label[
+                    "Card number ",
+                    htpy.input(
+                        type="text",
+                        name="number",
+                        inputmode="numeric",
+                        autocomplete="cc-number",
+                        required=True,
+                    ),
+                ]
+            ],
+            htpy.p[
+                htpy.label[
+                    "Expiry (MM/YY) ",
+                    htpy.input(type="text", name="expiry", autocomplete="cc-exp"),
+                ]
+            ],
+            htpy.p[
+                htpy.label[
+                    "CVC ",
+                    htpy.input(type="text", name="cvc", autocomplete="cc-csc"),
+                ]
+            ],
+            htpy.button(type="submit")["Pay"],
+        ],
+    )
+
+
+async def handle_fields_answer(
+    request: Request,
+    database_url: str,
+    outgoing: httpx2.AsyncClient,
+    clock: Callable[[], datetime],
+) -> Response:
+    """The card typed in the frame: approved or declined at once, or a 3-D
+    Secure challenge first, whose answer the hosted page takes."""
+    payment_id = _payment_of_secret(request.path_params["secret"])
+    if payment_id is None:
+        return HTMLResponse("No such payment.", status_code=404)
+    try:
+        form = dict(parse_qsl((await request.body()).decode("utf-8")))
+    except UnicodeDecodeError:
+        form = {}
+    number = "".join(form.get("number", "").split())
+    outcome: Outcome
+    if number == CARD_APPROVES:
+        outcome = "paid"
+    elif number == CARD_DECLINES:
+        outcome = "declined"
+    elif number == CARD_ASKS_3DS:
+        return _fake_page(
+            "3-D Secure",
+            htpy.h1["Your bank checks it's you"],
+            htpy.form(method="post", action=f"/_fake/psp/pay/{payment_id}")[
+                htpy.button(type="submit", name="outcome", value="paid")[
+                    "Complete authentication"
+                ],
+                " ",
+                htpy.button(type="submit", name="outcome", value="declined")[
+                    "Fail authentication"
+                ],
+            ],
+        )
+    else:
+        return HTMLResponse(
+            "Use a test card: 4242 4242 4242 4242, 4000 0000 0000 0002 or"
+            " 4000 0000 0000 3220.",
+            status_code=400,
+        )
+    return await _answer(
+        database_url, payment_id, outcome, _base(request), outgoing, clock
+    )
+
+
 async def handle_hosted_answer(
     request: Request,
     database_url: str,
@@ -1034,7 +1175,21 @@ async def handle_hosted_answer(
             outcome = candidate
     if outcome is None:
         return HTMLResponse("Pick an outcome.", status_code=400)
-    base = _base(request)
+    return await _answer(
+        database_url, payment_id, outcome, _base(request), outgoing, clock
+    )
+
+
+async def _answer(
+    database_url: str,
+    payment_id: str,
+    outcome: Outcome,
+    base: str,
+    outgoing: httpx2.AsyncClient,
+    clock: Callable[[], datetime],
+) -> Response:
+    """The buyer's choice, released as the PSP's news; then back to the
+    merchant's return_url."""
     async with await _connect(database_url) as conn:
         async with conn.cursor(row_factory=class_row(_HostedRow)) as cur:
             await cur.execute(
@@ -1584,6 +1739,15 @@ def make_app(
     async def cut_settlement(request: Request) -> Response:
         return await handle_cut_settlement(request, database_url, clock)
 
+    async def fields_script(request: Request) -> Response:
+        return await handle_fields_script()
+
+    async def fields_form(request: Request) -> Response:
+        return await handle_fields_form(request, database_url)
+
+    async def fields_answer(request: Request) -> Response:
+        return await handle_fields_answer(request, database_url, outgoing, clock)
+
     async def list_files(request: Request) -> Response:
         return await handle_list_files(request, database_url, hang)
 
@@ -1608,6 +1772,9 @@ def make_app(
             Route("/_fake/psp/faults", script_fault, methods=["POST"]),
             Route("/_fake/psp/pay/{payment_id}", hosted_page, methods=["GET"]),
             Route("/_fake/psp/pay/{payment_id}", hosted_answer, methods=["POST"]),
+            Route("/_fake/psp/js/fields.js", fields_script, methods=["GET"]),
+            Route("/_fake/psp/fields/{secret}", fields_form, methods=["GET"]),
+            Route("/_fake/psp/fields/{secret}", fields_answer, methods=["POST"]),
             Route(f"{account_path}/setup", setup, methods=["POST"]),
             Route(f"{account_path}/payments", create, methods=["POST"]),
             Route(f"{account_path}/payments", find, methods=["GET"]),

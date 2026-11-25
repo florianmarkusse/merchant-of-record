@@ -6,14 +6,15 @@ from typing import Literal
 
 import httpx2
 
-from mor.config import Environment
+from mor.config import Environment, Settings
 from mor.ids import PspIdempotencyKey, PspPaymentId, PspPayoutId
 from mor.money.amount import Money
-from mor.provider_accounts import require_allowed
+from mor.provider_accounts import ProviderAccountKind, allowed, require_allowed
 from mor.psp import fake_client
 from mor.psp.port import (
     CancelResult,
     CaptureResult,
+    CardFields,
     CreateResult,
     FetchResult,
     FindResult,
@@ -34,6 +35,28 @@ from mor.vendor_failures import UndecodableBody
 
 def _check(environment: Environment, account: PspAccount) -> None:
     require_allowed(environment, account.kind, f"psp account {account.name}")
+
+
+def card_fields(settings: Settings, account: PspAccount) -> CardFields | None:
+    """The account's card form on our page, if its PSP offers one
+    (docs/plan-payments.md §4, card fields)."""
+    match account.provider:
+        case PspProvider.FAKE:
+            return fake_client.card_fields(settings.fake_psp_origin)
+
+
+def browser_origins(settings: Settings) -> tuple[str, ...]:
+    """Where the scripts and frames of every PSP this environment may use
+    come from: what the CSP the app sends must allow (`mor.web.csp`)."""
+    found: list[str] = []
+    for provider in PspProvider:
+        match provider:
+            case PspProvider.FAKE:
+                if allowed(settings.environment, ProviderAccountKind.FAKE):
+                    found.extend(
+                        fake_client.card_fields(settings.fake_psp_origin).origins
+                    )
+    return tuple(found)
 
 
 async def create_payment(

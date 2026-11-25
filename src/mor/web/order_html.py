@@ -125,7 +125,9 @@ def render_order_page(view: OrderView) -> str:
             htpy.meta(charset="utf-8"),
             htpy.meta(name="viewport", content="width=device-width, initial-scale=1"),
             htpy.meta(name="robots", content="noindex"),
-            htpy.link(rel="icon", href="data:,"),
+            htpy.link(
+                rel="icon", href=static_url("checkout.svg"), type="image/svg+xml"
+            ),
             refresh,
             htpy.title[f"Your order · {view.merchant_name}"],
             htpy.link(rel="stylesheet", href=static_url("css/buyer.css")),

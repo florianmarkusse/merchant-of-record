@@ -672,22 +672,35 @@ def _grouped(quote: Quote, option: ShippingOption) -> list[tuple[str, str, list[
 def _share_bar(
     groups: list[tuple[str, str, list[Part]]], quote: Quote, total: Money
 ) -> htpy.Element:
-    """One bar, each group's share of what the buyer pays."""
+    """One bar, each group's share of what the buyer pays. Drawn as SVG,
+    whose widths are attributes: the CSP refuses `style` attributes."""
     pieces: list[htpy.Node] = []
     legend: list[htpy.Node] = []
+    start = Fraction(0)
     for label, css, parts in groups:
         amount = _sum(parts, quote.currency)
         if total.amount_minor <= 0 or amount.amount_minor <= 0:
             continue
         share = Fraction(amount.amount_minor * 100, total.amount_minor)
         percent = round_fraction(share, RoundingMode.HALF_EVEN)
-        width = f"{float(share):.2f}%"
         pieces.append(
-            htpy.span(class_=f"piece {css}", style=f"width: {width}", title=label)
+            htpy.rect(
+                class_=css,
+                x=f"{float(start):.2f}",
+                y="0",
+                width=f"{float(share):.2f}",
+                height="1",
+            )[htpy.title[label]]
         )
+        start += share
         legend.append(htpy.li[htpy.span(class_=f"swatch {css}"), f"{label} {percent}%"])
     return htpy.div(class_="shares")[
-        htpy.div(class_="bar", aria_hidden="true")[pieces],
+        htpy.svg(
+            class_="bar",
+            viewBox="0 0 100 1",
+            preserveAspectRatio="none",
+            aria_hidden="true",
+        )[pieces],
         htpy.ul(class_="legend")[legend],
     ]
 
