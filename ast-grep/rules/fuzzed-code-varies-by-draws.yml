@@ -1,0 +1,31 @@
+id: fuzzed-code-varies-by-draws
+language: python
+severity: error
+message: >-
+  A fake or a fuzzer varies only by what Hypothesis draws: a random id or
+  the wall clock changes a replay of the same draws, and Hypothesis reports
+  FlakyStrategyDefinition instead of the finding (fuzzing conventions).
+  Take time from the clock passed in, a fake's ids from its sequence
+  (`_new_id`), and randomness from a draw
+  (`strategies.randoms(use_true_random=False)`).
+files:
+  - src/mor/fakes/**/*.py
+  - tests/flow/**/*.py
+ignores:
+  # A command-line runner: records when it applied a migration.
+  - src/mor/fakes/migrate.py
+  # Transitional, with the echo flow (docs/README.md, slice 6): its fake
+  # keeps random ids and the wall clock until it is removed, and this
+  # ignore goes with it.
+  - src/mor/fakes/echo.py
+rule:
+  any:
+    - pattern: uuid.uuid4()
+    - pattern: uuid.uuid1()
+    - pattern: datetime.now($$$)
+    - pattern: date.today()
+    - pattern: time.time()
+    - pattern: time.monotonic()
+    - pattern: random.$F($$$)
+    - pattern: secrets.$F($$$)
+    - pattern: os.urandom($$$)

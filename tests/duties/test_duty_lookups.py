@@ -53,7 +53,9 @@ class Setup:
 
 
 async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> None:
-    network = RefusingTransport(httpx2.ASGITransport(app=make_app(url, hang_a_minute)))
+    network = RefusingTransport(
+        httpx2.ASGITransport(app=make_app(url, lambda: NOW, hang_a_minute))
+    )
     async with (
         httpx2.AsyncClient(transport=network) as http,
         await connect(url, autocommit=True) as worker,

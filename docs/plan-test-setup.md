@@ -93,10 +93,17 @@ may be while it is in use):
   own database (`tests/test_helpers.py` pins it): other databases on the
   cluster (the sandbox's worker) hold locks of their own.
 - A target is judged by its log: a `FAILED` line is a failure, else exit 0
-  is a pass, else the run broke. Failures and broken runs send one
-  Telegram message to `TELEGRAM_CHAT_ID_ALERTS` (token and chat id from
-  `.env`, never committed): the commit, the failing test, its first
-  assertion line and the log's path. Nothing is sent on a pass.
+  is a pass, else the run broke. A failed or broken target sends a
+  Telegram message to `TELEGRAM_CHAT_ID_ALERTS` as soon as it ends (token
+  and chat id from `.env`, never committed): the commit, the failing
+  test, its first assertion line and the log's path. Nothing is sent on a
+  pass.
+- A run that ends any other way (stopped, killed, the script failing)
+  sends one message on its way out, naming the target it was in. The
+  systemd unit has no time limit of its own; the targets' guards bound
+  the run. A unit limit that went stale cut every run short before its
+  alerts for five nights (21-Nov-2026 to 25-Nov-2026), so nothing waits
+  for the end of the run to alert.
 - `deploy/soak.sh test-alert` sends one test message; `SOAK_QUICK=1`,
   `SOAK_DRY_ALERT=1` and `SOAK_REF=<commit>` are for checking the soak
   itself.

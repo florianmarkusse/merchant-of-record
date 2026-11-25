@@ -18,7 +18,8 @@ its own (schema `fake_vendor`, its own connections), as a third party's
 would be.
 """
 
-from datetime import UTC, datetime
+from collections.abc import Callable
+from datetime import datetime
 from typing import Literal
 
 import msgspec
@@ -116,7 +117,9 @@ async def _formulas(
     return row[0], row[1]
 
 
-async def handle_ask(request: Request, database_url: str, hang: Hang) -> Response:
+async def handle_ask(
+    request: Request, database_url: str, clock: Callable[[], datetime], hang: Hang
+) -> Response:
     try:
         body = msgspec.json.decode(await request.body(), type=AskBody)
     except msgspec.DecodeError:
@@ -137,7 +140,7 @@ async def handle_ask(request: Request, database_url: str, hang: Hang) -> Respons
                 body.destination,
                 body.origin,
                 body.hs_code,
-                datetime.now(UTC),
+                clock(),
             ),
         )
         duty, tax = await _formulas(conn, body.destination, body.hs_code)
@@ -197,10 +200,12 @@ async def handle_script_fault(request: Request, database_url: str) -> Response:
     return Response(status_code=204)
 
 
-def make_app(database_url: str, hang: Hang) -> Starlette:
+def make_app(database_url: str, clock: Callable[[], datetime], hang: Hang) -> Starlette:
+    """`clock` is the vendor's own time, shared with tests as the other
+    fakes'."""
 
     async def ask(request: Request) -> Response:
-        return await handle_ask(request, database_url, hang)
+        return await handle_ask(request, database_url, clock, hang)
 
     async def set_rate(request: Request) -> Response:
         return await handle_set_rate(request, database_url)

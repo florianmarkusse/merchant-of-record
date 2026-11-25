@@ -73,6 +73,7 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Re
 from starlette.routing import Route
 
 from mor.db.connect import SESSION_OPTIONS
+from mor.db.fetch import one_value
 from mor.fakes.hang import Hang
 
 
@@ -242,6 +243,14 @@ def _json(body: object, status: int = 200) -> Response:
     return Response(
         msgspec.json.encode(body), status_code=status, media_type="application/json"
     )
+
+
+async def _new_id(conn: FakeConnection, prefix: str) -> str:
+    """The fake's next id (`pay_000000000042`): from a sequence, never at
+    random, so ids sort in the order they were made and a fuzzer's replay
+    meets the same order."""
+    number = await one_value(conn, "SELECT nextval('fake_id')", None, int)
+    return f"{prefix}_{number:012d}"
 
 
 async def _take_fault(
@@ -537,7 +546,7 @@ async def _record_event(
     clock: Callable[[], datetime],
 ) -> Event:
     event = Event(
-        id=f"evt_{uuid.uuid4().hex}",
+        id=await _new_id(conn, "evt"),
         payment_id=psp_payment.id,
         reference=psp_payment.reference,
         kind=kind,
@@ -656,7 +665,7 @@ async def handle_create(
                       qr_expires_at
             """,
             (
-                f"pay_{uuid.uuid4().hex}",
+                await _new_id(conn, "pay"),
                 account,
                 body.reference,
                 key if keyed else None,
@@ -1192,8 +1201,15 @@ async def handle_cut_settlement(
                 lines.append(
                     _CutLine(
                         type="capture",
-                        payment_id=f"pay_{uuid.uuid4().hex[:12]}",
-                        reference=str(uuid.uuid4()),
+                        payment_id=await _new_id(conn, "pay"),
+                        # A uuid from the sequence: never one of our attempts.
+                        reference=str(
+                            uuid.UUID(
+                                int=await one_value(
+                                    conn, "SELECT nextval('fake_id')", None, int
+                                )
+                            )
+                        ),
                         gross_minor=1000,
                         fee_minor=fee_of("card", 1000),
                         fault="unknown_reference",
@@ -1220,7 +1236,7 @@ async def handle_cut_settlement(
             if first and "net_differs" in faults:
                 net -= 100
                 batch_fault = "net_differs"
-            batch_id = f"stl_{uuid.uuid4().hex[:12]}"
+            batch_id = await _new_id(conn, "stl")
             await conn.execute(
                 """
                 INSERT INTO psp_fake_settlement_batch

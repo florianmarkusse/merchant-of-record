@@ -21,6 +21,7 @@ that does work is logged in `carrier_call`. Its state is its own (schema
 `fake_vendor`, its own connections), as a third party's would be.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -175,7 +176,9 @@ def _parts(rate: FakeRate, half_kilos: int) -> list[tuple[str, str, int]]:
     return parts
 
 
-async def handle_ask(request: Request, database_url: str, hang: Hang) -> Response:
+async def handle_ask(
+    request: Request, database_url: str, clock: Callable[[], datetime], hang: Hang
+) -> Response:
     try:
         body = msgspec.json.decode(await request.body(), type=AskBody)
     except msgspec.DecodeError:
@@ -201,7 +204,7 @@ async def handle_ask(request: Request, database_url: str, hang: Hang) -> Respons
                 body.length_mm,
                 body.width_mm,
                 body.height_mm,
-                datetime.now(UTC),
+                clock(),
             ),
         )
         rate = await _rate(conn, body.service, body.destination)
@@ -292,10 +295,12 @@ async def handle_script_fault(request: Request, database_url: str) -> Response:
     return Response(status_code=204)
 
 
-def make_app(database_url: str, hang: Hang) -> Starlette:
+def make_app(database_url: str, clock: Callable[[], datetime], hang: Hang) -> Starlette:
+    """`clock` is the vendor's own time, shared with tests as the other
+    fakes'."""
 
     async def ask(request: Request) -> Response:
-        return await handle_ask(request, database_url, hang)
+        return await handle_ask(request, database_url, clock, hang)
 
     async def set_rate(request: Request) -> Response:
         return await handle_set_rate(request, database_url)

@@ -1,0 +1,11 @@
+id: fuzzed-code-varies-by-draws
+valid:
+  - "payment_id = await _new_id(conn, 'pay')"
+  - "called_at = clock()"
+  - "chosen = order.choice(decodes)"
+  - "attempt_id = PaymentAttemptId(uuid.uuid7())"
+invalid:
+  - "payment_id = f'pay_{uuid.uuid4().hex}'"
+  - "called_at = datetime.now(UTC)"
+  - "random.shuffle(lines)"
+  - "token = secrets.token_hex(8)"

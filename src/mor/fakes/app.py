@@ -22,12 +22,13 @@ def make_app(
     hang: Hang,
 ) -> Starlette:
     """`outgoing` carries the fakes' webhooks: a real client in dev, our app
-    in-process in tests. `clock` is the vendors' own time (a QR's expiry);
+    in-process in tests. `clock` is the vendors' own time (a QR's expiry, a
+    call's log);
     tests share theirs with it. `hang` is how a vendor never answers
     (`mor.fakes.hang`)."""
     routes: list[BaseRoute] = []
     routes.extend(mor.fakes.echo.make_app(database_url, outgoing, hang).routes)
-    routes.extend(mor.fakes.duty.make_app(database_url, hang).routes)
-    routes.extend(mor.fakes.carrier.make_app(database_url, hang).routes)
+    routes.extend(mor.fakes.duty.make_app(database_url, clock, hang).routes)
+    routes.extend(mor.fakes.carrier.make_app(database_url, clock, hang).routes)
     routes.extend(mor.fakes.psp.make_app(database_url, outgoing, clock, hang).routes)
     return Starlette(routes=routes)

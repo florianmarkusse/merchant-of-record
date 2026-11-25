@@ -10,5 +10,7 @@ ExecStart=@REPO@/deploy/soak.sh run
 Nice=19
 CPUWeight=20
 IOSchedulingClass=idle
-# The targets take about 50 minutes; their own guards add up to 135.
-TimeoutStartSec=150min
+# No limit of its own: each target's guard in soak.sh bounds the run. A
+# limit here went stale as targets were added and cut every run short
+# before its alerts (21-Nov-2026 to 25-Nov-2026).
+TimeoutStartSec=infinity

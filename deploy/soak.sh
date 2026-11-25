@@ -14,8 +14,11 @@
 # limit is only a guard against a hang. (Ending targets by time lost a
 # found failure once, and a Ctrl-C did not reliably stop the fuzzers,
 # 17-Nov-2026.) Judged by its log: any FAILED line is a failure, else exit
-# 0 is a pass, else the run broke (a hang guard hit included). Failures and
-# broken runs alert.
+# 0 is a pass, else the run broke (a hang guard hit included). Each failed
+# or broken target alerts as soon as it ends, and a run that ends any
+# other way (stopped, killed, the script itself failing) alerts on its way
+# out: waiting for the end once lost every alert for five nights, when the
+# unit's time limit cut each run short (21-Nov-2026 to 25-Nov-2026).
 #
 # Needs in the repo's .env: TELEGRAM_BOT_API_TOKEN, TELEGRAM_CHAT_ID_ALERTS.
 #
@@ -104,7 +107,25 @@ prepare_checkout() {
   (cd "$CHECKOUT" && uv sync --quiet)
 }
 
+# Set by run_soak, read by the exit trap: where an unfinished run stopped.
+CURRENT="preparing the checkout"
+DONE=()
+FINISHED=0
+
+alert_unfinished() {
+  local code=$?
+  if [ "$FINISHED" = 1 ]; then
+    return
+  fi
+  send_alert "MoR soak stopped before the end (exit ${code}) while ${CURRENT}.
+Finished: ${DONE[*]:-none}" || true
+}
+
 run_soak() {
+  trap alert_unfinished EXIT
+  # A signal ends the script through the exit trap; bash runs it once the
+  # running target, which got the signal too, has ended.
+  trap 'exit 143' TERM INT HUP
   prepare_checkout
   # The targets of the commit under test, not this copy's: the timer runs
   # the working tree's script, and a target it named for uncommitted test
@@ -121,6 +142,7 @@ run_soak() {
     fi
     local log="${LOGS}/${stamp}-${name}.log"
     local code=0
+    CURRENT="running ${name} (log ${log})"
     # Each fuzzer writes how far its runs went (docs/plan-architecture.md §10);
     # the tables go at the end of the target's log.
     rm -rf "${CHECKOUT}/.hypothesis/reach"
@@ -135,28 +157,31 @@ run_soak() {
     elif [ "$code" = 0 ]; then
       outcome="pass"
     fi
+    local found=""
     case "$outcome" in
       pass) echo "${name}: pass (exit ${code}), log ${log}" ;;
       failed)
         echo "${name}: FAILED, log ${log}"
-        failures+=("${name} found a failure in $(grep -m1 '^FAILED ' "$log" | cut -d' ' -f2 | cut -c1-200 || true)
+        found="${name} found a failure in $(grep -m1 '^FAILED ' "$log" | cut -d' ' -f2 | cut -c1-200 || true)
 $(grep -m1 '^E ' "$log" | sed 's/^E *//' | cut -c1-300 || true)
-log: ${log}")
+log: ${log}"
         ;;
       *)
         echo "${name}: BROKEN (exit ${code}), log ${log}"
-        failures+=("${name} did not run properly (exit ${code}): $(tail -1 "$log" | cut -c1-300 || true)
-log: ${log}")
+        found="${name} did not run properly (exit ${code}): $(tail -1 "$log" | cut -c1-300 || true)
+log: ${log}"
         ;;
     esac
+    DONE+=("${name}")
+    if [ -n "$found" ]; then
+      failures+=("${name}")
+      # Sent now, not at the end: the run may never get there.
+      send_alert "MoR soak on ${commit}: ${found}" || true
+    fi
   done
+  FINISHED=1
   if [ "${#failures[@]}" -gt 0 ]; then
-    local text="MoR soak on ${commit}:"
-    for failure in "${failures[@]}"; do
-      text="${text}
-- ${failure}"
-    done
-    send_alert "$text"
+    echo "failed: ${failures[*]}"
     return 1
   fi
 }
