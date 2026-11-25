@@ -11,6 +11,7 @@ from typing import Literal
 
 import msgspec
 
+from mor.ids import CountryCode, ServiceCode
 from mor.markets.records import Collector, ServiceTier
 from mor.money.currency import Currency
 from mor.quote.build import Part, Quote
@@ -47,7 +48,7 @@ class TransitOut(msgspec.Struct, frozen=True):
 
 class OptionOut(msgspec.Struct, frozen=True, kw_only=True):
     key: str
-    service: str
+    service: ServiceCode
     name: str
     tier: ServiceTier
     transit: TransitOut | None
@@ -62,7 +63,7 @@ class NotOfferedOut(msgspec.Struct, frozen=True):
 
 class EstimateOut(msgspec.Struct, frozen=True, kw_only=True):
     object: str
-    country: str
+    country: CountryCode
     currency: Currency
     options: list[OptionOut]
     not_offered: list[NotOfferedOut]

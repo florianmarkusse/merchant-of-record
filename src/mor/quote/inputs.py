@@ -9,13 +9,13 @@ from datetime import datetime
 from psycopg.rows import class_row
 
 from mor.audit import Actor
-from mor.couriers.prices import NoCourierAccount, read_price, request_shipping_price
-from mor.couriers.records import Parcel, PriceHeld, PriceQuestion, PriceState
+from mor.carriers.prices import NoCarrierAccount, read_price, request_shipping_price
+from mor.carriers.records import Parcel, PriceHeld, PriceQuestion, PriceState
 from mor.db.connect import Connection
 from mor.duties.lookups import NoVendorAccount, read_lookup, request_duty_rate
 from mor.duties.port import RateQuestion
 from mor.duties.records import LookupState, VendorLookup
-from mor.ids import DutyLookupId, ShippingPriceLookupId
+from mor.ids import CountryCode, DutyLookupId, ShippingPriceLookupId
 from mor.markets.records import DutyMode, MarketSet, PriceSource
 from mor.quote.build import InputsMissing, QuoteRequest
 from mor.quote.shipping import price_question, routes_to
@@ -23,7 +23,7 @@ from mor.tax.line_rates import duty_source_for
 
 
 async def held_prices(
-    conn: Connection, market: MarketSet, destination: str, parcel: Parcel
+    conn: Connection, market: MarketSet, destination: CountryCode, parcel: Parcel
 ) -> dict[PriceQuestion, PriceHeld]:
     """What we hold from carriers for every live route to the destination."""
     prices: dict[PriceQuestion, PriceHeld] = {}
@@ -95,7 +95,7 @@ async def ask_missing(
         duty_lookups.append(asked)
     for question in missing.price_asks:
         priced = await request_shipping_price(conn, question, actor, now)
-        if isinstance(priced, NoCourierAccount):
+        if isinstance(priced, NoCarrierAccount):
             return NoAccount(priced.carrier)
         price_lookups.append(priced)
     return Asked(tuple(duty_lookups), tuple(price_lookups))

@@ -11,6 +11,7 @@ from fractions import Fraction
 from typing import Literal
 
 from mor.duties.records import VendorLookup
+from mor.ids import CountryCode, HsCode
 from mor.markets.changes import BASE_WORDS, percent_text, value_text
 from mor.markets.fx import FxMissing
 from mor.markets.records import (
@@ -60,12 +61,12 @@ from mor.tax.paths import (
 
 @dataclass(frozen=True, kw_only=True)
 class OrderCheck:
-    country: str
+    country: CountryCode
     category: str
     goods: Money
     freight: Money | None
-    hs_code: str | None
-    origin: str
+    hs_code: HsCode | None
+    origin: CountryCode
 
 
 CHARGE_WORDS = {
@@ -309,7 +310,7 @@ def _not_due(charge: Charge, why: str) -> ChargeRow:
     )
 
 
-def _country_name(market: MarketSet, iso2: str) -> str:
+def _country_name(market: MarketSet, iso2: CountryCode) -> str:
     for country in market.countries:
         if country.iso2 == iso2:
             return country.name
@@ -327,7 +328,7 @@ def _band_text(row: LandedRate) -> str:
             return f"on orders above {value_text(row.limit)}"
 
 
-def _mode_text(market: MarketSet, country: str) -> str:
+def _mode_text(market: MarketSet, country: CountryCode) -> str:
     source = duty_source_for(market, country)
     match source.mode:
         case DutyMode.OWN_ONLY:

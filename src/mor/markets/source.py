@@ -17,6 +17,7 @@ from enum import StrEnum
 from fractions import Fraction
 from pathlib import Path
 
+from mor.ids import CarrierCode, CountryCode, GroupCode, HsCode, ServiceCode
 from mor.markets.records import (
     Amount,
     Band,
@@ -204,12 +205,14 @@ def _required(errors: list[SourceError], at: At, column: str) -> str | Unparsed:
     return value
 
 
-def _iso2(errors: list[SourceError], at: At, column: str) -> str | Unparsed:
+def _iso2(errors: list[SourceError], at: At, column: str) -> CountryCode | Unparsed:
     value = _required(errors, at, column)
-    if isinstance(value, str) and not _ISO2.fullmatch(value):
+    if isinstance(value, Unparsed):
+        return value
+    if not _ISO2.fullmatch(value):
         _fail(errors, at, f"{column} {value!r} is not an ISO 3166 code")
         return Unparsed()
-    return value
+    return CountryCode(value)
 
 
 def _currency(errors: list[SourceError], at: At, column: str) -> Currency | Unparsed:
@@ -324,10 +327,12 @@ def _groups(text: str, errors: list[SourceError]) -> list[Group]:
             # Member order means nothing; sorted, as the database returns it.
             parsed.append(
                 Group(
-                    code=code,
+                    code=GroupCode(code),
                     label=label,
                     kind=kind,
-                    members=tuple(sorted(members.split())),
+                    members=tuple(
+                        CountryCode(iso2) for iso2 in sorted(members.split())
+                    ),
                 )
             )
     return parsed
@@ -368,9 +373,9 @@ def _landed_rates(
         ):
             continue
         if place in country_codes:
-            scope = Scope(place, None)
+            scope = Scope(CountryCode(place), None)
         else:
-            scope = Scope(None, place)
+            scope = Scope(None, GroupCode(place))
         parsed.append(
             LandedRate(
                 line_no=at.line_no,
@@ -508,7 +513,7 @@ def _hs_rates(
             _fail(errors, at, f"hs_prefix {prefix!r} is not 2 to 10 digits")
             prefix = Unparsed()
         charge = _choice(errors, at, "charge", Charge)
-        origin: str | None | Unparsed = None
+        origin: CountryCode | None | Unparsed = None
         if at.row.get("origin", ""):
             origin = _iso2(errors, at, "origin")
         preference = _preference(errors, at, origin)
@@ -533,14 +538,14 @@ def _hs_rates(
         ):
             continue
         if place in country_codes:
-            scope = Scope(place, None)
+            scope = Scope(CountryCode(place), None)
         else:
-            scope = Scope(None, place)
+            scope = Scope(None, GroupCode(place))
         parsed.append(
             HsRate(
                 line_no=at.line_no,
                 scope=scope,
-                hs_prefix=prefix,
+                hs_prefix=HsCode(prefix),
                 charge=charge,
                 origin=origin,
                 preference=preference,
@@ -555,7 +560,7 @@ def _hs_rates(
 
 
 def _preference(
-    errors: list[SourceError], at: At, origin: str | None | Unparsed
+    errors: list[SourceError], at: At, origin: CountryCode | None | Unparsed
 ) -> Preference | None | Unparsed:
     """A trade agreement's rate: an agreement, the origin it is for, and
     conditions from the closed list. No agreement: the standard rate."""
@@ -635,8 +640,8 @@ def _place(
     if isinstance(place, Unparsed):
         return place
     if place in country_codes:
-        return Scope(place, None)
-    return Scope(None, place)
+        return Scope(CountryCode(place), None)
+    return Scope(None, GroupCode(place))
 
 
 def _services(text: str, errors: list[SourceError]) -> list[Service]:
@@ -667,8 +672,8 @@ def _services(text: str, errors: list[SourceError]) -> list[Service]:
         ):
             parsed.append(
                 Service(
-                    code=code,
-                    provider=provider,
+                    code=ServiceCode(code),
+                    provider=CarrierCode(provider),
                     name=name,
                     origin=origin,
                     tier=tier,
@@ -705,7 +710,7 @@ def _rate_cards(text: str, errors: list[SourceError]) -> list[RateCard]:
             parsed.append(
                 RateCard(
                     code=code,
-                    service=service,
+                    service=ServiceCode(service),
                     currency=currency,
                     effective_from=effective_from,
                     effective_to=effective_to,
@@ -806,7 +811,7 @@ def _surcharges(text: str, errors: list[SourceError]) -> list[Surcharge]:
         parsed.append(
             Surcharge(
                 line_no=at.line_no,
-                service=service,
+                service=ServiceCode(service),
                 rate_card=card or None,
                 name=name,
                 basis=basis,
@@ -847,7 +852,7 @@ def _transit(
                 continue
             parsed.append(
                 Transit(
-                    service=service,
+                    service=ServiceCode(service),
                     scope=scope,
                     days_min=days_min,
                     days_max=days_max,
@@ -872,7 +877,10 @@ def _restrictions(text: str, errors: list[SourceError]) -> list[ServiceRestricti
         ):
             parsed.append(
                 ServiceRestriction(
-                    service=service, category=category, rule=rule, status=status
+                    service=ServiceCode(service),
+                    category=category,
+                    rule=rule,
+                    status=status,
                 )
             )
     return parsed
@@ -907,7 +915,7 @@ def _routes(
             parsed.append(
                 ShippingRoute(
                     scope=scope,
-                    service=service,
+                    service=ServiceCode(service),
                     rate_card=card,
                     source=source,
                     standing=standing,

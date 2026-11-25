@@ -9,6 +9,7 @@ from datetime import date
 from enum import StrEnum
 from fractions import Fraction
 
+from mor.ids import CarrierCode, CountryCode, GroupCode, HsCode, ServiceCode
 from mor.money.amount import Money
 from mor.money.currency import Currency
 
@@ -108,7 +109,7 @@ class Category:
 
 @dataclass(frozen=True, kw_only=True)
 class Country:
-    iso2: str
+    iso2: CountryCode
     name: str
     currency: str | None
     status: MarketStatus
@@ -117,10 +118,10 @@ class Country:
 
 @dataclass(frozen=True, kw_only=True)
 class Group:
-    code: str
+    code: GroupCode
     label: str
     kind: GroupKind
-    members: tuple[str, ...]
+    members: tuple[CountryCode, ...]
 
 
 @dataclass(frozen=True)
@@ -156,8 +157,8 @@ type Amount = Percent | PerLine | PerParcel
 class Scope:
     """Exactly one of a country or a group."""
 
-    country: str | None
-    group: str | None
+    country: CountryCode | None
+    group: GroupCode | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -191,9 +192,9 @@ class HsRate:
 
     line_no: int  # the row in hs_rates.csv, 2 for the first
     scope: Scope
-    hs_prefix: str  # digits only, 2 to 10
+    hs_prefix: HsCode  # digits only, 2 to 10
     charge: Charge
-    origin: str | None
+    origin: CountryCode | None
     preference: Preference | None  # None: the standard rate
     rate: Fraction
     effective_from: date | None
@@ -204,14 +205,14 @@ class HsRate:
 
 @dataclass(frozen=True)
 class DutySource:
-    country: str
+    country: CountryCode
     mode: DutyMode
     vendor: str | None  # the vendor's name (`zonos`); None exactly for own_only
 
 
 @dataclass(frozen=True, kw_only=True)
 class Registration:
-    country: str
+    country: CountryCode
     scheme: str
     number: str
     effective_from: date
@@ -317,10 +318,10 @@ class FeeComponent(StrEnum):
 
 @dataclass(frozen=True, kw_only=True)
 class Service:
-    code: str
-    provider: str
+    code: ServiceCode
+    provider: CarrierCode  # the carrier
     name: str
-    origin: str
+    origin: CountryCode
     tier: ServiceTier
     duties_paid: DutiesPaid
     volumetric_divisor: int | None  # cm³ per kg
@@ -331,7 +332,7 @@ class Service:
 @dataclass(frozen=True, kw_only=True)
 class RateCard:
     code: str
-    service: str
+    service: ServiceCode
     currency: Currency
     effective_from: date | None
     effective_to: date | None
@@ -343,7 +344,7 @@ class RateCard:
 @dataclass(frozen=True, kw_only=True)
 class CardZone:
     rate_card: str
-    destination: str  # a country
+    destination: CountryCode  # a country
     zone: str
     status: ResearchStatus
 
@@ -363,7 +364,7 @@ class CardRate:
 @dataclass(frozen=True, kw_only=True)
 class Surcharge:
     line_no: int  # the row in surcharges.csv
-    service: str
+    service: ServiceCode
     rate_card: str | None  # None: every card of the service
     name: str
     basis: SurchargeBasis
@@ -381,7 +382,7 @@ class Surcharge:
 
 @dataclass(frozen=True, kw_only=True)
 class Transit:
-    service: str
+    service: ServiceCode
     scope: Scope
     days_min: int
     days_max: int
@@ -390,7 +391,7 @@ class Transit:
 
 @dataclass(frozen=True, kw_only=True)
 class ServiceRestriction:
-    service: str
+    service: ServiceCode
     category: str
     rule: RestrictionRule
     status: ResearchStatus
@@ -402,7 +403,7 @@ class ShippingRoute:
     (`own_table`) or by the carrier (`carrier_api`, no card)."""
 
     scope: Scope
-    service: str
+    service: ServiceCode
     rate_card: str | None  # set exactly when the source is own_table
     source: PriceSource
     standing: Standing

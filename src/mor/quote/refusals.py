@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from mor.config import Environment
+from mor.ids import CountryCode
 from mor.markets.fx import FxMissing
 from mor.markets.records import Standing
 from mor.markets.rules import NotListed, NotOpen, RatesMissing, RulesNotConfirmed
@@ -65,7 +66,7 @@ NO_SERVICE = _order(
 )
 
 
-def refusal_of(refusal: QuoteRefusal, country: str) -> Refusal:
+def refusal_of(refusal: QuoteRefusal, country: CountryCode) -> Refusal:
     match refusal:
         case CountryClosed(category=category, closed=closed):
             match closed:

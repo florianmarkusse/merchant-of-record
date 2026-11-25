@@ -11,8 +11,8 @@ from datetime import datetime
 
 import httpx2
 
+import mor.carriers.prices
 import mor.checkout.flow
-import mor.couriers.prices
 import mor.duties.lookups
 import mor.echo.flow
 import mor.echo.inbound
@@ -126,9 +126,9 @@ async def run_effect(
             return await run_steps(
                 run,
                 lookup_id,
-                prepare=mor.couriers.prices.prepare_rate,
-                call=mor.couriers.prices.ask_rate,
-                complete=mor.couriers.prices.complete_rate,
+                prepare=mor.carriers.prices.prepare_rate,
+                call=mor.carriers.prices.ask_rate,
+                complete=mor.carriers.prices.complete_rate,
             )
         case ConsumerName.PSP_PAYMENT_CREATE:
             attempt_id = expect(fact, PaymentAttemptCreatedV1).payment_attempt_id

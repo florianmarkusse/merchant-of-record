@@ -34,7 +34,13 @@ from mor.checkout.records import SessionState
 from mor.checkout.sessions import lock_session, read_address, set_session_state
 from mor.config import Environment
 from mor.db.connect import Connection
-from mor.ids import CheckoutSessionId, PaymentAttemptId, PspRequestId
+from mor.ids import (
+    CheckoutSessionId,
+    PaymentAttemptId,
+    PspIdempotencyKey,
+    PspPaymentId,
+    PspRequestId,
+)
 from mor.merchants.records import KybState
 from mor.merchants.store import kyb_state_for_pay
 from mor.messaging.facts import (
@@ -230,22 +236,22 @@ class FindCall:
 class CaptureCall:
     account: PspAccount
     request_id: PspRequestId
-    provider_payment_id: str
+    provider_payment_id: PspPaymentId
     amount: Money
-    key: str
+    key: PspIdempotencyKey
 
 
 @dataclass(frozen=True)
 class CancelCall:
     account: PspAccount
     request_id: PspRequestId
-    provider_payment_id: str
+    provider_payment_id: PspPaymentId
 
 
 @dataclass(frozen=True)
 class PollCall:
     account: PspAccount
-    provider_payment_id: str
+    provider_payment_id: PspPaymentId
 
 
 # --- what a create or a capture call did: sent it, or only looked ------------
@@ -289,7 +295,7 @@ async def _find(
 class _Request:
     id: PspRequestId
     number: int
-    idempotency_key: str
+    idempotency_key: PspIdempotencyKey
     state: VendorRequestState
 
 
@@ -316,7 +322,7 @@ async def _new_request(
     now: datetime,
 ) -> _Request:
     request_id = PspRequestId(uuid.uuid7())
-    key = f"pay:{attempt_id}:{operation}:{number}"
+    key = PspIdempotencyKey(f"pay:{attempt_id}:{operation}:{number}")
     await conn.execute(
         """
         INSERT INTO psp_request

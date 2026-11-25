@@ -42,7 +42,7 @@ from mor.duties.lookups import (
     request_duty_rate,
 )
 from mor.duties.port import DutyProvider, RateQuestion
-from mor.ids import DutyLookupId
+from mor.ids import CountryCode, DutyLookupId, HsCode
 from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.messaging.delivery import (
@@ -83,9 +83,9 @@ class _HandledRow:
 T0 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "fuzz")
 QUESTIONS = (
-    RateQuestion("TH", "VN", "610910"),
-    RateQuestion("TH", "CN", "610910"),
-    RateQuestion("SG", "VN", "620342"),
+    RateQuestion(CountryCode("TH"), CountryCode("VN"), HsCode("610910")),
+    RateQuestion(CountryCode("TH"), CountryCode("CN"), HsCode("610910")),
+    RateQuestion(CountryCode("SG"), CountryCode("VN"), HsCode("620342")),
 )
 # Faults after which the answer is lost, so the lookup is asked again.
 LOSING = ("fail_500", "timeout_after_work")

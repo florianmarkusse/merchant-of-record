@@ -13,7 +13,14 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from fractions import Fraction
 
-from mor.ids import PspAccountId
+from mor.ids import (
+    PspAccountId,
+    PspEventId,
+    PspIdempotencyKey,
+    PspLineId,
+    PspPaymentId,
+    PspPayoutId,
+)
 from mor.messaging.guard import DuplicateGuard
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -100,7 +107,7 @@ class PaymentRequest:
     amount: Money
     method: PaymentMethod
     return_url: str  # where the PSP's page sends the buyer back
-    idempotency_key: str
+    idempotency_key: PspIdempotencyKey
 
 
 class PaymentStatus(StrEnum):
@@ -129,7 +136,7 @@ class BuyerAction:
 
 @dataclass(frozen=True, kw_only=True)
 class ProviderPayment:
-    provider_payment_id: str
+    provider_payment_id: PspPaymentId
     reference: str
     amount: Money
     status: PaymentStatus
@@ -190,8 +197,8 @@ class PspEventKind(StrEnum):
 
 @dataclass(frozen=True, kw_only=True)
 class PspEvent:
-    vendor_event_id: str
-    provider_payment_id: str
+    vendor_event_id: PspEventId
+    provider_payment_id: PspPaymentId
     reference: str
     kind: PspEventKind
     amount: Money
@@ -263,7 +270,7 @@ class SettlementPayout:
     """One transfer to our bank, as the PSP reports it. Amounts are exact in
     our minor units: a PSP may count finer than we do (IDR at 2 decimals)."""
 
-    vendor_payout_id: str
+    vendor_payout_id: PspPayoutId
     currency: Currency
     net: Fraction
     paid_out_at: datetime
@@ -271,11 +278,11 @@ class SettlementPayout:
 
 @dataclass(frozen=True, kw_only=True)
 class SettledLine:
-    vendor_line_id: str
-    vendor_payout_id: str
+    vendor_line_id: PspLineId
+    vendor_payout_id: PspPayoutId
     line_type: LineType
     vendor_type: str
-    provider_payment_id: str
+    provider_payment_id: PspPaymentId
     reference: str
     currency: Currency
     gross: Fraction

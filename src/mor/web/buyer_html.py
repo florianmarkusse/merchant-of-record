@@ -201,7 +201,7 @@ def _address_form(view: BuyerView, action: str) -> htpy.Node:
         rows.append(_field(view, name, label, autocomplete))
     rows.append(
         htpy.fieldset(class_="phone")[
-            htpy.legend["Phone, for the courier"],
+            htpy.legend["Phone, for the carrier"],
             htpy.input(
                 type="text",
                 name=addresses.DIAL_CODE,

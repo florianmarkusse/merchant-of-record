@@ -11,6 +11,7 @@ order and takes the first whose band holds the value, as
 from dataclasses import dataclass
 from datetime import date
 
+from mor.ids import CountryCode
 from mor.markets.records import (
     USABLE_STATUSES,
     Charge,
@@ -23,7 +24,7 @@ from mor.markets.records import (
 
 @dataclass(frozen=True)
 class NotListed:
-    iso2: str
+    iso2: CountryCode
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,7 @@ class Open:
 
 
 def country_rules(
-    market: MarketSet, iso2: str, category: str, on: date
+    market: MarketSet, iso2: CountryCode, category: str, on: date
 ) -> Open | Closed:
     country = _country(market, iso2)
     if country is None:
@@ -86,7 +87,7 @@ def country_rules(
 
 
 def candidate_rates(
-    market: MarketSet, iso2: str, category: str, charge: Charge, on: date
+    market: MarketSet, iso2: CountryCode, category: str, charge: Charge, on: date
 ) -> tuple[LandedRate, ...]:
     """The rates for a charge in force on `on`, most specific first: the
     country before its groups, and within each the category's own rows
@@ -139,7 +140,7 @@ def _started(rate: LandedRate) -> date:
     return rate.effective_from if rate.effective_from is not None else date.min
 
 
-def _country(market: MarketSet, iso2: str) -> Country | None:
+def _country(market: MarketSet, iso2: CountryCode) -> Country | None:
     for country in market.countries:
         if country.iso2 == iso2:
             return country

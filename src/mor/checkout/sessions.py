@@ -9,6 +9,7 @@ from datetime import datetime
 from psycopg.rows import class_row
 
 from mor.audit import Actor
+from mor.carriers.records import Parcel
 from mor.checkout.addresses import Address
 from mor.checkout.records import (
     SESSION_LIFETIME,
@@ -20,10 +21,16 @@ from mor.checkout.records import (
     SessionState,
     SoldLine,
 )
-from mor.couriers.records import Parcel
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
-from mor.ids import CheckoutAddressId, CheckoutSessionId, MerchantId, QuoteId
+from mor.ids import (
+    CheckoutAddressId,
+    CheckoutSessionId,
+    CountryCode,
+    HsCode,
+    MerchantId,
+    QuoteId,
+)
 from mor.messaging.facts import CheckoutSessionCreatedV1, CheckoutSessionExpiryDueV1
 from mor.messaging.store import append_fact
 from mor.money.amount import Money
@@ -150,9 +157,9 @@ class _LineRow:
     category: str
     merchant_sku: str | None
     customs_description: str
-    origin_country: str
+    origin_country: CountryCode
     weight_g: int
-    hs_code: str | None
+    hs_code: HsCode | None
 
 
 async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession | None:
@@ -347,7 +354,7 @@ class SessionSummary:
     merchant_name: str
     state: SessionState
     created_at: datetime
-    country: str | None
+    country: CountryCode | None
     quote_id: QuoteId | None
     open_waits: int  # lookups the current address still waits on
 
@@ -377,7 +384,7 @@ async def recent_sessions(conn: Connection, limit: int) -> list[SessionSummary]:
 
 async def address_countries(
     conn: Connection, session_id: CheckoutSessionId
-) -> dict[str, str]:
+) -> dict[str, CountryCode]:
     """Each of the session's addresses (id in hex) to its country only."""
     async with conn.cursor(row_factory=class_row(_AddressCountryRow)) as cur:
         await cur.execute(
@@ -385,7 +392,7 @@ async def address_countries(
             (session_id,),
         )
         found = await cur.fetchall()
-    countries: dict[str, str] = {}
+    countries: dict[str, CountryCode] = {}
     for address in found:
         countries[address.id.hex] = address.country
     return countries
@@ -394,4 +401,4 @@ async def address_countries(
 @dataclass(frozen=True)
 class _AddressCountryRow:
     id: CheckoutAddressId
-    country: str
+    country: CountryCode

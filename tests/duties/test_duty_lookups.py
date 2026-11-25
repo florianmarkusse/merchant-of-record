@@ -27,7 +27,7 @@ from mor.duties.port import DutyProvider, RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
 from mor.fakes.duty import make_app
 from mor.fakes.hang import hang_a_minute
-from mor.ids import DutyLookupId
+from mor.ids import CountryCode, DutyLookupId, HsCode
 from mor.markets.records import Charge
 from mor.markets.source import parse
 from mor.markets.store import load_market
@@ -40,7 +40,7 @@ from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 LATER = NOW + timedelta(seconds=3)  # past the first retry's backoff
 ACTOR = Actor(ActorKind.SYSTEM, "test")
-T_SHIRT = RateQuestion("TH", "VN", "610910")
+T_SHIRT = RateQuestion(CountryCode("TH"), CountryCode("VN"), HsCode("610910"))
 TH_HS = "TH,6109,duty,,,,30,,secondary,WTO,https://example.test,,,\n"
 
 
@@ -118,7 +118,7 @@ async def _fault(setup: Setup, fault: str) -> None:
     assert response.status_code == 204
 
 
-async def _vendor_rate(setup: Setup, hs_prefix: str, duty: str, tax: str) -> None:
+async def _vendor_rate(setup: Setup, hs_prefix: HsCode, duty: str, tax: str) -> None:
     response = await setup.http.post(
         "http://fake/_fake/duty/rates",
         json={"destination": "TH", "hs_prefix": hs_prefix, "duty": duty, "tax": tax},
@@ -161,7 +161,7 @@ def test_a_combination_is_asked_once_and_its_rates_stored(database_url: str) -> 
 def test_an_answer_that_differs_from_our_row_is_recorded(database_url: str) -> None:
     async def body(setup: Setup) -> None:
         await _load_market(setup.url)
-        await _vendor_rate(setup, "6109", "25%", "7%")
+        await _vendor_rate(setup, HsCode("6109"), "25%", "7%")
         lookup_id = await _ask(setup)
         await drain_once(setup.worker, setup.http, ENV, NOW)
 

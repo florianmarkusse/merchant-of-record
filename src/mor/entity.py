@@ -6,10 +6,12 @@ per country waits for an adviser (docs/plan-payments.md §9)."""
 
 from dataclasses import dataclass
 
+from mor.ids import CountryCode
+
 
 @dataclass(frozen=True)
 class TaxRegistration:
-    country: str
+    country: CountryCode
     label: str  # as the invoice prints it
     number: str
 
@@ -29,17 +31,19 @@ ENTITY = SellingEntity(
     address="[our registered address]",
     support_email="[our support address]",
     registrations=(
-        TaxRegistration("SG", "Tax registration", "[to be registered]"),
-        TaxRegistration("MY", "Tax registration", "[to be registered]"),
-        TaxRegistration("TH", "Tax registration", "[to be registered]"),
-        TaxRegistration("VN", "Tax registration", "[to be registered]"),
-        TaxRegistration("ID", "Tax registration", "[to be registered]"),
-        TaxRegistration("PH", "Tax registration", "[to be registered]"),
+        TaxRegistration(CountryCode("SG"), "Tax registration", "[to be registered]"),
+        TaxRegistration(CountryCode("MY"), "Tax registration", "[to be registered]"),
+        TaxRegistration(CountryCode("TH"), "Tax registration", "[to be registered]"),
+        TaxRegistration(CountryCode("VN"), "Tax registration", "[to be registered]"),
+        TaxRegistration(CountryCode("ID"), "Tax registration", "[to be registered]"),
+        TaxRegistration(CountryCode("PH"), "Tax registration", "[to be registered]"),
     ),
 )
 
 
-def registration_for(entity: SellingEntity, country: str) -> TaxRegistration | None:
+def registration_for(
+    entity: SellingEntity, country: CountryCode
+) -> TaxRegistration | None:
     """The registration an invoice to a buyer in `country` shows, if any."""
     for registration in entity.registrations:
         if registration.country == country:

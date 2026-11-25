@@ -12,6 +12,7 @@ from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredQuote
 from mor.checkout.records import CheckoutSession
 from mor.checkout.sessions import SessionSummary
 from mor.dates import format_moment
+from mor.ids import CountryCode
 from mor.money.amount import Money
 from mor.orders.store import Order
 from mor.payments.attempts import Attempt
@@ -185,7 +186,7 @@ def _order(order: Order | None, invoice_number: str | None) -> htpy.Node:
 def render_session_page(
     session: CheckoutSession,
     merchant_name: str,
-    countries: dict[str, str],
+    countries: dict[str, CountryCode],
     quotes: list[StoredQuote],
     attempts: list[Attempt],
     account_names: dict[str, str],

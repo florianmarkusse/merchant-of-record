@@ -5,7 +5,8 @@ freight and surcharges, and every reason a card is not offered."""
 from datetime import UTC, date, datetime
 from fractions import Fraction
 
-from mor.couriers.records import Parcel
+from mor.carriers.records import Parcel
+from mor.ids import CountryCode
 from mor.markets.records import MarketSet
 from mor.money.currency import Currency
 from mor.quote.groups import PartKind
@@ -30,7 +31,7 @@ def _offers(
     found: dict[str, Offer | NotOffered] = {}
     for offer in offers(
         market,
-        "SG",
+        CountryCode("SG"),
         frozenset({category}),
         parcel,
         1,

@@ -10,7 +10,14 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
-from mor.ids import MarketLoadId
+from mor.ids import (
+    CarrierCode,
+    CountryCode,
+    GroupCode,
+    HsCode,
+    MarketLoadId,
+    ServiceCode,
+)
 from mor.markets.records import (
     Amount,
     Band,
@@ -579,10 +586,10 @@ def _optional_fraction(
 
 @dataclass(frozen=True, kw_only=True)
 class _GroupRow:
-    code: str
+    code: GroupCode
     label: str
     kind: GroupKind
-    members: list[str]
+    members: list[CountryCode]
 
 
 async def _read_groups(conn: Connection, load_id: MarketLoadId) -> tuple[Group, ...]:
@@ -612,8 +619,8 @@ async def _read_groups(conn: Connection, load_id: MarketLoadId) -> tuple[Group, 
 @dataclass(frozen=True, kw_only=True)
 class _LandedRow:
     line_no: int
-    country_iso2: str | None
-    group_code: str | None
+    country_iso2: CountryCode | None
+    group_code: GroupCode | None
     category: str | None
     charge: Charge
     collector: Collector
@@ -733,11 +740,11 @@ async def _read_fx_rates(conn: Connection, load_id: MarketLoadId) -> tuple[FxRat
 @dataclass(frozen=True, kw_only=True)
 class _HsRow:
     line_no: int
-    country_iso2: str | None
-    group_code: str | None
-    hs_prefix: str
+    country_iso2: CountryCode | None
+    group_code: GroupCode | None
+    hs_prefix: HsCode
     charge: Charge
-    origin_iso2: str | None
+    origin_iso2: CountryCode | None
     agreement: str | None
     conditions: list[PreferenceCondition]
     rate_numerator: int
@@ -837,10 +844,10 @@ async def _read_shipping(conn: Connection, load_id: MarketLoadId) -> _Shipping:
 
 @dataclass(frozen=True, kw_only=True)
 class _ServiceRow:
-    code: str
-    provider: str
+    code: ServiceCode
+    provider: CarrierCode
     name: str
-    origin_iso2: str
+    origin_iso2: CountryCode
     tier: ServiceTier
     duties_paid: DutiesPaid
     volumetric_divisor: int | None
@@ -919,7 +926,7 @@ async def _read_card_rates(
 @dataclass(frozen=True, kw_only=True)
 class _SurchargeRow:
     line_no: int
-    service: str
+    service: ServiceCode
     rate_card: str | None
     name: str
     basis: SurchargeBasis
@@ -975,9 +982,9 @@ async def _read_surcharges(
 
 @dataclass(frozen=True, kw_only=True)
 class _TransitRow:
-    service: str
-    country_iso2: str | None
-    group_code: str | None
+    service: ServiceCode
+    country_iso2: CountryCode | None
+    group_code: GroupCode | None
     days_min: int
     days_max: int
     status: ResearchStatus
@@ -1008,9 +1015,9 @@ async def _read_transit(conn: Connection, load_id: MarketLoadId) -> tuple[Transi
 
 @dataclass(frozen=True, kw_only=True)
 class _RouteRow:
-    country_iso2: str | None
-    group_code: str | None
-    service: str
+    country_iso2: CountryCode | None
+    group_code: GroupCode | None
+    service: ServiceCode
     rate_card: str | None
     source: PriceSource
     standing: Standing
@@ -1045,8 +1052,8 @@ async def _read_routes(
 class _FeeRow:
     line_no: int
     component: FeeComponent
-    country_iso2: str | None
-    group_code: str | None
+    country_iso2: CountryCode | None
+    group_code: GroupCode | None
     rate_numerator: int
     rate_denominator: int
     fixed_minor: int | None

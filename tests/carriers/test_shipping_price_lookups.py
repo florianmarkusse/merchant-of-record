@@ -1,4 +1,4 @@
-"""Live carrier prices through the worker, against the fake courier
+"""Live carrier prices through the worker, against the fake carrier
 in-process (docs/plan-quote.md §4, 4c-2): one open request per
 combination, a price held while usable by the account's rule, every call
 counted, our own card's price stored beside the carrier's."""
@@ -11,18 +11,17 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from mor.audit import Actor, ActorKind
-from mor.config import Environment
-from mor.couriers import registry
-from mor.couriers.prices import (
-    NoCourierAccount,
-    courier_account,
-    create_courier_account,
+from mor.carriers import registry
+from mor.carriers.prices import (
+    NoCarrierAccount,
+    carrier_account,
+    create_carrier_account,
     read_price,
     request_shipping_price,
     set_price_rule,
 )
-from mor.couriers.records import (
-    CourierProvider,
+from mor.carriers.records import (
+    CarrierProvider,
     FinishedLookup,
     Parcel,
     PriceExpiry,
@@ -32,8 +31,9 @@ from mor.couriers.records import (
     PriceQuestion,
     PriceState,
 )
+from mor.config import Environment
 from mor.db.connect import Connection, connect
-from mor.ids import ShippingPriceLookupId
+from mor.ids import CarrierCode, CountryCode, ServiceCode, ShippingPriceLookupId
 from mor.markets.store import Loaded, load_market
 from mor.messaging.worker import drain_once
 from mor.money.amount import Money
@@ -51,7 +51,11 @@ VALID_FOR = timedelta(hours=24)
 # our card's 1 kg break.
 BOX = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
 TO_SG = PriceQuestion(
-    carrier="carrier", service="exp", origin="VN", destination="SG", parcel=BOX
+    carrier=CarrierCode("carrier"),
+    service=ServiceCode("exp"),
+    origin=CountryCode("VN"),
+    destination=CountryCode("SG"),
+    parcel=BOX,
 )
 
 
@@ -66,12 +70,12 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
     wired = wire(url, lambda: NOW)
     async with await connect(url, autocommit=True) as worker:
         async with await connect(url) as conn:
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 VENDOR_TIMEOUT,
                 VALID_FOR,
                 PriceExpiry.CARRIER_FIRST,
@@ -88,7 +92,7 @@ async def _ask(setup: Setup, now: datetime = NOW) -> ShippingPriceLookupId:
     async with await connect(setup.url) as conn:
         asked = await request_shipping_price(conn, TO_SG, ACTOR, now)
         await conn.commit()
-    assert not isinstance(asked, NoCourierAccount)
+    assert not isinstance(asked, NoCarrierAccount)
     return asked
 
 
@@ -108,7 +112,7 @@ async def _latest(setup: Setup) -> FinishedLookup:
 
 
 async def _carrier_calls(setup: Setup) -> int:
-    return await count_rows(setup.url, "SELECT count(*) FROM fake_vendor.courier_call")
+    return await count_rows(setup.url, "SELECT count(*) FROM fake_vendor.carrier_call")
 
 
 async def _facts(setup: Setup, lookup_id: ShippingPriceLookupId) -> list[str]:
@@ -127,14 +131,14 @@ async def _facts(setup: Setup, lookup_id: ShippingPriceLookupId) -> list[str]:
 
 async def _fault(setup: Setup, fault: str) -> None:
     response = await setup.wired.control.post(
-        "http://mor/_fake/courier/faults", json={"fault": fault}
+        "http://mor/_fake/carrier/faults", json={"fault": fault}
     )
     assert response.status_code == 204
 
 
 async def _carrier_rate(setup: Setup, valid_until: datetime | None) -> None:
     response = await setup.wired.control.post(
-        "http://mor/_fake/courier/rates",
+        "http://mor/_fake/carrier/rates",
         json={
             "service": "exp",
             "destination": "SG",
@@ -229,7 +233,9 @@ def test_the_carriers_own_validity_ends_a_price_unless_the_account_says_otherwis
 
         # Switched: the same stored price is now used for our full period.
         async with await connect(setup.url) as conn:
-            await set_price_rule(conn, "carrier", VALID_FOR, PriceExpiry.OWN_PERIOD)
+            await set_price_rule(
+                conn, CarrierCode("carrier"), VALID_FOR, PriceExpiry.OWN_PERIOD
+            )
             await conn.commit()
         assert (await _latest(setup)).usable_until == NOW + VALID_FOR
 
@@ -302,19 +308,23 @@ def test_a_price_in_another_currency_is_stored_as_the_carrier_gave_it(
 def test_a_carrier_without_an_account_here_cannot_be_asked(database_url: str) -> None:
     async def body(setup: Setup) -> None:
         other = PriceQuestion(
-            carrier="other", service="exp", origin="VN", destination="SG", parcel=BOX
+            carrier=CarrierCode("other"),
+            service=ServiceCode("exp"),
+            origin=CountryCode("VN"),
+            destination=CountryCode("SG"),
+            parcel=BOX,
         )
         async with await connect(setup.url) as conn:
             asked = await request_shipping_price(conn, other, ACTOR, NOW)
-        assert asked == NoCourierAccount("other")
+        assert asked == NoCarrierAccount(CarrierCode("other"))
 
     asyncio.run(_with_setup(database_url, body))
 
 
-def test_the_fake_courier_is_refused_in_prod(database_url: str) -> None:
+def test_the_fake_carrier_is_refused_in_prod(database_url: str) -> None:
     async def body(setup: Setup) -> None:
         async with await connect(setup.url) as conn:
-            account = await courier_account(conn, "carrier")
+            account = await carrier_account(conn, CarrierCode("carrier"))
         assert account is not None
         with pytest.raises(AccountNotAllowed):
             await registry.quote_rate(

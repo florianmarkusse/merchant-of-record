@@ -14,6 +14,8 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
+from mor.carriers.prices import create_carrier_account
+from mor.carriers.records import CarrierProvider, Parcel, PriceExpiry
 from mor.checkout import addresses
 from mor.checkout.flow import QUOTE_VALID_FOR
 from mor.checkout.quotes import MadeQuote, read_quote, stored_from
@@ -26,10 +28,8 @@ from mor.checkout.records import (
     SoldLine,
 )
 from mor.checkout.sessions import create_session, session_by_id
-from mor.couriers.prices import create_courier_account
-from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import connect
-from mor.ids import CheckoutSessionId
+from mor.ids import CarrierCode, CheckoutSessionId, CountryCode, HsCode
 from mor.markets.records import MarketSet
 from mor.markets.store import load_market
 from mor.merchants.records import KeyEnv, KybState
@@ -54,9 +54,9 @@ LINE = SoldLine(
     merchant_sku="LIN-01",
     customs=Customs(
         description="Men's linen shirt, woven",
-        origin_country="VN",
+        origin_country=CountryCode("VN"),
         weight_g=300,
-        hs_code="610910",
+        hs_code=HsCode("610910"),
     ),
 )
 SG_ADDRESS = {
@@ -104,7 +104,7 @@ async def _with_setup(
     async with await connect(url) as conn:
         await load_market(conn, market or quote_market(), "test", ACTOR, NOW)
         seller = await create_merchant(
-            conn, "Test Shop Co.", "Test Shop", "VN", 100, ACTOR, NOW
+            conn, "Test Shop Co.", "Test Shop", CountryCode("VN"), 100, ACTOR, NOW
         )
         await set_kyb_state(conn, seller.id, KybState.APPROVED, ACTOR, NOW)
         key = await create_api_key(conn, seller.id, KeyEnv.TEST, NOW)
@@ -122,12 +122,12 @@ async def _with_setup(
             ACTOR,
             NOW,
         )
-        await create_courier_account(
+        await create_carrier_account(
             conn,
-            "carrier",
-            CourierProvider.FAKE,
+            CarrierCode("carrier"),
+            CarrierProvider.FAKE,
             ProviderAccountKind.FAKE,
-            "http://mor/_fake/courier/acct",
+            "http://mor/_fake/carrier/acct",
             VENDOR_TIMEOUT,
             timedelta(hours=24),
             PriceExpiry.CARRIER_FIRST,
@@ -191,12 +191,12 @@ def test_an_address_gets_a_stored_quote_and_the_page_shows_four_lines(
         built = build_quote(
             quote_market(),
             QuoteRequest(
-                destination="SG",
+                destination=CountryCode("SG"),
                 lines=(
                     QuoteLine(
                         category="apparel",
-                        hs_code="610910",
-                        origin="VN",
+                        hs_code=HsCode("610910"),
+                        origin=CountryCode("VN"),
                         quantity=2,
                         unit_price=Money(2500, Currency.SGD),
                     ),
@@ -292,7 +292,7 @@ def test_a_refused_quote_says_why_in_buyer_words(database_url: str) -> None:
         merchant_sku=LINE.merchant_sku,
         customs=Customs(
             description="Men's linen shirt, woven",
-            origin_country="VN",
+            origin_country=CountryCode("VN"),
             weight_g=300,
             hs_code=None,
         ),

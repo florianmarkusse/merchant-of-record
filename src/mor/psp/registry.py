@@ -7,6 +7,7 @@ from typing import Literal
 import httpx2
 
 from mor.config import Environment
+from mor.ids import PspIdempotencyKey, PspPaymentId, PspPayoutId
 from mor.money.amount import Money
 from mor.provider_accounts import require_allowed
 from mor.psp import fake_client
@@ -63,9 +64,9 @@ async def capture(
     http: httpx2.AsyncClient,
     environment: Environment,
     account: PspAccount,
-    provider_payment_id: str,
+    provider_payment_id: PspPaymentId,
     amount: Money,
-    key: str,
+    key: PspIdempotencyKey,
 ) -> CaptureResult:
     _check(environment, account)
     match account.provider:
@@ -79,7 +80,7 @@ async def cancel(
     http: httpx2.AsyncClient,
     environment: Environment,
     account: PspAccount,
-    provider_payment_id: str,
+    provider_payment_id: PspPaymentId,
 ) -> CancelResult:
     _check(environment, account)
     match account.provider:
@@ -91,7 +92,7 @@ async def fetch_events(
     http: httpx2.AsyncClient,
     environment: Environment,
     account: PspAccount,
-    provider_payment_id: str,
+    provider_payment_id: PspPaymentId,
 ) -> FetchResult:
     _check(environment, account)
     match account.provider:
@@ -155,7 +156,7 @@ async def fetch_payout(
     http: httpx2.AsyncClient,
     environment: Environment,
     account: PspAccount,
-    payout_id: str,
+    payout_id: PspPayoutId,
 ) -> PayoutResult | UndecodableBody:
     _check(environment, account)
     match account.provider:
@@ -167,7 +168,7 @@ async def fetch_payout_lines(
     http: httpx2.AsyncClient,
     environment: Environment,
     account: PspAccount,
-    payout_id: str,
+    payout_id: PspPayoutId,
     after: str | None,
 ) -> LinesResult | UndecodableBody:
     _check(environment, account)
@@ -201,4 +202,6 @@ def decode_settlement(
                 case InboundMode.SETTLEMENT_PAGE:
                     if request_ref is None:
                         return UndecodableBody("a page of lines names no payout")
-                    return fake_client.decode_payout_lines(body, request_ref)
+                    return fake_client.decode_payout_lines(
+                        body, PspPayoutId(request_ref)
+                    )

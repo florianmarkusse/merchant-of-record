@@ -15,7 +15,7 @@ from mor.audit import Actor
 from mor.config import Environment
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
-from mor.ids import MerchantId
+from mor.ids import CountryCode, MerchantId
 from mor.merchants.records import (
     Authenticated,
     KeyEnv,
@@ -54,7 +54,7 @@ async def create_merchant(
     conn: Connection,
     legal_name: str,
     display_name: str,
-    country: str,
+    country: CountryCode,
     daily_vendor_asks: int,
     actor: Actor,
     now: datetime,

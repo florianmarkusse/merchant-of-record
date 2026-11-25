@@ -21,6 +21,7 @@ from mor.checkout.quotes import StoredQuote, read_made_quote, read_quote
 from mor.checkout.sessions import create_session, read_address, read_session
 from mor.config import Settings
 from mor.db.connect import Connection, connect
+from mor.ids import ApiIdempotencyKey, CountryCode
 from mor.invoices.store import invoice_for_order
 from mor.markets.store import market_in_force
 from mor.merchants.idempotency import (
@@ -107,7 +108,7 @@ async def create_checkout_session(
         auth = await _authenticated(conn, request, settings)
         if auth is None:
             return error_response(AUTH_FAILED)
-        key = request.headers.get("idempotency-key", "")
+        key = ApiIdempotencyKey(request.headers.get("idempotency-key", ""))
         if not key or len(key) > MAX_IDEMPOTENCY_KEY:
             return error_response(
                 ApiError(
@@ -174,7 +175,7 @@ async def get_checkout_session(request: Request, settings: Settings) -> Response
         session = await read_session(conn, auth.merchant.id, session_id)
         if session is None:
             return error_response(not_found)
-        country: str | None = None
+        country: CountryCode | None = None
         if session.address_id is not None:
             address = await read_address(conn, session.address_id)
             assert address is not None

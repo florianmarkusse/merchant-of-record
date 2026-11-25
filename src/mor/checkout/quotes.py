@@ -19,6 +19,7 @@ from mor.ids import (
     DutyLookupId,
     MarketLoadId,
     QuoteId,
+    ServiceCode,
     ShippingPriceLookupId,
 )
 from mor.markets.records import Collector, ServiceTier, Standing
@@ -34,7 +35,7 @@ from mor.quote.shipping import NotOfferedReason
 @dataclass(frozen=True, kw_only=True)
 class StoredOption:
     key: str
-    service: str
+    service: ServiceCode
     service_name: str
     tier: ServiceTier
     transit: tuple[int, int] | None
@@ -313,7 +314,7 @@ class _QuoteInputRow:
 class _OptionRow:
     option_no: int
     key: str
-    service: str
+    service: ServiceCode
     service_name: str
     tier: ServiceTier
     transit_min: int | None

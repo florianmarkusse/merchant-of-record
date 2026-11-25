@@ -4,7 +4,7 @@ Status: design confirmed 15-Nov-2026. Where the build stands and what
 comes next is `docs/README.md`; each slice's detail is in its own plan.
 
 This is the one design for the whole flow: checkout, tax and duty,
-payment, shipment, courier invoice, returns and payout. Logistics gets
+payment, shipment, carrier invoice, returns and payout. Logistics gets
 the detail here (§7 to §9) because no slice plan covers it yet.
 
 ## 1. Three rules that shape everything
@@ -20,7 +20,7 @@ fact we promised someone (a quote valid until 14:35, a 14-day return
 window). Even then the decision is taken under the lock (§4).
 
 **2. Every outside party sits behind a port with a fake.** Payment
-providers, couriers, the duty source, the payout rail, email. One module
+providers, carriers, the duty source, the payout rail, email. One module
 per provider, one registry per port that picks by name, and a fake that
 behaves like a real vendor, including its faults (§6).
 
@@ -43,10 +43,10 @@ in the outbox.
 | 2 | Buyer gives the address; we price it | `checkout_session` + immutable `quote` | duty source (only for an unknown product, §8) | `quote_made` or `quote_refused` |
 | 3 | Buyer pays | `payment_attempt` | PSP | `payment_captured` |
 | 4 | Order exists, invoice issued | `order_`, `invoice` | none | `order_paid`, `invoice_issued` |
-| 5 | Label booked | `shipment` | courier | `shipment_label_booked` |
-| 6 | Parcel travels | `shipment` (+ append-only events) | courier | `shipment_delivered` (or `_lost`, `_returned_to_sender`) |
-| 7 | Courier bills us | `courier_invoice` | courier | `courier_invoice_line_matched` |
-| 8 | Return or refund, if any | `return_request`, `refund` | courier, PSP | `return_received`, `refund_succeeded` |
+| 5 | Label booked | `shipment` | carrier | `shipment_label_booked` |
+| 6 | Parcel travels | `shipment` (+ append-only events) | carrier | `shipment_delivered` (or `_lost`, `_returned_to_sender`) |
+| 7 | Carrier bills us | `carrier_invoice` | carrier | `carrier_invoice_line_matched` |
+| 8 | Return or refund, if any | `return_request`, `refund` | carrier, PSP | `return_received`, `refund_succeeded` |
 | 9 | Merchant's money released and paid | `payout` | bank rail | `payout_paid` |
 | 10 | Tax filed, where we collected it | `tax_filing` | authority or filing service | `tax_filing_paid` |
 
@@ -61,7 +61,7 @@ merchant ─▶ (HTML, JSON)    ledger entry · facts into the outbox
                                     │
               ┌──────────┬──────────┼──────────┬──────────┐
               ▼          ▼          ▼          ▼          ▼
-            psp/      couriers/   duties/    rails/     notify/
+            psp/      carriers/   duties/    rails/     notify/
           registry    registry    registry   registry   registry
               ▲          ▲
    webhooks, polled pages, report files ─▶ vendor inbox (raw, unique key)
@@ -100,7 +100,7 @@ src/mor/
   orders/       order, invoice
   settlement/   the PSP's settlement lines and payouts
   shipments/    shipment, events, derived status, returns
-  couriers/     port, registry, client per courier, rate cards
+  carriers/     port, registry, client per carrier, rate cards
   payouts/      payout runs
   rails/        port, registry, client per payout rail
   web/          handlers and typed HTML pages; route table in main.py
@@ -144,7 +144,7 @@ Rules:
   the row's `lock_*` function makes (`plan-messaging.md` §5).
 - **Handlers never wait on a vendor.** A handler takes the row lock,
   changes state, writes facts, commits. The advisory lock is taken only
-  by workers, so a buyer cancelling is never blocked by a courier call in
+  by workers, so a buyer cancelling is never blocked by a carrier call in
   flight; the cancel is recorded, and the call's `complete` finds it.
 - **The ledger needs no lock to append** (the idempotency key is unique),
   but a decision that depends on a balance takes the merchant lock, so two
@@ -171,7 +171,7 @@ What time is still used for, and only for:
 ## 5. Messaging and workers
 
 Facts only: past tense, immutable, versioned, one record type per fact and
-version. There are no command messages: "book the label" is the courier
+version. There are no command messages: "book the label" is the carrier
 consumer reacting to `shipment_created`. How facts are stored, routed,
 picked up and run is `plan-messaging.md`; the shape in short:
 
@@ -255,12 +255,12 @@ module never touches our database and never sees a transaction.
 on the provider enum that calls the module's function directly:
 
 ```python
-async def book(account: CourierAccount, request: BookRequest) -> BookResult:
+async def book(account: CarrierAccount, request: BookRequest) -> BookResult:
     match account.provider:
-        case CourierName.FAKE:
-            return await couriers.fake.book(account, request)
-        case CourierName.DHL_EXPRESS:
-            return await couriers.dhl_express.book(account, request)
+        case CarrierName.FAKE:
+            return await carriers.fake.book(account, request)
+        case CarrierName.DHL_EXPRESS:
+            return await carriers.dhl_express.book(account, request)
 ```
 
 No protocol class, no injection: jump-to-definition lands on the code that
@@ -271,8 +271,8 @@ a provider (an ast-grep rule); feature code switches on capability values
 the account carries.
 
 **Which account is used** comes from data: account rows per port
-(`psp_account`, `courier_account`, …) and effective-dated routing rows.
-For couriers the routing key is lane (origin, destination), service level
+(`psp_account`, `carrier_account`, …) and effective-dated routing rows.
+For carriers the routing key is lane (origin, destination), service level
 and the order's tax paths (`plan-logistics.md` §4: a border-paid order may
 only use a duty-paid service). The routing version is stored on the quote
 and the shipment. Feature code never names a provider.
@@ -346,7 +346,7 @@ or service row:
 
 | Port | Modes the fake offers |
 |---|---|
-| Courier | tracking by `push` and by `poll`; invoice by `file` and by API page; each duplicate guard; shipping price from our tables and from a live rate call (§8); duty-paid and not |
+| Carrier | tracking by `push` and by `poll`; invoice by `file` and by API page; each duplicate guard; shipping price from our tables and from a live rate call (§8); duty-paid and not |
 | PSP | fat and thin webhooks; sale, authorise-then-capture, and buyer action (redirect, QR); synchronous and pending refunds; each duplicate guard; settlement by `file` and by API |
 | Duty source | our own tables and a vendor call (§8) |
 | Payout rail | instruction file and API with status events |
@@ -356,8 +356,8 @@ The fuzzer draws the mode per run (§10), so every one is exercised.
 ## 7. Logistics: records and tables
 
 ```
-CourierAccount   { id, provider, base_url, credentials_ref, billing_currency }
-CourierService   { account_id, code, level: express | standard | economy,
+CarrierAccount   { id, provider, base_url, credentials_ref, billing_currency }
+CarrierService   { account_id, code, level: express | standard | economy,
                    duties_paid: bool, carries_scheme_number: bool,
                    tracking: push | poll, invoice: file | api,
                    book_guard: vendor_constraint | compensable | none }
@@ -370,13 +370,13 @@ CustomsSnapshot  { lines[{ description, hs_code, origin, quantity, value }],
                    incoterm: ddp, scheme_numbers[], shipper, exporter }
                  # frozen at booking: what we told customs, for good
 
-Shipment         { id, order_id, courier_account_id, service_code, parcels[],
+Shipment         { id, order_id, carrier_account_id, service_code, parcels[],
                    customs: CustomsSnapshot, routing_version, state,
                    tracking_number?, export_declaration_no? }
 ShipmentEvent    { shipment_id, carrier_event_id, kind, occurred_at,
                    received_at, raw_ref }              # append-only
 ReturnRequest    { id, order_id, reason, state, return_shipment_id? }
-CourierInvoiceLine { account_id, invoice_no, line_no, tracking_number,
+CarrierInvoiceLine { account_id, invoice_no, line_no, tracking_number,
                    charge: freight | fuel | duty | import_tax | duty_paid_fee
                            | surcharge, amount: Money }
 ```
@@ -386,11 +386,11 @@ Tables and the constraint that does each guarding job:
 | Table | Unique on | What it prevents |
 |---|---|---|
 | `shipment` | `(order_id, sequence)` | a second shipment for the same order step |
-| `courier_request` | `(shipment_id, operation, number)`, and the idempotency key | a second booking after a crash |
-| `courier_inbox` | `(account_id, vendor_event_key)` | a webhook or polled page stored twice |
+| `carrier_request` | `(shipment_id, operation, number)`, and the idempotency key | a second booking after a crash |
+| `carrier_inbox` | `(account_id, vendor_event_key)` | a webhook or polled page stored twice |
 | `shipment_event` | `(shipment_id, carrier_event_id)` | an event applied twice |
 | `shipment_milestone` | `(shipment_id, milestone)` | `shipment_delivered` emitted twice |
-| `courier_invoice_line` | `(account_id, invoice_no, line_no)` | a bill line booked twice |
+| `carrier_invoice_line` | `(account_id, invoice_no, line_no)` | a bill line booked twice |
 | `return_request` | `(order_id, sequence)` | a double return on a double click |
 
 One table per thing, typed columns, enum types for every closed set. The
@@ -402,7 +402,7 @@ one waybill can come later; true splits are out: a split needs the boxes
 known before payment, can change the tax owed, pays the duty-paid minimum
 twice, and needs "partly delivered" rules for status, payout and returns.
 
-**Port operations** (`couriers/port.py`): `book` (label, commercial
+**Port operations** (`carriers/port.py`): `book` (label, commercial
 invoice, duties billed to us), `find_by_reference`, `cancel`,
 `book_pickup`, `book_return`, `quote_rate` (a live price, §8),
 `fetch_tracking` (one page), `verify_webhook`, `decode_events` (a webhook
@@ -564,9 +564,9 @@ rate. It is immutable; a changed address makes a new one.
 
 **Booking.** `order_paid` → a local consumer creates the `shipment`
 (state `created`, customs snapshot frozen, service taken from the quote)
-and emits `shipment_created`. The courier effect consumer handles that:
+and emits `shipment_created`. The carrier effect consumer handles that:
 
-- `prepare`: order still wants shipping? Create `courier_request #1`,
+- `prepare`: order still wants shipping? Create `carrier_request #1`,
   mark `sent`.
 - `call`: `book`. After a recorded send with no result, the service's
   `book_guard` decides (§5): send again, send again and cancel an extra
@@ -606,7 +606,7 @@ and a new milestone, `delivery_withdrawn`. If the merchant's money was not
 released yet, it stays held; if it was, the amount becomes a deduction
 like any other.
 
-**Courier invoice.** A file is stored raw, decoded into lines, and each
+**Carrier invoice.** A file is stored raw, decoded into lines, and each
 line is matched to a shipment by tracking number under that shipment's
 lock. One ledger entry per line, keyed by the line's identity:
 
@@ -614,8 +614,8 @@ lock. One ledger entry per line, keyed by the line's identity:
 at capture (from the quote):
   Dr psp_clearing            gross
   Cr tax_payable:{country}   tax we collected ourselves
-  Cr duties_payable:{courier}    duty + import tax + duty-paid fee, estimated
-  Cr shipping_payable:{courier}  shipping charged
+  Cr duties_payable:{carrier}    duty + import tax + duty-paid fee, estimated
+  Cr shipping_payable:{carrier}  shipping charged
   Cr merchant_payable        the merchant's price for the goods, in full
   Cr psp_fee_collected       estimated PSP fee, charged on top (§8)
   Cr revenue_mor_margin      our margin, charged on top (§8)
@@ -623,20 +623,20 @@ at settlement (real PSP fee known):
   Dr psp_fee_collected       the estimate
   Dr/Cr psp_fee_variance     the gap, ours
   Cr psp_clearing            the real fee the PSP kept
-per courier invoice line:
+per carrier invoice line:
   Dr duties_payable or shipping_payable   what we held for it
-  Cr courier_payable:{courier}            what the carrier bills
-  Dr/Cr courier_variance:{courier}        any difference, ours until attributed
+  Cr carrier_payable:{carrier}            what the carrier bills
+  Dr/Cr carrier_variance:{carrier}        any difference, ours until attributed
 when a person attributes a difference to the merchant:
   Dr merchant_payable
-  Cr courier_variance:{courier}
+  Cr carrier_variance:{carrier}
 ```
 
 The carrier bills in its own currency (DHL VN in VND). The line's FX rate
 is stored as an exact fraction with its source; rounding is named and the
 remainder booked. A line that matches no shipment, or a second bill for a
 shipment already cleared (carriers re-bill weeks later), is not an error:
-it becomes a `courier_invoice_exception` row for a person, or a further
+it becomes a `carrier_invoice_exception` row for a person, or a further
 entry on the same shipment.
 
 **Who bears a difference** (decided 15-Nov-2026). The carrier account is

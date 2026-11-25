@@ -41,7 +41,7 @@ runs happen (`plan-architecture.md` §6).
 `python -m mor.seed`, refused in prod, with the server running: one echo
 account per provider and event mode (push accounts subscribe their
 webhooks at the fake), an account at the fake duty vendor and the fake
-courier for every vendor the market data names, one fake PSP account per
+carrier for every vendor the market data names, one fake PSP account per
 wiring with a default route, and the Sandbox Shop merchant with its API
 key. Synthetic data only. Running it again changes nothing: insert, and a
 conflict means it was done.

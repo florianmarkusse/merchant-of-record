@@ -9,8 +9,8 @@ from datetime import date, datetime
 
 import htpy
 
-from mor.couriers.prices import LivePriceRow
-from mor.couriers.records import PriceState
+from mor.carriers.prices import LivePriceRow
+from mor.carriers.records import PriceState
 from mor.dates import format_day, format_moment
 from mor.duties.lookups import Agreement, AnswerRow
 from mor.markets.changes import percent_text, value_text

@@ -16,10 +16,12 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from mor.ids import CountryCode
+
 
 @dataclass(frozen=True, kw_only=True)
 class AddressRule:
-    country: str
+    country: CountryCode
     dial_code: str  # the default shown for the phone
     postcode: re.Pattern[str] | None  # None: the country has none we ask for
     postcode_required: bool
@@ -32,42 +34,42 @@ class AddressRule:
 # A country is offered only with a row here and open in the market data.
 ADDRESS_RULES = (
     AddressRule(
-        country="SG",
+        country=CountryCode("SG"),
         dial_code="+65",
         postcode=re.compile(r"^\d{6}$"),
         postcode_required=True,
         region_required=False,
     ),
     AddressRule(
-        country="MY",
+        country=CountryCode("MY"),
         dial_code="+60",
         postcode=re.compile(r"^\d{5}$"),
         postcode_required=True,
         region_required=True,
     ),
     AddressRule(
-        country="TH",
+        country=CountryCode("TH"),
         dial_code="+66",
         postcode=re.compile(r"^\d{5}$"),
         postcode_required=True,
         region_required=True,
     ),
     AddressRule(
-        country="ID",
+        country=CountryCode("ID"),
         dial_code="+62",
         postcode=re.compile(r"^\d{5}$"),
         postcode_required=True,
         region_required=True,
     ),
     AddressRule(
-        country="PH",
+        country=CountryCode("PH"),
         dial_code="+63",
         postcode=re.compile(r"^\d{4}$"),
         postcode_required=True,
         region_required=True,
     ),
     AddressRule(
-        country="VN",
+        country=CountryCode("VN"),
         dial_code="+84",
         postcode=re.compile(r"^\d{6}$"),
         postcode_required=False,
@@ -76,7 +78,7 @@ ADDRESS_RULES = (
 )
 
 
-def address_rule(country: str) -> AddressRule | None:
+def address_rule(country: CountryCode) -> AddressRule | None:
     for rule in ADDRESS_RULES:
         if rule.country == country:
             return rule
@@ -94,7 +96,7 @@ class Address:
     city: str
     region: str | None
     postcode: str | None
-    country: str
+    country: CountryCode
 
 
 # Form field names, shared by the page and the parser.
@@ -126,7 +128,7 @@ def _text(values: dict[str, str], field: str) -> str:
 
 
 def parse_address(
-    values: dict[str, str], countries: frozenset[str]
+    values: dict[str, str], countries: frozenset[CountryCode]
 ) -> Address | AddressErrors:
     """The submitted fields as an address, or one error per bad field.
     `countries`: those this cart may be sent to (open, with a rule)."""
@@ -141,7 +143,7 @@ def parse_address(
         if not texts[field] and field not in errors:
             errors[field] = "required"
 
-    country = texts[COUNTRY].upper()
+    country = CountryCode(texts[COUNTRY].upper())
     rule = address_rule(country)
     if rule is None or country not in countries:
         errors[COUNTRY] = "country"

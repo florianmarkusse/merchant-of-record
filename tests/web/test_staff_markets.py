@@ -11,12 +11,13 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
+from mor.carriers.prices import create_carrier_account
+from mor.carriers.records import CarrierProvider, PriceExpiry
 from mor.config import Environment, Settings
-from mor.couriers.prices import create_courier_account
-from mor.couriers.records import CourierProvider, PriceExpiry
 from mor.db.connect import connect
 from mor.duties.lookups import create_vendor_account
 from mor.duties.port import DutyProvider
+from mor.ids import CarrierCode
 from mor.markets.source import parse
 from mor.markets.store import load_market
 from mor.messaging.worker import drain_once
@@ -339,12 +340,12 @@ def test_a_live_route_is_priced_by_asking_the_carrier_from_the_page(
     async def body() -> None:
         async with await connect(database_url) as conn:
             await load_market(conn, live_market(), "live", LOADER, NOW)
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 timedelta(seconds=5),
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,

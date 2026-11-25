@@ -29,7 +29,7 @@ from mor.checkout.records import AfterPayment, CheckoutSession, SessionState
 from mor.checkout.sessions import read_address, session_by_id
 from mor.config import Settings
 from mor.db.connect import Connection, connect
-from mor.ids import CheckoutSessionId
+from mor.ids import CheckoutSessionId, CountryCode
 from mor.markets.records import MarketSet, MarketStatus
 from mor.markets.rules import Open, country_rules
 from mor.markets.store import market_in_force
@@ -90,10 +90,10 @@ async def _latest_attempt(
 
 def countries_for(
     market: MarketSet, session: CheckoutSession, now: datetime
-) -> frozenset[str]:
+) -> frozenset[CountryCode]:
     """Countries this cart may be sent to: open for every line's category,
     and with an address rule."""
-    found: set[str] = set()
+    found: set[CountryCode] = set()
     for rule in ADDRESS_RULES:
         open_for_all = True
         for line in session.lines:
@@ -106,7 +106,7 @@ def countries_for(
 
 
 def _country_names(
-    market: MarketSet, countries: frozenset[str]
+    market: MarketSet, countries: frozenset[CountryCode]
 ) -> tuple[tuple[str, str], ...]:
     named: list[tuple[str, str]] = []
     for country in market.countries:

@@ -30,10 +30,16 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from fractions import Fraction
 
-from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
+from mor.carriers.records import Parcel, PriceHeld, PriceQuestion
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
-from mor.ids import DutyLookupId, ShippingPriceLookupId
+from mor.ids import (
+    CountryCode,
+    DutyLookupId,
+    HsCode,
+    ServiceCode,
+    ShippingPriceLookupId,
+)
 from mor.markets.changes import BASE_WORDS, percent_text
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
@@ -102,15 +108,15 @@ CHARGE_ROUNDING = RoundingMode.HALF_EVEN
 @dataclass(frozen=True, kw_only=True)
 class QuoteLine:
     category: str
-    hs_code: str | None
-    origin: str
+    hs_code: HsCode | None
+    origin: CountryCode
     quantity: int
     unit_price: Money  # the merchant's price, tax-exclusive, in its currency
 
 
 @dataclass(frozen=True, kw_only=True)
 class QuoteRequest:
-    destination: str
+    destination: CountryCode
     lines: tuple[QuoteLine, ...]
     parcel: Parcel
     on: date  # which rules and cards are in force
@@ -134,7 +140,7 @@ class ShippingOption:
     key: str  # the route's: its card, or `live:<service>`
     rate_card: str | None  # None: priced by the carrier
     live: FromCarrier | None  # the carrier's price it used
-    service: str
+    service: ServiceCode
     service_name: str
     tier: ServiceTier
     transit_days: tuple[int, int] | None
@@ -146,7 +152,7 @@ class ShippingOption:
 
 @dataclass(frozen=True, kw_only=True)
 class Quote:
-    destination: str
+    destination: CountryCode
     currency: Currency
     goods: tuple[Part, ...]  # each line's price, then the fee components
     options: tuple[ShippingOption, ...]  # cheapest first

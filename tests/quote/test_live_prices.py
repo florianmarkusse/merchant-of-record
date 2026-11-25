@@ -7,7 +7,7 @@ the categories and the weight limit our own."""
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from mor.couriers.records import (
+from mor.carriers.records import (
     FinishedLookup,
     Parcel,
     PriceHeld,
@@ -17,7 +17,7 @@ from mor.couriers.records import (
     PriceState,
     StoredPrice,
 )
-from mor.ids import ShippingPriceLookupId
+from mor.ids import CarrierCode, CountryCode, HsCode, ServiceCode, ShippingPriceLookupId
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.quote.build import (
@@ -38,7 +38,11 @@ ON = date(2026, 11, 18)
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 BOX = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
 TO_SG = PriceQuestion(
-    carrier="carrier", service="exp", origin="VN", destination="SG", parcel=BOX
+    carrier=CarrierCode("carrier"),
+    service=ServiceCode("exp"),
+    origin=CountryCode("VN"),
+    destination=CountryCode("SG"),
+    parcel=BOX,
 )
 # The same parts our exp_card charges for this parcel, so the totals of
 # test_build_quote.py hold.
@@ -57,12 +61,14 @@ CARD_LIKE = StoredPrice(
 def _request(minor: int, parcel: Parcel = BOX) -> QuoteRequest:
     line = QuoteLine(
         category="apparel",
-        hs_code="610910",
-        origin="VN",
+        hs_code=HsCode("610910"),
+        origin=CountryCode("VN"),
         quantity=1,
         unit_price=Money(minor, Currency.SGD),
     )
-    return QuoteRequest(destination="SG", lines=(line,), parcel=parcel, on=ON, now=NOW)
+    return QuoteRequest(
+        destination=CountryCode("SG"), lines=(line,), parcel=parcel, on=ON, now=NOW
+    )
 
 
 def _held(

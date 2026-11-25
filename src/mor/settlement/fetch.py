@@ -31,7 +31,7 @@ from mor.audit import Actor, ActorKind
 from mor.config import Environment
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
-from mor.ids import PspAccountId
+from mor.ids import PspAccountId, PspPayoutId
 from mor.messaging.facts import PspSettlementDueV1
 from mor.messaging.outcome import Again, Applied, Done, NoCall, RetryLater
 from mor.messaging.store import append_fact
@@ -73,13 +73,13 @@ class FileCall:
 @dataclass(frozen=True)
 class PayoutCall:
     account: PspAccount
-    payout_id: str
+    payout_id: PspPayoutId
 
 
 @dataclass(frozen=True)
 class LinesCall:
     account: PspAccount
-    payout_id: str
+    payout_id: PspPayoutId
     after: str | None
 
 
@@ -176,9 +176,11 @@ async def prepare_fetch(
                 # None never comes with a pending payout: `_listed` sets the
                 # phase with it. Read as its start, the payout object.
                 case ReadPhase.PAYOUT | None:
-                    return PayoutCall(account, cursor.pending)
+                    return PayoutCall(account, PspPayoutId(cursor.pending))
                 case ReadPhase.LINES:
-                    return LinesCall(account, cursor.pending, cursor.pending_after)
+                    return LinesCall(
+                        account, PspPayoutId(cursor.pending), cursor.pending_after
+                    )
 
 
 async def read_settlement(

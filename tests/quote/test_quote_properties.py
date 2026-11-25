@@ -20,7 +20,7 @@ from fractions import Fraction
 
 from hypothesis import given, strategies
 
-from mor.couriers.records import (
+from mor.carriers.records import (
     FinishedLookup,
     Parcel,
     PriceHeld,
@@ -32,7 +32,14 @@ from mor.couriers.records import (
 )
 from mor.duties.port import RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
-from mor.ids import DutyLookupId, ShippingPriceLookupId
+from mor.ids import (
+    CarrierCode,
+    CountryCode,
+    DutyLookupId,
+    HsCode,
+    ServiceCode,
+    ShippingPriceLookupId,
+)
 from mor.markets.fx import convert_minor
 from mor.markets.load import MARKETS_DIR
 from mor.markets.records import Charge, Collector, MarketSet
@@ -54,11 +61,11 @@ _research = parse(_texts)
 assert not isinstance(_research, list)
 RESEARCH: MarketSet = _research
 
-HS_CODES = (None, "610910", "640399", "6910")
+HS_CODES = (None, HsCode("610910"), HsCode("640399"), HsCode("6910"))
 PRICED_IN = (Currency.SGD, Currency.USD, Currency.VND, Currency.EUR, Currency.THB)
 
 
-def _lookups(destinations: tuple[str, ...]) -> dict[RateQuestion, VendorLookup]:
+def _lookups(destinations: tuple[CountryCode, ...]) -> dict[RateQuestion, VendorLookup]:
     """An answered lookup for every combination the strategies make, so
     vendor-mode countries quote."""
     lookups: dict[RateQuestion, VendorLookup] = {}
@@ -66,7 +73,7 @@ def _lookups(destinations: tuple[str, ...]) -> dict[RateQuestion, VendorLookup]:
         for hs_code in HS_CODES:
             if hs_code is None:
                 continue
-            question = RateQuestion(destination, "VN", hs_code)
+            question = RateQuestion(destination, CountryCode("VN"), hs_code)
             lookups[question] = VendorLookup(
                 id=DutyLookupId(uuid.uuid7()),
                 vendor="zonos",
@@ -98,7 +105,7 @@ def _lookups(destinations: tuple[str, ...]) -> dict[RateQuestion, VendorLookup]:
 
 
 # The countries open for apparel in the research files today.
-RESEARCH_PLACES = ("SG", "TH")
+RESEARCH_PLACES = (CountryCode("SG"), CountryCode("TH"))
 RESEARCH_LOOKUPS = _lookups(RESEARCH_PLACES)
 
 lines = strategies.lists(
@@ -178,7 +185,7 @@ def _check(market: MarketSet, request: QuoteRequest, quote: Quote) -> None:
     on=days,
 )
 def test_any_order_on_the_synthetic_set_quotes_consistently_or_is_refused(
-    destination: str, order: list[QuoteLine], parcel: Parcel, on: date
+    destination: CountryCode, order: list[QuoteLine], parcel: Parcel, on: date
 ) -> None:
     request = QuoteRequest(
         destination=destination, lines=tuple(order), parcel=parcel, on=on, now=NOW
@@ -195,7 +202,7 @@ def test_any_order_on_the_synthetic_set_quotes_consistently_or_is_refused(
     on=days,
 )
 def test_any_order_on_the_research_files_quotes_consistently_or_is_refused(
-    destination: str, order: list[QuoteLine], parcel: Parcel, on: date
+    destination: CountryCode, order: list[QuoteLine], parcel: Parcel, on: date
 ) -> None:
     request = QuoteRequest(
         destination=destination, lines=tuple(order), parcel=parcel, on=on, now=NOW
@@ -225,7 +232,7 @@ carrier_parts = strategies.lists(
     currency=strategies.sampled_from((Currency.SGD, Currency.VND, Currency.USD)),
 )
 def test_any_carrier_price_quotes_consistently_with_each_part_charged(
-    destination: str,
+    destination: CountryCode,
     order: list[QuoteLine],
     parcel: Parcel,
     parts: list[PricePart],
@@ -253,9 +260,9 @@ def test_any_carrier_price_quotes_consistently_with_each_part_charged(
         None,
     )
     question = PriceQuestion(
-        carrier="carrier",
-        service="exp",
-        origin="VN",
+        carrier=CarrierCode("carrier"),
+        service=ServiceCode("exp"),
+        origin=CountryCode("VN"),
         destination=destination,
         parcel=parcel,
     )

@@ -10,7 +10,7 @@ from hypothesis import given, strategies
 
 from mor.duties.port import percent_formula
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
-from mor.ids import DutyLookupId
+from mor.ids import CountryCode, DutyLookupId, HsCode
 from mor.markets.records import Charge, MarketSet
 from mor.markets.rules import Open, country_rules
 from mor.markets.source import SourceError, parse
@@ -35,7 +35,7 @@ from tests.markets.fixtures import SG_GST, TH_BORDER, market_texts
 ON = date(2026, 11, 18)
 TH_HS = "TH,6109,duty,,,,30,,secondary,WTO,https://example.test,,,\n"
 LOOKUP_ID = DutyLookupId(uuid.UUID("01900000-0000-7000-8000-000000000001"))
-T_SHIRT = Line("610910", "VN", frozenset())
+T_SHIRT = Line(HsCode("610910"), CountryCode("VN"), frozenset())
 
 
 def _market(duty_sources: str) -> MarketSet:
@@ -54,7 +54,7 @@ def _answer(
         formula=formula,
         rate=rate,
         note=note,
-        hs_code_used="610910",
+        hs_code_used=HsCode("610910"),
         own_rate=None,
         own_line_no=None,
     )
@@ -76,13 +76,13 @@ ANSWERED = _lookup(
 def _rate(
     market: MarketSet, charge: Charge, line: Line, lookup: VendorLookup | None
 ) -> LineRate:
-    rules = country_rules(market, "TH", "apparel", ON)
+    rules = country_rules(market, CountryCode("TH"), "apparel", ON)
     assert isinstance(rules, Open), rules
     paths = tax_paths(market, rules, OrderValue(Money(5000, Currency.USD), None), ON)
     assert isinstance(paths, TaxPaths), paths
     band = paths.duty if charge == Charge.DUTY else paths.indirect_tax
     assert isinstance(band, BorderPaid)
-    return line_rate(market, "TH", charge, line, band.rate, ON, lookup)
+    return line_rate(market, CountryCode("TH"), charge, line, band.rate, ON, lookup)
 
 
 def test_a_country_not_listed_uses_only_our_rows() -> None:
@@ -113,7 +113,7 @@ def test_own_first_uses_our_row_and_the_vendor_only_for_a_gap() -> None:
     market = _market("TH,own_first,acme,\n")
     ours = _rate(market, Charge.DUTY, T_SHIRT, ANSWERED)
     assert isinstance(ours, Found) and isinstance(ours.source, FromHsRow)
-    shoes = Line("640399", "VN", frozenset())
+    shoes = Line(HsCode("640399"), CountryCode("VN"), frozenset())
     gap = _rate(market, Charge.DUTY, shoes, None)
     assert gap == AskVendor("acme")
 

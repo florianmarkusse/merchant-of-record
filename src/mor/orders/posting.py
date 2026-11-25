@@ -4,8 +4,8 @@
     quote currency:
       Dr psp_clearing:{psp account}    the option's total
       Cr tax_payable:{country}         taxes we collect ourselves
-      Cr duties_payable:{courier}      border duties and taxes, duty-paid fee
-      Cr shipping_payable:{courier}    freight, surcharges, fuel
+      Cr duties_payable:{carrier}      border duties and taxes, duty-paid fee
+      Cr shipping_payable:{carrier}    freight, surcharges, fuel
       Cr psp_fee_collected             the estimated PSP fee
       Cr revenue_mor_margin            our margin and FX margin
       Cr merchant_payable:{merchant}   goods priced in the quote currency
@@ -26,7 +26,14 @@ from datetime import datetime
 from mor.audit import Actor
 from mor.checkout.quotes import MadeQuote
 from mor.checkout.records import SoldLine
-from mor.ids import MerchantId, PaymentAttemptId, PspAccountId
+from mor.ids import (
+    CarrierCode,
+    CountryCode,
+    JournalKey,
+    MerchantId,
+    PaymentAttemptId,
+    PspAccountId,
+)
 from mor.ledger.account import (
     Account,
     DutiesPayable,
@@ -46,8 +53,8 @@ from mor.quote.build import Part
 from mor.quote.groups import PartKind
 
 
-def capture_key(attempt_id: PaymentAttemptId) -> str:
-    return f"capture:{attempt_id}"
+def capture_key(attempt_id: PaymentAttemptId) -> JournalKey:
+    return JournalKey(f"capture:{attempt_id}")
 
 
 def _account_of(
@@ -55,8 +62,8 @@ def _account_of(
     lines: tuple[SoldLine, ...],
     quote_currency: Currency,
     merchant_id: MerchantId,
-    country: str,
-    courier: str,
+    country: CountryCode,
+    carrier: CarrierCode,
 ) -> Account:
     match part.kind:
         case PartKind.GOODS:
@@ -69,9 +76,9 @@ def _account_of(
         case PartKind.FX | PartKind.MOR_MARGIN:
             return RevenueMorMargin()
         case PartKind.FREIGHT | PartKind.SURCHARGE | PartKind.FUEL:
-            return ShippingPayable(courier)
+            return ShippingPayable(carrier)
         case PartKind.DUTY_PAID_FEE:
-            return DutiesPayable(courier)
+            return DutiesPayable(carrier)
         case (
             PartKind.DUTY
             | PartKind.ADDITIONAL_DUTY
@@ -81,7 +88,7 @@ def _account_of(
         ):
             match part.collector:
                 case Collector.BORDER:
-                    return DutiesPayable(courier)
+                    return DutiesPayable(carrier)
                 case Collector.SELLER:
                     return TaxPayable(country)
                 case None:
@@ -95,8 +102,8 @@ def capture_entry(
     lines: tuple[SoldLine, ...],
     merchant_id: MerchantId,
     psp_account_id: PspAccountId,
-    country: str,
-    courier: str,
+    country: CountryCode,
+    carrier: CarrierCode,
     captured_at: datetime,
     actor: Actor,
     now: datetime,
@@ -119,7 +126,7 @@ def capture_entry(
     parts.extend(quote.goods)
     parts.extend(option.parts)
     for part in parts:
-        account = _account_of(part, lines, currency, merchant_id, country, courier)
+        account = _account_of(part, lines, currency, merchant_id, country, carrier)
         post(account, Money(-part.amount.amount_minor, part.amount.currency))
     for line in lines:
         price = line.unit_price

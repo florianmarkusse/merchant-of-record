@@ -57,7 +57,7 @@ class UndecodableInbox(Exception):
 class UnknownReference(Exception):
     """An event for a job this account never sent. Only a vendor bug can
     cause it here; a real port turns it into an exception row for a person
-    (plan-architecture.md §9 does this for courier invoice lines)."""
+    (plan-architecture.md §9 does this for carrier invoice lines)."""
 
 
 @dataclass(frozen=True, kw_only=True)

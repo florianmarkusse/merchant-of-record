@@ -17,6 +17,7 @@ import msgspec
 from msgspec import Meta
 from starlette.responses import Response
 
+from mor.carriers.records import Parcel
 from mor.checkout.addresses import Address
 from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredQuote
 from mor.checkout.records import (
@@ -28,9 +29,8 @@ from mor.checkout.records import (
     SessionState,
     SoldLine,
 )
-from mor.couriers.records import Parcel
 from mor.dates import format_instant
-from mor.ids import OrderId
+from mor.ids import CountryCode, HsCode, OrderId, ServiceCode
 from mor.markets.records import MarketSet
 from mor.merchants.records import KybState, Merchant
 from mor.money.amount import Money
@@ -48,7 +48,7 @@ from mor.public_ids import (
 # --- what comes in -----------------------------------------------------------------
 
 type Text = Annotated[str, Meta(min_length=1, max_length=500)]
-type Country = Annotated[str, Meta(pattern="^[A-Z]{2}$")]
+type Country = Annotated[CountryCode, Meta(pattern="^[A-Z]{2}$")]
 type Url = Annotated[str, Meta(pattern="^https?://", max_length=2000)]
 
 
@@ -61,7 +61,7 @@ class CustomsIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only
     description: Text
     origin_country: Country
     weight_g: Annotated[int, Meta(ge=1, le=1_000_000)]  # one unit's
-    hs_code: Annotated[str, Meta(pattern="^[0-9]{4,10}$")] | None = None
+    hs_code: Annotated[HsCode, Meta(pattern="^[0-9]{4,10}$")] | None = None
 
 
 class LineIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
@@ -312,9 +312,9 @@ def money_out(money: Money) -> MoneyOut:
 
 class CustomsOut(msgspec.Struct, frozen=True, kw_only=True):
     description: str
-    origin_country: str
+    origin_country: CountryCode
     weight_g: int
-    hs_code: str | None
+    hs_code: HsCode | None
 
 
 class LineOut(msgspec.Struct, frozen=True, kw_only=True):
@@ -335,7 +335,7 @@ class ParcelOut(msgspec.Struct, frozen=True, kw_only=True):
 
 class QuoteOptionOut(msgspec.Struct, frozen=True, kw_only=True):
     key: str
-    service: str
+    service: ServiceCode
     name: str
     total: MoneyOut
 
@@ -472,7 +472,7 @@ def _lines_out(sold: tuple[SoldLine, ...]) -> list[LineOut]:
 
 class ShippingOut(msgspec.Struct, frozen=True, kw_only=True):
     key: str
-    service: str
+    service: ServiceCode
     name: str
     transit_days_min: int | None
     transit_days_max: int | None
@@ -489,7 +489,7 @@ class AddressOut(msgspec.Struct, frozen=True, kw_only=True):
     city: str
     region: str | None
     postcode: str | None
-    country: str
+    country: CountryCode
 
 
 class OrderOut(msgspec.Struct, frozen=True, kw_only=True):

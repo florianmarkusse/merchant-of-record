@@ -7,23 +7,24 @@ from datetime import timedelta
 import psycopg
 import pytest
 
-from mor.couriers.prices import create_courier_account
-from mor.couriers.records import CourierProvider, PriceExpiry
+from mor.carriers.prices import create_carrier_account
+from mor.carriers.records import CarrierProvider, PriceExpiry
 from mor.db.connect import connect
 from mor.duties.lookups import create_vendor_account
 from mor.duties.port import DutyProvider
+from mor.ids import CarrierCode
 from mor.provider_accounts import ProviderAccountKind
 
 
-def test_a_fake_courier_cannot_be_a_live_account(database_url: str) -> None:
+def test_a_fake_carrier_cannot_be_a_live_account(database_url: str) -> None:
     async def body() -> None:
         async with await connect(database_url) as conn:
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.LIVE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 timedelta(seconds=5),
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,

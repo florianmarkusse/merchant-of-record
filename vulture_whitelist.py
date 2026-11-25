@@ -13,8 +13,8 @@ _ = Whitelist()
 # StrEnum members that mirror a database enum: rows read through
 # `mor.db.enums` arrive as these members, and every label must exist for
 # `tests/db/test_enums.py`, even one no code names yet.
-_.COURIER_PAYABLE  # ledger AccountKind: the courier invoice slice
-_.COURIER_VARIANCE
+_.CARRIER_PAYABLE  # ledger AccountKind: the carrier invoice slice
+_.CARRIER_VARIANCE
 _.RESERVE
 _.CONDITIONAL  # markets.records enums
 _.CLOSED
@@ -64,7 +64,7 @@ _.create_app
 
 # Used only by tests: setup and readers for the test database, and money
 # primitives the rules require and the tests pin down.
-_.set_price_rule  # couriers.prices
+_.set_price_rule  # carriers.prices
 _.echo_job_state  # echo.flow
 _.subtract  # money.amount
 _.divide  # money.rounding

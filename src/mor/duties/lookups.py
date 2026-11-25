@@ -37,7 +37,7 @@ from mor.duties.port import (
     VendorRates,
 )
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
-from mor.ids import DutyLookupId, DutyVendorAccountId, MarketLoadId
+from mor.ids import CountryCode, DutyLookupId, DutyVendorAccountId, HsCode, MarketLoadId
 from mor.markets.records import Charge, MarketSet
 from mor.markets.store import latest_load, read_market
 from mor.messaging.facts import (
@@ -80,9 +80,9 @@ class AskCall:
 class _LookupRow:
     id: DutyLookupId
     vendor_name: str
-    destination: str
-    origin: str
-    hs_code: str
+    destination: CountryCode
+    origin: CountryCode
+    hs_code: HsCode
     state: LookupState
     calls: int
     detail: str | None
@@ -105,7 +105,7 @@ class _AnswerRow:
     rate_numerator: int | None
     rate_denominator: int | None
     note: str | None
-    hs_code_used: str
+    hs_code_used: HsCode
     own_rate_numerator: int | None
     own_rate_denominator: int | None
     own_line_no: int | None
@@ -444,7 +444,7 @@ class Agreement:
     """Per destination and charge, how the vendor's answers compare with
     our own rows: the count a switch to `own_first` is judged on."""
 
-    destination: str
+    destination: CountryCode
     charge: Charge
     matched: int
     differed: int
@@ -484,9 +484,9 @@ class AnswerRow:
     """One vendor answer beside our own row in force when it came."""
 
     vendor: str
-    destination: str
-    origin: str
-    hs_code: str
+    destination: CountryCode
+    origin: CountryCode
+    hs_code: HsCode
     charge: Charge
     formula: str
     note: str | None
@@ -499,9 +499,9 @@ class AnswerRow:
 @dataclass(frozen=True, kw_only=True)
 class _VendorAnswerRow:
     vendor_name: str
-    destination: str
-    origin: str
-    hs_code: str
+    destination: CountryCode
+    origin: CountryCode
+    hs_code: HsCode
     charge: Charge
     formula: str
     note: str | None

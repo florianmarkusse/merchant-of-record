@@ -1,5 +1,5 @@
 """The live carrier price flow as a Hypothesis state machine against
-mor_test and the fake courier in-process (docs/plan-quote.md §4, 4c-2).
+mor_test and the fake carrier in-process (docs/plan-quote.md §4, 4c-2).
 
 Actions: ask for a price (also one already open or held); run a delivery;
 the worker catches up; crash after `prepare` committed, with or without
@@ -36,15 +36,15 @@ from hypothesis.stateful import (
 from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
-from mor.couriers.prices import (
-    NoCourierAccount,
-    create_courier_account,
+from mor.carriers.prices import (
+    NoCarrierAccount,
+    create_carrier_account,
     read_price,
     request_shipping_price,
     set_price_rule,
 )
-from mor.couriers.records import (
-    CourierProvider,
+from mor.carriers.records import (
+    CarrierProvider,
     Parcel,
     PriceExpiry,
     PriceQuestion,
@@ -52,7 +52,7 @@ from mor.couriers.records import (
 )
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
-from mor.ids import ShippingPriceLookupId
+from mor.ids import CarrierCode, CountryCode, ServiceCode, ShippingPriceLookupId
 from mor.messaging.delivery import (
     Candidate,
     Skipped,
@@ -92,24 +92,24 @@ ACTOR = Actor(ActorKind.SYSTEM, "fuzz")
 VALID_FOR = timedelta(hours=6)
 QUESTIONS = (
     PriceQuestion(
-        carrier="carrier",
-        service="exp",
-        origin="VN",
-        destination="SG",
+        carrier=CarrierCode("carrier"),
+        service=ServiceCode("exp"),
+        origin=CountryCode("VN"),
+        destination=CountryCode("SG"),
         parcel=Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100),
     ),
     PriceQuestion(
-        carrier="carrier",
-        service="exp",
-        origin="VN",
-        destination="SG",
+        carrier=CarrierCode("carrier"),
+        service=ServiceCode("exp"),
+        origin=CountryCode("VN"),
+        destination=CountryCode("SG"),
         parcel=Parcel(weight_g=2500, length_mm=400, width_mm=300, height_mm=200),
     ),
     PriceQuestion(
-        carrier="carrier",
-        service="exp",
-        origin="VN",
-        destination="AU",
+        carrier=CarrierCode("carrier"),
+        service=ServiceCode("exp"),
+        origin=CountryCode("VN"),
+        destination=CountryCode("AU"),
         parcel=Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100),
     ),
 )
@@ -162,7 +162,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
             async with await connect(TEST_URL) as conn:
                 asked = await request_shipping_price(conn, question, ACTOR, self.now)
                 await conn.commit()
-                assert not isinstance(asked, NoCourierAccount)
+                assert not isinstance(asked, NoCarrierAccount)
                 held = await read_price(conn, question)
             if held.open_id == asked:
                 known = self.open.get(question)
@@ -211,7 +211,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
     def script_a_fault(self, fault: str) -> None:
         self.scripted[fault] = self.scripted.get(fault, 0) + 1
         response = self.run(
-            self.control.post("http://mor/_fake/courier/faults", json={"fault": fault})
+            self.control.post("http://mor/_fake/carrier/faults", json={"fault": fault})
         )
         assert response.status_code == 204
 
@@ -242,7 +242,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
     def the_expiry_rule_is_switched(self, expiry: PriceExpiry) -> None:
         async def step() -> None:
             async with await connect(TEST_URL) as conn:
-                await set_price_rule(conn, "carrier", VALID_FOR, expiry)
+                await set_price_rule(conn, CarrierCode("carrier"), VALID_FOR, expiry)
                 await conn.commit()
 
         self.run(step())
@@ -298,7 +298,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
                 "   AND l.weight_g = c.weight_g AND l.length_mm = c.length_mm"
                 "   AND l.width_mm = c.width_mm AND l.height_mm = c.height_mm),"
                 " count(*)"
-                " FROM fake_vendor.courier_call c"
+                " FROM fake_vendor.carrier_call c"
                 " GROUP BY c.service, c.destination, c.weight_g, c.length_mm,"
                 " c.width_mm, c.height_mm"
             )
@@ -345,12 +345,12 @@ class ShippingPriceFlow(RuleBasedStateMachine):
 
     async def _set_up(self) -> None:
         async with await connect(TEST_URL) as conn:
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 VENDOR_TIMEOUT,
                 VALID_FOR,
                 PriceExpiry.CARRIER_FIRST,
@@ -368,7 +368,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
 
     async def _faults_waiting(self) -> int:
         return await one_value(
-            self.worker, "SELECT count(*) FROM fake_vendor.courier_fault", None, int
+            self.worker, "SELECT count(*) FROM fake_vendor.carrier_fault", None, int
         )
 
     async def _used(self, kinds: tuple[str, ...]) -> int:
@@ -376,7 +376,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
         still waiting."""
         cur = await self.worker.cursor(row_factory=class_row(_FaultCount)).execute(
             "SELECT fault::text AS fault, count(*) AS count"
-            " FROM fake_vendor.courier_fault GROUP BY fault"
+            " FROM fake_vendor.carrier_fault GROUP BY fault"
         )
         waiting: dict[str, int] = {}
         for fault_count in await cur.fetchall():
@@ -422,7 +422,7 @@ class ShippingPriceFlow(RuleBasedStateMachine):
 
     async def _drain_and_check(self) -> None:
         # Faults off, clock ahead: every request must finish.
-        await self.worker.execute("DELETE FROM fake_vendor.courier_fault")
+        await self.worker.execute("DELETE FROM fake_vendor.carrier_fault")
         self.network.refuse_next = 0
         for _ in range(20):
             self.now += timedelta(hours=2)

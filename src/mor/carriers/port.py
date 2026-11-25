@@ -1,4 +1,4 @@
-"""The courier port, with the one operation 4c-2 needs: `quote_rate`, a
+"""The carrier port, with the one operation 4c-2 needs: `quote_rate`, a
 live price (docs/plan-quote.md §4, 4c-2; plan-architecture.md §7, which
 lists the operations slice 6 adds). Our records and result unions, no
 carrier words.
@@ -12,7 +12,7 @@ the goods value: duty and tax are ours to price.
 from dataclasses import dataclass
 from datetime import datetime
 
-from mor.couriers.records import PricePart
+from mor.carriers.records import PricePart
 from mor.money.currency import Currency
 from mor.vendor_failures import CallFailure, UndecodableBody
 

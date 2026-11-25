@@ -7,7 +7,14 @@ import pytest
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import connect
-from mor.ids import JournalEntryId, MerchantId, PspAccountId
+from mor.ids import (
+    CarrierCode,
+    CountryCode,
+    JournalEntryId,
+    JournalKey,
+    MerchantId,
+    PspAccountId,
+)
 from mor.ledger.account import (
     Account,
     MerchantPayable,
@@ -33,8 +40,8 @@ NOW = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
 SYSTEM = Actor(ActorKind.SYSTEM, "test")
 
 CLEARING = PspClearing(PspAccountId(uuid.uuid7()))
-GST_SG = TaxPayable("SG")
-SHIPPING = ShippingPayable("fake_courier")
+GST_SG = TaxPayable(CountryCode("SG"))
+SHIPPING = ShippingPayable(CarrierCode("fake_carrier"))
 MERCHANT_1 = MerchantPayable(MerchantId(uuid.uuid7()))
 MERCHANT_2 = MerchantPayable(MerchantId(uuid.uuid7()))
 PSP_FEE = PspFeeCollected()
@@ -49,7 +56,7 @@ def _capture(key: str, merchant_account: Account = MERCHANT_1) -> JournalEntry:
     """A synthetic SGD capture shaped like plan-architecture.md §9: goods
     SGD 100.00 to the merchant, fee and margin on top, shipping, 9% GST."""
     return build_entry(
-        idempotency_key=key,
+        idempotency_key=JournalKey(key),
         description="capture",
         effective_at=NOW,
         actor=SYSTEM,
@@ -213,7 +220,7 @@ def test_same_key_with_another_description_is_a_bug(database_url: str) -> None:
     first = _capture("capture-1")
     asyncio.run(_record_and_commit(database_url, first))
     other = build_entry(
-        idempotency_key="capture-1",
+        idempotency_key=JournalKey("capture-1"),
         description="another capture",
         effective_at=NOW,
         actor=SYSTEM,

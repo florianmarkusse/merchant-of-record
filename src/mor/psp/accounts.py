@@ -10,7 +10,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
-from mor.ids import MerchantId, PspAccountId, PspRouteId
+from mor.ids import CountryCode, MerchantId, PspAccountId, PspRouteId
 from mor.messaging.guard import DuplicateGuard
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.port import (
@@ -172,7 +172,7 @@ async def add_route(
     conn: Connection,
     account_id: PspAccountId,
     merchant_id: MerchantId | None,
-    buyer_country: str | None,
+    buyer_country: CountryCode | None,
     effective_from: datetime,
     actor: Actor,
     now: datetime,
@@ -207,7 +207,7 @@ class Routed:
 
 
 async def route_for(
-    conn: Connection, merchant_id: MerchantId, buyer_country: str, now: datetime
+    conn: Connection, merchant_id: MerchantId, buyer_country: CountryCode, now: datetime
 ) -> Routed | None:
     """The account for a payment: among rows in force that match, the most
     specific (merchant and country, merchant, country, neither), then the

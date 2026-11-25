@@ -12,7 +12,7 @@ quote it can pay (the pay step is `plan-payments.md` §4).
 |---|---|---|
 | 4a | Markets in the database: countries and their rules, our registrations, FX rates, loaded from `docs/markets/` | `uv run python -m mor.markets.load` fills effective-dated rows; a country can be asked "open? on what rules?" |
 | 4b | The tax path rule, the seller-collected tax module (UK first), duty rates with switchable sources and a fake duty vendor | `tax_paths()` and duty rates for any (HS code, origin, destination) |
-| 4c | Shipping prices (own rate tables, and a carrier rate call through a fake courier), fee rules, and `build_quote` | the pure quote, fuzzed: parts sum to the total, every division rounded by a named mode, every remainder booked |
+| 4c | Shipping prices (own rate tables, and a carrier rate call through a fake carrier), fee rules, and `build_quote` | the pure quote, fuzzed: parts sum to the total, every division rounded by a named mode, every remainder booked |
 | 4d | Merchants, API keys, checkout sessions and estimates over the API; the quote flow with waiting; the buyer's address and quote pages | a merchant creates a session, a buyer enters an address and sees an all-in price, on the test setup |
 
 ## 2. Markets in the database (4a)
@@ -298,7 +298,7 @@ meets an answered lookup.
   `docs/markets/` into tables, effective-dated. `own_table` shipping price
   = zone × billed weight (volumetric per the service's divisor and step)
   + fuel + the surcharges that apply. The `carrier_api` source calls
-  `quote_rate` on a fake courier; the courier port grows the rest of its
+  `quote_rate` on a fake carrier; the carrier port grows the rest of its
   operations in slice 6.
 - Fee rules as plan-architecture §8: `psp_fee` (estimate per buyer country
   and currency), `fx`, `mor_margin`; per merchant overriding the default,
@@ -313,7 +313,7 @@ meets an answered lookup.
 
 4c is built in two steps: **4c-1** our own tables, the fee rules,
 `build_quote` and the full breakdown on the staff page; **4c-2** the
-`carrier_api` source, a fake courier's `quote_rate` asked by a worker and
+`carrier_api` source, a fake carrier's `quote_rate` asked by a worker and
 stored with its expiry, like the duty lookups.
 
 1. **One option per routed service, each with its full total**: freight
@@ -373,7 +373,7 @@ bill. Neither documents how long a price stays valid, and fuel changes
 weekly. A rate call costs nothing per call on a carrier account, but we
 count calls anyway, as for duty vendors.
 
-**The port** (`src/mor/couriers/`, the courier port of plan-architecture
+**The port** (`src/mor/carriers/`, the carrier port of plan-architecture
 §7, which grows its other operations in slice 6): `quote_rate(account,
 PriceQuestion) -> CarrierPrice | NotServed | Unavailable | OutcomeUnknown
 | UndecodableBody`. `PriceQuestion` is the service code, origin,
@@ -383,7 +383,7 @@ total and its parts (kind `freight | fuel | surcharge`, name, amount), all
 in one currency, and a `valid_until` when the carrier gives one. Decoding
 checks that the parts add up to the total. When they don't, the answer is
 `UndecodableBody`. `NotServed` is the carrier saying it does not carry
-this lane or parcel. One registry picks the module by `courier_provider`
+this lane or parcel. One registry picks the module by `carrier_provider`
 with an exhaustive `match`, and refuses an account kind the environment
 does not allow (`mor.provider_accounts`).
 
@@ -394,7 +394,7 @@ twice.
 
 The account is found from the service's carrier
 (`shipping_service.provider`, e.g. `dhl_express`). Each environment's
-database holds one `courier_account` per carrier: the real API in prod,
+database holds one `carrier_account` per carrier: the real API in prod,
 the fake elsewhere, as with duty vendors. The CSV is the same everywhere.
 
 **What stays ours for a live route**: whether the service, route and
@@ -408,7 +408,7 @@ Customs counts their sum as the freight.
 
 **Tables** (0012):
 
-- `courier_account` (id, carrier unique, provider: `courier_provider`
+- `carrier_account` (id, carrier unique, provider: `carrier_provider`
   enum, `fake` for now; base_url, timeout_ms, price_valid_for_s,
   price_expiry). Slice 6 adds credentials and the billing currency.
 - `shipping_price_lookup` (id, carrier, service, origin, destination,
@@ -437,7 +437,7 @@ extra read, and nothing else.
 answer** (decided 19-Nov-2026: reusing a price the carrier calls expired
 may be fine for some carriers, so it must be a switch, not impossible).
 The lookup stores what happened: `finished_at` and the carrier's
-`carrier_valid_until` (or none). `courier_account` holds the rule:
+`carrier_valid_until` (or none). `carrier_account` holds the rule:
 `price_valid_for_s` (24 hours by default) and `price_expiry`, a
 `price_expiry` enum:
 
@@ -485,7 +485,7 @@ a usable one the option is left out (`fuel_unknown`).
 An option is keyed by its route (the card, or `live:<service>`), not by
 its card alone.
 
-**The fake courier** at `/_fake/courier/`, in `fake_vendor`: per
+**The fake carrier** at `/_fake/carrier/`, in `fake_vendor`: per
 (service, destination) a base price, a price per kg of billed weight and a
 fuel percentage; a validity it states (or none); a call log; and faults
 scripted for the next call: a 5xx, a timeout after answering, not served,
@@ -901,7 +901,7 @@ its format is fixed. Here:
   receiver's contact number, email and full address with postcode. The
   order page's link also goes to the email. Checked
   19-Nov-2026 in DHL's guide and its MyDHL field guidelines, not in its
-  API reference: confirm when the courier slice books labels.
+  API reference: confirm when the carrier slice books labels.
 - **No address book**: buyers have no accounts. One address per quote.
 - **A tax id per country later.** DHL asks for a receiver tax id for
   sales into many countries (KR's customs code, for one). It becomes a

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
 
-from mor.ids import DutyLookupId
+from mor.ids import DutyLookupId, HsCode
 from mor.markets.records import Charge
 
 
@@ -27,7 +27,7 @@ class StoredAnswer:
     formula: str
     rate: Fraction | None  # None: the formula is not a plain percentage
     note: str | None
-    hs_code_used: str
+    hs_code_used: HsCode
     own_rate: Fraction | None
     own_line_no: int | None
 

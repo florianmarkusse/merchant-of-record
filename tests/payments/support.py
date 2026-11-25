@@ -13,15 +13,15 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
+from mor.carriers.records import Parcel
 from mor.checkout import addresses
 from mor.checkout.addresses import parse_address
 from mor.checkout.flow import submit_address
 from mor.checkout.quotes import MadeQuote, read_quote
 from mor.checkout.records import AfterPayment, Customs, SessionDraft, SoldLine
 from mor.checkout.sessions import create_session, session_by_id
-from mor.couriers.records import Parcel
 from mor.db.connect import connect
-from mor.ids import CheckoutSessionId, MerchantId
+from mor.ids import CheckoutSessionId, CountryCode, HsCode, MerchantId
 from mor.markets.store import load_market
 from mor.merchants.records import KybState
 from mor.merchants.store import create_merchant, set_kyb_state
@@ -69,9 +69,9 @@ def line(price: Money) -> SoldLine:
         merchant_sku="LIN-01",
         customs=Customs(
             description="Men's linen shirt, woven",
-            origin_country="VN",
+            origin_country=CountryCode("VN"),
             weight_g=300,
-            hs_code="610910",
+            hs_code=HsCode("610910"),
         ),
     )
 
@@ -97,7 +97,7 @@ async def make_shop(
     async with await connect(url) as conn:
         await load_market(conn, quote_market(), "test", ACTOR, NOW)
         seller = await create_merchant(
-            conn, "Test Shop Co.", "Test Shop", "VN", 100, ACTOR, NOW
+            conn, "Test Shop Co.", "Test Shop", CountryCode("VN"), 100, ACTOR, NOW
         )
         await set_kyb_state(conn, seller.id, KybState.APPROVED, ACTOR, NOW)
         account = await create_psp_account(
@@ -160,7 +160,7 @@ async def quoted_session(
             ACTOR,
             now,
         )
-        address = parse_address(SG_ADDRESS, frozenset({"SG"}))
+        address = parse_address(SG_ADDRESS, frozenset({CountryCode("SG")}))
         assert not isinstance(address, dict), address
         await submit_address(conn, session.id, address, ENV, now)
         await conn.commit()

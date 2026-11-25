@@ -38,7 +38,7 @@ payouts to merchants (slice 9), merchant webhooks and emails to buyers
 
 The echo flow stays until the shipment slice: it is the only flow that
 exercises the `compensable` guard (money is never `compensable`) and a
-status derived from a set of events, both of which come back with courier
+status derived from a set of events, both of which come back with carrier
 booking and tracking.
 
 ## 2. The fake PSP
@@ -218,8 +218,8 @@ The capture entry, keyed `capture:{attempt_id}`
 quote currency (say SGD):
   Dr psp_clearing:{psp_account}       captured amount = the option's total
   Cr tax_payable:{country}            seller-collected tax parts
-  Cr duties_payable:{courier}         border duty and tax parts, duty-paid fee
-  Cr shipping_payable:{courier}       freight, surcharge, fuel parts
+  Cr duties_payable:{carrier}         border duty and tax parts, duty-paid fee
+  Cr shipping_payable:{carrier}       freight, surcharge, fuel parts
   Cr psp_fee_collected                psp_fee part
   Cr revenue_mor_margin               mor_margin and fx parts
   Cr fx_position:{quote currency}     goods parts, per merchant currency

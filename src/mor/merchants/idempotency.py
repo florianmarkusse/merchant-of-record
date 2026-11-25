@@ -15,7 +15,7 @@ from psycopg.rows import class_row
 
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
-from mor.ids import MerchantId
+from mor.ids import ApiIdempotencyKey, MerchantId
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ class _StoredRow:
 async def claim_key(
     conn: Connection,
     merchant_id: MerchantId,
-    key: str,
+    key: ApiIdempotencyKey,
     request_sha256: bytes,
     now: datetime,
 ) -> Claim:
@@ -85,7 +85,11 @@ async def claim_key(
 
 
 async def store_response(
-    conn: Connection, merchant_id: MerchantId, key: str, status: int, response: bytes
+    conn: Connection,
+    merchant_id: MerchantId,
+    key: ApiIdempotencyKey,
+    status: int,
+    response: bytes,
 ) -> None:
     """The answer to replay for this key. Never commits."""
     await conn.execute(

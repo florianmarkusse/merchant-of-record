@@ -308,7 +308,7 @@ Questions for that call:
 
 1. SG entity or Dutch BV? This blocks PSP contracts and the licensing
    analysis.
-2. Which couriers do the first merchants use today, what is the typical
+2. Which carriers do the first merchants use today, what is the typical
    order value (it decides how often de minimis rules apply), and which
    buyer countries come first?
 3. Expected buyer mix by method (cards vs QR and wallets), once the first

@@ -27,7 +27,7 @@ from datetime import datetime
 from fractions import Fraction
 
 from mor.audit import Actor
-from mor.ids import PspAccountId
+from mor.ids import JournalKey, PspAccountId, PspLineId, PspPayoutId
 from mor.ledger.account import (
     Account,
     PayoutInTransit,
@@ -48,17 +48,19 @@ def to_minor(exact: Fraction) -> int:
     return round_fraction(exact, ROUNDING)
 
 
-def line_key(account_id: PspAccountId, vendor_line_id: str) -> str:
-    return f"settlement:{account_id}:{vendor_line_id}"
+def line_key(account_id: PspAccountId, vendor_line_id: PspLineId) -> JournalKey:
+    return JournalKey(f"settlement:{account_id}:{vendor_line_id}")
 
 
-def payout_key(account_id: PspAccountId, vendor_payout_id: str) -> str:
-    return f"payout:{account_id}:{vendor_payout_id}"
+def payout_key(account_id: PspAccountId, vendor_payout_id: PspPayoutId) -> JournalKey:
+    return JournalKey(f"payout:{account_id}:{vendor_payout_id}")
 
 
-def rounding_key(account_id: PspAccountId, vendor_payout_id: str, number: int) -> str:
+def rounding_key(
+    account_id: PspAccountId, vendor_payout_id: PspPayoutId, number: int
+) -> JournalKey:
     """The `number`th change to a payout's rounding, counted from 1."""
-    return f"payout-rounding:{account_id}:{vendor_payout_id}:{number}"
+    return JournalKey(f"payout-rounding:{account_id}:{vendor_payout_id}:{number}")
 
 
 def _post(lines: list[Line], account: Account, amount: Money) -> None:
@@ -71,7 +73,7 @@ def _post(lines: list[Line], account: Account, amount: Money) -> None:
 
 def line_entry(
     account_id: PspAccountId,
-    vendor_line_id: str,
+    vendor_line_id: PspLineId,
     estimate: Money,
     fee: Money,
     effective_at: datetime,
@@ -145,7 +147,7 @@ def check_net(reported: Fraction, lines: Sequence[LineAmounts]) -> AddedUp | Net
 
 def payout_entry(
     account_id: PspAccountId,
-    vendor_payout_id: str,
+    vendor_payout_id: PspPayoutId,
     net: Money,
     effective_at: datetime,
     actor: Actor,
@@ -174,7 +176,7 @@ def payout_entry(
 
 def rounding_entry(
     account_id: PspAccountId,
-    vendor_payout_id: str,
+    vendor_payout_id: PspPayoutId,
     number: int,
     change: Money,
     effective_at: datetime,

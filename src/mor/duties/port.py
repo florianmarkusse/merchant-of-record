@@ -14,7 +14,7 @@ from datetime import timedelta
 from enum import StrEnum
 from fractions import Fraction
 
-from mor.ids import DutyVendorAccountId
+from mor.ids import CountryCode, DutyVendorAccountId, HsCode
 from mor.markets.records import Charge
 from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import CallFailure
@@ -39,9 +39,9 @@ class DutyVendorAccount:
 
 @dataclass(frozen=True)
 class RateQuestion:
-    destination: str
-    origin: str
-    hs_code: str  # digits only
+    destination: CountryCode
+    origin: CountryCode
+    hs_code: HsCode  # digits only
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -54,7 +54,7 @@ class VendorRate:
 
 @dataclass(frozen=True)
 class VendorRates:
-    hs_code_used: str  # the vendor may correct the code it was given
+    hs_code_used: HsCode  # the vendor may correct the code it was given
     rates: tuple[VendorRate, ...]
 
 

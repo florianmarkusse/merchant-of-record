@@ -52,6 +52,7 @@ from mor.duties.records import LookupState
 from mor.ids import (
     CheckoutAddressId,
     CheckoutSessionId,
+    CountryCode,
     DutyLookupId,
     MarketLoadId,
     PaymentAttemptId,
@@ -146,7 +147,7 @@ type RefreshResult = Attempt | NoSession | SessionOver | NotRefreshable
 
 
 def _quote_request(
-    session: CheckoutSession, country: str, now: datetime
+    session: CheckoutSession, country: CountryCode, now: datetime
 ) -> QuoteRequest:
     lines: list[QuoteLine] = []
     for line in session.lines:
@@ -242,7 +243,7 @@ async def _attempt(
     conn: Connection,
     session: LockedSession,
     address_id: CheckoutAddressId,
-    country: str,
+    country: CountryCode,
     environment: Environment,
     actor: Actor,
     now: datetime,

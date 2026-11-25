@@ -7,6 +7,7 @@ from fractions import Fraction
 
 from hypothesis import example, given, strategies
 
+from mor.ids import CountryCode, HsCode
 from mor.markets.fx import FxMissing, convert_minor, rate
 from mor.markets.records import Charge, MarketSet, PreferenceCondition
 from mor.markets.rules import Open, country_rules
@@ -53,7 +54,7 @@ def _market(**texts: str) -> MarketSet:
     return market
 
 
-def _paths(market: MarketSet, country: str, order: OrderValue) -> TaxPaths:
+def _paths(market: MarketSet, country: CountryCode, order: OrderValue) -> TaxPaths:
     rules = country_rules(market, country, "apparel", ON)
     assert isinstance(rules, Open), rules
     paths = tax_paths(market, rules, order, ON)
@@ -69,27 +70,27 @@ def _sgd(minor: int) -> OrderValue:
 
 
 def test_inside_a_seller_band_without_registration_nothing_is_due() -> None:
-    paths = _paths(_market(), "SG", _sgd(25000))
+    paths = _paths(_market(), CountryCode("SG"), _sgd(25000))
     assert isinstance(paths.indirect_tax, NotDue)
     assert paths.indirect_tax.reason == "not_registered"
     assert not anything_at_border(paths)
 
 
 def test_inside_a_seller_band_with_our_registration_we_collect() -> None:
-    paths = _paths(_market(registrations=REGISTERED_SG), "SG", _sgd(25000))
+    paths = _paths(_market(registrations=REGISTERED_SG), CountryCode("SG"), _sgd(25000))
     assert isinstance(paths.indirect_tax, SellerCollected)
     assert paths.indirect_tax.registration.number == "M90000000X"
 
 
 def test_a_registration_applies_only_from_its_date() -> None:
     later = "SG,OVR,M90000000X,2027-01-01,made up for the test\n"
-    paths = _paths(_market(registrations=later), "SG", _sgd(25000))
+    paths = _paths(_market(registrations=later), CountryCode("SG"), _sgd(25000))
     assert isinstance(paths.indirect_tax, NotDue)
 
 
 def test_the_limit_itself_is_inside_an_up_to_band_and_a_cent_more_is_not() -> None:
-    at_limit = _paths(_market(), "SG", _sgd(40000))
-    above = _paths(_market(), "SG", _sgd(40001))
+    at_limit = _paths(_market(), CountryCode("SG"), _sgd(40000))
+    above = _paths(_market(), CountryCode("SG"), _sgd(40001))
     assert isinstance(at_limit.indirect_tax, NotDue)
     assert at_limit.indirect_tax.reason == "not_registered"  # inside the band
     assert isinstance(above.indirect_tax, BorderPaid)
@@ -97,10 +98,12 @@ def test_the_limit_itself_is_inside_an_up_to_band_and_a_cent_more_is_not() -> No
 
 
 def test_vat_and_duty_are_decided_separately() -> None:
-    paths = _paths(_market(), "TH", OrderValue(Money(1000, Currency.USD), None))
+    paths = _paths(
+        _market(), CountryCode("TH"), OrderValue(Money(1000, Currency.USD), None)
+    )
     assert isinstance(paths.indirect_tax, BorderPaid)
     assert isinstance(paths.duty, BorderPaid)
-    sg = _paths(_market(), "SG", _sgd(60000))
+    sg = _paths(_market(), CountryCode("SG"), _sgd(60000))
     assert isinstance(sg.indirect_tax, BorderPaid)
     assert isinstance(sg.duty, NotDue)
 
@@ -108,7 +111,7 @@ def test_vat_and_duty_are_decided_separately() -> None:
 def test_a_limit_on_goods_plus_freight_waits_for_the_freight() -> None:
     landed = SG_GST.replace("SGD,goods,", "SGD,goods_plus_freight,")
     market = _market(landed=landed + TH_BORDER)
-    rules = country_rules(market, "SG", "apparel", ON)
+    rules = country_rules(market, CountryCode("SG"), "apparel", ON)
     assert isinstance(rules, Open)
     assert tax_paths(market, rules, _sgd(30000), ON) == NeedsFreight(2)
     with_freight = OrderValue(Money(30000, Currency.SGD), Money(15000, Currency.SGD))
@@ -121,8 +124,10 @@ def test_a_value_in_another_currency_is_compared_after_exact_conversion() -> Non
     # 400 SGD is 400 / 1.4309 * 1.1165 = 312.11... USD.
     below = OrderValue(Money(31211, Currency.USD), None)
     above = OrderValue(Money(31212, Currency.USD), None)
-    assert isinstance(_paths(_market(), "SG", below).indirect_tax, NotDue)
-    assert isinstance(_paths(_market(), "SG", above).indirect_tax, BorderPaid)
+    assert isinstance(_paths(_market(), CountryCode("SG"), below).indirect_tax, NotDue)
+    assert isinstance(
+        _paths(_market(), CountryCode("SG"), above).indirect_tax, BorderPaid
+    )
 
 
 def test_an_unconfirmed_exchange_rate_is_not_used() -> None:
@@ -130,7 +135,7 @@ def test_an_unconfirmed_exchange_rate_is_not_used() -> None:
         "EUR,USD,1.1165,2026-11-06,verified", "EUR,USD,1.1165,2026-11-06,estimate"
     )
     market = _market(fx_rows=weak)
-    rules = country_rules(market, "SG", "apparel", ON)
+    rules = country_rules(market, CountryCode("SG"), "apparel", ON)
     assert isinstance(rules, Open)
     order = OrderValue(Money(1000, Currency.USD), None)
     assert tax_paths(market, rules, order, ON) == FxMissing(Currency.USD, Currency.SGD)
@@ -140,7 +145,7 @@ def test_an_unconfirmed_exchange_rate_is_not_used() -> None:
 @example(minor=40000)  # the limit itself: inside the up_to band
 @example(minor=40001)
 def test_every_sg_order_takes_exactly_the_band_its_value_falls_in(minor: int) -> None:
-    paths = _paths(_market(), "SG", _sgd(minor))
+    paths = _paths(_market(), CountryCode("SG"), _sgd(minor))
     if minor <= 40000:
         assert isinstance(paths.indirect_tax, NotDue)
         assert paths.indirect_tax.reason == "not_registered"
@@ -151,18 +156,24 @@ def test_every_sg_order_takes_exactly_the_band_its_value_falls_in(minor: int) ->
 # --- rates per HS code ----------------------------------------------------------
 
 
-def _duty_rate(hs_code: str | None, origin: str, met: frozenset[PreferenceCondition]):
+def _duty_rate(
+    hs_code: HsCode | None, origin: CountryCode, met: frozenset[PreferenceCondition]
+):
     market = _market(hs_rows=TH_HS)
-    paths = _paths(market, "TH", OrderValue(Money(5000, Currency.USD), None))
+    paths = _paths(
+        market, CountryCode("TH"), OrderValue(Money(5000, Currency.USD), None)
+    )
     assert isinstance(paths.duty, BorderPaid)
     line = Line(hs_code, origin, met)
-    return line_rate(market, "TH", Charge.DUTY, line, paths.duty.rate, ON, None)
+    return line_rate(
+        market, CountryCode("TH"), Charge.DUTY, line, paths.duty.rate, ON, None
+    )
 
 
 def test_the_longest_prefix_and_the_lines_origin_win() -> None:
-    from_china = _duty_rate("610910", "CN", frozenset())
-    from_vietnam = _duty_rate("610910", "VN", frozenset())
-    other_knit = _duty_rate("611020", "CN", frozenset())
+    from_china = _duty_rate(HsCode("610910"), CountryCode("CN"), frozenset())
+    from_vietnam = _duty_rate(HsCode("610910"), CountryCode("VN"), frozenset())
+    other_knit = _duty_rate(HsCode("611020"), CountryCode("CN"), frozenset())
     assert isinstance(from_china, Found) and from_china.rate == Fraction(30, 100)
     assert isinstance(from_vietnam, Found) and from_vietnam.rate == Fraction(28, 100)
     assert isinstance(other_knit, Found) and other_knit.rate == Fraction(25, 100)
@@ -173,8 +184,8 @@ def test_an_agreement_applies_only_when_every_condition_is_met() -> None:
         {PreferenceCondition.CERTIFICATE_OF_ORIGIN, PreferenceCondition.DIRECT_SHIPMENT}
     )
     one = frozenset({PreferenceCondition.CERTIFICATE_OF_ORIGIN})
-    met = _duty_rate("610910", "VN", both)
-    half = _duty_rate("610910", "VN", one)
+    met = _duty_rate(HsCode("610910"), CountryCode("VN"), both)
+    half = _duty_rate(HsCode("610910"), CountryCode("VN"), one)
     assert isinstance(met, Found) and met.rate == 0 and met.missed == ()
     assert isinstance(half, Found) and half.rate == Fraction(28, 100)
     assert half.missed[0].missing == {PreferenceCondition.DIRECT_SHIPMENT}
@@ -183,27 +194,43 @@ def test_an_agreement_applies_only_when_every_condition_is_met() -> None:
 def test_an_unconfirmed_agreement_rate_is_reported_not_applied() -> None:
     weak = TH_HS.replace("0,,secondary,ASEAN", "0,,unverified,ASEAN")
     market = _market(hs_rows=weak)
-    paths = _paths(market, "TH", OrderValue(Money(5000, Currency.USD), None))
+    paths = _paths(
+        market, CountryCode("TH"), OrderValue(Money(5000, Currency.USD), None)
+    )
     assert isinstance(paths.duty, BorderPaid)
     everything = frozenset(PreferenceCondition)
-    line = Line("610910", "VN", everything)
-    found = line_rate(market, "TH", Charge.DUTY, line, paths.duty.rate, ON, None)
+    line = Line(HsCode("610910"), CountryCode("VN"), everything)
+    found = line_rate(
+        market, CountryCode("TH"), Charge.DUTY, line, paths.duty.rate, ON, None
+    )
     assert isinstance(found, Found) and found.rate == Fraction(28, 100)
     assert found.missed[0].unconfirmed
 
 
 def test_duty_without_an_hs_rate_is_needed_never_a_category_guess() -> None:
-    assert _duty_rate(None, "VN", frozenset()) == RateNeeded(Charge.DUTY, "no_hs_code")
-    assert _duty_rate("640399", "VN", frozenset()) == RateNeeded(Charge.DUTY, "no_rate")
+    assert _duty_rate(None, CountryCode("VN"), frozenset()) == RateNeeded(
+        Charge.DUTY, "no_hs_code"
+    )
+    assert _duty_rate(HsCode("640399"), CountryCode("VN"), frozenset()) == RateNeeded(
+        Charge.DUTY, "no_rate"
+    )
 
 
 def test_vat_without_an_hs_rate_takes_the_band_rows_rate() -> None:
     market = _market()
-    paths = _paths(market, "TH", OrderValue(Money(5000, Currency.USD), None))
+    paths = _paths(
+        market, CountryCode("TH"), OrderValue(Money(5000, Currency.USD), None)
+    )
     assert isinstance(paths.indirect_tax, BorderPaid)
-    line = Line("610910", "VN", frozenset())
+    line = Line(HsCode("610910"), CountryCode("VN"), frozenset())
     found = line_rate(
-        market, "TH", Charge.IMPORT_TAX, line, paths.indirect_tax.rate, ON, None
+        market,
+        CountryCode("TH"),
+        Charge.IMPORT_TAX,
+        line,
+        paths.indirect_tax.rate,
+        ON,
+        None,
     )
     assert isinstance(found, Found)
     assert found.rate == Fraction(7, 100)
@@ -213,16 +240,18 @@ def test_vat_without_an_hs_rate_takes_the_band_rows_rate() -> None:
 def test_an_unconfirmed_standard_hs_rate_is_not_used() -> None:
     weak = TH_HS.replace("6109,duty,,,,30,,secondary", "6109,duty,,,,30,,estimate")
     market = _market(hs_rows=weak)
-    paths = _paths(market, "TH", OrderValue(Money(5000, Currency.USD), None))
+    paths = _paths(
+        market, CountryCode("TH"), OrderValue(Money(5000, Currency.USD), None)
+    )
     assert isinstance(paths.duty, BorderPaid)
-    line = Line("610910", "CN", frozenset())
+    line = Line(HsCode("610910"), CountryCode("CN"), frozenset())
     assert line_rate(
-        market, "TH", Charge.DUTY, line, paths.duty.rate, ON, None
+        market, CountryCode("TH"), Charge.DUTY, line, paths.duty.rate, ON, None
     ) == RateNotConfirmed(3)
 
 
 def test_a_found_rate_names_the_row_it_came_from() -> None:
-    found = _duty_rate("610910", "CN", frozenset())
+    found = _duty_rate(HsCode("610910"), CountryCode("CN"), frozenset())
     assert isinstance(found, Found) and isinstance(found.source, FromHsRow)
     assert found.source.row.line_no == 3
 

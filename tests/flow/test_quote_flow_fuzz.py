@@ -1,5 +1,5 @@
 """The quote flow as a Hypothesis state machine against mor_test, the
-fake courier and the worker (docs/plan-quote.md §5, 4d-2), on the
+fake carrier and the worker (docs/plan-quote.md §5, 4d-2), on the
 synthetic set with express priced live by its carrier.
 
 Actions: a buyer gives an address (again, or another; also a step that
@@ -34,6 +34,8 @@ from hypothesis.stateful import (
 )
 
 from mor.audit import Actor, ActorKind
+from mor.carriers.prices import create_carrier_account
+from mor.carriers.records import CarrierProvider, Parcel, PriceExpiry
 from mor.checkout.addresses import Address
 from mor.checkout.flow import QUOTE_VALID_FOR, refresh_quote, submit_address
 from mor.checkout.records import (
@@ -45,11 +47,9 @@ from mor.checkout.records import (
     SoldLine,
 )
 from mor.checkout.sessions import create_session
-from mor.couriers.prices import create_courier_account
-from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
-from mor.ids import CheckoutSessionId
+from mor.ids import CarrierCode, CheckoutSessionId, CountryCode, HsCode
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import (
@@ -93,7 +93,7 @@ FAULTS = (
 )
 
 
-def _address(country: str, n: int) -> Address:
+def _address(country: CountryCode, n: int) -> Address:
     if country == "SG":
         return Address(
             name=f"Buyer {n}",
@@ -105,7 +105,7 @@ def _address(country: str, n: int) -> Address:
             city="Singapore",
             region=None,
             postcode="123456",
-            country="SG",
+            country=CountryCode("SG"),
         )
     return Address(
         name=f"Buyer {n}",
@@ -117,7 +117,7 @@ def _address(country: str, n: int) -> Address:
         city="Khlong Toei",
         region="Bangkok",
         postcode="10110",
-        country="TH",
+        country=CountryCode("TH"),
     )
 
 
@@ -150,13 +150,13 @@ class QuoteFlow(RuleBasedStateMachine):
     # --- actions ---------------------------------------------------------
 
     @initialize(country=strategies.sampled_from(("SG", "TH")))
-    def a_first_address_is_given(self, country: str) -> None:
+    def a_first_address_is_given(self, country: CountryCode) -> None:
         self.give_an_address(0, country)
 
     @rule(
         session=strategies.integers(0, 1), country=strategies.sampled_from(("SG", "TH"))
     )
-    def give_an_address(self, session: int, country: str) -> None:
+    def give_an_address(self, session: int, country: CountryCode) -> None:
         self.given += 1
 
         async def step() -> None:
@@ -176,7 +176,7 @@ class QuoteFlow(RuleBasedStateMachine):
         session=strategies.integers(0, 1), country=strategies.sampled_from(("SG", "TH"))
     )
     def an_address_step_crashes_before_it_commits(
-        self, session: int, country: str
+        self, session: int, country: CountryCode
     ) -> None:
         async def step() -> None:
             crashing = await connect(TEST_URL)
@@ -232,7 +232,7 @@ class QuoteFlow(RuleBasedStateMachine):
     @rule(fault=strategies.sampled_from(FAULTS))
     def script_a_fault(self, fault: str) -> None:
         response = self.run(
-            self.control.post("http://mor/_fake/courier/faults", json={"fault": fault})
+            self.control.post("http://mor/_fake/carrier/faults", json={"fault": fault})
         )
         assert response.status_code == 204
 
@@ -371,14 +371,14 @@ class QuoteFlow(RuleBasedStateMachine):
         async with await connect(TEST_URL) as conn:
             await load_market(conn, live_market(), "fuzz", ACTOR, T0)
             seller = await create_merchant(
-                conn, "Fuzz Shop Co.", "Fuzz Shop", "VN", 100, ACTOR, T0
+                conn, "Fuzz Shop Co.", "Fuzz Shop", CountryCode("VN"), 100, ACTOR, T0
             )
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 VENDOR_TIMEOUT,
                 timedelta(hours=6),
                 PriceExpiry.CARRIER_FIRST,
@@ -393,9 +393,9 @@ class QuoteFlow(RuleBasedStateMachine):
                     merchant_sku=None,
                     customs=Customs(
                         description="Linen shirt",
-                        origin_country="VN",
+                        origin_country=CountryCode("VN"),
                         weight_g=300,
-                        hs_code="610910",
+                        hs_code=HsCode("610910"),
                     ),
                 )
                 session = await create_session(
@@ -418,7 +418,7 @@ class QuoteFlow(RuleBasedStateMachine):
 
     async def _faults_waiting(self) -> int:
         return await one_value(
-            self.worker, "SELECT count(*) FROM fake_vendor.courier_fault", None, int
+            self.worker, "SELECT count(*) FROM fake_vendor.carrier_fault", None, int
         )
 
     async def _catch_up(self) -> None:
@@ -440,7 +440,7 @@ class QuoteFlow(RuleBasedStateMachine):
     async def _drain_and_check(self) -> None:
         # Faults off; the clock moves only by retry backoffs, so a session
         # still alive must finish quoting before its life ends.
-        await self.worker.execute("DELETE FROM fake_vendor.courier_fault")
+        await self.worker.execute("DELETE FROM fake_vendor.carrier_fault")
         self.network.refuse_next = 0
         for _ in range(30):
             self.now += timedelta(minutes=5)

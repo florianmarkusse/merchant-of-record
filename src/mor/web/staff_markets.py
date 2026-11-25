@@ -34,15 +34,15 @@ from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 import mor.markets.fx
 from mor.audit import Actor, ActorKind
-from mor.checkout.quotes import session_quotes
-from mor.checkout.sessions import address_countries, recent_sessions, session_by_id
-from mor.couriers.prices import (
-    NoCourierAccount,
-    courier_account,
+from mor.carriers.prices import (
+    NoCarrierAccount,
+    carrier_account,
     live_prices,
     request_shipping_price,
 )
-from mor.couriers.records import Parcel, PriceHeld, PriceQuestion
+from mor.carriers.records import Parcel, PriceHeld, PriceQuestion
+from mor.checkout.quotes import session_quotes
+from mor.checkout.sessions import address_countries, recent_sessions, session_by_id
 from mor.db.connect import Connection, connect
 from mor.duties.lookups import (
     NoVendorAccount,
@@ -54,6 +54,7 @@ from mor.duties.lookups import (
 )
 from mor.duties.port import RateQuestion
 from mor.duties.records import VendorLookup
+from mor.ids import CarrierCode, CountryCode, HsCode
 from mor.invoices.store import invoice_for_order
 from mor.markets.changes import describe_changes
 from mor.markets.fx import FxMissing
@@ -138,7 +139,7 @@ def read_order(fields: dict[str, str]) -> OrderForm | dict[str, str] | None:
     """The form as an order, the errors per field, or None while the
     country or the price is still empty (marked only once Quote is pressed,
     see `_missing`)."""
-    country = fields.get("country", "").strip().upper()
+    country = CountryCode(fields.get("country", "").strip().upper())
     goods_text = fields.get("goods", "").strip()
     if not country or not goods_text:
         return None
@@ -153,10 +154,11 @@ def read_order(fields: dict[str, str]) -> OrderForm | dict[str, str] | None:
     goods = parse_major(goods_text, currency)
     if isinstance(goods, InvalidAmount):
         errors["goods"] = f"Enter a price ({goods.reason.replace('_', ' ')})."
-    hs_code = fields.get("hs", "").replace(".", "").replace(" ", "") or None
+    hs_text = fields.get("hs", "").replace(".", "").replace(" ", "")
+    hs_code = HsCode(hs_text) if hs_text else None
     if hs_code is not None and not hs_code.isdigit():
         errors["hs"] = "Digits only."
-    origin = fields.get("origin", "").strip().upper() or "VN"
+    origin = CountryCode(fields.get("origin", "").strip().upper() or "VN")
     parcel = _parcel(fields, errors)
     if errors or isinstance(goods, InvalidAmount):
         return errors
@@ -236,7 +238,7 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
     references: tuple[tuple[Currency, Fraction], ...] = ()
     why: Explained | None = None
     ask: Ask | None = None
-    no_account: set[str] = set()
+    no_account: set[CarrierCode] = set()
     async with await connect(database_url) as conn:
         market = await market_in_force(conn)
         if isinstance(order, OrderForm) and market is not None:
@@ -247,7 +249,7 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
                 quote = _quote(market, check, order.parcel, on, now, lookup, prices)
                 if isinstance(quote, InputsMissing):
                     for question in quote.price_asks:
-                        if await courier_account(conn, question.carrier) is None:
+                        if await carrier_account(conn, question.carrier) is None:
                             no_account.add(question.carrier)
                 if isinstance(quote, Quote):
                     # Explained with the shown option's freight, so a band
@@ -398,9 +400,9 @@ async def ask_vendor(request: Request, database_url: str, now: datetime) -> Resp
     form = await read_form(request, AskForm)
     if form is None or not form.back.startswith(PAGE):
         return Response("bad form", status_code=400)
-    country = form.country.strip().upper()
-    origin = form.origin.strip().upper() or "VN"
-    hs_code = form.hs.replace(".", "").replace(" ", "")
+    country = CountryCode(form.country.strip().upper())
+    origin = CountryCode(form.origin.strip().upper() or "VN")
+    hs_code = HsCode(form.hs.replace(".", "").replace(" ", ""))
     if not hs_code.isdigit() or not 4 <= len(hs_code) <= 10:
         return Response("HS code: 4 to 10 digits", status_code=400)
     async with await connect(database_url) as conn:
@@ -452,7 +454,7 @@ async def ask_carrier(request: Request, database_url: str, now: datetime) -> Res
     parcel = Parcel(
         weight_g=sizes[0], length_mm=sizes[1], width_mm=sizes[2], height_mm=sizes[3]
     )
-    country = form.country.strip().upper()
+    country = CountryCode(form.country.strip().upper())
     async with await connect(database_url) as conn:
         market = await market_in_force(conn)
         if market is None:
@@ -469,7 +471,7 @@ async def ask_carrier(request: Request, database_url: str, now: datetime) -> Res
                 f"{form.service} is not priced live into {country}", status_code=409
             )
         asked = await request_shipping_price(conn, question, PERSON, now)
-        if isinstance(asked, NoCourierAccount):
+        if isinstance(asked, NoCarrierAccount):
             return Response(f"no account for {asked.carrier}", status_code=409)
         await conn.commit()
     separator = "&" if "?" in form.back else "?"

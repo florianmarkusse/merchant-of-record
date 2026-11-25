@@ -13,6 +13,7 @@ format never rewrites one.
 from datetime import datetime
 
 from mor.entity import SellingEntity
+from mor.ids import CountryCode
 from mor.invoices.records import Series
 
 
@@ -31,7 +32,7 @@ DEFAULT_SERIES: dict[str, str] = {"placeholder": "INV"}
 SERIES_BY_COUNTRY: dict[tuple[str, str], str] = {}
 
 
-def series_for(entity: SellingEntity, buyer_country: str) -> str:
+def series_for(entity: SellingEntity, buyer_country: CountryCode) -> str:
     """The one place a series is picked."""
     country_series = SERIES_BY_COUNTRY.get((entity.code, buyer_country))
     if country_series is not None:

@@ -17,7 +17,7 @@ from psycopg.rows import class_row
 from mor.db.connect import connect
 from mor.db.fetch import one_value
 from mor.fakes.psp import HELD_BACK_MINOR
-from mor.ids import SettlementLineId, SettlementPayoutId
+from mor.ids import PspPaymentId, SettlementLineId, SettlementPayoutId
 from mor.ledger.account import (
     PayoutInTransit,
     PspClearing,
@@ -502,7 +502,7 @@ def test_a_payout_and_its_pages_add_up_in_whatever_order_they_are_decoded(
 
 
 def _report(
-    batch_id: str, line_id: str, payment_id: str, reference: str, currency: str
+    batch_id: str, line_id: str, payment_id: PspPaymentId, reference: str, currency: str
 ) -> bytes:
     """A report as the fake writes one, for a line it would never cut, in a
     batch that paid nothing."""

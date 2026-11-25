@@ -1,8 +1,8 @@
-"""The fake courier: answers a live price for one parcel, the way a
+"""The fake carrier: answers a live price for one parcel, the way a
 carrier's rate call would (docs/plan-quote.md §4, 4c-2).
 
 A made-up API, with carrier-side accounts as a path segment
-(`A` = /_fake/courier/{account}):
+(`A` = /_fake/carrier/{account}):
 
     POST A/rates                {"service", "origin", "destination",
                                  "weight_g", "length_mm", "width_mm",
@@ -10,14 +10,14 @@ A made-up API, with carrier-side accounts as a path segment
          200 {"currency", "total_minor", "valid_until",
               "parts": [{"kind", "name", "amount_minor"}]}
          404 {"error": "not_served", "detail"}
-    POST /_fake/courier/rates   {"service", "destination", "currency",
+    POST /_fake/carrier/rates   {"service", "destination", "currency",
                                  "base_minor", "per_kg_minor", "fuel_bp",
                                  "surcharge_minor", "valid_until"}: set a price
-    POST /_fake/courier/faults  {"fault"}: script the next call to fail
+    POST /_fake/carrier/faults  {"fault"}: script the next call to fail
 
 The billed weight is the greater of the actual and the volumetric weight
 (L x W x H / 5000 in cm³), rounded up to the next half kilo. Every call
-that does work is logged in `courier_call`. Its state is its own (schema
+that does work is logged in `carrier_call`. Its state is its own (schema
 `fake_vendor`, its own connections), as a third party's would be.
 """
 
@@ -122,7 +122,7 @@ def _error(status: int, code: str, detail: str = "") -> JSONResponse:
 async def _take_fault(conn: FakeConnection) -> Fault | None:
     cur = await conn.execute(
         """
-        DELETE FROM courier_fault WHERE seq = (SELECT min(seq) FROM courier_fault)
+        DELETE FROM carrier_fault WHERE seq = (SELECT min(seq) FROM carrier_fault)
         RETURNING fault::text
         """
     )
@@ -140,7 +140,7 @@ async def _rate(conn: FakeConnection, service: str, destination: str) -> FakeRat
         """
         SELECT currency, base_minor, per_kg_minor, fuel_bp, surcharge_minor,
                valid_until
-        FROM courier_rate WHERE service = %s AND destination = %s
+        FROM carrier_rate WHERE service = %s AND destination = %s
         """,
         (service, destination),
     )
@@ -187,7 +187,7 @@ async def handle_ask(request: Request, database_url: str, hang: Hang) -> Respons
             return _error(500, "internal_error")
         await conn.execute(
             """
-            INSERT INTO courier_call
+            INSERT INTO carrier_call
               (account, service, origin, destination, weight_g, length_mm,
                width_mm, height_mm, called_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -252,7 +252,7 @@ async def handle_set_rate(request: Request, database_url: str) -> Response:
     async with await _connect(database_url) as conn:
         await conn.execute(
             """
-            INSERT INTO courier_rate
+            INSERT INTO carrier_rate
               (service, destination, currency, base_minor, per_kg_minor,
                fuel_bp, surcharge_minor, valid_until)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -286,7 +286,7 @@ async def handle_script_fault(request: Request, database_url: str) -> Response:
         return _error(400, "invalid_body")
     async with await _connect(database_url) as conn:
         await conn.execute(
-            "INSERT INTO courier_fault (fault) VALUES (%s)", (body.fault,)
+            "INSERT INTO carrier_fault (fault) VALUES (%s)", (body.fault,)
         )
         await conn.commit()
     return Response(status_code=204)
@@ -305,8 +305,8 @@ def make_app(database_url: str, hang: Hang) -> Starlette:
 
     return Starlette(
         routes=[
-            Route("/_fake/courier/rates", set_rate, methods=["POST"]),
-            Route("/_fake/courier/faults", script_fault, methods=["POST"]),
-            Route("/_fake/courier/{account}/rates", ask, methods=["POST"]),
+            Route("/_fake/carrier/rates", set_rate, methods=["POST"]),
+            Route("/_fake/carrier/faults", script_fault, methods=["POST"]),
+            Route("/_fake/carrier/{account}/rates", ask, methods=["POST"]),
         ]
     )

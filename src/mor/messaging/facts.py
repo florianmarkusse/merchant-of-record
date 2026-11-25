@@ -31,7 +31,9 @@ from mor.ids import (
     PaymentAttemptId,
     ProbeId,
     PspAccountId,
+    PspEventId,
     PspInboxId,
+    PspPaymentId,
     QuoteId,
     SettlementLineId,
     SettlementPayoutId,
@@ -512,8 +514,8 @@ class PspEventReceivedV1(
     schema_version: ClassVar[int] = 1
 
     payment_attempt_id: PaymentAttemptId
-    vendor_event_id: str
-    provider_payment_id: str
+    vendor_event_id: PspEventId
+    provider_payment_id: PspPaymentId
     kind: PspEventKind
     amount_minor: int
     currency: str

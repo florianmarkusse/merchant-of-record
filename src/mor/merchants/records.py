@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from mor.ids import MerchantId
+from mor.ids import CountryCode, MerchantId
 
 
 DEFAULT_DAILY_VENDOR_ASKS = 100  # decided 19-Nov-2026
@@ -25,7 +25,7 @@ class Merchant:
     id: MerchantId
     legal_name: str
     display_name: str  # what buyers see
-    country: str
+    country: CountryCode
     daily_vendor_asks: int  # new vendor lookups its estimates may start a day
     created_at: datetime
     kyb_state: KybState

@@ -15,8 +15,9 @@ from urllib.parse import urlencode
 
 import htpy
 
-from mor.couriers.records import PriceQuestion
+from mor.carriers.records import PriceQuestion
 from mor.dates import format_day, format_moment
+from mor.ids import CarrierCode
 from mor.markets.records import Collector, Country, Standing
 from mor.markets.rules import (
     Closed,
@@ -85,7 +86,7 @@ class QuoteView:
     references: tuple[tuple[Currency, Fraction], ...]
     # Carriers a live route needs a price from but this environment has no
     # account for: nothing can be asked.
-    carriers_without_account: frozenset[str] = frozenset()
+    carriers_without_account: frozenset[CarrierCode] = frozenset()
 
 
 # --- words for people --------------------------------------------------------

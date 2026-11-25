@@ -1077,11 +1077,14 @@ async def handle_cut_settlement(
                 WHERE p.account = %s AND p.status = 'captured'
                   AND NOT EXISTS (SELECT 1 FROM psp_fake_settled s
                                   WHERE s.payment_id = p.id)
-                ORDER BY p.created_at, p.id
+                ORDER BY p.created_at, p.reference, p.id
                 """,
                 (account,),
             )
             unsettled = await rows.fetchall()
+        # Ties on the test clock are broken by our reference (an attempt's
+        # uuid7, in creation order), never by our random ids: a fuzzer's
+        # replay must meet the same lines in the same order.
         groups: dict[str, list[_CutLine]] = {}
         for settleable in unsettled:
             groups.setdefault(settleable.currency, []).append(
@@ -1105,7 +1108,8 @@ async def handle_cut_settlement(
                     JOIN psp_fake_payment p ON p.id = s.payment_id
                     JOIN psp_fake_settlement_line l
                       ON l.payment_id = p.id AND l.fault IS NULL
-                    WHERE p.account = %s ORDER BY p.created_at, p.id LIMIT 1
+                    WHERE p.account = %s
+                    ORDER BY p.created_at, p.reference, p.id LIMIT 1
                     """,
                     (account,),
                 )

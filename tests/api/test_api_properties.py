@@ -16,8 +16,9 @@ from datetime import UTC, datetime
 import msgspec
 from hypothesis import given, strategies
 
+from mor.carriers.records import Parcel
 from mor.config import Environment
-from mor.couriers.records import Parcel
+from mor.ids import CountryCode
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.quote.build import Quote, QuoteLine, QuoteRequest, build_quote
@@ -119,7 +120,7 @@ parcels = strategies.builds(
     prod=strategies.booleans(),
 )
 def test_every_estimate_option_is_its_parts_summed(
-    destination: str, order: list[QuoteLine], parcel: Parcel, prod: bool
+    destination: CountryCode, order: list[QuoteLine], parcel: Parcel, prod: bool
 ) -> None:
     request = QuoteRequest(
         destination=destination,

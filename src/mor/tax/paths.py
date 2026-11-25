@@ -13,6 +13,7 @@ from datetime import date
 from fractions import Fraction
 from typing import Literal
 
+from mor.ids import CountryCode
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
     Band,
@@ -189,7 +190,9 @@ def _measured(
             return goods + freight
 
 
-def registration_on(market: MarketSet, iso2: str, on: date) -> Registration | None:
+def registration_on(
+    market: MarketSet, iso2: CountryCode, on: date
+) -> Registration | None:
     """Our registration in a country in force on `on`, if any."""
     for registration in market.registrations:
         if registration.country == iso2 and registration.effective_from <= on:

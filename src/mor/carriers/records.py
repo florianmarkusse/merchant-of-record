@@ -5,7 +5,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from mor.ids import CourierAccountId, MarketLoadId, ShippingPriceLookupId
+from mor.ids import (
+    CarrierAccountId,
+    CarrierCode,
+    CountryCode,
+    MarketLoadId,
+    ServiceCode,
+    ShippingPriceLookupId,
+)
 from mor.money.amount import Money
 from mor.provider_accounts import ProviderAccountKind
 
@@ -24,15 +31,15 @@ class Parcel:
 class PriceQuestion:
     """A price for one service on one lane, for one exact parcel."""
 
-    carrier: str  # the service's provider, e.g. `dhl_express`
-    service: str
-    origin: str
-    destination: str
+    carrier: CarrierCode  # the service's provider, e.g. `dhl_express`
+    service: ServiceCode
+    origin: CountryCode
+    destination: CountryCode
     parcel: Parcel
 
 
-class CourierProvider(StrEnum):
-    """The module that speaks to a carrier; matches `courier_provider`. A
+class CarrierProvider(StrEnum):
+    """The module that speaks to a carrier; matches `carrier_provider`. A
     carrier's name (`dhl_express`) is data; its provider is code."""
 
     FAKE = "fake"
@@ -48,10 +55,10 @@ class PriceExpiry(StrEnum):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CourierAccount:
-    id: CourierAccountId
-    carrier: str
-    provider: CourierProvider
+class CarrierAccount:
+    id: CarrierAccountId
+    carrier: CarrierCode
+    provider: CarrierProvider
     kind: ProviderAccountKind
     base_url: str
     timeout: timedelta

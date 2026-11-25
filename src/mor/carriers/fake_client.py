@@ -1,4 +1,4 @@
-"""Client for the fake courier's rate call (mor.fakes.courier), shaped like
+"""Client for the fake carrier's rate call (mor.fakes.carrier), shaped like
 any real provider module: our records in, our result union out, never our
 database.
 
@@ -16,13 +16,13 @@ import asyncio
 import httpx2
 import msgspec
 
-from mor.couriers.port import (
+from mor.carriers.port import (
     NotServed,
     QuoteRateResult,
     carrier_price,
 )
-from mor.couriers.records import (
-    CourierAccount,
+from mor.carriers.records import (
+    CarrierAccount,
     PricePart,
     PricePartKind,
     PriceQuestion,
@@ -65,7 +65,7 @@ def _currency(text: str) -> Currency | None:
 
 
 async def quote_rate(
-    http: httpx2.AsyncClient, account: CourierAccount, question: PriceQuestion
+    http: httpx2.AsyncClient, account: CarrierAccount, question: PriceQuestion
 ) -> QuoteRateResult:
     parcel = question.parcel
     try:

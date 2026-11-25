@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from mor.ids import InvoiceId, OrderId
+from mor.ids import CountryCode, InvoiceId, OrderId
 from mor.money.currency import Currency
 
 
@@ -39,7 +39,7 @@ class BuyerAddress:
     city: str
     region: str | None
     postcode: str | None
-    country: str
+    country: CountryCode
 
 
 @dataclass(frozen=True, kw_only=True)

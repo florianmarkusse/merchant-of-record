@@ -28,6 +28,7 @@ import httpx2
 import msgspec
 
 from mor.dates import AwareDatetime, parse_instant, to_utc
+from mor.ids import PspEventId, PspIdempotencyKey, PspLineId, PspPaymentId, PspPayoutId
 from mor.money.amount import Money
 from mor.money.currency import Currency, exponent
 from mor.psp.port import (
@@ -103,7 +104,7 @@ class _Refusal(msgspec.Struct, frozen=True):
 
 class _Event(msgspec.Struct, frozen=True, kw_only=True):
     id: str
-    payment_id: str
+    payment_id: PspPaymentId
     reference: str
     kind: PspEventKind
     amount_minor: int
@@ -117,7 +118,7 @@ class _Events(msgspec.Struct, frozen=True):
 
 class _Thin(msgspec.Struct, frozen=True):
     id: str
-    payment_id: str
+    payment_id: PspPaymentId
     reference: str
 
 
@@ -171,7 +172,7 @@ def _payment(raw: _Payment) -> ProviderPayment | UndecodableBody:
             None if expires_at is None else to_utc(expires_at),
         )
     return ProviderPayment(
-        provider_payment_id=raw.id,
+        provider_payment_id=PspPaymentId(raw.id),
         reference=raw.reference,
         amount=amount,
         status=PaymentStatus(raw.status),
@@ -185,7 +186,7 @@ async def _send(
     method: Literal["GET", "POST"],
     path: str,
     body: object | None = None,
-    key: str | None = None,
+    key: PspIdempotencyKey | None = None,
     params: dict[str, str] | None = None,
 ) -> httpx2.Response | Unavailable | OutcomeUnknown:
     headers: dict[str, str] = {}
@@ -283,9 +284,9 @@ async def find_payments(
 async def capture(
     http: httpx2.AsyncClient,
     account: PspAccount,
-    provider_payment_id: str,
+    provider_payment_id: PspPaymentId,
     amount: Money,
-    key: str,
+    key: PspIdempotencyKey,
 ) -> CaptureResult:
     sent = await _send(
         http,
@@ -310,7 +311,7 @@ async def capture(
 
 
 async def cancel(
-    http: httpx2.AsyncClient, account: PspAccount, provider_payment_id: str
+    http: httpx2.AsyncClient, account: PspAccount, provider_payment_id: PspPaymentId
 ) -> CancelResult:
     sent = await _send(
         http, account, "POST", f"/payments/{provider_payment_id}/cancel", {}
@@ -330,7 +331,7 @@ async def cancel(
 
 
 async def fetch_events(
-    http: httpx2.AsyncClient, account: PspAccount, provider_payment_id: str
+    http: httpx2.AsyncClient, account: PspAccount, provider_payment_id: PspPaymentId
 ) -> FetchResult:
     """One payment with all its events, raw: stored like a webhook and
     decoded on the same path. A read, so asking again is always safe."""
@@ -364,7 +365,7 @@ def decode_events(body: bytes) -> tuple[PspEvent, ...] | UndecodableBody:
             return amount
         events.append(
             PspEvent(
-                vendor_event_id=raw.id,
+                vendor_event_id=PspEventId(raw.id),
                 provider_payment_id=raw.payment_id,
                 reference=raw.reference,
                 kind=raw.kind,
@@ -405,7 +406,7 @@ class _Payout(msgspec.Struct, frozen=True, kw_only=True):
 class _Line(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     type: str
-    payment_id: str
+    payment_id: PspPaymentId
     reference: str
     currency: str
     gross_minor: int
@@ -484,7 +485,7 @@ async def fetch_settlement_file(
 
 
 async def fetch_payout(
-    http: httpx2.AsyncClient, account: PspAccount, payout_id: str
+    http: httpx2.AsyncClient, account: PspAccount, payout_id: PspPayoutId
 ) -> PayoutResult | UndecodableBody:
     """The payout object, raw; only its readiness is read here."""
     sent = await _get(http, account, f"/payouts/{payout_id}")
@@ -498,7 +499,10 @@ async def fetch_payout(
 
 
 async def fetch_payout_lines(
-    http: httpx2.AsyncClient, account: PspAccount, payout_id: str, after: str | None
+    http: httpx2.AsyncClient,
+    account: PspAccount,
+    payout_id: PspPayoutId,
+    after: str | None,
 ) -> LinesResult | UndecodableBody:
     """A page of the payout's lines after the cursor, raw; only the cursor
     is read here."""
@@ -586,7 +590,7 @@ def decode_settlement_file(body: bytes) -> SettlementDocument | UndecodableBody:
                 if isinstance(net, UndecodableBody):
                     return net
                 payout = SettlementPayout(
-                    vendor_payout_id=batch,
+                    vendor_payout_id=PspPayoutId(batch),
                     currency=currency,
                     net=exact_amount(net, currency),
                     paid_out_at=moment,
@@ -600,11 +604,11 @@ def decode_settlement_file(body: bytes) -> SettlementDocument | UndecodableBody:
                     return fee
                 lines.append(
                     SettledLine(
-                        vendor_line_id=row_id,
-                        vendor_payout_id=batch,
+                        vendor_line_id=PspLineId(row_id),
+                        vendor_payout_id=PspPayoutId(batch),
                         line_type=_line_type(vendor_type),
                         vendor_type=vendor_type,
-                        provider_payment_id=payment_id,
+                        provider_payment_id=PspPaymentId(payment_id),
                         reference=reference,
                         currency=currency,
                         gross=exact_amount(gross, currency),
@@ -629,7 +633,7 @@ def decode_payout(body: bytes) -> SettlementDocument | UndecodableBody:
     if isinstance(currency, UndecodableBody):
         return currency
     payout = SettlementPayout(
-        vendor_payout_id=raw.id,
+        vendor_payout_id=PspPayoutId(raw.id),
         currency=currency,
         net=exact_amount(raw.amount_minor, currency),
         paid_out_at=to_utc(raw.arrival_date),
@@ -638,7 +642,7 @@ def decode_payout(body: bytes) -> SettlementDocument | UndecodableBody:
 
 
 def decode_payout_lines(
-    body: bytes, vendor_payout_id: str
+    body: bytes, vendor_payout_id: PspPayoutId
 ) -> SettlementDocument | UndecodableBody:
     """A page of a payout's lines. The page does not name its payout: the
     request did, and the caller says which it was."""
@@ -653,7 +657,7 @@ def decode_payout_lines(
             return currency
         lines.append(
             SettledLine(
-                vendor_line_id=raw.id,
+                vendor_line_id=PspLineId(raw.id),
                 vendor_payout_id=vendor_payout_id,
                 line_type=_line_type(raw.type),
                 vendor_type=raw.type,

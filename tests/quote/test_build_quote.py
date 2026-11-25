@@ -7,10 +7,10 @@ import uuid
 from datetime import UTC, date, datetime
 from fractions import Fraction
 
-from mor.couriers.records import Parcel
+from mor.carriers.records import Parcel
 from mor.duties.port import RateQuestion
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
-from mor.ids import DutyLookupId
+from mor.ids import CountryCode, DutyLookupId, HsCode
 from mor.markets.records import Charge, Collector, FeeComponent
 from mor.markets.rules import NotOpen
 from mor.money.amount import Money
@@ -38,16 +38,19 @@ NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 BOX = Parcel(
     weight_g=1000, length_mm=200, width_mm=150, height_mm=100
 )  # 1 kg; 0.6 kg by volume
-T_SHIRT = RateQuestion("TH", "VN", "610910")
+T_SHIRT = RateQuestion(CountryCode("TH"), CountryCode("VN"), HsCode("610910"))
+
+
+T_SHIRT_CODE = HsCode("610910")
 
 
 def _line(
-    minor: int, currency: Currency = Currency.SGD, hs: str | None = "610910"
+    minor: int, currency: Currency = Currency.SGD, hs: HsCode | None = T_SHIRT_CODE
 ) -> QuoteLine:
     return QuoteLine(
         category="apparel",
         hs_code=hs,
-        origin="VN",
+        origin=CountryCode("VN"),
         quantity=1,
         unit_price=Money(minor, currency),
     )
@@ -77,7 +80,7 @@ def _amounts(quote: Quote, rate_card: str) -> dict[str, int]:
 
 def test_an_order_above_the_border_limit_adds_tax_and_the_duty_paid_fee() -> None:
     request = QuoteRequest(
-        destination="SG", lines=(_line(50000),), parcel=BOX, on=ON, now=NOW
+        destination=CountryCode("SG"), lines=(_line(50000),), parcel=BOX, on=ON, now=NOW
     )
     quote = _quote(build_quote(quote_market(), request, {}, {}))
     # Worked by hand: SGD 500.00; fees 3% and 5%; 1 kg at SGD 30.00,
@@ -108,7 +111,7 @@ def test_below_the_limit_nothing_is_due_and_every_card_is_offered_cheapest_first
     None
 ):
     request = QuoteRequest(
-        destination="SG", lines=(_line(10000),), parcel=BOX, on=ON, now=NOW
+        destination=CountryCode("SG"), lines=(_line(10000),), parcel=BOX, on=ON, now=NOW
     )
     quote = _quote(build_quote(quote_market(), request, {}, {}))
     cards: list[str] = []
@@ -125,7 +128,9 @@ def test_duty_and_tax_are_shared_over_the_lines_by_their_value() -> None:
     quote = _quote(
         build_quote(
             quote_market(),
-            QuoteRequest(destination="SG", lines=lines, parcel=BOX, on=ON, now=NOW),
+            QuoteRequest(
+                destination=CountryCode("SG"), lines=lines, parcel=BOX, on=ON, now=NOW
+            ),
             {},
             {},
         )
@@ -146,7 +151,11 @@ def test_duty_and_tax_are_shared_over_the_lines_by_their_value() -> None:
 def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
     market = quote_market(duty_sources="TH,vendor,acme,\n")
     request = QuoteRequest(
-        destination="TH", lines=(_line(5000, Currency.USD),), parcel=BOX, on=ON, now=NOW
+        destination=CountryCode("TH"),
+        lines=(_line(5000, Currency.USD),),
+        parcel=BOX,
+        on=ON,
+        now=NOW,
     )
     assert build_quote(market, request, {}, {}) == InputsMissing(
         asks=(VendorAsk("acme", T_SHIRT),), waiting=()
@@ -174,7 +183,7 @@ def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
                 formula="25%",
                 rate=Fraction(1, 4),
                 note=None,
-                hs_code_used="610910",
+                hs_code_used=HsCode("610910"),
                 own_rate=None,
                 own_line_no=None,
             ),
@@ -183,7 +192,7 @@ def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
                 formula="7%",
                 rate=Fraction(7, 100),
                 note=None,
-                hs_code_used="610910",
+                hs_code_used=HsCode("610910"),
                 own_rate=None,
                 own_line_no=None,
             ),
@@ -199,7 +208,7 @@ def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
 
 def test_a_line_without_the_hs_code_its_duty_needs_is_refused() -> None:
     request = QuoteRequest(
-        destination="TH",
+        destination=CountryCode("TH"),
         lines=(_line(5000, Currency.USD, hs=None),),
         parcel=BOX,
         on=ON,
@@ -215,7 +224,11 @@ def test_a_closed_country_or_a_missing_fee_rule_is_refused() -> None:
     closed = build_quote(
         quote_market(),
         QuoteRequest(
-            destination="DE", lines=(_line(5000),), parcel=BOX, on=ON, now=NOW
+            destination=CountryCode("DE"),
+            lines=(_line(5000),),
+            parcel=BOX,
+            on=ON,
+            now=NOW,
         ),
         {},
         {},
@@ -228,7 +241,7 @@ def test_a_closed_country_or_a_missing_fee_rule_is_refused() -> None:
         }
     )
     request = QuoteRequest(
-        destination="SG", lines=(_line(5000),), parcel=BOX, on=ON, now=NOW
+        destination=CountryCode("SG"), lines=(_line(5000),), parcel=BOX, on=ON, now=NOW
     )
     assert build_quote(no_margin, request, {}, {}) == NoFeeRule(FeeComponent.MOR_MARGIN)
 
@@ -238,7 +251,11 @@ def test_a_quote_names_the_placeholder_fee_rules_it_used() -> None:
         build_quote(
             quote_market(),
             QuoteRequest(
-                destination="SG", lines=(_line(5000),), parcel=BOX, on=ON, now=NOW
+                destination=CountryCode("SG"),
+                lines=(_line(5000),),
+                parcel=BOX,
+                on=ON,
+                now=NOW,
             ),
             {},
             {},

@@ -106,7 +106,7 @@ uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_v
 uv run python -m mor.messaging.worker    # the worker: runs due deliveries; outside prod watchfiles restarts it on a change under src/
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod; uvicorn reloads it on a change under src/
-uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor and courier accounts at the fake, a fake PSP account per wiring with a default route, the Sandbox Shop merchant and its key (server must run)
+uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor and carrier accounts at the fake, a fake PSP account per wiring with a default route, the Sandbox Shop merchant and its key (server must run)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
 uv run python -m mor.merchants           # create/list merchants; `key mer_…` prints a new API key once; `revoke <key id>`; `kyb mer_… approved` (or pending, suspended)
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram
@@ -157,14 +157,22 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   `fetchone()` and an assert; a function that changes a row it read
   takes the row's `Locked…` type, made only by its `lock_*` function; no
   import aliases; no local named after a domain name, module or builtin.
-- Every id has its own `NewType` in `mor.ids` (`MerchantId`,
-  `PspAccountId`), named after its table, so pyright refuses one id where
-  another belongs (decided 24-Nov-2026). It gets its type where it is made
+- Every id and code has its own `NewType` in `mor.ids` (`MerchantId`,
+  `PspAccountId`, `CountryCode`, `CarrierCode`, `JournalKey`), so pyright
+  refuses one where another belongs (decided 24-Nov-2026). A uuid id is
+  named after its table. A value gets its type where it is made
   (`OrderId(uuid.uuid7())`), read (the record's field) or parsed (a path
-  parameter, `mor.public_ids`), and passes through unchanged elsewhere. A
-  bare `uuid.UUID` is only for generic messaging code (a message, an
-  aggregate of any kind); the `typed-ids` ast-grep rule refuses it
-  elsewhere, except in the echo flow until it is retired.
+  parameter, `mor.public_ids`, a market data file, a form once
+  normalized), and passes through unchanged elsewhere. A bare `uuid.UUID`
+  is only for generic messaging code (a message, an aggregate of any
+  kind); the `typed-ids` ast-grep rule refuses it elsewhere, except in the
+  echo flow until it is retired. A new string id or code gets its type
+  there too: no check can find a bare `str`. The fakes stay untyped, as
+  the vendors they stand for.
+- The company that carries a parcel is a carrier, never a courier, in
+  code, schema and plans (decided 24-Nov-2026). "Courier" stays only in
+  market data and research, where it is the customs term (a courier
+  regime, courier consignments).
 - Name a value by its role (`seller`, `paid_invoice`), not with a `_row`
   or `_record` suffix. Where two modules clash (the many `flow` modules
   in `mor.messaging.consumers`), import by dotted path (`import

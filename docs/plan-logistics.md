@@ -3,7 +3,7 @@
 Status: input for the shipment, returns and registrations slices and for
 launch (§8, §8b, §9). The country rows (§3) and the tax path rule (§4)
 are built (`plan-quote.md` §2, §3); the shipment's records, tables,
-booking, tracking, courier invoice and who bears a difference are in
+booking, tracking, carrier invoice and who bears a difference are in
 `plan-architecture.md` §7 to §9.
 
 Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
@@ -70,7 +70,7 @@ duty, §4). That is the whole tax logic of v1 (§4).
    06-Nov-2026). Rates, shipment with label and commercial invoice
    (duties billed to us), pickup, tracking (DHL by polling, FedEx by
    signed webhooks), return label, invoice import. Plus the fake
-   courier, which stays the default in dev and tests.
+   carrier, which stays the default in dev and tests.
    - **Express and a cheaper service where the carrier has one** (decided
      06-Nov-2026: express is not always what the buyer prefers). DHL VN
      sells only Express Worldwide. FedEx sells International Priority and
@@ -331,7 +331,7 @@ its own return rules. The merchant can be more generous, never less.
 
 ## 7. What the shipment slice adds beyond the architecture
 
-The port, tables, booking, tracking, courier invoice and ledger entries
+The port, tables, booking, tracking, carrier invoice and ledger entries
 are `plan-architecture.md` §7 to §9. On top of them:
 
 - **Line data**: as sessions carry it today, plus box size,
@@ -345,7 +345,7 @@ are `plan-architecture.md` §7 to §9. On top of them:
   `refunded_without_return`.
 - **Facts**: `shipment_created`, `shipment_label_booked`,
   `shipment_label_failed`, `shipment_picked_up`, `shipment_delivered`,
-  `shipment_held_at_customs`, `shipment_lost`, `courier_invoice_imported`,
+  `shipment_held_at_customs`, `shipment_lost`, `carrier_invoice_imported`,
   `return_requested`, `return_approved`, `return_received`,
   `refund_requested`, `registration_threshold_approaching`.
 - DHL's export declaration number is stored on every shipment (§5: the
@@ -431,7 +431,7 @@ needs anything in VN is the open VN adviser question in §6.
 ## 9. Later, in this order
 
 1. **A cheaper SEA lane** (Janio, Boxme, J&T, or the VN aggregators ShipX
-   and EFEX) once SEA volume justifies it. It is one more courier module
+   and EFEX) once SEA volume justifies it. It is one more carrier module
    and one more routing row. Customers see a cheaper "economy" option
    next to DHL.
 2. **Economy lines to the EU, UK, US and AU** (Asendia or YunExpress
@@ -447,9 +447,9 @@ needs anything in VN is the open VN adviser question in §6.
 ## 10. Project rules this design applies
 
 - Closed sets (the tax paths, states, reasons), matched exhaustively.
-- Errors as values from every courier and duty-source call.
+- Errors as values from every carrier and duty-source call.
 - Facts for every step; an inbox keyed on the carrier's event id.
-- One module per courier and per duty source, one place that picks by
+- One module per carrier and per duty source, one place that picks by
   name, and a fake as the default.
 - Effective-dated country rules, with the version stored on the quote and
   the shipment.

@@ -1,0 +1,38 @@
+-- The fake carrier's tables, renamed with the rest (migrations/0028):
+-- carrier, never courier.
+
+ALTER TYPE courier_fault_kind RENAME TO carrier_fault_kind;
+ALTER TABLE courier_rate RENAME TO carrier_rate;
+ALTER TABLE courier_call RENAME TO carrier_call;
+ALTER TABLE courier_fault RENAME TO carrier_fault;
+ALTER SEQUENCE courier_call_seq_seq RENAME TO carrier_call_seq_seq;
+ALTER SEQUENCE courier_fault_seq_seq RENAME TO carrier_fault_seq_seq;
+
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_pkey TO carrier_rate_pkey;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_base_minor_check TO carrier_rate_base_minor_check;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_per_kg_minor_check TO carrier_rate_per_kg_minor_check;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_fuel_bp_check TO carrier_rate_fuel_bp_check;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_surcharge_minor_check TO carrier_rate_surcharge_minor_check;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_service_not_null TO carrier_rate_service_not_null;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_destination_not_null TO carrier_rate_destination_not_null;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_currency_not_null TO carrier_rate_currency_not_null;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_base_minor_not_null TO carrier_rate_base_minor_not_null;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_per_kg_minor_not_null TO carrier_rate_per_kg_minor_not_null;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_fuel_bp_not_null TO carrier_rate_fuel_bp_not_null;
+ALTER TABLE carrier_rate RENAME CONSTRAINT courier_rate_surcharge_minor_not_null TO carrier_rate_surcharge_minor_not_null;
+
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_pkey TO carrier_call_pkey;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_seq_not_null TO carrier_call_seq_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_account_not_null TO carrier_call_account_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_service_not_null TO carrier_call_service_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_origin_not_null TO carrier_call_origin_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_destination_not_null TO carrier_call_destination_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_weight_g_not_null TO carrier_call_weight_g_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_length_mm_not_null TO carrier_call_length_mm_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_width_mm_not_null TO carrier_call_width_mm_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_height_mm_not_null TO carrier_call_height_mm_not_null;
+ALTER TABLE carrier_call RENAME CONSTRAINT courier_call_called_at_not_null TO carrier_call_called_at_not_null;
+
+ALTER TABLE carrier_fault RENAME CONSTRAINT courier_fault_pkey TO carrier_fault_pkey;
+ALTER TABLE carrier_fault RENAME CONSTRAINT courier_fault_seq_not_null TO carrier_fault_seq_not_null;
+ALTER TABLE carrier_fault RENAME CONSTRAINT courier_fault_fault_not_null TO carrier_fault_fault_not_null;

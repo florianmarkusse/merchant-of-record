@@ -10,6 +10,7 @@ import uuid
 from mor.audit import ActorKind
 from mor.checkout.records import SESSION_LIFETIME, AfterPayment
 from mor.db.connect import connect
+from mor.ids import CountryCode
 from mor.merchants.records import KeyEnv, KybState
 from mor.merchants.store import create_api_key, create_merchant, set_kyb_state
 from mor.messaging.consumers import run_local
@@ -294,7 +295,7 @@ def test_the_orders_api_shows_the_merchant_its_own_order_with_the_invoice(
 async def _other_merchant_key(setup: Setup) -> dict[str, str]:
     async with await connect(setup.url) as conn:
         other = await create_merchant(
-            conn, "Other Shop Co.", "Other Shop", "TH", 100, ACTOR, NOW
+            conn, "Other Shop Co.", "Other Shop", CountryCode("TH"), 100, ACTOR, NOW
         )
         key = await create_api_key(conn, other.id, KeyEnv.TEST, NOW)
         await conn.commit()

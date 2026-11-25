@@ -12,10 +12,11 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
+from mor.carriers.prices import create_carrier_account
+from mor.carriers.records import CarrierProvider, PriceExpiry
 from mor.config import Environment, Settings
-from mor.couriers.prices import create_courier_account
-from mor.couriers.records import CourierProvider, PriceExpiry
 from mor.db.connect import connect
+from mor.ids import CarrierCode, CountryCode
 from mor.markets.records import MarketSet
 from mor.markets.store import load_market
 from mor.merchants.records import KeyEnv, Merchant
@@ -74,7 +75,7 @@ async def _shop(
         if market is not None:
             await load_market(conn, market, "test", ACTOR, NOW)
         seller = await create_merchant(
-            conn, f"{name} Co.", name, "VN", daily_vendor_asks, ACTOR, NOW
+            conn, f"{name} Co.", name, CountryCode("VN"), daily_vendor_asks, ACTOR, NOW
         )
         key = await create_api_key(conn, seller.id, KeyEnv.TEST, NOW)
         await conn.commit()
@@ -351,7 +352,9 @@ def test_two_requests_at_once_with_one_key_make_one_session(
     asyncio.run(body())
 
 
-def _estimate(country: str, line: Mapping[str, object] = LINE) -> dict[str, object]:
+def _estimate(
+    country: CountryCode, line: Mapping[str, object] = LINE
+) -> dict[str, object]:
     return {"lines": [line], "parcel": PARCEL, "country": country}
 
 
@@ -361,7 +364,11 @@ def test_an_estimate_lists_each_option_with_parts_that_sum_to_its_total(
     async def body() -> None:
         shop = await _shop(database_url, quote_market())
         response = await _call(
-            database_url, "POST", "/v1/estimates", shop.key, _estimate("SG")
+            database_url,
+            "POST",
+            "/v1/estimates",
+            shop.key,
+            _estimate(CountryCode("SG")),
         )
         assert response.status_code == 200, response.text
         estimate = response.json()
@@ -396,7 +403,7 @@ def test_prod_does_not_estimate_on_a_placeholder_fee(database_url: str) -> None:
             "POST",
             "/v1/estimates",
             live.text,
-            _estimate("SG"),
+            _estimate(CountryCode("SG")),
             environment=Environment.PROD,
         )
         assert response.status_code == 503
@@ -410,8 +417,13 @@ def test_an_estimate_is_refused_with_the_reason(database_url: str) -> None:
         market = quote_market(duty_sources="TH,vendor,acme,\n")
         shop = await _shop(database_url, market)
         cases = (
-            (_estimate("ZZ"), 422, "country_not_supported", "country"),
-            (_estimate("TH", NO_HS_LINE), 422, "classification_needed", None),
+            (_estimate(CountryCode("ZZ")), 422, "country_not_supported", "country"),
+            (
+                _estimate(CountryCode("TH"), NO_HS_LINE),
+                422,
+                "classification_needed",
+                None,
+            ),
         )
         for request, status, code, param in cases:
             response = await _call(
@@ -434,12 +446,12 @@ def test_a_live_price_is_fetched_once_while_the_merchant_waits(
         shop = await _shop(database_url, live_market())
         wired = wire(database_url, lambda: NOW)
         async with await connect(database_url) as conn:
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 VENDOR_TIMEOUT,
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,
@@ -448,7 +460,11 @@ def test_a_live_price_is_fetched_once_while_the_merchant_waits(
         try:
             for _ in range(2):
                 pending = await _call(
-                    database_url, "POST", "/v1/estimates", shop.key, _estimate("SG")
+                    database_url,
+                    "POST",
+                    "/v1/estimates",
+                    shop.key,
+                    _estimate(CountryCode("SG")),
                 )
                 assert pending.status_code == 503, pending.text
                 assert pending.headers["retry-after"] == "2"
@@ -461,7 +477,11 @@ def test_a_live_price_is_fetched_once_while_the_merchant_waits(
             async with await connect(database_url, autocommit=True) as worker:
                 await drain_once(worker, wired.http, ENV, NOW)
             ready = await _call(
-                database_url, "POST", "/v1/estimates", shop.key, _estimate("SG")
+                database_url,
+                "POST",
+                "/v1/estimates",
+                shop.key,
+                _estimate(CountryCode("SG")),
             )
             assert ready.status_code == 200, ready.text
             keys = [option["key"] for option in ready.json()["options"]]
@@ -477,19 +497,23 @@ def test_new_lookups_over_the_daily_limit_are_not_asked(database_url: str) -> No
     async def body() -> None:
         shop = await _shop(database_url, live_market(), daily_vendor_asks=0)
         async with await connect(database_url) as conn:
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 VENDOR_TIMEOUT,
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,
             )
             await conn.commit()
         response = await _call(
-            database_url, "POST", "/v1/estimates", shop.key, _estimate("SG")
+            database_url,
+            "POST",
+            "/v1/estimates",
+            shop.key,
+            _estimate(CountryCode("SG")),
         )
         assert response.status_code == 429
         assert _error(response)["code"] == "rate_limited"

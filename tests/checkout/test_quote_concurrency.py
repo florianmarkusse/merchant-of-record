@@ -13,16 +13,22 @@ row alone would lock the lookup only after the state was read)."""
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-import mor.couriers.prices
+import mor.carriers.prices
 from mor.audit import Actor, ActorKind
+from mor.carriers.prices import PriceCall, create_carrier_account
+from mor.carriers.records import CarrierProvider, Parcel, PriceExpiry
 from mor.checkout.addresses import Address
 from mor.checkout.flow import Waiting, submit_address
 from mor.checkout.records import AfterPayment, Customs, SessionDraft, SoldLine
 from mor.checkout.sessions import create_session, session_by_id
-from mor.couriers.prices import PriceCall, create_courier_account
-from mor.couriers.records import CourierProvider, Parcel, PriceExpiry
 from mor.db.connect import connect
-from mor.ids import CheckoutSessionId, ShippingPriceLookupId
+from mor.ids import (
+    CarrierCode,
+    CheckoutSessionId,
+    CountryCode,
+    HsCode,
+    ShippingPriceLookupId,
+)
 from mor.markets.store import load_market
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import finish_delivery
@@ -53,7 +59,7 @@ SG = Address(
     city="Singapore",
     region=None,
     postcode="123456",
-    country="SG",
+    country=CountryCode("SG"),
 )
 # Long enough for the second buyer's step to reach the lookup it waits on
 # and block there.
@@ -69,14 +75,14 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
         async with await connect(database_url) as conn:
             await load_market(conn, live_market(), "test", ACTOR, NOW)
             seller = await create_merchant(
-                conn, "Test Shop Co.", "Test Shop", "VN", 100, ACTOR, NOW
+                conn, "Test Shop Co.", "Test Shop", CountryCode("VN"), 100, ACTOR, NOW
             )
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
-                "carrier",
-                CourierProvider.FAKE,
+                CarrierCode("carrier"),
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/courier/acct",
+                "http://mor/_fake/carrier/acct",
                 timedelta(seconds=2),
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,
@@ -89,9 +95,9 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
                 merchant_sku=None,
                 customs=Customs(
                     description="Linen shirt",
-                    origin_country="VN",
+                    origin_country=CountryCode("VN"),
                     weight_g=300,
-                    hs_code="610910",
+                    hs_code=HsCode("610910"),
                 ),
             )
             for _ in range(2):
@@ -130,12 +136,12 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
             assert await try_lock_aggregate(worker, candidate)
             lookup_id = ShippingPriceLookupId(candidate.aggregate_id)
             async with worker.transaction():
-                prepared = await mor.couriers.prices.prepare_rate(
+                prepared = await mor.carriers.prices.prepare_rate(
                     worker, lookup_id, NOW
                 )
             assert isinstance(prepared, PriceCall)
-            result = await mor.couriers.prices.ask_rate(wired.http, ENV, prepared)
-            await mor.couriers.prices.complete_rate(
+            result = await mor.carriers.prices.ask_rate(wired.http, ENV, prepared)
+            await mor.carriers.prices.complete_rate(
                 completer, lookup_id, prepared, result, NOW
             )
             await finish_delivery(completer, candidate, NOW)

@@ -27,7 +27,7 @@ from fractions import Fraction
 from typing import Literal
 
 from mor.duties.records import LookupState, StoredAnswer, VendorLookup
-from mor.ids import DutyLookupId
+from mor.ids import CountryCode, DutyLookupId, HsCode
 from mor.markets.records import (
     USABLE_STATUSES,
     Charge,
@@ -43,8 +43,8 @@ from mor.markets.records import (
 
 @dataclass(frozen=True)
 class Line:
-    hs_code: str | None  # digits only
-    origin: str
+    hs_code: HsCode | None  # digits only
+    origin: CountryCode
     # Agreement conditions this product meets. Recorded with the merchant
     # records (4d); until then none, so no preference applies.
     conditions_met: frozenset[PreferenceCondition]
@@ -134,7 +134,7 @@ type LineRate = (
 )
 
 
-def duty_source_for(market: MarketSet, destination: str) -> DutySource:
+def duty_source_for(market: MarketSet, destination: CountryCode) -> DutySource:
     """The destination's row in duty_sources.csv; not listed is own_only."""
     for source in market.duty_sources:
         if source.country == destination:
@@ -144,7 +144,7 @@ def duty_source_for(market: MarketSet, destination: str) -> DutySource:
 
 def line_rate(
     market: MarketSet,
-    destination: str,
+    destination: CountryCode,
     charge: Charge,
     line: Line,
     band_row: LandedRate,
@@ -197,7 +197,7 @@ def _vendor_rate(vendor: str, charge: Charge, lookup: VendorLookup | None) -> Li
 
 
 def own_standard_row(
-    market: MarketSet, destination: str, charge: Charge, line: Line, on: date
+    market: MarketSet, destination: CountryCode, charge: Charge, line: Line, on: date
 ) -> HsRate | None:
     """Our standard row for a line (whatever its research status): what a
     vendor's answer is compared with."""
@@ -208,7 +208,7 @@ def own_standard_row(
 
 def _own_rate(
     market: MarketSet,
-    destination: str,
+    destination: CountryCode,
     charge: Charge,
     line: Line,
     band_row: LandedRate,
@@ -241,7 +241,7 @@ def _own_rate(
 
 
 def _matching_rows(
-    market: MarketSet, destination: str, charge: Charge, line: Line, on: date
+    market: MarketSet, destination: CountryCode, charge: Charge, line: Line, on: date
 ) -> list[HsRate]:
     """Rows for this charge whose prefix starts the HS code and whose origin
     is the line's or any, in force on `on`; the destination's own rows, or

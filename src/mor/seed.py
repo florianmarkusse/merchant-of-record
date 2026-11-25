@@ -15,7 +15,7 @@ pointing at the fake duty vendor, which is given a few rates
 page shows a disagreement.
 
 Every carrier a live route names (`carrier_api` in shipping_routes.csv)
-gets an account pointing at the fake courier, its prices used for
+gets an account pointing at the fake carrier, its prices used for
 PRICE_VALID_FOR under the `carrier_first` rule (decided 19-Nov-2026). The
 fake answers its own default prices.
 
@@ -45,16 +45,16 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
+from mor.carriers.prices import carrier_account, create_carrier_account
+from mor.carriers.records import CarrierProvider, PriceExpiry
 from mor.config import Environment, Settings, load_settings
-from mor.couriers.prices import courier_account, create_courier_account
-from mor.couriers.records import CourierProvider, PriceExpiry
 from mor.db.connect import Connection, connect
 from mor.duties.lookups import create_vendor_account, vendor_account
 from mor.duties.port import DutyProvider
 from mor.echo.flow import create_echo_account
 from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
-from mor.ids import MerchantId
+from mor.ids import CarrierCode, CountryCode, MerchantId
 from mor.markets.records import PriceSource
 from mor.markets.store import latest_load, read_market
 from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, KybState, NewKey
@@ -212,8 +212,10 @@ async def seed_duty_vendors(
     return created
 
 
-async def seed_couriers(conn: Connection, settings: Settings) -> list[str] | SeedInProd:
-    """An account at the fake courier for every carrier a live route in the
+async def seed_carriers(
+    conn: Connection, settings: Settings
+) -> list[CarrierCode] | SeedInProd:
+    """An account at the fake carrier for every carrier a live route in the
     market data in force names and this database lacks; the carriers
     created. Never commits."""
     if settings.environment == Environment.PROD:
@@ -222,7 +224,7 @@ async def seed_couriers(conn: Connection, settings: Settings) -> list[str] | See
     if load is None:
         return []
     market = await read_market(conn, load.id)
-    created: list[str] = []
+    created: list[CarrierCode] = []
     for route in market.routes:
         if route.source != PriceSource.CARRIER_API:
             continue
@@ -230,14 +232,14 @@ async def seed_couriers(conn: Connection, settings: Settings) -> list[str] | See
             if service.code != route.service:
                 continue
             carrier = service.provider
-            if carrier in created or await courier_account(conn, carrier) is not None:
+            if carrier in created or await carrier_account(conn, carrier) is not None:
                 continue
-            await create_courier_account(
+            await create_carrier_account(
                 conn,
                 carrier,
-                CourierProvider.FAKE,
+                CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                f"{settings.self_url}/_fake/courier/sandbox-{carrier}",
+                f"{settings.self_url}/_fake/carrier/sandbox-{carrier}",
                 TIMEOUT,
                 PRICE_VALID_FOR,
                 PriceExpiry.CARRIER_FIRST,
@@ -404,8 +406,8 @@ async def _main() -> int:
             return 1
         vendors = await seed_duty_vendors(conn, settings)
         assert not isinstance(vendors, SeedInProd)
-        couriers = await seed_couriers(conn, settings)
-        assert not isinstance(couriers, SeedInProd)
+        carriers = await seed_carriers(conn, settings)
+        assert not isinstance(carriers, SeedInProd)
         key = await seed_merchant(conn, settings, datetime.now(UTC))
         assert not isinstance(key, SeedInProd)
         psps = await seed_psp_accounts(conn, settings, datetime.now(UTC))
@@ -427,7 +429,7 @@ async def _main() -> int:
             created += 1
     print(f"{len(seeded)} echo accounts, {created} new; webhooks subscribed")
     print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
-    print(f"courier accounts created: {', '.join(couriers) or 'none'}")
+    print(f"carrier accounts created: {', '.join(carriers) or 'none'}")
     print(f"{len(psps)} fake PSP accounts set up; default route: {DEFAULT_PSP}")
     if key is not None:
         print(f"Sandbox Shop API key (shown once): {key.text}")
@@ -456,7 +458,7 @@ async def seed_merchant(
             conn,
             legal_name,
             display_name,
-            "VN",
+            CountryCode("VN"),
             DEFAULT_DAILY_VENDOR_ASKS,
             SEEDER,
             now,

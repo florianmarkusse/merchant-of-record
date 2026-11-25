@@ -6,8 +6,15 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import NewType
 
-from mor.couriers.records import Parcel
-from mor.ids import CheckoutAddressId, CheckoutSessionId, MerchantId, QuoteId
+from mor.carriers.records import Parcel
+from mor.ids import (
+    CheckoutAddressId,
+    CheckoutSessionId,
+    CountryCode,
+    HsCode,
+    MerchantId,
+    QuoteId,
+)
 from mor.money.amount import Money
 
 
@@ -52,9 +59,9 @@ MAX_ADDRESSES = 10
 @dataclass(frozen=True, kw_only=True)
 class Customs:
     description: str
-    origin_country: str
+    origin_country: CountryCode
     weight_g: int  # one unit's
-    hs_code: str | None  # the merchant's: a hint, classification is ours
+    hs_code: HsCode | None  # the merchant's: a hint, classification is ours
 
 
 @dataclass(frozen=True, kw_only=True)

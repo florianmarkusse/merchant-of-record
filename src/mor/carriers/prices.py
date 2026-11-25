@@ -24,16 +24,15 @@ import httpx2
 from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
-from mor.config import Environment
-from mor.couriers import registry
-from mor.couriers.port import (
+from mor.carriers import registry
+from mor.carriers.port import (
     CarrierPrice,
     NotServed,
     QuoteRateResult,
 )
-from mor.couriers.records import (
-    CourierAccount,
-    CourierProvider,
+from mor.carriers.records import (
+    CarrierAccount,
+    CarrierProvider,
     FinishedLookup,
     OwnPrice,
     Parcel,
@@ -45,8 +44,16 @@ from mor.couriers.records import (
     StoredPrice,
     usable_until,
 )
+from mor.config import Environment
 from mor.db.connect import Connection
-from mor.ids import CourierAccountId, MarketLoadId, ShippingPriceLookupId
+from mor.ids import (
+    CarrierAccountId,
+    CarrierCode,
+    CountryCode,
+    MarketLoadId,
+    ServiceCode,
+    ShippingPriceLookupId,
+)
 from mor.markets.store import latest_load, read_market
 from mor.messaging.facts import (
     ShippingPriceFoundV1,
@@ -68,18 +75,18 @@ ACTOR = Actor(ActorKind.SYSTEM, "shipping_price_ask")
 
 
 @dataclass(frozen=True)
-class NoCourierAccount:
+class NoCarrierAccount:
     """This environment has no account for the carrier a route names:
     nothing can be asked."""
 
-    carrier: str
+    carrier: CarrierCode
 
 
 @dataclass(frozen=True)
 class PriceCall:
     """What `prepare_rate` committed to ask, for `ask_rate`."""
 
-    account: CourierAccount
+    account: CarrierAccount
     question: PriceQuestion
 
 
@@ -88,9 +95,9 @@ class PriceCall:
 
 @dataclass(frozen=True, kw_only=True)
 class _AccountRow:
-    id: CourierAccountId
-    carrier: str
-    provider: CourierProvider
+    id: CarrierAccountId
+    carrier: CarrierCode
+    provider: CarrierProvider
     kind: ProviderAccountKind
     base_url: str
     timeout_ms: int
@@ -101,10 +108,10 @@ class _AccountRow:
 @dataclass(frozen=True, kw_only=True)
 class _LookupRow:
     id: ShippingPriceLookupId
-    carrier: str
-    service: str
-    origin: str
-    destination: str
+    carrier: CarrierCode
+    service: ServiceCode
+    origin: CountryCode
+    destination: CountryCode
     weight_g: int
     length_mm: int
     width_mm: int
@@ -125,20 +132,20 @@ class _LookupRow:
 # --- accounts ---------------------------------------------------------------
 
 
-async def create_courier_account(
+async def create_carrier_account(
     conn: Connection,
-    carrier: str,
-    provider: CourierProvider,
+    carrier: CarrierCode,
+    provider: CarrierProvider,
     kind: ProviderAccountKind,
     base_url: str,
     timeout: timedelta,
     price_valid_for: timedelta,
     price_expiry: PriceExpiry,
-) -> CourierAccountId:
-    account_id = CourierAccountId(uuid.uuid7())
+) -> CarrierAccountId:
+    account_id = CarrierAccountId(uuid.uuid7())
     await conn.execute(
         """
-        INSERT INTO courier_account
+        INSERT INTO carrier_account
           (id, carrier, provider, kind, base_url, timeout_ms, price_valid_for_s,
            price_expiry)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -157,20 +164,22 @@ async def create_courier_account(
     return account_id
 
 
-async def courier_account(conn: Connection, carrier: str) -> CourierAccount | None:
+async def carrier_account(
+    conn: Connection, carrier: CarrierCode
+) -> CarrierAccount | None:
     async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
         await cur.execute(
             """
             SELECT id, carrier, provider, kind, base_url, timeout_ms,
                    price_valid_for_s, price_expiry
-            FROM courier_account WHERE carrier = %s
+            FROM carrier_account WHERE carrier = %s
             """,
             (carrier,),
         )
         row = await cur.fetchone()
     if row is None:
         return None
-    return CourierAccount(
+    return CarrierAccount(
         id=row.id,
         carrier=row.carrier,
         provider=row.provider,
@@ -183,13 +192,13 @@ async def courier_account(conn: Connection, carrier: str) -> CourierAccount | No
 
 
 async def set_price_rule(
-    conn: Connection, carrier: str, valid_for: timedelta, expiry: PriceExpiry
+    conn: Connection, carrier: CarrierCode, valid_for: timedelta, expiry: PriceExpiry
 ) -> None:
     """How long the carrier's prices are used, from now on, for every price
     already held too: nothing stored changes. Never commits."""
     await conn.execute(
         """
-        UPDATE courier_account SET price_valid_for_s = %s, price_expiry = %s
+        UPDATE carrier_account SET price_valid_for_s = %s, price_expiry = %s
         WHERE carrier = %s
         """,
         (int(valid_for.total_seconds()), expiry.value, carrier),
@@ -201,14 +210,14 @@ async def set_price_rule(
 
 async def request_shipping_price(
     conn: Connection, question: PriceQuestion, actor: Actor, now: datetime
-) -> ShippingPriceLookupId | NoCourierAccount:
+) -> ShippingPriceLookupId | NoCarrierAccount:
     """The lookup that serves this question at `now`: the newest finished
     one while usable, else the open request, opened here if there is none.
     Insert first; a conflict means another request is open, and that one is
     the answer. Never commits."""
-    account = await courier_account(conn, question.carrier)
+    account = await carrier_account(conn, question.carrier)
     if account is None:
-        return NoCourierAccount(question.carrier)
+        return NoCarrierAccount(question.carrier)
     held = await read_price(conn, question)
     if held.latest is not None and held.latest.usable_until > now:
         return held.latest.id
@@ -292,13 +301,13 @@ async def read_price(conn: Connection, question: PriceQuestion) -> PriceHeld:
             newest = row
     if newest is None:
         return PriceHeld(None, open_id)
-    account = await courier_account(conn, question.carrier)
+    account = await carrier_account(conn, question.carrier)
     assert account is not None, "a lookup's account is never removed"
     return PriceHeld(await _finished(conn, newest, account), open_id)
 
 
 async def _finished(
-    conn: Connection, row: _LookupRow, account: CourierAccount
+    conn: Connection, row: _LookupRow, account: CarrierAccount
 ) -> FinishedLookup:
     assert row.finished_at is not None, "a finished lookup has its moment"
     price: StoredPrice | None = None
@@ -390,7 +399,7 @@ async def prepare_rate(
     lookup = await _lock_lookup(conn, lookup_id)
     if lookup.state != PriceState.REQUESTED:
         return NoCall(Stale())
-    account = await courier_account(conn, lookup.carrier)
+    account = await carrier_account(conn, lookup.carrier)
     assert account is not None, f"no account for {lookup.carrier}"
     # Counted before the call and committed with this step: a call that is
     # made is always counted, even if the worker dies right after.
@@ -568,11 +577,11 @@ async def live_prices(conn: Connection, limit: int) -> list[LivePriceRow]:
             (limit,),
         )
         rows = await cur.fetchall()
-    accounts: dict[str, CourierAccount] = {}
+    accounts: dict[str, CarrierAccount] = {}
     result: list[LivePriceRow] = []
     for row in rows:
         if row.carrier not in accounts:
-            account = await courier_account(conn, row.carrier)
+            account = await carrier_account(conn, row.carrier)
             assert account is not None, "a lookup's account is never removed"
             accounts[row.carrier] = account
         finished: FinishedLookup | None = None

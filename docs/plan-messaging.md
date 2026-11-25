@@ -237,7 +237,7 @@ client, the environment, the delivery and `now`.
   and capture either send or look up after a lost answer, so their call
   returns `CreateSent`, `CaptureSent` or `Looked`.
 - **Request rows**: one table per port (`echo_request`, the PSP's
-  attempt columns, later `courier_request`), unique on (aggregate,
+  attempt columns, later `carrier_request`), unique on (aggregate,
   operation, number), holding the idempotency key for good.
 - **The exceptions list is a state, not a table**: an aggregate in
   `needs_person` with its request still `sent`. A generic exceptions

@@ -30,7 +30,7 @@ from enum import StrEnum
 from fractions import Fraction
 from typing import Literal
 
-from mor.couriers.records import (
+from mor.carriers.records import (
     FinishedLookup,
     OwnPrice,
     Parcel,
@@ -40,7 +40,7 @@ from mor.couriers.records import (
     PriceState,
 )
 from mor.dates import format_moment
-from mor.ids import ShippingPriceLookupId
+from mor.ids import CountryCode, GroupCode, ServiceCode, ShippingPriceLookupId
 from mor.markets.changes import decimal_text, percent_text
 from mor.markets.fx import FxMissing, convert_minor
 from mor.markets.records import (
@@ -163,7 +163,7 @@ class PriceMissing:
 
 def offers(
     market: MarketSet,
-    destination: str,
+    destination: CountryCode,
     categories: frozenset[str],
     parcel: Parcel,
     line_count: int,
@@ -210,10 +210,10 @@ def offers(
     return result
 
 
-def routes_to(market: MarketSet, destination: str) -> list[ShippingRoute]:
+def routes_to(market: MarketSet, destination: CountryCode) -> list[ShippingRoute]:
     """The routes whose place is the destination or a group it is in, one
     per service (the country's own row before a group's), by key."""
-    groups: set[str] = set()
+    groups: set[GroupCode] = set()
     for group in market.groups:
         if destination in group.members:
             groups.add(group.code)
@@ -229,7 +229,9 @@ def routes_to(market: MarketSet, destination: str) -> list[ShippingRoute]:
     return ordered
 
 
-def price_question(service: Service, destination: str, parcel: Parcel) -> PriceQuestion:
+def price_question(
+    service: Service, destination: CountryCode, parcel: Parcel
+) -> PriceQuestion:
     return PriceQuestion(
         carrier=service.provider,
         service=service.code,
@@ -241,8 +243,8 @@ def price_question(service: Service, destination: str, parcel: Parcel) -> PriceQ
 
 def own_card_price(
     market: MarketSet,
-    service_code: str,
-    destination: str,
+    service_code: ServiceCode,
+    destination: CountryCode,
     parcel: Parcel,
     currency: Currency,
     on: date,
@@ -283,7 +285,9 @@ def own_card_price(
     return None
 
 
-def carries_duties_paid(market: MarketSet, service: Service, destination: str) -> bool:
+def carries_duties_paid(
+    market: MarketSet, service: Service, destination: CountryCode
+) -> bool:
     """Whether the carrier pays what is due at the border and bills us."""
     match service.duties_paid:
         case DutiesPaid.YES | DutiesPaid.MANDATORY:
@@ -309,7 +313,7 @@ def chargeable_kg(service: Service, parcel: Parcel) -> Fraction:
 def _offer(
     market: MarketSet,
     route: ShippingRoute,
-    destination: str,
+    destination: CountryCode,
     categories: frozenset[str],
     parcel: Parcel,
     line_count: int,
@@ -459,7 +463,7 @@ def _offer(
 def _live_offer(
     market: MarketSet,
     route: ShippingRoute,
-    destination: str,
+    destination: CountryCode,
     categories: frozenset[str],
     parcel: Parcel,
     currency: Currency,
@@ -510,7 +514,7 @@ def _from_carrier(
     market: MarketSet,
     route: ShippingRoute,
     service: Service,
-    destination: str,
+    destination: CountryCode,
     latest: FinishedLookup,
     chargeable: Fraction,
     currency: Currency,
@@ -645,7 +649,10 @@ def duty_paid_parts(
 
 
 def surcharges_for(
-    market: MarketSet, service: str, card: RateCard | None, destination: str
+    market: MarketSet,
+    service: ServiceCode,
+    card: RateCard | None,
+    destination: CountryCode,
 ) -> list[Surcharge]:
     """The surcharges on a service's prices into a destination: rows for
     every card of the service, except where the card has its own row of
@@ -770,7 +777,7 @@ def _at_least(
     return value, how
 
 
-def _restriction(market: MarketSet, service: str, category: str) -> str | None:
+def _restriction(market: MarketSet, service: ServiceCode, category: str) -> str | None:
     """Why the service may not carry the category, or None. A row that is
     not a confirmed `allowed` keeps the service out (Q1)."""
     for row in market.restrictions:
@@ -807,7 +814,7 @@ def _service(market: MarketSet, code: str) -> Service:
     raise AssertionError(f"card of unknown service {code}: the loader checks this")
 
 
-def _zone(market: MarketSet, card: str, destination: str) -> CardZone | None:
+def _zone(market: MarketSet, card: str, destination: CountryCode) -> CardZone | None:
     for zone in market.zones:
         if zone.rate_card == card and zone.destination == destination:
             return zone
@@ -827,7 +834,9 @@ def _weight_break(
     return best
 
 
-def _transit(market: MarketSet, service: str, destination: str) -> Transit | None:
+def _transit(
+    market: MarketSet, service: ServiceCode, destination: CountryCode
+) -> Transit | None:
     """The service's transit time to the country, else to a group it is in."""
     in_group: Transit | None = None
     for transit in market.transit:
@@ -842,7 +851,9 @@ def _transit(market: MarketSet, service: str, destination: str) -> Transit | Non
     return in_group
 
 
-def _in_places(market: MarketSet, destination: str, places: tuple[str, ...]) -> bool:
+def _in_places(
+    market: MarketSet, destination: CountryCode, places: tuple[str, ...]
+) -> bool:
     if destination in places:
         return True
     for group in market.groups:

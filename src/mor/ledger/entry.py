@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from mor.audit import Actor
-from mor.ids import JournalEntryId
+from mor.ids import JournalEntryId, JournalKey
 from mor.ledger.account import Account
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -27,7 +27,7 @@ class Line:
 @dataclass(frozen=True, kw_only=True)
 class JournalEntry:
     id: JournalEntryId
-    idempotency_key: str
+    idempotency_key: JournalKey
     description: str
     effective_at: datetime
     recorded_at: datetime
@@ -53,7 +53,7 @@ def _require_utc(name: str, moment: datetime) -> None:
 
 
 def build_entry(
-    idempotency_key: str,
+    idempotency_key: JournalKey,
     description: str,
     effective_at: datetime,
     actor: Actor,

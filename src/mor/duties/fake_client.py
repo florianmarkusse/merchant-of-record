@@ -25,6 +25,7 @@ from mor.duties.port import (
     VendorRates,
     percent_formula,
 )
+from mor.ids import HsCode
 from mor.markets.records import Charge
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
@@ -35,7 +36,7 @@ class _Line(msgspec.Struct, frozen=True):
 
 
 class _Answer(msgspec.Struct, frozen=True):
-    hs_code_used: str
+    hs_code_used: HsCode
     duties: list[_Line]
     taxes: list[_Line]
 

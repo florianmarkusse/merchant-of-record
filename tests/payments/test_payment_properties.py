@@ -14,13 +14,16 @@ from mor.audit import Actor, ActorKind
 from mor.checkout.quotes import MadeQuote, QuoteInputs, StoredOption
 from mor.checkout.records import Customs, SoldLine
 from mor.ids import (
+    CarrierCode,
     CheckoutAddressId,
     CheckoutSessionId,
+    CountryCode,
     MarketLoadId,
     MerchantId,
     PaymentAttemptId,
     PspAccountId,
     QuoteId,
+    ServiceCode,
 )
 from mor.invoices.lines import invoice_lines
 from mor.invoices.records import InvoiceSection
@@ -126,7 +129,10 @@ def _paid_quotes(draw: strategies.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ..
                 category="apparel",
                 merchant_sku=None,
                 customs=Customs(
-                    description="Item", origin_country="VN", weight_g=100, hs_code=None
+                    description="Item",
+                    origin_country=CountryCode("VN"),
+                    weight_g=100,
+                    hs_code=None,
                 ),
             )
         )
@@ -156,7 +162,7 @@ def _paid_quotes(draw: strategies.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ..
         total = 1
     option = StoredOption(
         key="opt",
-        service="exp",
+        service=ServiceCode("exp"),
         service_name="Express",
         tier=ServiceTier.EXPRESS,
         transit=None,
@@ -194,8 +200,8 @@ def test_the_capture_entry_balances_and_pays_the_merchant_exactly(
         lines,
         merchant_id,
         PspAccountId(uuid.uuid7()),
-        "SG",
-        "carrier",
+        CountryCode("SG"),
+        CarrierCode("carrier"),
         NOW,
         Actor(ActorKind.SYSTEM, "test"),
         NOW,

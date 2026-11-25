@@ -13,7 +13,7 @@ from hypothesis import given, strategies
 
 from mor.audit import Actor, ActorKind
 from mor.fakes.psp import payout_amount
-from mor.ids import PspAccountId
+from mor.ids import PspAccountId, PspLineId, PspPayoutId
 from mor.ledger.account import (
     Account,
     PayoutInTransit,
@@ -74,7 +74,7 @@ def test_a_line_clears_its_estimate_and_books_the_gap_as_ours(
 ) -> None:
     entry = line_entry(
         ACCOUNT,
-        "line-1",
+        PspLineId("line-1"),
         Money(estimate, Currency.SGD),
         Money(fee, Currency.SGD),
         WHEN,
@@ -114,10 +114,16 @@ def test_a_net_rounded_either_way_adds_up_and_clears_what_its_lines_left(
         left += to_minor(line.gross) - to_minor(line.fee)
     assert check.rounding == reported - left
     payout = payout_entry(
-        ACCOUNT, "po-1", Money(reported, Currency.IDR), WHEN, ACTOR, WHEN
+        ACCOUNT, PspPayoutId("po-1"), Money(reported, Currency.IDR), WHEN, ACTOR, WHEN
     )
     rounding = rounding_entry(
-        ACCOUNT, "po-1", 1, Money(check.rounding, Currency.IDR), WHEN, ACTOR, WHEN
+        ACCOUNT,
+        PspPayoutId("po-1"),
+        1,
+        Money(check.rounding, Currency.IDR),
+        WHEN,
+        ACTOR,
+        WHEN,
     )
     clearing = 0
     in_transit = 0
@@ -136,10 +142,10 @@ def test_a_net_rounded_either_way_adds_up_and_clears_what_its_lines_left(
 @given(change=strategies.integers(-(10**6), 10**6))
 def test_a_rounding_change_and_its_reversal_leave_nothing(change: int) -> None:
     there = rounding_entry(
-        ACCOUNT, "po-1", 1, Money(change, Currency.SGD), WHEN, ACTOR, WHEN
+        ACCOUNT, PspPayoutId("po-1"), 1, Money(change, Currency.SGD), WHEN, ACTOR, WHEN
     )
     back = rounding_entry(
-        ACCOUNT, "po-1", 2, Money(-change, Currency.SGD), WHEN, ACTOR, WHEN
+        ACCOUNT, PspPayoutId("po-1"), 2, Money(-change, Currency.SGD), WHEN, ACTOR, WHEN
     )
     if change == 0:
         assert there is None and back is None
@@ -161,7 +167,9 @@ def test_a_net_further_off_than_rounding_does_not_add_up(
 
 @given(net=strategies.integers(-(10**9), 10**9))
 def test_a_payout_is_booked_as_reported(net: int) -> None:
-    entry = payout_entry(ACCOUNT, "po-1", Money(net, Currency.SGD), WHEN, ACTOR, WHEN)
+    entry = payout_entry(
+        ACCOUNT, PspPayoutId("po-1"), Money(net, Currency.SGD), WHEN, ACTOR, WHEN
+    )
     if net == 0:
         assert entry is None
         return
@@ -183,7 +191,7 @@ def test_any_bytes_decode_to_a_document_or_a_typed_error(body: bytes) -> None:
     for decoded in (
         decode_settlement_file(body),
         decode_payout(body),
-        decode_payout_lines(body, "po-1"),
+        decode_payout_lines(body, PspPayoutId("po-1")),
     ):
         assert isinstance(decoded, SettlementDocument | UndecodableBody)
 
@@ -240,7 +248,7 @@ def test_a_vendors_moment_is_taken_in_utc_and_one_without_an_offset_refused() ->
         b' "reference": "r", "currency": "SGD", "gross_minor": 1, "fee_minor": 0,'
         b' "created": "2026-11-18T16:30:00"}], "has_more": false}'
     )
-    assert isinstance(decode_payout_lines(page, "po-1"), UndecodableBody)
+    assert isinstance(decode_payout_lines(page, PspPayoutId("po-1")), UndecodableBody)
     report = (
         ",".join(CSV_HEADER)
         + "\nmerchant_payout,b,b-payout,,,,SGD,,,0,2026-11-18T16:30:00\n"
@@ -254,7 +262,7 @@ def test_a_page_of_lines_belongs_to_the_payout_it_was_asked_for() -> None:
         b' "reference": "-", "currency": "SGD", "gross_minor": -300,'
         b' "fee_minor": 0, "created": "2026-11-18T09:30:00Z"}], "has_more": true}'
     )
-    decoded = decode_payout_lines(page, "po-7")
+    decoded = decode_payout_lines(page, PspPayoutId("po-7"))
     assert isinstance(decoded, SettlementDocument)
     assert decoded.payout is None
     assert [line.vendor_payout_id for line in decoded.lines] == ["po-7"]

@@ -5,9 +5,10 @@ from hypothesis import given, strategies
 
 from mor.checkout import addresses
 from mor.checkout.addresses import Address, parse_address
+from mor.ids import CountryCode
 
 
-OFFERED = frozenset({"SG", "TH"})
+OFFERED = frozenset({CountryCode("SG"), CountryCode("TH")})
 SG = {
     addresses.NAME: "  Tan  Mei Ling ",
     addresses.EMAIL: "mei@example.test",
@@ -41,7 +42,7 @@ def test_an_address_is_tidied_and_its_phone_split_from_its_dial_code() -> None:
         city="Singapore",
         region=None,
         postcode="123456",
-        country="SG",
+        country=CountryCode("SG"),
     )
     parsed = parse_address(TH, OFFERED)
     assert isinstance(parsed, Address)
@@ -78,11 +79,13 @@ def test_each_bad_field_is_named() -> None:
 
 
 def test_only_a_country_offered_for_this_cart_may_be_chosen() -> None:
-    assert parse_address(SG, frozenset({"TH"})) == {addresses.COUNTRY: "country"}
-    # Offered by the market but with no address rule: refused too.
-    assert parse_address(SG | {addresses.COUNTRY: "DE"}, frozenset({"DE"})) == {
+    assert parse_address(SG, frozenset({CountryCode("TH")})) == {
         addresses.COUNTRY: "country"
     }
+    # Offered by the market but with no address rule: refused too.
+    assert parse_address(
+        SG | {addresses.COUNTRY: "DE"}, frozenset({CountryCode("DE")})
+    ) == {addresses.COUNTRY: "country"}
 
 
 form_values = strategies.dictionaries(

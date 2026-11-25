@@ -15,6 +15,7 @@ from hypothesis import given, strategies
 
 from mor.audit import Actor, ActorKind
 from mor.db.connect import connect
+from mor.ids import CountryCode
 from mor.markets.changes import describe_changes
 from mor.markets.load import MARKETS_DIR
 from mor.markets.records import (
@@ -188,7 +189,7 @@ def test_an_open_country_lists_its_rates_most_specific_first() -> None:
         "verified,FR,https://f.test,,,,\n"
     )
     market = _market(market_texts(eu_fee + fr_fee + fr_vat))
-    rules = country_rules(market, "FR", "apparel", TODAY)
+    rules = country_rules(market, CountryCode("FR"), "apparel", TODAY)
     assert isinstance(rules, Open)
     places: list[str | None] = []
     for rate in rules.candidates[Charge.FEE]:
@@ -198,16 +199,20 @@ def test_an_open_country_lists_its_rates_most_specific_first() -> None:
 
 def test_a_country_not_open_is_closed_with_its_reason() -> None:
     market = _market(market_texts(SG_GST))
-    assert country_rules(market, "DE", "apparel", TODAY) == NotOpen(
+    assert country_rules(market, CountryCode("DE"), "apparel", TODAY) == NotOpen(
         MarketStatus.CONDITIONAL, "product-safety rep needed"
     )
-    assert country_rules(market, "ZZ", "apparel", TODAY) == NotListed("ZZ")
+    assert country_rules(market, CountryCode("ZZ"), "apparel", TODAY) == NotListed(
+        CountryCode("ZZ")
+    )
 
 
 def test_a_rate_weaker_than_secondary_closes_the_country() -> None:
     estimated = SG_GST.replace(",verified,IRAS", ",estimate,IRAS", 1)
     market = _market(market_texts(estimated))
-    assert country_rules(market, "SG", "apparel", TODAY) == RulesNotConfirmed((2,))
+    assert country_rules(
+        market, CountryCode("SG"), "apparel", TODAY
+    ) == RulesNotConfirmed((2,))
     assert market.landed_rates[0].status == ResearchStatus.ESTIMATE
 
 
@@ -219,7 +224,7 @@ def test_a_rate_entered_ahead_takes_over_on_its_date() -> None:
     market = _market(market_texts(SG_GST + later))
 
     def seller_rate(on: date) -> Fraction:
-        rules = country_rules(market, "SG", "apparel", on)
+        rules = country_rules(market, CountryCode("SG"), "apparel", on)
         assert isinstance(rules, Open)
         for rate in rules.candidates[Charge.IMPORT_TAX]:
             if rate.collector.value == "seller":
@@ -243,7 +248,7 @@ def test_a_new_limit_entered_ahead_replaces_the_old_band_on_its_date() -> None:
     market = _market(market_texts(SG_GST + lower))
 
     def seller_limits(on: date) -> list[int]:
-        rules = country_rules(market, "SG", "apparel", on)
+        rules = country_rules(market, CountryCode("SG"), "apparel", on)
         assert isinstance(rules, Open)
         limits: list[int] = []
         for rate in rules.candidates[Charge.IMPORT_TAX]:
@@ -257,4 +262,6 @@ def test_a_new_limit_entered_ahead_replaces_the_old_band_on_its_date() -> None:
 
 def test_an_open_country_without_import_tax_rows_is_closed_not_tax_free() -> None:
     market = _market(market_texts(SG_GST))
-    assert country_rules(market, "TH", "apparel", TODAY) == RatesMissing("apparel")
+    assert country_rules(market, CountryCode("TH"), "apparel", TODAY) == RatesMissing(
+        "apparel"
+    )

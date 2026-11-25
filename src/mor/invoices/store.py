@@ -23,7 +23,7 @@ from mor.checkout.sessions import read_address, session_by_id
 from mor.db.connect import Connection
 from mor.db.fetch import one_value
 from mor.entity import ENTITY, registration_for
-from mor.ids import InvoiceId, OrderId
+from mor.ids import CountryCode, InvoiceId, OrderId
 from mor.invoices.lines import invoice_lines
 from mor.invoices.numbering import SERIES, number_text, series_for
 from mor.invoices.records import (
@@ -177,7 +177,7 @@ class _InvoiceRow:
     buyer_city: str
     buyer_region: str | None
     buyer_postcode: str | None
-    buyer_country: str
+    buyer_country: CountryCode
 
 
 async def invoice_for_order(conn: Connection, order_id: OrderId) -> Invoice | None:

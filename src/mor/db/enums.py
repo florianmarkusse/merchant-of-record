@@ -24,13 +24,13 @@ from psycopg.rows import TupleRow
 from psycopg.types.enum import EnumInfo, register_enum
 
 from mor.audit import ActorKind
-from mor.checkout.records import AfterPayment, QuoteState, SessionState
-from mor.couriers.records import (
-    CourierProvider,
+from mor.carriers.records import (
+    CarrierProvider,
     PriceExpiry,
     PricePartKind,
     PriceState,
 )
+from mor.checkout.records import AfterPayment, QuoteState, SessionState
 from mor.duties.port import DutyProvider
 from mor.duties.records import LookupState
 from mor.echo.events import VendorStatus
@@ -104,7 +104,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("carrier_price_part", PricePartKind),
     ("checkout_session_state", SessionState),
     ("consumer_name", ConsumerName),
-    ("courier_provider", CourierProvider),
+    ("carrier_provider", CarrierProvider),
     ("currency", Currency),
     ("duplicate_guard", DuplicateGuard),
     ("duties_paid", DutiesPaid),

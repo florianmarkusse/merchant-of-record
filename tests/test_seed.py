@@ -6,13 +6,14 @@ import asyncio
 from datetime import UTC, datetime
 
 from mor.audit import Actor, ActorKind
+from mor.carriers.prices import carrier_account
+from mor.carriers.records import PriceExpiry
 from mor.config import Environment, Settings
-from mor.couriers.prices import courier_account
-from mor.couriers.records import PriceExpiry
 from mor.db.connect import connect
 from mor.db.fetch import one_value
 from mor.echo.flow import create_echo_job
 from mor.echo.port import EchoProvider, EventMode
+from mor.ids import CarrierCode
 from mor.markets.store import load_market
 from mor.merchants.records import KeyEnv, NewKey
 from mor.merchants.store import authenticate
@@ -23,7 +24,7 @@ from mor.seed import (
     SeedInProd,
     base_url,
     seed_accounts,
-    seed_couriers,
+    seed_carriers,
     seed_merchant,
     seed_psp_accounts,
     set_up_fake_psp,
@@ -133,13 +134,13 @@ def test_each_carrier_on_a_live_route_gets_one_account_at_the_fake(
             await load_market(
                 conn, live_market(), "live", Actor(ActorKind.SYSTEM, "t"), NOW
             )
-            first = await seed_couriers(conn, settings)
-            again = await seed_couriers(conn, settings)
-            account = await courier_account(conn, "carrier")
+            first = await seed_carriers(conn, settings)
+            again = await seed_carriers(conn, settings)
+            account = await carrier_account(conn, CarrierCode("carrier"))
             await conn.commit()
         assert first == ["carrier"] and again == []
         assert account is not None
-        assert account.base_url == "http://mor/_fake/courier/sandbox-carrier"
+        assert account.base_url == "http://mor/_fake/carrier/sandbox-carrier"
         assert account.price_expiry == PriceExpiry.CARRIER_FIRST
 
     asyncio.run(body())

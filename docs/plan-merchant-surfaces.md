@@ -168,14 +168,14 @@ Still to build:
   or the balance goes negative and the merchant is invoiced. Where
   consumer law forbids charging the buyer (defective goods), the buyer is
   not charged; it is still the merchant's cost.
-- **Cross-border labels go through our courier partners in v1** (decided
+- **Cross-border labels go through our carrier partners in v1** (decided
   04-Nov-2026). Only then do we get DDP duty billing, our SG/MY tax
   registration numbers on the declaration (otherwise buyers can be taxed
-  twice), and delivery events for payout timing. Later, an "own courier"
-  mode for routes where the merchant's courier can do DDP with our
-  numbers: the merchant enters courier and tracking number, and tracking
+  twice), and delivery events for payout timing. Later, an "own carrier"
+  mode for routes where the merchant's carrier can do DDP with our
+  numbers: the merchant enters carrier and tracking number, and tracking
   comes from an aggregator (AfterShip, 17TRACK or similar).
-- **The order page** gains tracking from courier events and a return or
+- **The order page** gains tracking from carrier events and a return or
   refund request inside the policy window, with their slices; the buyer
   gets its link by email with the `notify` slice.
 

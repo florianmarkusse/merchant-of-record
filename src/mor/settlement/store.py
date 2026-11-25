@@ -35,6 +35,9 @@ from mor.ids import (
     PaymentAttemptId,
     PspAccountId,
     PspInboxId,
+    PspLineId,
+    PspPaymentId,
+    PspPayoutId,
     SettlementLineId,
     SettlementPayoutId,
 )
@@ -204,10 +207,10 @@ async def record_document(
 class LockedLine:
     id: SettlementLineId
     account_id: PspAccountId
-    vendor_line_id: str
+    vendor_line_id: PspLineId
     type: LineType
     vendor_type: str
-    provider_payment_id: str
+    provider_payment_id: PspPaymentId
     our_reference: str
     currency: Currency
     gross_numerator: int
@@ -499,7 +502,7 @@ async def settle_pending(
 class LockedPayout:
     id: SettlementPayoutId
     account_id: PspAccountId
-    vendor_payout_id: str
+    vendor_payout_id: PspPayoutId
     currency: Currency
     net_numerator: int
     net_denominator: int
@@ -551,7 +554,7 @@ async def book_payout(
 @dataclass(frozen=True)
 class PayoutKey:
     account_id: PspAccountId
-    vendor_payout_id: str
+    vendor_payout_id: PspPayoutId
 
 
 async def payout_key(

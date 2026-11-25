@@ -17,6 +17,7 @@ from mor.ids import (
     CheckoutSessionId,
     PaymentAttemptId,
     PspAccountId,
+    PspPaymentId,
     PspRouteId,
     QuoteId,
 )
@@ -55,7 +56,7 @@ class Attempt:
     amount: Money
     return_url: str
     state: AttemptState
-    provider_payment_id: str | None
+    provider_payment_id: PspPaymentId | None
     action: BuyerAction | None
     ended_reason: str | None
     created_at: datetime
@@ -82,7 +83,7 @@ class _Row:
     currency: Currency
     return_url: str
     state: AttemptState
-    provider_payment_id: str | None
+    provider_payment_id: PspPaymentId | None
     action_kind: ActionKind | None
     action_url: str | None
     action_expires_at: datetime | None
@@ -247,7 +248,7 @@ async def attempt_of_account(
 async def record_payment(
     conn: Connection,
     attempt: LockedAttempt,
-    provider_payment_id: str,
+    provider_payment_id: PspPaymentId,
     action: BuyerAction | None,
     now: datetime,
 ) -> LockedAttempt:

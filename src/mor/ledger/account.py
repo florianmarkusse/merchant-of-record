@@ -1,5 +1,5 @@
 """Ledger accounts: one record per kind, holding exactly what narrows it
-(the merchant, the country, the courier, the PSP account), so an account
+(the merchant, the country, the carrier, the PSP account), so an account
 cannot be built with a scope its kind does not have. The postings that use
 them are in plan-architecture.md §9.
 
@@ -10,7 +10,7 @@ made by `kind_of` and `scope_of`; nothing reads an account back from them.
 from dataclasses import dataclass
 from enum import StrEnum
 
-from mor.ids import MerchantId, PspAccountId
+from mor.ids import CarrierCode, CountryCode, MerchantId, PspAccountId
 
 
 class AccountKind(StrEnum):
@@ -24,8 +24,8 @@ class AccountKind(StrEnum):
     PSP_FEE_COLLECTED = "psp_fee_collected"
     PSP_FEE_VARIANCE = "psp_fee_variance"
     REVENUE_MOR_MARGIN = "revenue_mor_margin"
-    COURIER_PAYABLE = "courier_payable"
-    COURIER_VARIANCE = "courier_variance"
+    CARRIER_PAYABLE = "carrier_payable"
+    CARRIER_VARIANCE = "carrier_variance"
     RESERVE = "reserve"
     ROUNDING = "rounding"
     FX_POSITION = "fx_position"
@@ -43,21 +43,21 @@ class PspClearing:
 class TaxPayable:
     """Tax we collect ourselves and owe to `country`."""
 
-    country: str
+    country: CountryCode
 
 
 @dataclass(frozen=True)
 class DutiesPayable:
-    """Border duties and taxes, paid through the courier."""
+    """Border duties and taxes, paid through the carrier."""
 
-    courier: str
+    carrier: CarrierCode
 
 
 @dataclass(frozen=True)
 class ShippingPayable:
-    """Freight, surcharges and fuel the buyer paid us for the courier."""
+    """Freight, surcharges and fuel the buyer paid us for the carrier."""
 
-    courier: str
+    carrier: CarrierCode
 
 
 @dataclass(frozen=True)
@@ -83,17 +83,17 @@ class RevenueMorMargin:
 
 
 @dataclass(frozen=True)
-class CourierPayable:
-    """What the courier bills us (slice 7)."""
+class CarrierPayable:
+    """What the carrier bills us (slice 7)."""
 
-    courier: str
+    carrier: CarrierCode
 
 
 @dataclass(frozen=True)
-class CourierVariance:
-    """A courier bill's difference, ours until a person attributes it."""
+class CarrierVariance:
+    """A carrier bill's difference, ours until a person attributes it."""
 
-    courier: str
+    carrier: CarrierCode
 
 
 @dataclass(frozen=True)
@@ -134,8 +134,8 @@ type Account = (
     | PspFeeCollected
     | PspFeeVariance
     | RevenueMorMargin
-    | CourierPayable
-    | CourierVariance
+    | CarrierPayable
+    | CarrierVariance
     | Reserve
     | Rounding
     | FxPosition
@@ -161,10 +161,10 @@ def kind_of(account: Account) -> AccountKind:
             return AccountKind.PSP_FEE_VARIANCE
         case RevenueMorMargin():
             return AccountKind.REVENUE_MOR_MARGIN
-        case CourierPayable():
-            return AccountKind.COURIER_PAYABLE
-        case CourierVariance():
-            return AccountKind.COURIER_VARIANCE
+        case CarrierPayable():
+            return AccountKind.CARRIER_PAYABLE
+        case CarrierVariance():
+            return AccountKind.CARRIER_VARIANCE
         case Reserve():
             return AccountKind.RESERVE
         case Rounding():
@@ -193,11 +193,11 @@ def scope_of(account: Account) -> str:
         case TaxPayable(country=country):
             return country
         case (
-            DutiesPayable(courier=courier)
-            | ShippingPayable(courier=courier)
-            | CourierPayable(courier=courier)
-            | CourierVariance(courier=courier)
+            DutiesPayable(carrier=carrier)
+            | ShippingPayable(carrier=carrier)
+            | CarrierPayable(carrier=carrier)
+            | CarrierVariance(carrier=carrier)
         ):
-            return courier
+            return carrier
         case PspFeeCollected() | RevenueMorMargin() | FxPosition():
             return ""

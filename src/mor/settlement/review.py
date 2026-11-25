@@ -15,7 +15,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
-from mor.ids import PspAccountId, SettlementExceptionId
+from mor.ids import PspAccountId, PspPayoutId, SettlementExceptionId
 from mor.money.currency import Currency
 from mor.psp.port import SettlementMode
 from mor.settlement.records import ExceptionKind, Reconciliation
@@ -123,7 +123,7 @@ class PayoutRow:
     less the exact sum of its lines arrived so far, in minor units; open
     since it was stored."""
 
-    vendor_payout_id: str
+    vendor_payout_id: PspPayoutId
     currency: Currency
     net_minor: int
     paid_out_at: datetime
