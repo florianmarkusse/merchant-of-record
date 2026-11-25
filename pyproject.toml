@@ -47,7 +47,7 @@ lines-after-imports = 2
 
 [tool.pyright]
 # scripts/ are PEP 723 scripts with their own dependencies; not part of the package.
-include = ["src", "tests"]
+include = ["src", "tests", "vulture_whitelist.py"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = "error"

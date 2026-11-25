@@ -3,12 +3,13 @@
 reason. Run `uv run vulture` (paths and settings are in pyproject.toml).
 
 Attribute access on `_` is vulture's convention: it marks the name used.
+vulture only parses this file, so `_` is a plain stand-in that type-checks.
 """
 
-from vulture.whitelist_utils import Whitelist
+from typing import Any
 
 
-_ = Whitelist()
+_: Any = None
 
 # StrEnum members that mirror a database enum: rows read through
 # `mor.db.enums` arrive as these members, and every label must exist for
