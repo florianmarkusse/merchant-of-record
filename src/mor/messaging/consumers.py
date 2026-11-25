@@ -11,6 +11,9 @@ from datetime import datetime
 
 import httpx2
 
+import mor.bank.fetch
+import mor.bank.inbound
+import mor.bank.matching
 import mor.carriers.prices
 import mor.checkout.flow
 import mor.duties.lookups
@@ -37,6 +40,9 @@ from mor.messaging.delivery import (
     run_steps,
 )
 from mor.messaging.facts import (
+    BankEntryReceivedV1,
+    BankInboxStoredV1,
+    BankStatementDueV1,
     CheckoutSessionExpiryDueV1,
     DutyRateFoundV1,
     DutyRateNeededV1,
@@ -183,6 +189,15 @@ async def run_effect(
                 prepare=mor.settlement.fetch.prepare_fetch,
                 call=mor.settlement.fetch.read_settlement,
                 complete=mor.settlement.fetch.complete_fetch,
+            )
+        case ConsumerName.BANK_STATEMENT_FETCH:
+            bank_account_id = expect(fact, BankStatementDueV1).bank_account_id
+            return await run_steps(
+                run,
+                bank_account_id,
+                prepare=mor.bank.fetch.prepare_fetch,
+                call=mor.bank.fetch.read_page,
+                complete=mor.bank.fetch.complete_fetch,
             )
         # Transitional, with the echo flow (docs/plan-messaging.md §9).
         case ConsumerName.ECHO_SEND:
@@ -352,3 +367,28 @@ async def run_local(
                     raise WrongFact(f"settlement_payout_reconcile got {fact!r}")
             payout = await mor.settlement.store.lock_payout_by_key(conn, key)
             return await mor.settlement.store.reconcile_payout(conn, payout, now)
+        case ConsumerName.BANK_INBOX_DECODE:
+            # Locks nothing: reads its inbox row, which never changes; each
+            # entry's insert is its own guard.
+            stored_bank = expect(fact, BankInboxStoredV1)
+            return await mor.bank.inbound.decode_inbox(conn, stored_bank, now)
+        case ConsumerName.BANK_ENTRY_MATCH:
+            # Under the bank account's lock, which an entry names and a
+            # payout reaches through its destination (none: it stays in
+            # transit, and nothing is locked).
+            match fact:
+                case BankEntryReceivedV1(bank_account_id=bank_account_id):
+                    pass
+                case SettlementPayoutReportedV1(settlement_payout_id=payout_id):
+                    destination = await mor.bank.matching.destination_of(
+                        conn, payout_id
+                    )
+                    if destination is None:
+                        return await mor.bank.matching.match_account(conn, None, now)
+                    bank_account_id = destination
+                case _:
+                    raise WrongFact(f"bank_entry_match got {fact!r}")
+            bank_account = await mor.bank.matching.lock_bank_account(
+                conn, bank_account_id
+            )
+            return await mor.bank.matching.match_account(conn, bank_account, now)

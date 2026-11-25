@@ -8,6 +8,7 @@ import httpx2
 from starlette.applications import Starlette
 from starlette.routing import BaseRoute
 
+import mor.fakes.bank
 import mor.fakes.carrier
 import mor.fakes.duty
 import mor.fakes.echo
@@ -31,4 +32,5 @@ def make_app(
     routes.extend(mor.fakes.duty.make_app(database_url, clock, hang).routes)
     routes.extend(mor.fakes.carrier.make_app(database_url, clock, hang).routes)
     routes.extend(mor.fakes.psp.make_app(database_url, outgoing, clock, hang).routes)
+    routes.extend(mor.fakes.bank.make_app(database_url, clock, hang).routes)
     return Starlette(routes=routes)

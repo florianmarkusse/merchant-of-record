@@ -9,7 +9,9 @@
     POST /_fake/sandbox/cut          vendor side: cut a report
     POST /_fake/sandbox/fault        vendor side: script a fault
     POST /_fake/sandbox/settlement   PSP side: cut a settlement, maybe with
-                                     a fault (docs/plan-payments.md §7)
+                                     a fault, and a bank fault for its
+                                     credit (docs/plan-payments.md §7)
+    POST /_fake/sandbox/bank-book    bank side: book what is pending
 
 Forms are plain POSTs answered with a redirect back to the page, which
 carries a short note on what happened. The vendor-side buttons call the
@@ -40,8 +42,10 @@ from mor.echo.flow import create_echo_job
 from mor.echo.inbound import JobNotFound, record_manual_event
 from mor.echo.port import EchoProvider, EventKind, EventMode
 from mor.echo.records import EchoEventSource, EchoJobState
+from mor.fakes.bank import BANK_FAULTS
 from mor.fakes.psp import CUT_FAULTS
-from mor.ids import PspAccountId
+from mor.ids import BankAccountId, PspAccountId
+from mor.money.currency import Currency
 from mor.psp.port import SettlementMode
 from mor.web.forms import read_form, same_origin
 
@@ -83,6 +87,11 @@ class FaultForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 class SettlementForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     account_id: uuid.UUID
     fault: str = ""
+    bank_fault: str = ""
+
+
+class BankForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    bank_account_id: uuid.UUID
 
 
 def _back(note: str) -> Response:
@@ -124,12 +133,20 @@ class PspRow:
     settlement_mode: SettlementMode
 
 
+@dataclass(frozen=True)
+class BankRow:
+    id: BankAccountId
+    name: str
+    currency: Currency
+
+
 @dataclass(frozen=True, kw_only=True)
 class View:
     accounts: list[AccountRow]
     jobs: list[JobRow]
     events: list[EventRow]
     psp_accounts: list[PspRow]
+    bank_accounts: list[BankRow]
     note: str | None
 
 
@@ -159,11 +176,18 @@ async def read_view(conn: Connection, note: str | None) -> View:
             " FROM psp_account WHERE kind = 'fake' ORDER BY name"
         )
         psp_accounts = await cur.fetchall()
+    async with conn.cursor(row_factory=class_row(BankRow)) as cur:
+        await cur.execute(
+            "SELECT id, name, currency"
+            " FROM bank_account WHERE kind = 'fake' ORDER BY name"
+        )
+        bank_accounts = await cur.fetchall()
     return View(
         accounts=accounts,
         jobs=jobs,
         events=events,
         psp_accounts=psp_accounts,
+        bank_accounts=bank_accounts,
         note=note,
     )
 
@@ -286,6 +310,9 @@ def _settlement_section(view: View) -> htpy.Node:
     options: list[htpy.Element] = [htpy.option(value="")["no fault"]]
     for fault in CUT_FAULTS:
         options.append(htpy.option(value=fault)[fault])
+    bank_options: list[htpy.Element] = [htpy.option(value="")["no bank fault"]]
+    for bank_fault in BANK_FAULTS:
+        bank_options.append(htpy.option(value=bank_fault)[bank_fault])
     rows: list[htpy.Node] = []
     for account in view.psp_accounts:
         rows.append(
@@ -294,6 +321,8 @@ def _settlement_section(view: View) -> htpy.Node:
                     htpy.input(type="hidden", name="account_id", value=str(account.id)),
                     f"{account.name} (settles by {account.settlement_mode}) ",
                     htpy.select(name="fault")[options],
+                    " ",
+                    htpy.select(name="bank_fault")[bank_options],
                     " ",
                     htpy.button(type="submit")["cut a settlement"],
                 ]
@@ -306,6 +335,32 @@ def _settlement_section(view: View) -> htpy.Node:
             " batch per currency. Our side reads it at the account's next look;"
             " see ",
             htpy.a(href="/staff/settlement")["the Settlement staff page"],
+            ".",
+        ],
+        htpy.ul[rows],
+    ]
+
+
+def _bank_section(view: View) -> htpy.Node:
+    if not view.bank_accounts:
+        return None
+    rows: list[htpy.Node] = []
+    for account in view.bank_accounts:
+        rows.append(
+            htpy.li[
+                _button(
+                    "/_fake/sandbox/bank-book",
+                    f"book {account.name} ({account.currency})",
+                    {"bank_account_id": str(account.id)},
+                )
+            ]
+        )
+    return htpy.section[
+        htpy.h2["Bank"],
+        htpy.p[
+            "Each payout a cut makes waits at the fake bank until its day is"
+            " booked. Our side reads the bank at the account's next look; see ",
+            htpy.a(href="/staff/bank")["the Bank staff page"],
             ".",
         ],
         htpy.ul[rows],
@@ -330,6 +385,7 @@ def render(view: View) -> str:
             ],
             htpy.p(role="status")[htpy.strong[view.note]] if view.note else None,
             _settlement_section(view),
+            _bank_section(view),
             _fault_form(),
             sections or htpy.p["No accounts: run `python -m mor.seed`."],
         ],
@@ -475,6 +531,8 @@ async def cut_settlement(
     form = await read_form(request, SettlementForm)
     if form is None or (form.fault and form.fault not in CUT_FAULTS):
         return Response("bad form", status_code=400)
+    if form.bank_fault and form.bank_fault not in BANK_FAULTS:
+        return Response("bad form", status_code=400)
     async with await connect(database_url) as conn:
         cur = await conn.execute(
             "SELECT base_url FROM psp_account WHERE id = %s AND kind = 'fake'",
@@ -484,4 +542,30 @@ async def cut_settlement(
     if row is None:
         return _back(f"no fake PSP account {form.account_id}")
     faults = [form.fault] if form.fault else []
-    return _back(await _vendor_call(http, f"{row[0]}/settlements", {"faults": faults}))
+    bank_faults = [form.bank_fault] if form.bank_fault else []
+    return _back(
+        await _vendor_call(
+            http,
+            f"{row[0]}/settlements",
+            {"faults": faults, "bank_faults": bank_faults},
+        )
+    )
+
+
+async def book_at_bank(
+    request: Request, database_url: str, http: httpx2.AsyncClient
+) -> Response:
+    if not same_origin(request):
+        return Response("cross-site POST refused", status_code=403)
+    form = await read_form(request, BankForm)
+    if form is None:
+        return Response("bad form", status_code=400)
+    async with await connect(database_url) as conn:
+        cur = await conn.execute(
+            "SELECT base_url FROM bank_account WHERE id = %s AND kind = 'fake'",
+            (form.bank_account_id,),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        return _back(f"no fake bank account {form.bank_account_id}")
+    return _back(await _vendor_call(http, f"{row[0]}/book", {}))

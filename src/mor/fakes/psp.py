@@ -31,9 +31,12 @@ A made-up acquirer API, with PSP-side accounts as a path segment
     POST /_fake/psp/faults       {"account", "operation", "fault"}: script
                                  the next call of an operation to fail, or
                                  the next create to be declined
-    POST A/settlements           {"faults"?: [...]}: cut a batch now, one per
-                                 currency, of every captured payment not
-                                 settled yet (docs/plan-payments.md §7)
+    POST A/settlements           {"faults"?: [...], "bank_faults"?: [...]}:
+                                 cut a batch now, one per currency, of every
+                                 captured payment not settled yet
+                                 (docs/plan-payments.md §7); each payout
+                                 leaves a pending credit at the account's
+                                 fake bank destination (mor.fakes.bank)
     GET  A/settlement-files?after=      {"files": [...]}, oldest first
     GET  A/settlement-files/{name}      a report, as Adyen's: CSV, a row
                                         per line, then the payout's row
@@ -74,6 +77,7 @@ from starlette.routing import Route
 
 from mor.db.connect import SESSION_OPTIONS
 from mor.db.fetch import one_value
+from mor.fakes.bank import BankFault, credit_payout
 from mor.fakes.hang import Hang
 
 
@@ -171,6 +175,9 @@ class RedeliverBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 
 class CutBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     faults: list[CutFault] = []
+    # What the bank gets wrong with the first batch's credit
+    # (mor.fakes.bank).
+    bank_faults: list[BankFault] = []
 
 
 class FaultBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -1279,6 +1286,10 @@ async def handle_cut_settlement(
                         " VALUES (%s, %s)",
                         (line.payment_id, batch_id),
                     )
+            bank_faults: frozenset[BankFault] = frozenset()
+            if first:
+                bank_faults = frozenset(body.bank_faults)
+            await credit_payout(conn, account, currency, batch_id, net, bank_faults)
             made.append(batch_id)
         await conn.commit()
     return _json({"batches": made})

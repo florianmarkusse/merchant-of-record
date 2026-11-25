@@ -24,6 +24,7 @@ from psycopg.rows import TupleRow
 from psycopg.types.enum import EnumInfo, register_enum
 
 from mor.audit import ActorKind
+from mor.bank.port import BankProvider
 from mor.carriers.records import (
     CarrierProvider,
     PriceExpiry,
@@ -146,6 +147,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("psp_inbound_mode", InboundMode),
     ("psp_operation", PspOperation),
     ("psp_provider", PspProvider),
+    ("bank_provider", BankProvider),
     ("psp_settlement_mode", SettlementMode),
     ("psp_settlement_read_phase", ReadPhase),
     ("psp_status_mode", StatusMode),

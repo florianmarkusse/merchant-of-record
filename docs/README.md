@@ -5,7 +5,7 @@ describe the design as it is now: when something changes, the plan it
 changes is rewritten and the decisions it overturns are updated, never
 amended by a newer page. Git holds the history.
 
-Status as of 24-Nov-2026.
+Status as of 25-Nov-2026.
 
 ## Built
 
@@ -15,7 +15,7 @@ Status as of 24-Nov-2026.
 | 2 | Messaging: outbox, deliveries, the worker, the consumer table, effect consumers, inbound on one path; the probe and the echo flow | `plan-messaging.md` |
 | 3 | The test setup on the laptop and the nightly soak | `plan-test-setup.md` |
 | 4 | Market data, the tax path, duty rates and carrier prices from switchable sources, `build_quote`, merchants and the API, the buyer's checkout up to a quote | `plan-quote.md`, `plan-markets-data.md` |
-| 5a–5c-1 | Payments against the fake PSP in every mode, the order, the invoice, settlement with each payout reconciled | `plan-payments.md` |
+| 5a–5c-2 | Payments against the fake PSP in every mode, the order, the invoice, settlement with each payout reconciled, the bank: every entry booked, each payout matched to its credit | `plan-payments.md` |
 
 The checks that run after every change (ruff, pyright strict, vulture,
 `npx tsc`, the ast-grep rules, pytest with the fuzzers) are in
@@ -23,12 +23,7 @@ The checks that run after every change (ruff, pyright strict, vulture,
 
 ## Next, in this order
 
-1. **5c-2, the bank statement**: designed first. A fake bank and the
-   import of its statements, matching each PSP payout to its credit,
-   moving it from `payout_in_transit` to `bank:{entity}`, and flagging a
-   payout whose credit arrived but whose lines do not add up
-   (`plan-payments.md` §1, §7).
-2. **5c-3**: the fake PSP's card fields and the Playwright smoke suite
+1. **5c-3**: the fake PSP's card fields and the Playwright smoke suite
    (`plan-architecture.md` §10).
 
 Then the slices of the whole flow (`plan-architecture.md` §2), each
@@ -62,6 +57,12 @@ Slices of their own, placed when needed:
 
 ## Waiting until needed
 
+- The bank (`plan-payments.md` §7, the bank statement): a real bank
+  module once the bank is chosen; a camt.053 or MT940 file upload as a
+  second statement mode if that bank needs it; matching a credit that
+  carries no reference (Stripe's descriptor "STRIPE", its trace id) with
+  the first PSP that needs it, never by amount alone.
+
 - Messaging: the message's own uuid, version draining, replay
   (`plan-messaging.md` §12).
 - `src/mor/markets/source.py` decoded with msgspec structs instead of
@@ -79,6 +80,10 @@ Slices of their own, placed when needed:
 
 - The legal entity, SG or Dutch BV: it blocks PSP contracts, carrier
   accounts, registrations and licensing (`plan-psp-integration.md` §10).
+- The bank: it follows the entity and must hold the SEA currencies we
+  settle in: a multi-currency account (Wise, Airwallex), local accounts,
+  or both beside a Dutch one such as ABN AMRO (`plan-payments.md` §7,
+  the bank statement).
 - Carrier quotes and accounts (`plan-logistics-next.md`), the v1 country
   list and the returns floor (`plan-logistics.md` §11).
 - Advisers: customs, tax, VN export, payment licences, consumer law

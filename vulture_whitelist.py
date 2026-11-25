@@ -69,3 +69,8 @@ _.set_price_rule  # carriers.prices
 _.echo_job_state  # echo.flow
 _.subtract  # money.amount
 _.divide  # money.rounding
+
+# A fact names what happened: bank_entry_received names its entry, though
+# bank_entry_match runs over the whole account (docs/plan-payments.md §7,
+# the bank statement).
+_.bank_entry_id

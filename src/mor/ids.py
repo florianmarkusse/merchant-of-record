@@ -52,6 +52,11 @@ SettlementLineId = NewType("SettlementLineId", uuid.UUID)
 SettlementPayoutId = NewType("SettlementPayoutId", uuid.UUID)
 SettlementExceptionId = NewType("SettlementExceptionId", uuid.UUID)
 
+# The bank
+BankAccountId = NewType("BankAccountId", uuid.UUID)
+BankInboxId = NewType("BankInboxId", uuid.UUID)
+BankEntryId = NewType("BankEntryId", uuid.UUID)
+
 # Ledger
 JournalEntryId = NewType("JournalEntryId", uuid.UUID)
 
@@ -70,6 +75,9 @@ PspPaymentId = NewType("PspPaymentId", str)
 PspPayoutId = NewType("PspPayoutId", str)
 PspLineId = NewType("PspLineId", str)
 PspEventId = NewType("PspEventId", str)
+
+# The bank's id for an entry it shows
+BankTransactionId = NewType("BankTransactionId", str)
 
 # Idempotency keys, one type per space they are unique in
 JournalKey = NewType("JournalKey", str)  # journal_entry.idempotency_key

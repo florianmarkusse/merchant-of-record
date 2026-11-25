@@ -8,14 +8,19 @@ Persistence functions take the connection first and never commit.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from fractions import Fraction
 
 from psycopg.rows import class_row
 
 from mor.audit import Actor
 from mor.db.connect import Connection
-from mor.ids import PspAccountId, PspPayoutId, SettlementExceptionId
+from mor.ids import (
+    PspAccountId,
+    PspPayoutId,
+    SettlementExceptionId,
+    SettlementPayoutId,
+)
 from mor.money.currency import Currency
 from mor.psp.port import SettlementMode
 from mor.settlement.records import ExceptionKind, Reconciliation
@@ -121,8 +126,11 @@ async def account_summary(
 class PayoutRow:
     """A payout and whether its lines add up yet. `difference` is its net
     less the exact sum of its lines arrived so far, in minor units; open
-    since it was stored."""
+    since it was stored. `arrived_minor` and `arrived_on`: the bank credit
+    matched to it, if any (docs/plan-payments.md §7, the bank statement);
+    `note`: what a person found, once it was flagged."""
 
+    id: SettlementPayoutId
     vendor_payout_id: PspPayoutId
     currency: Currency
     net_minor: int
@@ -134,10 +142,26 @@ class PayoutRow:
     difference_denominator: int
     lines: int
     booked_lines: int
+    arrived_minor: int | None
+    arrived_on: date | None
+    note: str | None
+    noted_by: str | None
+    noted_at: datetime | None
 
     @property
     def difference(self) -> Fraction:
         return Fraction(self.difference_numerator, self.difference_denominator)
+
+    @property
+    def flagged(self) -> bool:
+        """Its credit is in the bank, yet its lines do not add up or the
+        credit is not its net: a person looks."""
+        if self.arrived_minor is None:
+            return False
+        return (
+            self.reconciliation == Reconciliation.OPEN
+            or self.arrived_minor != self.net_minor
+        )
 
 
 async def payouts_of(
@@ -147,7 +171,8 @@ async def payouts_of(
     async with conn.cursor(row_factory=class_row(PayoutRow)) as cur:
         await cur.execute(
             """
-            SELECT p.vendor_payout_id, p.currency, p.net_minor, p.paid_out_at,
+            SELECT p.id, p.vendor_payout_id, p.currency, p.net_minor,
+                   p.paid_out_at,
                    p.recorded_at, p.booked_at, p.reconciliation,
                    p.difference_numerator, p.difference_denominator,
                    (SELECT count(*) FROM settlement_line l
@@ -156,8 +181,14 @@ async def payouts_of(
                    (SELECT count(*) FROM settlement_line l
                     WHERE l.account_id = p.account_id
                       AND l.vendor_payout_id = p.vendor_payout_id
-                      AND l.state = 'booked') AS booked_lines
-            FROM settlement_payout p WHERE p.account_id = %s
+                      AND l.state = 'booked') AS booked_lines,
+                   e.amount_minor AS arrived_minor, e.booked_on AS arrived_on,
+                   n.note, n.actor_id AS noted_by, n.noted_at
+            FROM settlement_payout p
+            LEFT JOIN bank_match m ON m.payout_id = p.id
+            LEFT JOIN bank_entry e ON e.id = m.entry_id
+            LEFT JOIN settlement_payout_note n ON n.payout_id = p.id
+            WHERE p.account_id = %s
             ORDER BY (p.reconciliation = 'open') DESC,
                      CASE WHEN p.reconciliation = 'open' THEN p.recorded_at END,
                      p.recorded_at DESC, p.id DESC

@@ -13,18 +13,26 @@ page before a newer one), and, as drawn, booked as each is decoded (a
 payout reconciled against some of its lines; a line for a payment our
 books have not caught up with waits) or left for the actions, with the
 payments' own news.
+The PSP account pays out into an account at the fake bank, read from the
+start (docs/plan-payments.md §7, the bank statement); each cut's first
+credit may carry drawn bank faults.
 Actions: run one delivery; the worker catches up; crash inside a local
-step before its commit (a settlement step's above all, while one is due),
-or around an effect's call (a settlement read among them); a handled fact
-met again by its consumer (a settlement step's above all); the PSP sends every
-event again; the clock moves, or passes the settlement interval; the PSP
-cuts a settlement, some batches with faults; a settlement read fails.
+step before its commit (a settlement or bank step's above all, while one
+is due), or around an effect's call (a settlement or bank read among
+them); a handled fact met again by its consumer (a settlement or bank
+step's above all); the PSP sends every event again; the clock moves, or
+passes the settlement interval; the PSP cuts a settlement, some batches
+with faults; a settlement read fails; the bank books its day; a bank read
+fails.
 
-After every action, the rules in payment_checks.py, settlement's among
-them. After draining with faults off and one last clean cut: every
-payment completed (or, with no duplicate guard, with a person), and
-everything the fake settled booked once, or the exception its fault calls
-for, with `psp_clearing` holding exactly what the fake has not paid out.
+After every action, the rules in payment_checks.py, settlement's and the
+bank's among them. After draining with faults off, one last clean cut and
+the bank's last day: every payment completed (or, with no duplicate
+guard, with a person), and everything the fake settled booked once, or
+the exception its fault calls for, with `psp_clearing` holding exactly
+what the fake has not paid out; every bank transaction stored once, our
+`bank` equal to the fake bank's balance, and each payout's credit matched
+unless its fault hid the reference.
 """
 
 import asyncio
@@ -46,8 +54,12 @@ from hypothesis.stateful import (
 )
 from psycopg.rows import class_row
 
+from mor.bank.accounts import create_bank_account, set_payout_destination
+from mor.bank.fetch import start_reading
+from mor.bank.port import BankProvider
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_row, one_value
+from mor.fakes.bank import BANK_FAULTS, BankFault, ListFault
 from mor.fakes.psp import CUT_FAULTS, CutFault
 from mor.ids import CheckoutSessionId
 from mor.messaging.delivery import (
@@ -60,13 +72,16 @@ from mor.messaging.worker import (
     find_candidates,
     run_one,
 )
+from mor.money.currency import Currency
 from mor.payments.flow import Paying, pay
+from mor.provider_accounts import ProviderAccountKind
 from mor.psp.port import CaptureMode, SettlementMode, StatusMode
 from mor.settlement.fetch import start_settlement_reading
 from tests.flow import reach
 from tests.flow.payment_checks import (
     Handled,
     catch_up,
+    check_bank_drained,
     check_drained,
     check_every_action,
     check_settlement_drained,
@@ -74,7 +89,14 @@ from tests.flow.payment_checks import (
     handled_locally,
     meet_again,
 )
-from tests.helpers import ENV, TEST_URL, crash_around_a_call, empty_tables, wire
+from tests.helpers import (
+    ENV,
+    TEST_URL,
+    VENDOR_TIMEOUT,
+    crash_around_a_call,
+    empty_tables,
+    wire,
+)
 from tests.payments.support import (
     ACTOR,
     NOW,
@@ -99,14 +121,20 @@ class _Reached:
     balanced: bool
     net_off: bool
     counted: bool
+    credit_matched: bool
+    credit_unmatched: bool
 
 
 T0 = NOW
 READ_FAULTS = ("fail_500", "fail_500_after_work", "timeout_after_work")
+BANK_READ_FAULTS: tuple[ListFault, ...] = ("fail_500", "timeout")
+BANK = "bank-sgd"
 SETTLEMENT_STEPS = (
     ConsumerName.SETTLEMENT_LINE_BOOK,
     ConsumerName.SETTLEMENT_PAYOUT_BOOK,
     ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
+    ConsumerName.BANK_INBOX_DECODE,
+    ConsumerName.BANK_ENTRY_MATCH,
 )
 
 MILESTONES = (
@@ -135,6 +163,15 @@ MILESTONES = (
     "a payout balanced",
     "a payout open: its net is off",
     "a balance transfer counted",
+    # The bank (plan-payments.md §7, the bank statement).
+    "a credit matched to its payout",
+    "a credit left for a person",
+    "a credit in suspense before its payout",
+    "crash in bank_entry_match",
+    "crash in bank_inbox_decode",
+    "crash around a bank read",
+    "met again: bank_entry_match",
+    "met again: bank_inbox_decode",
 )
 TALLY: Counter[str] = Counter()
 
@@ -182,8 +219,12 @@ class SettlementFlow(RuleBasedStateMachine):
         first_cut=strategies.lists(
             strategies.sampled_from(CUT_FAULTS), max_size=2, unique=True
         ),
+        first_bank_faults=strategies.lists(
+            strategies.sampled_from(BANK_FAULTS), max_size=2, unique=True
+        ),
         book_first_cut=strategies.booleans(),
         decode_order=strategies.randoms(use_true_random=False),
+        bank_first=strategies.booleans(),
     )
     def approved_payments(
         self,
@@ -193,15 +234,19 @@ class SettlementFlow(RuleBasedStateMachine):
         settlement_mode: SettlementMode,
         booked: list[bool],
         first_cut: list[CutFault],
+        first_bank_faults: list[BankFault],
         book_first_cut: bool,
         decode_order: random.Random,
+        bank_first: bool,
     ) -> None:
         """A session per entry of `booked`, each approved at the PSP, and
         caught up in our books where its entry says so; then a first cut,
         fetched whole and decoded in a drawn order, and booked as it is
         decoded if drawn so: the orders a payout and its pages arrive in
         come from the start, not from luck in the actions
-        (plan-payments.md §7)."""
+        (plan-payments.md §7). The bank books its day and is read (its
+        pages stored, not decoded) before the PSP's report is fetched or
+        after, as drawn: a credit can come before its payout."""
         self.guard = guard
 
         async def step() -> None:
@@ -218,7 +263,30 @@ class SettlementFlow(RuleBasedStateMachine):
             self.settlement_interval = shop.account.settlement_interval
             async with await connect(TEST_URL) as conn:
                 await start_settlement_reading(conn, shop.account.id, ACTOR, self.now)
+                bank = await create_bank_account(
+                    conn,
+                    BANK,
+                    BankProvider.FAKE,
+                    ProviderAccountKind.FAKE,
+                    f"http://mor/_fake/bank/{BANK}",
+                    "FAKE-SGD-0001",
+                    Currency.SGD,
+                    self.now,
+                    VENDOR_TIMEOUT,
+                    self.settlement_interval,
+                )
+                await set_payout_destination(conn, shop.account.id, bank, self.now)
+                await start_reading(conn, bank.id, ACTOR, self.now)
                 await conn.commit()
+            opened = await self.control.post(
+                f"http://mor/_fake/bank/{BANK}/setup", json={"currency": "SGD"}
+            )
+            assert opened.status_code == 204, opened.text
+            pointed = await self.control.post(
+                f"http://mor/_fake/bank/{BANK}/destinations",
+                json={"psp_account": shop.account.name},
+            )
+            assert pointed.status_code == 204, pointed.text
             for caught_up in booked:
                 session_id, option = await quoted_session(
                     TEST_URL, shop.merchant_id, SGD_PRICE, self.now
@@ -252,10 +320,21 @@ class SettlementFlow(RuleBasedStateMachine):
                 if caught_up:
                     await self._books_catch_up()
                 self.sessions.append(session_id)
-            await self._cut(first_cut)
+            await self._cut(first_cut, first_bank_faults)
+            # Both readers' next looks come due.
             self.now += self.settlement_interval
-            await self._fetch_settlement()
+            if bank_first:
+                await self._book_at_bank()
+                await self._fetch_only(ConsumerName.BANK_STATEMENT_FETCH)
+                await self._run_only(ConsumerName.BANK_INBOX_DECODE)
+                await self._run_only(ConsumerName.BANK_ENTRY_MATCH)
+                if await self._credit_before_payout():
+                    self.met.add("a credit in suspense before its payout")
+            await self._fetch_only(ConsumerName.PSP_SETTLEMENT_FETCH)
             await self._decode_in_order(decode_order, book_first_cut)
+            if not bank_first:
+                await self._book_at_bank()
+                await self._fetch_only(ConsumerName.BANK_STATEMENT_FETCH)
 
         self.run(step())
 
@@ -290,6 +369,8 @@ class SettlementFlow(RuleBasedStateMachine):
             return
         if candidate.consumer == ConsumerName.PSP_SETTLEMENT_FETCH:
             self.met.add("crash around a settlement read")
+        if candidate.consumer == ConsumerName.BANK_STATEMENT_FETCH:
+            self.met.add("crash around a bank read")
         self.run(
             crash_around_a_call(candidate, with_call, self.http, self.network, self.now)
         )
@@ -346,10 +427,29 @@ class SettlementFlow(RuleBasedStateMachine):
     @rule(
         faults=strategies.lists(
             strategies.sampled_from(CUT_FAULTS), max_size=2, unique=True
-        )
+        ),
+        bank_faults=strategies.lists(
+            strategies.sampled_from(BANK_FAULTS), max_size=2, unique=True
+        ),
     )
-    def the_psp_cuts_a_settlement(self, faults: list[CutFault]) -> None:
-        self.run(self._cut(faults))
+    def the_psp_cuts_a_settlement(
+        self, faults: list[CutFault], bank_faults: list[BankFault]
+    ) -> None:
+        self.run(self._cut(faults, bank_faults))
+
+    @rule()
+    def the_bank_books_its_day(self) -> None:
+        self.run(self._book_at_bank())
+
+    @precondition(lambda self: self.run(self._bank_faults_waiting()) == 0)
+    @rule(fault=strategies.sampled_from(BANK_READ_FAULTS))
+    def a_bank_read_fails(self, fault: ListFault) -> None:
+        response = self.run(
+            self.control.post(
+                "http://mor/_fake/bank/faults", json={"account": BANK, "fault": fault}
+            )
+        )
+        assert response.status_code == 204, response.text
 
     @precondition(lambda self: self.run(self._faults_waiting()) < 2)
     @rule(fault=strategies.sampled_from(READ_FAULTS))
@@ -373,6 +473,12 @@ class SettlementFlow(RuleBasedStateMachine):
         """Not a rule: a waiting line is a moment, seen only while it lasts."""
         if self.run(self._lines_waiting()):
             self.met.add("a line waited for its order")
+
+    @invariant()
+    def note_a_credit_waiting_for_its_payout(self) -> None:
+        """Not a rule: a credit read before its payout report is a moment."""
+        if self.run(self._credit_before_payout()):
+            self.met.add("a credit in suspense before its payout")
 
     @invariant()
     def note_arrival_orders(self) -> None:
@@ -399,13 +505,13 @@ class SettlementFlow(RuleBasedStateMachine):
         self.now += timedelta(minutes=1)
         await catch_up(self.worker, self.http, self.now)
 
-    async def _fetch_settlement(self) -> None:
-        """Only the looks, until none is due: every document stored, none
-        decoded."""
+    async def _fetch_only(self, reader: ConsumerName) -> None:
+        """Only that reader's looks, until none is due: every document
+        stored, none decoded."""
         for _ in range(50):
             ran = False
             for candidate in await find_candidates(self.worker, self.now, 50):
-                if candidate.consumer == ConsumerName.PSP_SETTLEMENT_FETCH:
+                if candidate.consumer == reader:
                     result = await run_one(
                         self.worker, self.http, ENV, candidate, self.now
                     )
@@ -414,6 +520,13 @@ class SettlementFlow(RuleBasedStateMachine):
             if not ran:
                 return
         raise AssertionError("the reading never finished")
+
+    async def _run_only(self, consumer: ConsumerName) -> None:
+        """That consumer's deliveries due now, once each."""
+        for candidate in await find_candidates(self.worker, self.now, 50):
+            if candidate.consumer == consumer:
+                result = await run_one(self.worker, self.http, ENV, candidate, self.now)
+                assert not isinstance(result, Failed), result
 
     async def _decode_in_order(self, order: random.Random, book: bool) -> None:
         """Each stored document decoded in the drawn order; with `book`, the
@@ -457,11 +570,40 @@ class SettlementFlow(RuleBasedStateMachine):
                 found.append(handled)
         return found
 
-    async def _cut(self, faults: list[CutFault]) -> None:
+    async def _cut(self, faults: list[CutFault], bank_faults: list[BankFault]) -> None:
         response = await self.control.post(
-            "http://mor/_fake/psp/acct/settlements", json={"faults": faults}
+            "http://mor/_fake/psp/acct/settlements",
+            json={"faults": faults, "bank_faults": bank_faults},
         )
         assert response.status_code == 200, response.text
+
+    async def _book_at_bank(self) -> None:
+        response = await self.control.post(f"http://mor/_fake/bank/{BANK}/book")
+        assert response.status_code == 200, response.text
+
+    async def _bank_faults_waiting(self) -> int:
+        return await one_value(
+            self.worker,
+            "SELECT count(*) FROM fake_vendor.bank_fake_scripted",
+            None,
+            int,
+        )
+
+    async def _credit_before_payout(self) -> bool:
+        """A stored credit whose payout the fake made but our books have
+        not read yet."""
+        cur = await self.worker.execute(
+            """
+            SELECT 1 FROM bank_entry e
+            JOIN fake_vendor.bank_fake_transaction t
+              ON t.transaction_id = e.vendor_entry_id
+            WHERE t.payout_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM settlement_payout p
+                              WHERE p.vendor_payout_id = t.payout_id)
+            LIMIT 1
+            """
+        )
+        return await cur.fetchone() is not None
 
     async def _faults_waiting(self) -> int:
         return await one_value(
@@ -537,7 +679,12 @@ class SettlementFlow(RuleBasedStateMachine):
                       WHERE p.reconciliation = 'open' AND f.fault = 'net_differs')
                 AS net_off,
               EXISTS (SELECT 1 FROM settlement_line WHERE state = 'counted')
-                AS counted
+                AS counted,
+              EXISTS (SELECT 1 FROM bank_match) AS credit_matched,
+              EXISTS (SELECT 1 FROM bank_entry e WHERE e.amount_minor > 0
+                      AND NOT EXISTS (SELECT 1 FROM bank_match m
+                                      WHERE m.entry_id = e.id))
+                AS credit_unmatched
             """
         )
         found = await one_row(cur, "the settlement milestones")
@@ -558,6 +705,10 @@ class SettlementFlow(RuleBasedStateMachine):
             reached.add("a payout open: its net is off")
         if counted:
             reached.add("a balance transfer counted")
+        if found.credit_matched:
+            reached.add("a credit matched to its payout")
+        if found.credit_unmatched:
+            reached.add("a credit left for a person")
         cur = await self.worker.execute(
             "SELECT DISTINCT kind::text FROM settlement_exception"
         )
@@ -568,20 +719,24 @@ class SettlementFlow(RuleBasedStateMachine):
     async def _drain_and_check(self) -> None:
         # Faults off: a read scripted to fail and not yet tried goes.
         await self.worker.execute("DELETE FROM fake_vendor.psp_fake_fault_next")
+        await self.worker.execute("DELETE FROM fake_vendor.bank_fake_scripted")
         await self.control.post(
             "http://mor/_fake/psp/acct/events/redeliver", json={"all": False}
         )
         for _ in range(20):
             self.now += timedelta(minutes=5)
             await catch_up(self.worker, self.http, self.now)
-        # One last cut with no faults, so every run settles what it took.
-        await self._cut([])
+        # One last cut with no faults, so every run settles what it took,
+        # and the bank's last day, so every credit is read.
+        await self._cut([], [])
+        await self._book_at_bank()
         for _ in range(3):
             self.now += self.settlement_interval
             await catch_up(self.worker, self.http, self.now)
         await check_every_action(self.worker)
         await check_drained(self.worker)
         await check_settlement_drained(self.worker)
+        await check_bank_drained(self.worker)
         cur = await self.worker.execute(
             "SELECT state::text, count(*) FROM checkout_session GROUP BY state"
         )

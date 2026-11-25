@@ -9,6 +9,12 @@ nothing.
     GET  /staff/settlement                                   every account
     GET  /staff/settlement/{account}                         one account
     POST /staff/settlement/{account}/exceptions/{exception}  resolve one
+    POST /staff/settlement/{account}/payouts/{payout}/note   a flagged payout
+
+Each payout shows whether its credit is in the bank yet. One whose credit
+arrived while its lines do not add up, or whose credit is not its net, is
+flagged and takes a note, which books nothing (docs/plan-payments.md §7,
+the bank statement).
 
 Mounted outside prod only until staff sign-in exists, as the other staff
 pages; until then the actor is this page, not a person.
@@ -23,10 +29,11 @@ import msgspec
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
+import mor.bank.matching
 from mor.audit import Actor, ActorKind
-from mor.dates import format_moment
+from mor.dates import format_day, format_moment
 from mor.db.connect import connect
-from mor.ids import PspAccountId, SettlementExceptionId
+from mor.ids import PspAccountId, SettlementExceptionId, SettlementPayoutId
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.settlement.records import Reconciliation
@@ -129,7 +136,40 @@ def _difference(payout: PayoutRow) -> str:
     return f"{difference} {payout.currency} minor"
 
 
-def _payout_rows(payouts: list[PayoutRow], now: datetime) -> htpy.Node:
+def _in_bank(account_id: PspAccountId, payout: PayoutRow) -> htpy.Node:
+    """Whether its credit arrived, by how much it differs, and the flag
+    with its note form."""
+    if payout.arrived_minor is None or payout.arrived_on is None:
+        return htpy.span(class_="muted")["not yet"]
+    arrived = f"on {format_day(payout.arrived_on)}"
+    if payout.arrived_minor != payout.net_minor:
+        arrived += (
+            f", {_money(payout.arrived_minor, payout.currency)}: off by"
+            f" {_money(payout.arrived_minor - payout.net_minor, payout.currency)}"
+        )
+    if not payout.flagged:
+        return arrived
+    if payout.note is not None:
+        when = "" if payout.noted_at is None else format_moment(payout.noted_at)
+        return [arrived, htpy.div[f"{payout.note} ({payout.noted_by}, {when})"]]
+    return [
+        htpy.strong[f"flagged: {arrived}"],
+        htpy.form(
+            method="post", action=f"{PAGE}/{account_id}/payouts/{payout.id}/note"
+        )[
+            htpy.label[
+                "What was found ",
+                htpy.input(type="text", name="note", required=True),
+            ],
+            " ",
+            htpy.button(type="submit")["Note"],
+        ],
+    ]
+
+
+def _payout_rows(
+    account_id: PspAccountId, payouts: list[PayoutRow], now: datetime
+) -> htpy.Node:
     if not payouts:
         return htpy.p(class_="muted")["No payouts read yet."]
     rows: list[htpy.Node] = []
@@ -151,6 +191,7 @@ def _payout_rows(payouts: list[PayoutRow], now: datetime) -> htpy.Node:
                 htpy.td(class_="num")[f"{payout.booked_lines} of {payout.lines}"],
                 htpy.td[state],
                 htpy.td[booked],
+                htpy.td[_in_bank(account_id, payout)],
             ]
         )
     return htpy.div(class_="scroll")[
@@ -163,6 +204,7 @@ def _payout_rows(payouts: list[PayoutRow], now: datetime) -> htpy.Node:
                     htpy.th["Lines booked"],
                     htpy.th["Lines add up"],
                     htpy.th["Payout booked"],
+                    htpy.th["In our bank"],
                 ]
             ],
             htpy.tbody[rows],
@@ -245,12 +287,13 @@ def render_account(
             " records what was found and books nothing: a correction is a"
             " journal entry made by hand. A payout is open until the lines"
             " that have arrived add up to its net; lines may still be on"
-            " their way."
+            " their way. Once its credit is in our bank, a payout still open,"
+            " or whose credit is not its net, is flagged."
         ],
         htpy.h2["Exceptions"],
         _exception_rows(summary.id, found),
         htpy.h2["Payouts"],
-        _payout_rows(payouts, now),
+        _payout_rows(summary.id, payouts, now),
     )
 
 
@@ -310,5 +353,42 @@ async def resolve(request: Request, database_url: str, now: datetime) -> Respons
             note = "not resolved: write what was found"
         case NoSuchException():
             return Response("no such exception", status_code=404)
+    back = f"{PAGE}/{account_id}?{urlencode({'note': note})}"
+    return RedirectResponse(back, status_code=303)
+
+
+class NoteForm(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    note: str
+
+
+async def note_on_payout(
+    request: Request, database_url: str, now: datetime
+) -> Response:
+    if not same_origin(request):
+        return Response("cross-site POST refused", status_code=403)
+    account_id = _account_id(request)
+    try:
+        payout_id = SettlementPayoutId(uuid.UUID(request.path_params["payout_id"]))
+    except ValueError:
+        return Response("no such payout", status_code=404)
+    if account_id is None:
+        return Response("no such account", status_code=404)
+    form = await read_form(request, NoteForm)
+    if form is None:
+        return Response("bad form", status_code=400)
+    async with await connect(database_url) as conn:
+        result = await mor.bank.matching.note_payout(
+            conn, account_id, payout_id, form.note, PERSON, now
+        )
+        await conn.commit()
+    match result:
+        case mor.bank.matching.Noted():
+            note = "noted"
+        case mor.bank.matching.AlreadyNoted():
+            note = "already noted: the first note stands"
+        case mor.bank.matching.EmptyNote():
+            note = "not noted: write what was found"
+        case mor.bank.matching.NothingToNote():
+            return Response("no such payout", status_code=404)
     back = f"{PAGE}/{account_id}?{urlencode({'note': note})}"
     return RedirectResponse(back, status_code=303)

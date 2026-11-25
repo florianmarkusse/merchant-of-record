@@ -216,8 +216,9 @@ async def check_settlement_is_booked_once(conn: Connection) -> None:
     one entry, taking its fee out of `psp_clearing`; a booked payout put
     its net on the way to the bank; the rounding entries hold exactly the
     rounding each payout says is booked, and only a balanced payout has
-    any. A line booked twice, a payout booked without its row, or a
-    rounding change lost or doubled breaks one of the sums."""
+    any; what is in transit is the booked nets less the credits matched to
+    them in the bank. A line booked twice, a payout booked without its
+    row, or a rounding change lost or doubled breaks one of the sums."""
     cur = await conn.execute(
         """
         SELECT l.vendor_line_id FROM settlement_line l
@@ -242,7 +243,9 @@ async def check_settlement_is_booked_once(conn: Connection) -> None:
           (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
             WHERE account_kind = 'payout_in_transit') AS in_transit,
           (SELECT coalesce(sum(net_minor), 0) FROM settlement_payout
-            WHERE booked_at IS NOT NULL) AS nets,
+            WHERE booked_at IS NOT NULL)
+          - (SELECT coalesce(sum(e.amount_minor), 0) FROM bank_match m
+              JOIN bank_entry e ON e.id = m.entry_id) AS nets,
           (SELECT coalesce(sum(l.amount_minor), 0) FROM journal_line l
             JOIN journal_entry e ON e.id = l.entry_id
             WHERE l.account_kind = 'psp_clearing'
@@ -261,6 +264,111 @@ async def check_settlement_is_booked_once(conn: Connection) -> None:
     assert sums.open_with_rounding == 0, sums
 
 
+@dataclass(frozen=True, kw_only=True)
+class _BankSumsRow:
+    entries: int
+    entries_booked: int
+    matches: int
+    matches_booked: int
+    in_bank: int
+    shown: int
+    in_suspense: int
+    unexplained: int
+
+
+async def check_bank_is_booked_once(conn: Connection) -> None:
+    """The bank's rows and the ledger agree (docs/plan-payments.md §7, the
+    bank statement): every stored entry has its one entry in `bank`, every
+    match its one entry out of suspense, and suspense holds exactly the
+    entries no payout explains. An entry booked twice or a match lost or
+    doubled breaks one of the sums; a credit matched twice breaks the
+    unique constraints first."""
+    async with conn.cursor(row_factory=class_row(_BankSumsRow)) as sums_cur:
+        await sums_cur.execute(
+            """
+        SELECT
+          (SELECT count(*) FROM bank_entry) AS entries,
+          (SELECT count(*) FROM journal_entry
+            WHERE idempotency_key LIKE 'bank-entry:%') AS entries_booked,
+          (SELECT count(*) FROM bank_match) AS matches,
+          (SELECT count(*) FROM journal_entry
+            WHERE idempotency_key LIKE 'bank-match:%') AS matches_booked,
+          (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
+            WHERE account_kind = 'bank') AS in_bank,
+          (SELECT coalesce(sum(amount_minor), 0) FROM bank_entry) AS shown,
+          (SELECT coalesce(sum(amount_minor), 0) FROM journal_line
+            WHERE account_kind = 'bank_suspense') AS in_suspense,
+          (SELECT coalesce(-sum(e.amount_minor), 0) FROM bank_entry e
+            WHERE NOT EXISTS (SELECT 1 FROM bank_match m
+                              WHERE m.entry_id = e.id)) AS unexplained
+            """
+        )
+        sums = await one_row(sums_cur, "the bank sums")
+    assert sums.entries == sums.entries_booked, sums
+    assert sums.matches == sums.matches_booked, sums
+    assert sums.in_bank == sums.shown, sums
+    assert sums.in_suspense == sums.unexplained, sums
+
+
+@dataclass(frozen=True, kw_only=True)
+class _BankCreditRow:
+    payout_id: str
+    faults: list[str]
+    stored: bool
+    matched: bool
+
+
+async def check_bank_drained(conn: Connection) -> None:
+    """Every transaction the fake bank booked is stored once, our `bank`
+    equals each fake account's balance, and each payout's credit is matched
+    unless its fault hid the reference: a clean, short or twice-listed
+    credit matched, one with no or a cut reference left for a person, one
+    that never arrived never stored."""
+    cur = await conn.execute(
+        """
+        SELECT t.transaction_id, t.amount_minor, t.description
+        FROM fake_vendor.bank_fake_transaction t
+        WHERE t.state = 'booked' AND NOT EXISTS (
+          SELECT 1 FROM bank_entry e WHERE e.vendor_entry_id = t.transaction_id)
+        """
+    )
+    unread = await cur.fetchall()
+    assert unread == [], f"bank transactions never stored: {unread}"
+    cur = await conn.execute(
+        """
+        SELECT f.name FROM fake_vendor.bank_fake_account f
+        JOIN bank_account a ON a.name = f.name
+        WHERE f.balance_minor <> (
+          SELECT coalesce(sum(l.amount_minor), 0) FROM journal_line l
+          WHERE l.account_kind = 'bank' AND l.account_scope = a.id::text)
+        """
+    )
+    assert await cur.fetchall() == []
+    async with conn.cursor(row_factory=class_row(_BankCreditRow)) as credits_cur:
+        await credits_cur.execute(
+            """
+            SELECT DISTINCT ON (t.payout_id) t.payout_id, t.faults,
+              EXISTS (SELECT 1 FROM bank_entry e
+                      WHERE e.vendor_entry_id = t.transaction_id) AS stored,
+              EXISTS (SELECT 1 FROM bank_match m
+                      JOIN settlement_payout p ON p.id = m.payout_id
+                      WHERE p.vendor_payout_id = t.payout_id) AS matched
+            FROM fake_vendor.bank_fake_transaction t
+            WHERE t.payout_id IS NOT NULL
+            ORDER BY t.payout_id, t.seq
+            """
+        )
+        credits_seen = await credits_cur.fetchall()
+    for credit_seen in credits_seen:
+        faults = set(credit_seen.faults)
+        if "never_arrives" in faults:
+            assert not credit_seen.stored and not credit_seen.matched, credit_seen
+        elif faults & {"no_reference", "reference_cut"}:
+            assert credit_seen.stored and not credit_seen.matched, credit_seen
+        else:
+            assert credit_seen.matched, credit_seen
+
+
 async def check_no_advisory_lock_is_held(conn: Connection) -> None:
     cur = await conn.execute(
         "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
@@ -277,6 +385,7 @@ async def check_every_action(conn: Connection) -> None:
     await check_one_psp_payment_per_attempt(conn)
     await check_invoice_numbers(conn)
     await check_settlement_is_booked_once(conn)
+    await check_bank_is_booked_once(conn)
     await check_no_advisory_lock_is_held(conn)
 
 

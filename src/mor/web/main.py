@@ -22,6 +22,7 @@ from mor.web import (
     buyer,
     order_pages,
     sandbox,
+    staff_bank,
     staff_markets,
     staff_settlement,
     webhooks,
@@ -133,6 +134,21 @@ def make_app(
     async def staff_settlement_resolve(request: Request) -> Response:
         return await staff_settlement.resolve(request, url, clock())
 
+    async def staff_settlement_payout_note(request: Request) -> Response:
+        return await staff_settlement.note_on_payout(request, url, clock())
+
+    async def staff_bank_accounts(request: Request) -> Response:
+        return await staff_bank.accounts_page(url)
+
+    async def staff_bank_account(request: Request) -> Response:
+        return await staff_bank.account_page(request, url)
+
+    async def staff_bank_link(request: Request) -> Response:
+        return await staff_bank.link_entry(request, url, clock())
+
+    async def staff_bank_note(request: Request) -> Response:
+        return await staff_bank.note_on_entry(request, url, clock())
+
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
         Route("/webhooks/psp/{account_id}", psp_webhook, methods=["POST"]),
@@ -199,6 +215,23 @@ def make_app(
                     staff_settlement_resolve,
                     methods=["POST"],
                 ),
+                Route(
+                    "/staff/settlement/{account_id}/payouts/{payout_id}/note",
+                    staff_settlement_payout_note,
+                    methods=["POST"],
+                ),
+                Route("/staff/bank", staff_bank_accounts, methods=["GET"]),
+                Route("/staff/bank/{account_id}", staff_bank_account, methods=["GET"]),
+                Route(
+                    "/staff/bank/{account_id}/entries/{entry_id}/link",
+                    staff_bank_link,
+                    methods=["POST"],
+                ),
+                Route(
+                    "/staff/bank/{account_id}/entries/{entry_id}/note",
+                    staff_bank_note,
+                    methods=["POST"],
+                ),
             ]
         )
     if fakes is not None:
@@ -230,6 +263,9 @@ def make_app(
         async def sandbox_settlement(request: Request) -> Response:
             return await sandbox.cut_settlement(request, url, http)
 
+        async def sandbox_bank_book(request: Request) -> Response:
+            return await sandbox.book_at_bank(request, url, http)
+
         routes.extend(
             [
                 Route("/_fake/", sandbox_page, methods=["GET"]),
@@ -242,6 +278,7 @@ def make_app(
                 Route(
                     "/_fake/sandbox/settlement", sandbox_settlement, methods=["POST"]
                 ),
+                Route("/_fake/sandbox/bank-book", sandbox_bank_book, methods=["POST"]),
             ]
         )
         routes.extend(fakes.app.routes)

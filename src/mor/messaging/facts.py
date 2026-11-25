@@ -22,6 +22,9 @@ import msgspec
 from mor.echo.port import EventKind
 from mor.echo.records import EchoEventSource
 from mor.ids import (
+    BankAccountId,
+    BankEntryId,
+    BankInboxId,
     CheckoutAddressId,
     CheckoutSessionId,
     DutyLookupId,
@@ -56,6 +59,7 @@ class AggregateType(StrEnum):
     ORDER = "order"
     SETTLEMENT_LINE = "settlement_line"
     SETTLEMENT_PAYOUT = "settlement_payout"
+    BANK_ACCOUNT = "bank_account"
 
 
 class MessageType(StrEnum):
@@ -110,6 +114,9 @@ class MessageType(StrEnum):
     PSP_SETTLEMENT_DUE = "psp_settlement_due"
     SETTLEMENT_LINE_RECEIVED = "settlement_line_received"
     SETTLEMENT_PAYOUT_REPORTED = "settlement_payout_reported"
+    BANK_STATEMENT_DUE = "bank_statement_due"
+    BANK_INBOX_STORED = "bank_inbox_stored"
+    BANK_ENTRY_RECEIVED = "bank_entry_received"
 
 
 @dataclass(frozen=True)
@@ -590,6 +597,37 @@ class SettlementPayoutReportedV1(
     psp_account_id: PspAccountId
 
 
+class BankStatementDueV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Scheduled: look for transactions the bank has booked, one page per
+    look (docs/plan-payments.md §7, the bank statement)."""
+
+    message_type: ClassVar[MessageType] = MessageType.BANK_STATEMENT_DUE
+    schema_version: ClassVar[int] = 1
+
+    bank_account_id: BankAccountId
+
+
+class BankInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A page of the bank's transactions was stored raw."""
+
+    message_type: ClassVar[MessageType] = MessageType.BANK_INBOX_STORED
+    schema_version: ClassVar[int] = 1
+
+    bank_account_id: BankAccountId
+    inbox_id: BankInboxId
+
+
+class BankEntryReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """An entry the bank shows, stored and booked once by the bank's id:
+    match it."""
+
+    message_type: ClassVar[MessageType] = MessageType.BANK_ENTRY_RECEIVED
+    schema_version: ClassVar[int] = 1
+
+    bank_account_id: BankAccountId
+    bank_entry_id: BankEntryId
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -639,6 +677,9 @@ type Fact = (
     | PspSettlementDueV1
     | SettlementLineReceivedV1
     | SettlementPayoutReportedV1
+    | BankStatementDueV1
+    | BankInboxStoredV1
+    | BankEntryReceivedV1
 )
 
 
@@ -727,6 +768,12 @@ def aggregate_of(fact: Fact) -> Aggregate:
             return Aggregate(AggregateType.SETTLEMENT_PAYOUT, payout_id)
         case OrderPaidV1(order_id=order_id) | InvoiceIssuedV1(order_id=order_id):
             return Aggregate(AggregateType.ORDER, order_id)
+        case (
+            BankStatementDueV1(bank_account_id=bank_account_id)
+            | BankInboxStoredV1(bank_account_id=bank_account_id)
+            | BankEntryReceivedV1(bank_account_id=bank_account_id)
+        ):
+            return Aggregate(AggregateType.BANK_ACCOUNT, bank_account_id)
 
 
 def encode(fact: Fact) -> bytes:
@@ -850,6 +897,12 @@ def decode(
             decoded = _decode(payload, SettlementLineReceivedV1)
         case MessageType.SETTLEMENT_PAYOUT_REPORTED:
             decoded = _decode(payload, SettlementPayoutReportedV1)
+        case MessageType.BANK_STATEMENT_DUE:
+            decoded = _decode(payload, BankStatementDueV1)
+        case MessageType.BANK_INBOX_STORED:
+            decoded = _decode(payload, BankInboxStoredV1)
+        case MessageType.BANK_ENTRY_RECEIVED:
+            decoded = _decode(payload, BankEntryReceivedV1)
     if isinstance(decoded, str):
         return UndecodableFact(
             message_type=message_type,

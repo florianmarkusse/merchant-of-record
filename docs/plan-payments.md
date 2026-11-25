@@ -1,7 +1,7 @@
 # Payments, the order, the invoice and settlement (slice 5)
 
-Status: 5a, 5b and 5c-1 built (19-Nov to 23-Nov-2026). 5c-2, the bank
-statement, is next and not designed yet; then 5c-3 (§1).
+Status: 5a, 5b, 5c-1 and 5c-2 built (19-Nov to 25-Nov-2026); 5c-3 is
+next (§1).
 
 Applies `plan-architecture.md` §2 (stages 3 and 4), §4, §5, §6 and §9
 (the capture entry) to payments against the fake PSP. Slice 4 left the
@@ -27,11 +27,11 @@ payouts to merchants (slice 9), merchant webhooks and emails to buyers
   real PSPs send): settlement by file and by API from the fake, the real
   PSP fee clearing the estimate, each payout reconciled with its lines
   (§7).
-- **5c-2: the bank statement** (next, to be designed): a fake bank and
-  the import of its statements, matching each PSP payout to the credit
-  that shows it arrived, which moves the payout from `payout_in_transit`
-  to `bank:{entity}`; a payout whose credit arrived but whose lines do
-  not add up is flagged on the staff settlement page (§7).
+- **5c-2: the bank statement** (built 25-Nov-2026): a fake bank and
+  the import of its transactions, every entry booked, each PSP payout
+  matched to its credit, which moves it from `payout_in_transit` to
+  `bank`; a payout whose credit arrived but whose lines do not add up is
+  flagged on the staff settlement page (§7, the bank statement).
 - **5c-3: the browser side**: the fake's card-fields component (the first
   PSP JavaScript, under the prod CSP) and the Playwright smoke suite
   (`plan-architecture.md` §10).
@@ -531,8 +531,8 @@ Cr psp_clearing:{account}        the same
 ```
 
 The PSP says the money left it; it is not in our bank until the bank's
-statement shows it. 5c-2 moves it from `payout_in_transit` to
-`bank:{entity}`, and only `bank` is money we pay merchants from (decided
+statement shows it. The bank match moves it from `payout_in_transit` to
+`bank:{bank account}` (below), and only `bank` is money we pay merchants from (decided
 20-Nov-2026: a payout to a merchant must never spend money that is not in
 our bank yet).
 
@@ -558,9 +558,8 @@ the payout stays open and shows it.
 is normal for a while (lines are listed after the payout, pages arrive
 one by one, a balance transfer waits for the next batch), so the staff
 settlement page lists open payouts with the difference and how long it
-has been open. Once 5c-2 has matched the payout's bank credit, a payout
-still open is flagged there, and the resolve-with-a-note form applies to
-it as to a line exception.
+has been open. Once its bank credit is matched, a payout still open is
+flagged there and takes a note (the bank statement, below).
 
 **The health figure.** `psp_clearing` per account and currency, beside
 the captures the PSP has not settled yet: zero once everything captured
@@ -598,6 +597,158 @@ conversion into the merchant's currency is ours: the capture already owes
 the merchant in its currency through `fx_position`, and the real trade
 clears it between settlement and the merchant's payout (slice 9).
 
+### The bank statement (5c-2)
+
+A PSP's payout is only a claim until our bank shows the credit. 5c-2
+reads our bank accounts, books every entry they show, and matches each
+payout to its credit, which moves it from `payout_in_transit` to `bank`
+(decided 25-Nov-2026).
+
+**What real banks offer** (read 25-Nov-2026): an end-of-day statement
+(ISO 20022 camt.053, or the older MT940) as a file, and more and more a
+JSON API. ABN AMRO's Business Account Insight API (Dutch business
+accounts only, OAuth client credentials over mutual TLS, a fee agreed at
+onboarding) lists `/transactions` per IBAN with a `transactionId`, the
+remittance text in `descriptionLines`, the counterparty, and a
+`nextPageKey`; `/balances` gives the booked balance; its push product is
+a pilot. DBS RAPID (SG) is a JSON API too. Wise keeps a statement per
+currency balance (`balance-statements/{balanceId}`), Airwallex lists
+transactions per global account, one per currency. camt.053's own entry
+reference (`AcctSvcrRef`) is not unique by the standard, so each bank
+module names the id its bank promises. On the PSP side Adyen puts its
+payout reference `TX…XT` in the transfer's description, which the bank
+may cut short; Stripe's best key is the bank's trace id, known up to 10
+days after the payout, and its descriptor defaults to "STRIPE".
+
+Sources: [ABN AMRO Business Account Insight](https://developer.abnamro.com/api-products/business-account-insight/overview),
+[ABN AMRO statements](https://www.abnamro.nl/en/commercialbanking/products/payments/sepa/reporting/index.html),
+[DBS RAPID](https://www.dbs.com.sg/corporate/solutions/digital/rapid),
+[Wise balance statement](https://docs.wise.com/api-reference/balance-statement),
+[Airwallex global accounts](https://www.airwallex.com/docs/api/core_resources/global_accounts),
+[SAP on AcctSvcrRef](https://userapps.support.sap.com/sap/support/knowledge/en/3745593),
+[Adyen settlement details report](https://docs.adyen.com/reporting/settlement-reconciliation/transaction-level/settlement-details-report),
+[Stripe trace ID](https://docs.stripe.com/payouts/trace-id).
+
+**Which bank is open** (`README.md`, decisions waiting on people): it
+follows the entity, and it must hold the SEA currencies we settle in
+(settlement currency, above), so it is a multi-currency account (Wise,
+Airwallex), local accounts per currency, or both beside a Dutch account.
+The design holds for each: a **bank account is one currency balance at
+one provider** (an IBAN at ABN AMRO, a Wise balance id, an Airwallex
+global account), and a bank provider is a module behind one port, as a
+PSP is.
+
+**Our side**:
+
+- `bank_account (id, provider, kind, base_url, credentials_ref,
+  external_ref, currency, statement_interval_s)`, `kind` `fake`,
+  `sandbox` or `live`, refused by the registry where the environment
+  does not allow it (`plan-architecture.md` §6). `external_ref` is what
+  the bank calls the account (IBAN, balance id).
+- `psp_payout_destination (psp_account_id, currency, bank_account_id)`,
+  one row per PSP account and currency, as a PSP account is configured
+  with where it pays out. A payout is matched only within its
+  destination; a payout with none stays in transit and is shown so.
+- `src/mor/bank/`: `port.py`, `registry.py` (one `match` on the
+  provider), `fake_client.py`. The port reads only:
+  `list_transactions(account, page_key) -> TransactionsPage | …` and
+  `decode_transactions` (pure). Reads need no guard.
+
+**Reading**, the one inbound path (`plan-messaging.md` §7):
+
+```
+bank_statement_due (scheduled, per bank account)
+  └▶ bank_statement_fetch (effect, reads only): one page per look, after
+     the cursor, the bank's own page key; more promised looks again now,
+     otherwise after the account's interval
+       └▶ bank_inbox (raw) ─▶ bank_inbox_decode: each entry stored once by
+          (bank_account_id, vendor_entry_id) and booked in the same
+          transaction ─▶ bank_entry_received
+             └▶ bank_entry_match
+settlement_payout_reported ─▶ bank_entry_match
+```
+
+**Booking an entry**, on import, keyed `bank-entry:{bank account}:{entry
+id}`, dated by its booking date, whatever it is:
+
+```
+Dr bank:{bank account}            the amount (a debit: the other way)
+Cr bank_suspense:{bank account}   the same
+```
+
+So the ledger's `bank` follows the bank's own balance from the first
+read, and `bank_suspense` holds whatever is not explained yet.
+
+**The cursor is a position, never a transaction id** (decided
+25-Nov-2026, found by the fuzzer): a bank that lists a transaction twice
+makes "after this id" ambiguous, and the fake once skipped a credit that
+came between the two listings. Business Account Insight pages by an
+opaque `nextPageKey`, and so does the fake.
+
+**Matching** (`bank_entry_match`, under the bank account's row lock, so
+an entry and a payout arriving at once serialize), each run over every
+unmatched credit and unmatched payout of the account:
+
+- a credit and a payout match when the payout's id is a whole token of
+  the credit's remittance text, the payout's destination is this account,
+  and each is the other's only candidate. Two candidates on either side
+  match nothing: a person picks. Never by amount alone (decided
+  25-Nov-2026);
+- the amount need not agree. What arrived is matched; a shortfall (a
+  correspondent bank's charge) or an excess stays in
+  `payout_in_transit`, shown on the payout, with no write-off (decided
+  25-Nov-2026);
+- the match, keyed `bank-match:{bank account}:{entry id}`, moves what
+  arrived:
+
+  ```
+  Dr bank_suspense:{bank account}      the credit's amount
+  Cr payout_in_transit:{psp account}   the same
+  ```
+
+- either side may come first: a credit read before the payout report
+  waits in suspense, and the payout's fact runs the match again.
+  `bank_match` is unique on the entry and on the payout, and append-only.
+
+**A person links** a credit no rule matched to a payout of the same
+account and currency on the staff page, booking the same entry with the
+person as actor (decided 25-Nov-2026: the correction has one meaning, so
+it books). Any other entry (a debit we did not make, a credit nobody
+announced) gets a note, booking nothing; it stays in `bank_suspense`.
+
+**The staff settlement page** shows each payout's bank state: not
+arrived, or arrived on a date, with the amount when it differs. A payout
+whose credit arrived and whose lines are still open, or whose credit
+differs, is flagged, and takes a note as a line exception does. Beside
+it: per bank account, its unmatched entries with their candidates, and
+`bank` beside the bank's own booked balance.
+
+**The fake bank** under `/_fake/bank/{account}`, in `fake_vendor`,
+scripted and never timed, in Business Account Insight's shape:
+`GET …/transactions?pageKey=` (oldest first, a page of a few, with
+`nextPageKey` and `has_more`), each with `transactionId`, a signed decimal `amount` in
+major units, `currency`, `descriptionLines`, `counterPartyName` and
+`bookDate`. A cut of the fake PSP leaves a pending credit at its
+destination, with the payout id in the text; `POST …/book` books what is
+pending (the staff sandbox page, the seed and the fuzzer call it).
+Faults, picked with the cut: no reference in the text, the reference
+cut short, a credit short by a charge, a credit that never arrives, a
+transaction listed twice, a credit nobody announced, a debit we did not
+make, and the list answering 500 or timing out.
+
+**Tables**: `bank_account`, `psp_payout_destination`, `bank_cursor
+(bank_account_id, page_key)`, `bank_inbox`, `bank_balance_shown
+(bank_account_id, inbox_id, balance_minor)` (the bank's balance after
+the newest page read, which `bank` must equal), `bank_entry (id,
+bank_account_id, vendor_entry_id, amount_minor, currency, remittance,
+counterparty, booked_on, balance_after_minor, inbox_id, recorded_at)`
+unique on
+`(bank_account_id, vendor_entry_id)`, `bank_match (entry_id unique,
+payout_id unique, actor, matched_at)`, `bank_entry_note (entry_id
+unique, note, actor, noted_at)` and `settlement_payout_note (payout_id
+unique, note, actor, noted_at)`, all append-only. Ledger kinds `bank`
+and `bank_suspense`, scoped by bank account.
+
 ## 8. Testing and fuzzing
 
 - Pure: the transition table is total; the capture entry balances and
@@ -619,6 +770,11 @@ clears it between settlement and the merchant's payout (slice 9).
   balanced; a payout read before its lines are listable stays open, then
   balances; a payout and its pages decoded in any order end balanced;
   facts met again book nothing.
+  The bank: each fault gives exactly its state (unmatched, short, in
+  suspense); a credit before its payout report and after it both end
+  matched; a transaction listed twice books once; a clean cut leaves
+  `payout_in_transit` at zero and `bank` equal to the bank's balance; a
+  person's link books once.
 - Concurrency: six workers issue invoices for 24 orders at once, numbers
   still 1…n; a webhook applied while the capture call is out.
 - Fuzzers (`plan-architecture.md` §10): the payment machine (up to the
@@ -629,13 +785,17 @@ clears it between settlement and the merchant's payout (slice 9).
   per attempt; after draining, every captured attempt has one order, one
   capture entry and one invoice, no session is stuck in `paying`, every
   settled payment is booked once and every payout balanced unless its
-  fault says otherwise. With guard `none`, "waiting on a person" is
+  fault says otherwise. The settlement machine also books the fake
+  bank's pending credits and reads the bank in the drawn order; after
+  draining, every payout with a clean credit is matched, `bank` per
+  account equals the fake bank's balance, and nothing is matched twice. With guard `none`, "waiting on a person" is
   allowed, never a double charge.
 - Planted bugs each caught: a resend on a `none` guard; expiring a session
   while it is paid; the invoice counter read without `FOR UPDATE`; the
   number committed apart from the invoice; a tolerance in the net check;
   lines not triggering the reconciliation; waiting lines never booked; a
-  payout booked twice.
+  payout booked twice; a match by amount alone; a payout matched to two
+  credits; an entry booked twice.
 
 ## 9. Compliance touchpoints (named, not answered)
 
@@ -646,6 +806,10 @@ clears it between settlement and the merchant's payout (slice 9).
   behalf, and which entity holds the PSP contract; safeguarding rules
   for funds the PSP holds between capture and payout, and for funds in
   our bank before the merchant's payout.
+- Which bank, in which country, holds merchants' money between the
+  PSP's payout and ours, and whether that account must be a segregated
+  or safeguarding account; whether the bank API's data (counterparty
+  names) is personal data we must treat as such.
 - KYB before a live payment, beyond the minimal state of §6.
 - The statement descriptor `OURS*MERCHANT` (`plan-merchant-surfaces.md`
   §5) is a PSP selection criterion; the fake takes one per payment.

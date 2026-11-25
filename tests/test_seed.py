@@ -18,15 +18,18 @@ from mor.markets.store import load_market
 from mor.merchants.records import KeyEnv, NewKey
 from mor.merchants.store import authenticate
 from mor.messaging.worker import Failed, drain_once
+from mor.money.currency import Currency
 from mor.seed import (
     DEFAULT_PSP,
     SeededEchoAccount,
     SeedInProd,
     base_url,
     seed_accounts,
+    seed_bank_accounts,
     seed_carriers,
     seed_merchant,
     seed_psp_accounts,
+    set_up_fake_bank,
     set_up_fake_psp,
     subscribe_webhooks,
 )
@@ -191,6 +194,53 @@ def test_psp_accounts_are_seeded_once_per_wiring_with_one_default_route(
                 f"{SELF_URL}/_fake/psp/{DEFAULT_PSP}/payments?reference=none"
             )
             assert cur_count.json() == {"payments": []}
+        finally:
+            await wired.http.aclose()
+            await wired.control.aclose()
+
+    asyncio.run(body())
+
+
+def test_a_bank_account_per_currency_is_seeded_once_with_every_psp_paying_in(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        wired = wire(database_url, lambda: NOW)
+        settings = Settings(ENV, database_url, SELF_URL)
+        try:
+            psp_count = 0
+            bank_count = 0
+            for _ in range(2):
+                async with await connect(database_url) as conn:
+                    psps = await seed_psp_accounts(conn, settings, NOW)
+                    assert not isinstance(psps, SeedInProd)
+                    banks = await seed_bank_accounts(conn, settings, psps, NOW)
+                    assert not isinstance(banks, SeedInProd)
+                    await conn.commit()
+                assert await set_up_fake_psp(wired.control, settings, psps) is None
+                assert await set_up_fake_bank(wired.control, banks, psps) is None
+                psp_count = len(psps)
+                bank_count = len(banks)
+            assert bank_count == len(Currency)
+            assert await count_rows(
+                database_url, "SELECT count(*) FROM bank_account"
+            ) == len(Currency)
+            assert (
+                await count_rows(
+                    database_url, "SELECT count(*) FROM psp_payout_destination"
+                )
+                == len(Currency) * psp_count
+            )
+            assert (
+                await count_rows(
+                    database_url,
+                    "SELECT count(*) FROM fake_vendor.bank_fake_destination",
+                )
+                == len(Currency) * psp_count
+            )
+            assert await count_rows(
+                database_url, "SELECT count(*) FROM bank_cursor"
+            ) == len(Currency)
         finally:
             await wired.http.aclose()
             await wired.control.aclose()

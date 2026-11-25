@@ -40,6 +40,9 @@ class ConsumerName(StrEnum):
     SETTLEMENT_LINE_BOOK = "settlement_line_book"
     SETTLEMENT_PAYOUT_BOOK = "settlement_payout_book"
     SETTLEMENT_PAYOUT_RECONCILE = "settlement_payout_reconcile"
+    BANK_STATEMENT_FETCH = "bank_statement_fetch"
+    BANK_INBOX_DECODE = "bank_inbox_decode"
+    BANK_ENTRY_MATCH = "bank_entry_match"
 
 
 # The two kinds, as types: the worker hands `handle` only a local consumer
@@ -62,6 +65,8 @@ type LocalConsumer = Literal[
     ConsumerName.SETTLEMENT_LINE_BOOK,
     ConsumerName.SETTLEMENT_PAYOUT_BOOK,
     ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
+    ConsumerName.BANK_INBOX_DECODE,
+    ConsumerName.BANK_ENTRY_MATCH,
 ]
 type EffectConsumer = Literal[
     ConsumerName.ECHO_SEND,
@@ -75,6 +80,7 @@ type EffectConsumer = Literal[
     ConsumerName.PSP_PAYMENT_POLL,
     ConsumerName.PSP_PAYMENT_FETCH,
     ConsumerName.PSP_SETTLEMENT_FETCH,
+    ConsumerName.BANK_STATEMENT_FETCH,
 ]
 
 
@@ -177,11 +183,20 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
                 ConsumerName.SETTLEMENT_LINE_BOOK,
                 ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
             )
+        # A payout may be reported after its credit is read: it runs the
+        # bank match too (docs/plan-payments.md §7, the bank statement).
         case MessageType.SETTLEMENT_PAYOUT_REPORTED:
             return (
                 ConsumerName.SETTLEMENT_PAYOUT_BOOK,
                 ConsumerName.SETTLEMENT_PAYOUT_RECONCILE,
+                ConsumerName.BANK_ENTRY_MATCH,
             )
+        case MessageType.BANK_STATEMENT_DUE:
+            return (ConsumerName.BANK_STATEMENT_FETCH,)
+        case MessageType.BANK_INBOX_STORED:
+            return (ConsumerName.BANK_INBOX_DECODE,)
+        case MessageType.BANK_ENTRY_RECEIVED:
+            return (ConsumerName.BANK_ENTRY_MATCH,)
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
@@ -225,6 +240,8 @@ def consumer_kind(consumer: ConsumerName) -> Local | Effect:
             | ConsumerName.SETTLEMENT_LINE_BOOK
             | ConsumerName.SETTLEMENT_PAYOUT_BOOK
             | ConsumerName.SETTLEMENT_PAYOUT_RECONCILE
+            | ConsumerName.BANK_INBOX_DECODE
+            | ConsumerName.BANK_ENTRY_MATCH
         ):
             return Local(consumer)
         case (
@@ -239,5 +256,6 @@ def consumer_kind(consumer: ConsumerName) -> Local | Effect:
             | ConsumerName.PSP_PAYMENT_POLL
             | ConsumerName.PSP_PAYMENT_FETCH
             | ConsumerName.PSP_SETTLEMENT_FETCH
+            | ConsumerName.BANK_STATEMENT_FETCH
         ):
             return Effect(consumer)

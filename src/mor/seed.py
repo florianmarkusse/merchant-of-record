@@ -26,6 +26,10 @@ dashboard, and a default route to the push / sale / keyed one
 Each reads its settlement, keyed accounts by report file and the others
 through the API (§7.1).
 
+One fake bank account per currency, each read for its transactions, and
+every fake PSP account paying out each currency into it, on both sides
+(docs/plan-payments.md §7, the bank statement).
+
 A synthetic merchant, "Sandbox Shop", with an API key for this
 environment: the key is printed when it is created, and only then
 (docs/plan-quote.md §5, 4d-1).
@@ -45,6 +49,13 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
+from mor.bank.accounts import (
+    bank_account_by_name,
+    create_bank_account,
+    set_payout_destination,
+)
+from mor.bank.fetch import start_reading
+from mor.bank.port import BankAccount, BankProvider
 from mor.carriers.prices import carrier_account, create_carrier_account
 from mor.carriers.records import CarrierProvider, PriceExpiry
 from mor.config import Environment, Settings, load_settings
@@ -67,6 +78,7 @@ from mor.merchants.store import (
     set_kyb_state,
 )
 from mor.messaging.guard import DuplicateGuard
+from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
 from mor.psp.accounts import add_route, create_psp_account, psp_account_by_name
 from mor.psp.port import (
@@ -313,6 +325,64 @@ async def seed_psp_accounts(
     return seeded
 
 
+def bank_name(currency: Currency) -> str:
+    return f"sandbox-bank-{currency.value.lower()}"
+
+
+async def seed_bank_accounts(
+    conn: Connection, settings: Settings, psps: list[PspAccount], now: datetime
+) -> list[BankAccount] | SeedInProd:
+    """A bank account per currency, made if missing, read from now on, with
+    every PSP account paying out that currency into it. Never commits."""
+    if settings.environment == Environment.PROD:
+        return SeedInProd()
+    seeded: list[BankAccount] = []
+    for currency in Currency:
+        name = bank_name(currency)
+        account = await bank_account_by_name(conn, name)
+        if account is None:
+            account = await create_bank_account(
+                conn,
+                name,
+                BankProvider.FAKE,
+                ProviderAccountKind.FAKE,
+                f"{settings.self_url}/_fake/bank/{name}",
+                f"FAKE-{currency.value}-0001",
+                currency,
+                now,
+                TIMEOUT,
+                SETTLEMENT_INTERVAL,
+            )
+        await start_reading(conn, account.id, SEEDER, now)
+        for psp in psps:
+            await set_payout_destination(conn, psp.id, account, now)
+        seeded.append(account)
+    return seeded
+
+
+async def set_up_fake_bank(
+    http: httpx2.AsyncClient, banks: list[BankAccount], psps: list[PspAccount]
+) -> FakeUnreachable | None:
+    """The bank side: each account opened, and each PSP account's payouts
+    in its currency pointed at it, as on the PSP's dashboard."""
+    for bank in banks:
+        try:
+            response = await http.post(
+                f"{bank.base_url}/setup", json={"currency": bank.currency.value}
+            )
+            if response.status_code != 204:
+                return FakeUnreachable(f"status {response.status_code}")
+            for psp in psps:
+                response = await http.post(
+                    f"{bank.base_url}/destinations", json={"psp_account": psp.name}
+                )
+                if response.status_code != 204:
+                    return FakeUnreachable(f"status {response.status_code}")
+        except httpx2.TransportError as error:
+            return FakeUnreachable(repr(error))
+    return None
+
+
 async def set_up_fake_psp(
     http: httpx2.AsyncClient, settings: Settings, accounts: list[PspAccount]
 ) -> FakeUnreachable | None:
@@ -412,6 +482,8 @@ async def _main() -> int:
         assert not isinstance(key, SeedInProd)
         psps = await seed_psp_accounts(conn, settings, datetime.now(UTC))
         assert not isinstance(psps, SeedInProd)
+        banks = await seed_bank_accounts(conn, settings, psps, datetime.now(UTC))
+        assert not isinstance(banks, SeedInProd)
         await conn.commit()
     async with httpx2.AsyncClient() as http:
         unreachable = await subscribe_webhooks(http, settings, seeded)
@@ -419,6 +491,8 @@ async def _main() -> int:
             unreachable = await set_fake_duty_rates(http, settings)
         if unreachable is None:
             unreachable = await set_up_fake_psp(http, settings, psps)
+        if unreachable is None:
+            unreachable = await set_up_fake_bank(http, banks, psps)
     if unreachable is not None:
         print(f"accounts seeded, webhooks not subscribed: {unreachable.detail}")
         print(f"is the server running at {settings.self_url}? Then seed again.")
@@ -431,6 +505,7 @@ async def _main() -> int:
     print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
     print(f"carrier accounts created: {', '.join(carriers) or 'none'}")
     print(f"{len(psps)} fake PSP accounts set up; default route: {DEFAULT_PSP}")
+    print(f"{len(banks)} fake bank accounts, one per currency")
     if key is not None:
         print(f"Sandbox Shop API key (shown once): {key.text}")
     return 0

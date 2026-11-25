@@ -10,7 +10,7 @@ made by `kind_of` and `scope_of`; nothing reads an account back from them.
 from dataclasses import dataclass
 from enum import StrEnum
 
-from mor.ids import CarrierCode, CountryCode, MerchantId, PspAccountId
+from mor.ids import BankAccountId, CarrierCode, CountryCode, MerchantId, PspAccountId
 
 
 class AccountKind(StrEnum):
@@ -30,6 +30,8 @@ class AccountKind(StrEnum):
     ROUNDING = "rounding"
     FX_POSITION = "fx_position"
     PAYOUT_IN_TRANSIT = "payout_in_transit"
+    BANK = "bank"
+    BANK_SUSPENSE = "bank_suspense"
 
 
 @dataclass(frozen=True)
@@ -125,6 +127,22 @@ class PayoutInTransit:
     psp_account_id: PspAccountId
 
 
+@dataclass(frozen=True)
+class Bank:
+    """Money in one of our bank accounts, as its statement shows it: the
+    only money merchants are paid from (docs/plan-payments.md §7)."""
+
+    bank_account_id: BankAccountId
+
+
+@dataclass(frozen=True)
+class BankSuspense:
+    """What a bank account shows that nothing explains yet: a credit not
+    matched to a payout, a debit we did not make."""
+
+    bank_account_id: BankAccountId
+
+
 type Account = (
     PspClearing
     | TaxPayable
@@ -140,6 +158,8 @@ type Account = (
     | Rounding
     | FxPosition
     | PayoutInTransit
+    | Bank
+    | BankSuspense
 )
 
 
@@ -173,6 +193,10 @@ def kind_of(account: Account) -> AccountKind:
             return AccountKind.FX_POSITION
         case PayoutInTransit():
             return AccountKind.PAYOUT_IN_TRANSIT
+        case Bank():
+            return AccountKind.BANK
+        case BankSuspense():
+            return AccountKind.BANK_SUSPENSE
 
 
 def scope_of(account: Account) -> str:
@@ -190,6 +214,11 @@ def scope_of(account: Account) -> str:
             MerchantPayable(merchant_id=merchant_id) | Reserve(merchant_id=merchant_id)
         ):
             return str(merchant_id)
+        case (
+            Bank(bank_account_id=bank_account_id)
+            | BankSuspense(bank_account_id=bank_account_id)
+        ):
+            return str(bank_account_id)
         case TaxPayable(country=country):
             return country
         case (
