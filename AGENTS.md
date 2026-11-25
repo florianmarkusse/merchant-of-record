@@ -88,9 +88,9 @@ this project.
   the other projects). Run `npm install` once; the Stop hook runs `npx
   tsc` from then on. Every page works without them: a script only
   improves a form or table the server already handles.
-- Checks: the shared hooks run them; this project's extras (vulture,
-  `npx tsc`) are in `.claude/checks.sh`, vulture's reviewed false
-  positives in `vulture_whitelist.py`. A rule ruff cannot say becomes an
+- Checks: the shared hooks run them, vulture (from `[tool.vulture]`) and
+  `npx tsc` (from `tsconfig.json`) included; vulture's reviewed false
+  positives are in `vulture_whitelist.py`. A rule ruff cannot say becomes an
   ast-grep rule (`ast-grep/rules/`, examples in `ast-grep/rule-tests/`;
   `uv run ast-grep scan` shows its cases). A failing check says why.
   `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
