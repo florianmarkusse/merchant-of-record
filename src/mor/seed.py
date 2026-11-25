@@ -231,7 +231,7 @@ async def seed_carriers(
         for service in market.services:
             if service.code != route.service:
                 continue
-            carrier = service.provider
+            carrier = service.carrier
             if carrier in created or await carrier_account(conn, carrier) is not None:
                 continue
             await create_carrier_account(

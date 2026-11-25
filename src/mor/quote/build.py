@@ -398,7 +398,7 @@ def _option(
     match offer.priced_by:
         case FromCarrier():
             live = offer.priced_by
-            ship_source = f"{offer.service.provider} rate call"
+            ship_source = f"{offer.service.carrier} rate call"
         case FromCard(card=priced_card):
             ship_source = priced_card.code
     shipping: list[Part] = []

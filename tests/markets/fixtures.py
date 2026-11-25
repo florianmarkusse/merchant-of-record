@@ -53,7 +53,7 @@ def market_texts(
 
 SHIPPING_HEADERS = {
     "services": (
-        "service,provider,name,origin,tier,ddp,volumetric_divisor,weight_step_kg,"
+        "service,carrier,name,origin,tier,ddp,volumetric_divisor,weight_step_kg,"
         "max_weight_kg,status,source,source_url,research_ref,checked_on,question,"
         "notes\n"
     ),

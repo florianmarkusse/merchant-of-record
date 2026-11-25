@@ -319,7 +319,7 @@ class FeeComponent(StrEnum):
 @dataclass(frozen=True, kw_only=True)
 class Service:
     code: ServiceCode
-    provider: CarrierCode  # the carrier
+    carrier: CarrierCode
     name: str
     origin: CountryCode
     tier: ServiceTier
@@ -507,7 +507,7 @@ def _canonical_lines(market: MarketSet) -> list[str]:
         )
     for service in market.services:
         lines.append(
-            f"service|{service.code}|{service.provider}|{service.name}"
+            f"service|{service.code}|{service.carrier}|{service.name}"
             f"|{service.origin}|{service.tier.value}|{service.duties_paid.value}"
             f"|{service.volumetric_divisor}|{_fraction_text(service.max_weight_kg)}"
             f"|{service.status.value}"

@@ -233,7 +233,7 @@ def price_question(
     service: Service, destination: CountryCode, parcel: Parcel
 ) -> PriceQuestion:
     return PriceQuestion(
-        carrier=service.provider,
+        carrier=service.carrier,
         service=service.code,
         origin=service.origin,
         destination=destination,

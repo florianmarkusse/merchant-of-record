@@ -31,7 +31,7 @@ class Parcel:
 class PriceQuestion:
     """A price for one service on one lane, for one exact parcel."""
 
-    carrier: CarrierCode  # the service's provider, e.g. `dhl_express`
+    carrier: CarrierCode  # the service's carrier, e.g. `dhl_express`
     service: ServiceCode
     origin: CountryCode
     destination: CountryCode

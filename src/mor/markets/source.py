@@ -648,7 +648,7 @@ def _services(text: str, errors: list[SourceError]) -> list[Service]:
     parsed: list[Service] = []
     for at in _rows("services", text, errors):
         code = _required(errors, at, "service")
-        provider = _required(errors, at, "provider")
+        carrier = _required(errors, at, "carrier")
         name = _required(errors, at, "name")
         origin = _iso2(errors, at, "origin")
         tier = _choice(errors, at, "tier", ServiceTier)
@@ -661,7 +661,7 @@ def _services(text: str, errors: list[SourceError]) -> list[Service]:
             continue
         if (
             isinstance(code, str)
-            and isinstance(provider, str)
+            and isinstance(carrier, str)
             and isinstance(name, str)
             and isinstance(origin, str)
             and isinstance(tier, ServiceTier)
@@ -673,7 +673,7 @@ def _services(text: str, errors: list[SourceError]) -> list[Service]:
             parsed.append(
                 Service(
                     code=ServiceCode(code),
-                    provider=CarrierCode(provider),
+                    carrier=CarrierCode(carrier),
                     name=name,
                     origin=origin,
                     tier=tier,

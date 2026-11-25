@@ -393,7 +393,7 @@ One source per service and lane: a buyer never sees the same service
 twice.
 
 The account is found from the service's carrier
-(`shipping_service.provider`, e.g. `dhl_express`). Each environment's
+(`shipping_service.carrier`, e.g. `dhl_express`). Each environment's
 database holds one `carrier_account` per carrier: the real API in prod,
 the fake elsewhere, as with duty vendors. The CSV is the same everywhere.
 

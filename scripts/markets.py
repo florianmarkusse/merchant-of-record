@@ -86,7 +86,7 @@ SCHEMA: dict[str, tuple[str, ...]] = {
     "providers": ("provider", "name", "kind", "website", "relationship", "notes"),
     "services": (
         "service",
-        "provider",
+        "carrier",
         "name",
         "origin",
         "tier",
@@ -668,7 +668,7 @@ def check_services(data: Data, known: Known) -> list[str]:
     errors: list[str] = []
     for i, row in enumerate(data.rows("services")):
         errors.extend(check_status_row("services", i, row, known))
-        errors.extend(known_ref("services", i, row, "provider", known.providers))
+        errors.extend(known_ref("services", i, row, "carrier", known.providers))
         errors.extend(known_ref("services", i, row, "origin", known.iso))
         errors.extend(pattern("services", i, row, ("volumetric_divisor",), INTEGER))
         weights = ("weight_step_kg", "max_weight_kg")
@@ -696,7 +696,7 @@ def check_rate_cards(data: Data, known: Known) -> list[str]:
 
 
 def check_supersedes(data: Data, known: Known) -> list[str]:
-    """A card replaces another card of the same provider, without cycles."""
+    """A card replaces another card of the same carrier, without cycles."""
     errors: list[str] = []
     cards = by_key(data.rows("rate_cards"), "rate_card")
     services = by_key(data.rows("services"), "service")
@@ -714,8 +714,8 @@ def check_supersedes(data: Data, known: Known) -> list[str]:
         mine = services.get(row["service"])
         theirs = services.get(cards[older]["service"])
         if mine is not None and theirs is not None:
-            if mine["provider"] != theirs["provider"]:
-                errors.append(f"{here}: supersedes {older} of another provider")
+            if mine["carrier"] != theirs["carrier"]:
+                errors.append(f"{here}: supersedes {older} of another carrier")
         seen = {row["rate_card"]}
         step = older
         while step:
@@ -1802,7 +1802,7 @@ def all_in_title(result: AllIn) -> str:
 
 def provider_kind(data: Data, card: Row) -> str:
     service = by_key(data.rows("services"), "service")[card["service"]]
-    return by_key(data.rows("providers"), "provider")[service["provider"]]["kind"]
+    return by_key(data.rows("providers"), "provider")[service["carrier"]]["kind"]
 
 
 def usable_benchmark(data: Data, result: AllIn) -> bool:

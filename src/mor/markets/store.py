@@ -265,7 +265,7 @@ async def _insert_shipping(
     async with conn.cursor() as cur:
         await cur.executemany(
             "INSERT INTO shipping_service"
-            " (load_id, code, provider, name, origin_iso2, tier, duties_paid,"
+            " (load_id, code, carrier, name, origin_iso2, tier, duties_paid,"
             "  volumetric_divisor, max_weight_numerator, max_weight_denominator,"
             "  status)"
             " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
@@ -273,7 +273,7 @@ async def _insert_shipping(
                 (
                     load_id,
                     s.code,
-                    s.provider,
+                    s.carrier,
                     s.name,
                     s.origin,
                     s.tier.value,
@@ -845,7 +845,7 @@ async def _read_shipping(conn: Connection, load_id: MarketLoadId) -> _Shipping:
 @dataclass(frozen=True, kw_only=True)
 class _ServiceRow:
     code: ServiceCode
-    provider: CarrierCode
+    carrier: CarrierCode
     name: str
     origin_iso2: CountryCode
     tier: ServiceTier
@@ -861,7 +861,7 @@ async def _read_services(
 ) -> tuple[Service, ...]:
     async with conn.cursor(row_factory=class_row(_ServiceRow)) as cur:
         await cur.execute(
-            "SELECT code, provider, name, origin_iso2, tier, duties_paid,"
+            "SELECT code, carrier, name, origin_iso2, tier, duties_paid,"
             " volumetric_divisor, max_weight_numerator, max_weight_denominator,"
             " status FROM shipping_service WHERE load_id = %s ORDER BY code",
             (load_id,),
@@ -872,7 +872,7 @@ async def _read_services(
         services.append(
             Service(
                 code=row.code,
-                provider=row.provider,
+                carrier=row.carrier,
                 name=row.name,
                 origin=row.origin_iso2,
                 tier=row.tier,

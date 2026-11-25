@@ -117,7 +117,7 @@ a value waits on a re-fetch, an email or an adviser.
 | `facts.csv` | fact: country or group × topic × category × origin |
 | `questions.csv` | question: email, adviser question or re-fetch, with priority, due date, blocker and providers |
 | `providers.csv` | logistics or landed-cost provider and our contact status |
-| `services.csv` | carrier service from an origin |
+| `services.csv` | carrier service from an origin; its `carrier` is a `providers.csv` id |
 | `rate_cards.csv` | price list of a service: kind, currency, validity, when received, what it supersedes, its conditions, whether fuel and VAT are included |
 | `zones.csv` | country or group → zone, per rate card, with the mapping's status |
 | `rates.csv` | price per rate card × zone × weight; `ack` on a price that falls as weight rises |
