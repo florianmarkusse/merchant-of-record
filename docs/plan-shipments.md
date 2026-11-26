@@ -1,6 +1,6 @@
 # Shipments: booking, tracking and milestones (slice 6)
 
-Status: 6a-1 built; 6a-2 (booking) is next.
+Status: 6a-1 is built (§4); 6a-2, booking, is next, then 6b and 6c.
 
 Applies `plan-architecture.md` §5, §6, §7 and §9 (booking, tracking) to
 shipments against the fake carrier in every mode. Slice 5 left a paid
@@ -16,11 +16,13 @@ entries.
 
 ## 1. Steps
 
-- **6a-1: what checkout refuses.** Apparel only, our classification
-  per SKU with its staff page, the merchant's ship-from address (§4).
-  No messaging; it makes every sold line shippable before 6a-2 ships it.
-- **6a-2: booking.** Carrier account capabilities, the merchant's ship-from
-  address, the shipment with its customs snapshot on `order_paid`, the
+- **6a-1: what checkout refuses (built).** Apparel only, our
+  classification per SKU with its staff page, the merchant's ship-from
+  address (§4). No messaging; it makes every sold line shippable before
+  6a-2 ships it.
+- **6a-2: booking (next).** Carrier account capabilities, the shipment
+  with its customs snapshot and a copy of the ship-from on `order_paid`,
+  quotes offering only services from the ship-from's country, the
   `carrier_book` effect under each duplicate guard, label and commercial
   invoice stored, a refused booking, cancelling the extra labels a
   `compensable` resend made, a staff shipments page, the label through
@@ -124,12 +126,17 @@ sku_classification  id, merchant_id, merchant_sku, hs_code,
   comes with the dashboard. The seed classifies the Sandbox Shop's
   SKUs.
 
-**The merchant's ship-from address.** The merchant has no address today; the label needs one (the pickup and
-the shipper field, `plan-logistics.md` §6). A `merchant_ship_from` row
+**The merchant's ship-from address.** The label needs one (the pickup
+and the shipper field, `plan-logistics.md` §6). A `merchant_ship_from` row
 per change, append-only, the newest in force; set by
 `python -m mor.merchants ship-from mer_… …` and by the seed. The shipment
 copies it at creation, so a later change never alters a booked waybill.
-Its country must be the service's origin.
+Its country must be the origin of a service we offer: the CLI checks
+that against the market data in force when it is set. The quote offers
+only services whose origin is the ship-from's country (6a-2; today every
+service leaves from VN, so none is offered wrongly yet). The shipment
+checks it once more when it is created (§6), since the address can
+change between the quote and the payment.
 
 A merchant without one cannot open a checkout session or ask for an
 estimate: either answers 422 `ship_from_missing`. An order we cannot
@@ -185,6 +192,10 @@ shipment_booking_retried ┴▶ carrier_book (effect, shipment lock)
               Refused → `label_failed`, shipment_label_failed
               Unavailable / OutcomeUnknown → deferred, stays `booking`
 ```
+
+If the ship-from copied at `shipment_create` is not in the chosen
+service's origin country, the shipment is created `label_failed` with
+that reason and no request, and a person takes it from there as below.
 
 After a `sent` with no result, the account's `book_guard` decides, as in
 the payment attempt: send again with the same key; send again and move

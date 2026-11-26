@@ -28,11 +28,11 @@ Slice 5 is done and 6a-1 is built. Then the slices of the whole flow
 (`plan-architecture.md` §2), each designed first where it adds tables or
 message shapes:
 
-6. Shipments against the fake carrier in every mode: what checkout
-   refuses (apparel only, our classification per SKU, the ship-from
-   address), booking, tracking, milestones (`plan-shipments.md`). The
-   echo flow is retired with it, and with it the echo ignores of the
-   `typed-ids` ast-grep rule.
+6. Shipments against the fake carrier in every mode
+   (`plan-shipments.md` §1): 6a-1, what checkout refuses, is built;
+   next 6a-2, booking a label on `order_paid`; then 6b, tracking and
+   milestones; then 6c, the echo flow retired, and with it the echo
+   ignores of the `typed-ids` ast-grep rule.
 7. Carrier invoice import and its ledger entries.
 8. Returns and refunds, chargebacks (`plan-psp-integration.md` §5).
 9. Payout release and payout runs against the fake rail
