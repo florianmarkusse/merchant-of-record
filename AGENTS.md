@@ -13,8 +13,7 @@ and wins where the two differ.
   refunds and chargebacks. We then pay the merchant out, minus tax and fees.
   Early stage: expect the project's shape to change, and keep this file
   current as it does.
-- Python with pyright strict (decided 05-Nov-2026; why not C or Rust:
-  `docs/plan-architecture.md` §3).
+- Python with pyright strict.
 - Where to start: `docs/README.md` says what is built, what comes next
   and which document holds what. `docs/plan-architecture.md` is the design
   for the whole flow. A plan describes the design as it is now: a change
@@ -41,8 +40,7 @@ and wins where the two differ.
     or to the merchant by cause (§9).
 - Local databases `mor_dev` and `mor_test` on the PostgreSQL 18 cluster,
   reached over peer auth as the developer's own role
-  (`postgresql:///mor_dev`), no dedicated role locally (decided
-  16-Nov-2026). Ids are uuid7, made in code (`uuid.uuid7()`), so they
+  (`postgresql:///mor_dev`), no dedicated role locally. Ids are uuid7, made in code (`uuid.uuid7()`), so they
   sort by time and code knows an id before inserting.
 
 ### Chosen Stack
@@ -56,16 +54,15 @@ this project.
   form whose work the server also does when the form is sent. Payment
   provider components (card fields, wallets) need JavaScript and are
   allowed in checkout; the server still takes the outcome from the
-  provider, never from the browser (decided 04-Nov-2026: a strict no-JS rule
-  is not possible with PSP card fields). Merchant-facing JSON APIs and
+  provider, never from the browser. Merchant-facing JSON APIs and
   webhooks come next to this, not instead of it.
-- Libraries (decided 05-Nov-2026):
+- Libraries:
   - Web: Starlette with plain handlers; the request is an argument, never
     hidden global state. HTML: htpy (typed functions, escaped by default).
   - Database: psycopg 3 (async) with hand-written SQL, rows read into
     frozen dataclasses; migrations run by a small runner of our own.
-    Every database enum loads as its StrEnum through `mor.db.enums`
-    (decided 21-Nov-2026), so `class_row` reads a row straight into its
+    Every database enum loads as its StrEnum through `mor.db.enums`,
+    so `class_row` reads a row straight into its
     domain record; `tests/db/test_enums.py` keeps that table complete.
     Code writes a state as its member, passed as a parameter, not as a
     quoted label in SQL; a filter in a `WHERE` may keep the label.
@@ -77,19 +74,18 @@ this project.
     before anything else sees it, because Python does not check types at
     runtime.
   - Outgoing HTTP: httpx2, the maintained fork of httpx, which is what
-    the conventions' "httpx" means here (decided 17-Nov-2026; why:
-    `docs/plan-messaging.md` §11). Crypto: `cryptography` and joserfc (HMAC,
+    the conventions' "httpx" means here. Crypto: `cryptography` and joserfc (HMAC,
     JWT/JWE). Invoices as PDF: WeasyPrint, from the same HTML functions.
   - Money: `int` minor units with a currency enum; exact rates as
     `fractions.Fraction`. Never `float` or `Decimal` for amounts.
-- Frontend (decided 18-Nov-2026): the staff pages' stylesheet is
+- Frontend: the staff pages' stylesheet is
   `static/css/staff.css`; scripts are strict TypeScript in `ts/`, compiled
   by `tsc` into git-ignored `static/js/` (no bundler, no framework, as in
   the other projects). Run `npm install` once; the Stop hook runs `npx
   tsc` from then on. Every page works without them: a script only
   improves a form or table the server already handles.
 - The app sends the Content-Security-Policy itself, in every environment,
-  from `src/mor/web/csp.py` (decided 25-Nov-2026, overriding the shared
+  from `src/mor/web/csp.py` (overriding the shared
   convention that nginx sets it in prod): dev, the browser smoke suite and
   prod get the same header, so it cannot drift. No inline scripts or
   `style` attributes; a PSP's origins join the policy through the PSP
@@ -141,8 +137,7 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   (`tests/flow/reach.py`); the soak fails a milestone reached by fewer than
   1 run in 200. Depth comes from structure (machines split by stage, a deep
   start, per-run fault plans, preconditioned rules), not from
-  `hypothesis.target`, which was measured and dropped
-  (`docs/plan-architecture.md` §10).
+  `hypothesis.target` (`docs/plan-architecture.md` §10).
 - Async tests: pytest functions are synchronous and run their async body
   with `asyncio.run`, one event loop per call; no pytest async plugin.
 - The ledger refuses `UPDATE` and `DELETE` by trigger but not `TRUNCATE`
@@ -168,7 +163,7 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   import aliases; no local named after a domain name, module or builtin.
 - Every id and code has its own `NewType` in `mor.ids` (`MerchantId`,
   `PspAccountId`, `CountryCode`, `CarrierCode`, `JournalKey`), so pyright
-  refuses one where another belongs (decided 24-Nov-2026). A uuid id is
+  refuses one where another belongs. A uuid id is
   named after its table. A value gets its type where it is made
   (`OrderId(uuid.uuid7())`), read (the record's field) or parsed (a path
   parameter, `mor.public_ids`, a market data file, a form once
@@ -179,7 +174,7 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   there too: no check can find a bare `str`. The fakes stay untyped, as
   the vendors they stand for.
 - The company that carries a parcel is a carrier, never a courier, in
-  code, schema and plans (decided 24-Nov-2026). "Courier" stays only in
+  code, schema and plans. "Courier" stays only in
   market data and research, where it is the customs term (a courier
   regime, courier consignments).
 - Name a value by its role (`seller`, `paid_invoice`), not with a `_row`
@@ -194,7 +189,7 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
   impossible ones are impossible.
 - Timestamps: local time only at the edge, for display and for
   tax-point rules that name a local date. Inside the process every moment
-  is aware UTC (decided 20-Nov-2026): a vendor's timestamp is decoded as
+  is aware UTC: a vendor's timestamp is decoded as
   `mor.dates.AwareDatetime` (one without an offset is refused) and
   converted with `to_utc`, a CSV cell with `parse_instant`; every database
   connection sets `TimeZone=UTC` (`mor.db.connect.SESSION_OPTIONS`), so a
@@ -210,9 +205,8 @@ uv run python -m tests.messaging.fact_schemas  # record a new fact version's sha
 - One table in code gives each currency's minor-unit exponent. Never
   hardcode "divide by 100". SEA has both 0-decimal (VND) and 2-decimal
   (SGD, MYR, THB, PHP) currencies. IDR uses exponent 0, a deliberate
-  departure from ISO 4217's 2 (decided 04-Nov-2026: sub-rupiah amounts are
-  not used in practice and Adyen uses 0; exponent 2 would only add amounts
-  we can never charge). Our table follows ISO 4217 everywhere else, and each
+  departure from ISO 4217's 2 (sub-rupiah amounts are not used in
+  practice, and Adyen uses 0 too). Our table follows ISO 4217 everywhere else, and each
   provider module converts to and from its provider's exponents. An
   incoming provider amount that is not a whole number in our exponent (e.g.
   a fee of IDR 1,234.56 from a 2-decimal PSP) is rounded explicitly at
