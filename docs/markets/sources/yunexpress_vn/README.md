@@ -8,8 +8,8 @@ post (US: USPS). Contact: admin@vioshipping.com, WhatsApp/Zalo +84 943
 
 | File | What | Status |
 |---|---|---|
-| `pages/*.html` | vioepacket.com/en route pages, `epacket-extra` and `routes`, downloaded 07-Nov-2026; rates effective 01-Nov-2026, headed "Business rates" | loaded: main routes (standard line, not clothing) as `yunexpress_vn_2026_list`, US-Saver as `yunexpress_vn_us_saver_2026_list`, Extra groups as `yunexpress_vn_extra_2026_list`, 0.1 to 5 kg; transit, surcharges and US-Saver product limits |
-| `2026-11-26_epacket_standard_clothing.pdf` | VIO's price list ePacket Standard (p. 1), Clothing (p. 2) and terms (p. 3), VND excl. VAT, effective 01-Nov-2026; attached to VIO's answer to q08 | received 26-Nov-2026; Standard 0.1 to 5 kg loaded as `yunexpress_vn_2026_retail`; BR, CL, AE, SA transit and the HK, HR and RO fees loaded |
+| `pages/*.html` | vioepacket.com/en route pages, `epacket-extra` and `routes`, downloaded 07-Nov-2026; rates effective 01-Nov-2026, headed "Business rates" | loaded: main routes (standard line) as `yunexpress_vn_2026_list`, the clothing tables as `yunexpress_vn_clothing_2026_list`, US-Saver as `yunexpress_vn_us_saver_2026_list`, Extra groups as `yunexpress_vn_extra_2026_list`, 0.1 to 5 kg; transit, surcharges and US-Saver product limits |
+| `2026-11-26_epacket_standard_clothing.pdf` | VIO's price list ePacket Standard (p. 1), Clothing (p. 2) and terms (p. 3), VND excl. VAT, effective 01-Nov-2026; attached to VIO's answer to q08 | received 26-Nov-2026; Standard 0.1 to 5 kg loaded as `yunexpress_vn_2026_retail`, Clothing as `yunexpress_vn_clothing_2026_retail`; BR, CL, AE, SA transit and the HK, HR and RO fees loaded |
 | `2026-11-26_epacket_extra.pdf` | VIO's price list ePacket Extra (pp. 1-2), country list with price column and maximum weight (pp. 3-4) and terms (p. 5), VND excl. VAT, effective 01-Nov-2026 | received 26-Nov-2026; loaded as `yunexpress_vn_extra_2026_retail` with the website card's country mapping |
 
 ### Two tiers
@@ -27,9 +27,12 @@ so light parcels such as the 0.25 kg XS scenario bill at 0.3 kg.
 - Standard adds Brazil, Chile, UAE and Saudi Arabia; one US column, last
   mile all USPS (no US-Saver, no Alaska, Hawaii, PR, APO/FPO or Amazon
   warehouses, no proof of delivery).
-- Clothing: same prices as Standard to US, GB, DE/FR/ES, IT, AU, CA, but
-  charged on actual weight, poly bags only, one parcel per waybill. Not
-  loaded.
+- Clothing (also on the website): same prices as Standard to US, GB,
+  DE/FR/ES, IT, AU, CA, but charged on actual weight; clothing and ordinary
+  textiles only, poly bags only, one parcel per waybill. Loaded as its own
+  service `yunexpress_vn_clothing` with no volumetric divisor, the main
+  routes' transit and fees (EU handling, UK remote area, IOSS, pickup),
+  and every other category prohibited.
 - Declared-value limits per country (US US$250, GB under GBP 135, EU
   under EUR 150, CA US$99 delivered DDP with 18% of the declared value
   above CAD 20, MX 19% tax on the declared value, SA 15% VAT). The CA and
@@ -41,7 +44,7 @@ so light parcels such as the 0.25 kg XS scenario bill at 0.3 kg.
 - No returns to Vietnam; failed deliveries are re-delivered for a fee
   within 14 days (country exceptions), then destroyed.
 
-Not loaded: the clothing line, Extra destinations without an ISO code
+Not loaded: Extra destinations without an ISO code
 (Kosovo, Canary Islands, Azores, ...; the PDF also lists Uruguay twice,
 as `UT` in group 1 and `UY` in the rest of the world, the website card's
 `UY` in group 1 is kept). Main-route rates include fuel; neither the

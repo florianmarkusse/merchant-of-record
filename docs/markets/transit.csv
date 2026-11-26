@@ -297,6 +297,14 @@ yunexpress_vn_extra,YT,9,26,secondary,VIO ePacket Extra (group range),sources/yu
 yunexpress_vn_extra,ZA,12,20,secondary,VIO ePacket Extra (group range),sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
 yunexpress_vn_extra,ZM,9,26,secondary,VIO ePacket Extra (group range),sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
 yunexpress_vn_extra,ZW,12,26,secondary,VIO ePacket Extra (group range),sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,US,5,8,secondary,VIO ePacket routes_usa.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,DE,8,14,secondary,VIO ePacket routes_europe.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,FR,8,14,secondary,VIO ePacket routes_europe.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,ES,8,14,secondary,VIO ePacket routes_europe.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,IT,8,14,secondary,VIO ePacket routes_europe.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,GB,5,10,secondary,VIO ePacket routes_uk.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,AU,7,13,secondary,VIO ePacket routes_australia.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
+yunexpress_vn_clothing,CA,5,12,secondary,VIO ePacket routes_canada.html,sources/yunexpress_vn/README.md,2026-11-07,"working days, VIO estimate"
 vnpost_ems,DE,3,4,verified,"EMS calculator, ems.com.vn, Hanoi/HCMC to the capital",research/logistics/02-global-carriers.md §2b,2026-11-07,calculator estimate for 1 kg goods
 jt_intl,SG,3,4,verified,"J&T Express Vietnam quote (reply to q06), sources/jt_intl/2026-11-14_quote_shipping_rate.xlsx",sources/jt_intl/README.md,2026-11-14,days as quoted
 jt_intl_sg_fast,SG,2,3,verified,"J&T Express Vietnam quote (reply to q06), sources/jt_intl/2026-11-14_quote_shipping_rate.xlsx",sources/jt_intl/README.md,2026-11-14,days as quoted
