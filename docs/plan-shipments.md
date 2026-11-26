@@ -1,6 +1,7 @@
 # Shipments: booking, tracking and milestones (slice 6)
 
-Status: 6a-1 is built (§4); 6a-2, booking, is next, then 6b and 6c.
+Status: 6a-1 and 6a-2 are built (§4, §6); 6b, tracking, is next, then
+6c.
 
 Applies `plan-architecture.md` §5, §6, §7 and §9 (booking, tracking) to
 shipments against the fake carrier in every mode. Slice 5 left a paid
@@ -20,14 +21,14 @@ entries.
   classification per SKU with its staff page, the merchant's ship-from
   address (§4). No messaging; it makes every sold line shippable before
   6a-2 ships it.
-- **6a-2: booking (next).** Carrier account capabilities, the shipment
-  with its customs snapshot and a copy of the ship-from on `order_paid`,
-  quotes offering only services from the ship-from's country, the
-  `carrier_book` effect under each duplicate guard, label and commercial
-  invoice stored, a refused booking, cancelling the extra labels a
-  `compensable` resend made, a staff shipments page, the label through
-  the orders API.
-- **6b: tracking.** The carrier inbox in every mode (fat and thin
+- **6a-2: booking (built).** Carrier account capabilities, the shipment
+  with its customs snapshot and the ship-from it was made with on
+  `order_paid`, quotes offering only services from the ship-from's
+  country, the `carrier_book` effect under each duplicate guard, label and
+  commercial invoice stored, a refused booking, cancelling the extra
+  labels a `compensable` resend made, a staff shipments page, the label
+  through the orders API.
+- **6b: tracking (next).** The carrier inbox in every mode (fat and thin
   webhooks, polling), shipment events, the status derived from the set of
   events, milestones and their facts, the order page and orders API
   showing them.
@@ -52,14 +53,12 @@ so feature code switches on the account's values, never on a provider:
   CHECK as `psp_account` (a fake account has no `credentials_ref`).
 
 One account per carrier stays (`UNIQUE (carrier)`): the quote's service
-names the carrier, the carrier names the account. The seed spreads the
-wirings over the carriers it seeds, deterministically, and prints which
-carrier has which, so the test setup exercises every mode; the fuzzer
-makes its own accounts with drawn modes. A routing row per merchant
-(`psp_route`'s shape) comes with the first vendor sandbox account, as
-`plan-architecture.md` §6 says.
-
-Existing accounts get `vendor_constraint` and `poll` in the migration.
+names the carrier, the carrier names the account. The seed makes one for
+every carrier a route names, and spreads the wirings over them in carrier
+order (`CARRIER_WIRINGS` in `mor.seed`), printing which carrier has which,
+so the test setup exercises every mode; the fuzzer makes its own account
+with a drawn guard. A routing row per merchant (`psp_route`'s shape) comes
+with the first vendor sandbox account, as `plan-architecture.md` §6 says.
 
 ## 3. The fake carrier
 
@@ -68,27 +67,32 @@ echo fake's shape (flavour in the path, state in `fake_vendor`, events
 released only when told):
 
 ```
+POST A/rates                a live price (plan-quote.md §4)
 POST A/shipments            book: label PDF, commercial invoice PDF,
                             tracking number, export declaration number
-GET  A/shipments?reference  every shipment with our reference
-POST A/shipments/{tn}/cancel
+GET  A/shipments?reference  every label with our reference, live or
+                            cancelled, with its documents
+POST A/shipments/{tn}/cancel   `cancellable` only
+POST /_fake/carrier/faults  {"operation", "fault"}: script the next call
+                            of `rate`, `book`, `find` or `cancel` to fail
+6b adds:
 GET  A/tracking?cursor      one page of events (poll, thin webhooks)
 POST A/events/release       next event of a shipment's script (dev page,
                             CLI, fuzzer); `all` plays the whole script
-POST /_fake/carrier/faults  script the next call to fail
 ```
 
 `A` is `/_fake/carrier/{flavour}/{account}`, the flavour one of `keyed`,
-`cancellable` or `plain`, matching the account's `book_guard` (the
-migration rewrites the seeded fake accounts' base URLs, as
-`0028_carrier_names.sql` did). The scenario comes from values in the
-request: a receiver postcode `REFUSE` is a refused address, a customs
-description starting `REFUSE` is refused customs data, `LOST` and
-`RETURN` pick those scripts, anything else is delivered. Faults: a 500
-before or after the work, a timeout after the work, a webhook sent twice
-or with a bad signature, events released out of order. It counts bookings
-per reference: the fuzzer's proof that nothing was booked twice. Its PDFs
-are one-page WeasyPrint renders of its own markup.
+`cancellable` or `plain`, matching the account's `book_guard`. The
+scenario comes from values in the request: a receiver whose first address
+line starts with `REFUSE` is a refused address (a postcode is checked by
+format at checkout, so it cannot carry the word), an item description
+starting `REFUSE` is refused customs data; from 6b `LOST` and `RETURN`
+pick those scripts, anything else is delivered. Faults: a 500 before or
+after the work, a timeout after the work; from 6b a webhook sent twice or
+with a bad signature, events released out of order. Its labels, numbered
+from a sequence, are rows per reference: the fuzzer's proof that nothing
+was booked twice. Its PDFs are one-page WeasyPrint renders of its own
+markup.
 
 ## 4. What checkout refuses
 
@@ -130,13 +134,13 @@ sku_classification  id, merchant_id, merchant_sku, hs_code,
 and the shipper field, `plan-logistics.md` §6). A `merchant_ship_from` row
 per change, append-only, the newest in force; set by
 `python -m mor.merchants ship-from mer_… …` and by the seed. The shipment
-copies it at creation, so a later change never alters a booked waybill.
-Its country must be the origin of a service we offer: the CLI checks
-that against the market data in force when it is set. The quote offers
-only services whose origin is the ship-from's country (6a-2; today every
-service leaves from VN, so none is offered wrongly yet). The shipment
-checks it once more when it is created (§6), since the address can
-change between the quote and the payment.
+names the row in force at its creation, so a later change never alters a
+booked waybill. Its country must be the origin of a service we offer: the
+CLI checks that against the market data in force when it is set. The
+quote and the estimate offer only services whose origin is the
+ship-from's country (`routes_from` in `mor.quote.shipping`). The
+shipment checks it once more when it is created (§6), since the address
+can change between the quote and the payment.
 
 A merchant without one cannot open a checkout session or ask for an
 estimate: either answers 422 `ship_from_missing`. An order we cannot
@@ -147,21 +151,36 @@ pays, not held after.
 
 ```
 shipment               id, order_id, sequence (0 outbound; slice 8 adds
-                       returns), carrier_account_id, service,
+                       returns), carrier, carrier_account_id, service,
                        market_load_id (the routing version), parcel
-                       columns, ship-from copy, receiver address id,
-                       incoterm, booking state, tracking status,
-                       tracking_number, export_declaration_no, created_at
+                       columns, ship_from_id, receiver_address_id,
+                       incoterm, booking_state, failure, detail,
+                       tracking_status, tracking_number,
+                       export_declaration_no, created_at, updated_at
                        UNIQUE (order_id, sequence)
 shipment_customs_line  shipment_id, line_no, description, hs_code,
                        origin, quantity, value_minor, currency
                        (from checkout_session_line, frozen; append-only)
 carrier_request        shipment_id, operation (book | cancel), number,
-                       idempotency_key UNIQUE, state, sends, result
+                       idempotency_key UNIQUE, state, sends,
+                       target_tracking_number (a cancel's label), result
                        UNIQUE (shipment_id, operation, number)
 shipment_document      shipment_id, kind (label | commercial_invoice),
-                       content_type, body bytea, UNIQUE (shipment_id, kind)
+                       content_type, body bytea; once per kind,
+                       append-only
 ```
+
+- The ship-from and the receiver are referenced, not copied: both tables
+  are append-only, so the row in force when the shipment was made is its
+  copy, and a later change never alters a booked waybill.
+- `carrier_account_id` is empty only on a shipment that failed for want
+  of an account (`no_carrier_account`); a person books it again once the
+  account exists.
+- `incoterm` is `ddp` when the chosen option charged the buyer something
+  the border collects (the quote offers that only on a duty-paid service,
+  whose carrier pays it and bills us), else `dap`: nothing is due.
+- A customs line's value is the sold line's unit price times its
+  quantity, in its currency, under our HS code.
 
 Two closed sets, not the one list in `plan-logistics.md` §7, because they
 are two machines that change independently (a scan can arrive while we
@@ -193,9 +212,13 @@ shipment_booking_retried ┴▶ carrier_book (effect, shipment lock)
               Unavailable / OutcomeUnknown → deferred, stays `booking`
 ```
 
-If the ship-from copied at `shipment_create` is not in the chosen
-service's origin country, the shipment is created `label_failed` with
-that reason and no request, and a person takes it from there as below.
+If the ship-from in force at `shipment_create` is not in the chosen
+service's origin country (`ship_from_elsewhere`), or the service's carrier
+has no account (`no_carrier_account`), the shipment is created
+`label_failed` with that reason and no request, and a person takes it
+from there as below. An answer that is not what the carrier documents,
+on a booking, a lookup or a cancel, also goes to a person
+(`needs_person`, with the answer in `detail`).
 
 After a `sent` with no result, the account's `book_guard` decides, as in
 the payment attempt: send again with the same key; send again and move
@@ -205,15 +228,20 @@ not found → `needs_person` and `shipment_needs_person`. In
 the one we recorded stays, each other gets a `cancel` request, then back
 to `labelled`.
 
-A person on the staff page can book again a `label_failed` or
+A person on `/staff/shipments` can book again a `label_failed` or
 `needs_person` shipment (request number + 1, `shipment_booking_retried`,
-the person as actor). Correcting the merchant's data waits for the
-merchant surfaces; until then the fix is made with the carrier and the
-merchant by hand, then booked again.
+the person as actor), unless its ship-from is still outside the service's
+origin (it never changes: that one is booked with the carrier by hand) or
+its carrier still has no account. Correcting the merchant's data waits
+for the merchant surfaces; until then the fix is made with the carrier
+and the merchant by hand, then booked again. On a `none` guard after a
+lost answer the person checks with the carrier first: it may hold a label
+already.
 
-The merchant gets the label from `GET /v1/orders/{id}/label` (PDF),
-and the order in the API gains a `shipment` object (booking state,
-tracking status, carrier, tracking number).
+The merchant gets the label from `GET /v1/orders/{id}/label` (PDF, 404
+until labelled), and the order in the API has a `shipment` object (id,
+booking state, tracking status, carrier, service, tracking number,
+`label_url` once labelled).
 
 ## 7. Tracking
 
@@ -276,20 +304,29 @@ and the seven milestone facts. Consumers: `shipment_create`,
 
 - Properties: `derive_status` gives the same status for every order and
   duplication of a set of events; the decoders give a typed record or a
-  typed error for any bytes; the customs lines carry every session line
-  at its value.
-- A flow machine, `tests/flow/shipment`, starting deep: one to three paid
-  orders, nothing booked. Actions: run a due delivery, crash around the
-  book call or inside a local step, release the next event, send it
-  twice, release out of order, a bad signature, a staff "book again",
-  clock jumps for polls. Faults planned per run. After draining: one
-  shipment per order; the fake holds exactly one live label per
-  shipment (extras only on `cancellable`, and each cancelled); each
-  milestone at most once; each status equals `derive_status` of the
-  events the fake released. Reach milestones: labelled under each guard,
-  `deduplicating`, `needs_person`, `label_failed`, each tracking mode,
-  `delivered`, `delivery_withdrawn`. It joins a soak target with a timed
-  budget.
+  typed error for any bytes.
+- Booking tests (`tests/shipments/test_booking.py`): the customs lines
+  carry every sold line at its value, a lost answer under each guard, a
+  refusal, a ship-from moved after the quote, a carrier without an
+  account, book again, the label through the API.
+- A flow machine, `tests/flow/test_shipment_flow_fuzz.py`, starting deep:
+  one to three paid orders, nothing shipped. Built for booking: a drawn
+  guard, buyers whose address the carrier refuses, faults planned per
+  run, crashes around a booking or inside a local step, lost answers, a
+  person booking again. After every action: a `keyed` or `plain` carrier
+  never holds two labels for a shipment, a `cancellable` one only while
+  it books or sorts them out; a labelled shipment's label is live with
+  both documents stored; a failed or stuck one has none live. After
+  draining, and a person booking every stuck one again: each shipment
+  labelled with exactly one live label, or its address refused. Reach
+  milestones: labelled under each guard, an extra label cancelled,
+  `needs_person`, `label_failed`, booked again. Its soak target is
+  `shipment-flow`.
+- 6b adds to the machine: release the next event, send it twice, release
+  out of order, a bad signature, clock jumps for polls; after draining,
+  each milestone at most once and each status equal to `derive_status`
+  of the events the fake released; reach milestones for each tracking
+  mode, `delivered` and `delivery_withdrawn`.
 - The browser smoke suite: the order page shows the tracking status.
 
 ## 10. Compliance touchpoints (named, not answered)

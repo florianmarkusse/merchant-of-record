@@ -110,7 +110,7 @@ uv run python -m mor.fakes.migrate       # apply migrations_fake/ (schema fake_v
 uv run python -m mor.messaging.worker    # the worker: runs due deliveries; outside prod watchfiles restarts it on a change under src/
 uv run python -m mor.probe               # start a probe, exit 0 once the worker finished it
 uv run python -m mor.web.serve           # the web app on SELF_URL (default 127.0.0.1:8741), fakes outside prod; uvicorn reloads it on a change under src/
-uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor and carrier accounts at the fake, a fake PSP account per wiring with a default route, the Sandbox Shop merchant and its key (server must run; load market data first, or it makes no duty or carrier accounts)
+uv run python -m mor.seed                # test setup: echo accounts per provider and mode, duty vendor accounts and a carrier account per routed carrier at the fake (the booking guards and tracking modes spread over them), a fake PSP account per wiring with a default route, the Sandbox Shop merchant and its key (server must run; load market data first, or it makes no duty or carrier accounts)
 uv run python -m mor.markets.load        # show what docs/markets/ would change; --write loads it as a new set
 uv run python -m mor.merchants           # create/list merchants; `key mer_…` prints a new API key once; `revoke <key id>`; `kyb mer_… approved` (or pending, suspended); `ship-from mer_… …` sets where its parcels leave from
 deploy/soak.sh                           # the nightly soak, now; `install` sets up its timer, `test-alert` checks Telegram

@@ -116,6 +116,7 @@ class QuoteLine:
 
 @dataclass(frozen=True, kw_only=True)
 class QuoteRequest:
+    origin: CountryCode  # where the parcel leaves from: the ship-from's
     destination: CountryCode
     lines: tuple[QuoteLine, ...]
     parcel: Parcel
@@ -318,6 +319,7 @@ def build_quote(
     price_waiting: list[ShippingPriceLookupId] = []
     for offer in offers(
         market,
+        request.origin,
         destination,
         categories,
         request.parcel,

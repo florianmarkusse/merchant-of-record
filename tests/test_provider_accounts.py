@@ -7,7 +7,7 @@ from datetime import timedelta
 import psycopg
 import pytest
 
-from mor.carriers.prices import create_carrier_account
+from mor.carriers.accounts import create_carrier_account
 from mor.carriers.records import CarrierProvider, PriceExpiry
 from mor.db.connect import connect
 from mor.duties.lookups import create_vendor_account
@@ -24,7 +24,7 @@ def test_a_fake_carrier_cannot_be_a_live_account(database_url: str) -> None:
                 CarrierCode("carrier"),
                 CarrierProvider.FAKE,
                 ProviderAccountKind.LIVE,
-                "http://mor/_fake/carrier/acct",
+                "http://mor/_fake/carrier/keyed/acct",
                 timedelta(seconds=5),
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,

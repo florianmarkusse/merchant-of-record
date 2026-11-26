@@ -44,6 +44,13 @@ _.REVOKED  # merchants.records KeyState
 _.SALE  # psp.port CaptureMode
 _.AUTHORISE_CAPTURE
 _.SUCCEEDED  # messaging.guard VendorRequestState
+_.PICKED_UP  # shipments.records TrackingStatus: derived from events in 6b
+_.IN_TRANSIT
+_.HELD_AT_CUSTOMS
+_.DELIVERED
+_.RETURNING
+_.RETURNED
+_.LOST
 
 # Fields of msgspec wire records: msgspec encodes them into the merchant
 # API's JSON, which vulture does not see as a read.

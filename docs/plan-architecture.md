@@ -355,12 +355,13 @@ The fuzzer draws the mode per run (§10), so every one is exercised.
 ## 7. Logistics: records and tables
 
 ```
-CarrierAccount   { id, provider, base_url, credentials_ref, billing_currency }
-CarrierService   { account_id, code, level: express | standard | economy,
-                   duties_paid: bool, carries_scheme_number: bool,
-                   tracking: push | poll, invoice: file | api,
-                   book_guard: vendor_constraint | compensable | none }
-                 # capabilities as data (§5)
+CarrierAccount   { id, carrier, provider, kind, base_url, credentials_ref,
+                   book_guard: vendor_constraint | compensable | none,
+                   tracking: push_fat | push_thin | poll, invoice: file | api,
+                   billing_currency }
+                 # one per carrier; capabilities as data (§5)
+CarrierService   { code, carrier, origin, tier, duties_paid,
+                   carries_scheme_number }   # market data (plan-quote.md §4)
 RateCard         effective-dated: zones, weight breaks, fuel, surcharges
                  (the shape docs/markets/ already has, loaded into tables)
 
@@ -558,23 +559,23 @@ rate. It is immutable; a changed address makes a new one.
 
 ## 9. Logistics: the shipment, end to end
 
-**Booking.** `order_paid` → a local consumer creates the `shipment`
-(state `created`, customs snapshot frozen, service taken from the quote)
-and emits `shipment_created`. The carrier effect consumer handles that:
+**Booking** (`plan-shipments.md` §6 has the detail). `order_paid` → a
+local consumer creates the `shipment` (state `booking`, customs snapshot
+frozen, service taken from the quote, `carrier_request #1`) and emits
+`shipment_created`. The carrier effect consumer handles that:
 
-- `prepare`: order still wants shipping? Create `carrier_request #1`,
-  mark `sent`.
-- `call`: `book`. After a recorded send with no result, the service's
+- `prepare`: still `booking`? Mark the open request `sent`.
+- `call`: `book`. After a recorded send with no result, the account's
   `book_guard` decides (§5): send again, send again and cancel an extra
   label later, or look up only and hand a persistent "not found" to a
   person.
 - `complete`: `Booked` → state `labelled`, label and commercial invoice
-  stored as files, tracking number and export declaration number saved,
+  stored, tracking number and export declaration number saved,
   `shipment_label_booked` emitted. A typed refusal (address not
   serviceable, customs data rejected) → `label_failed` with the reason,
-  shown to the merchant, who fixes and re-requests (request #2).
+  which a person books again once fixed (request #2).
   `Unavailable` or `OutcomeUnknown` → the delivery stays unhandled with a
-  later `not_before`; state stays `label_requested`.
+  later `not_before`; state stays `booking`.
 
 **Cancel and refund before pickup** are facts on the same shipment.
 `complete` applies the result to the state as it is then: a label that

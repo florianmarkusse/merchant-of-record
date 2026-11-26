@@ -17,6 +17,7 @@ Status as of 26-Nov-2026.
 | 4 | Market data, the tax path, duty rates and carrier prices from switchable sources, `build_quote`, merchants and the API, the buyer's checkout up to a quote | `plan-quote.md`, `plan-markets-data.md` |
 | 5a–5c-3 | Payments against the fake PSP in every mode, the order, the invoice, settlement with each payout reconciled, the bank: every entry booked, each payout matched to its credit; card fields, the CSP the app sends, the browser smoke suite | `plan-payments.md` |
 | 6a-1 | What checkout refuses: apparel only, our classification per SKU and its staff page, the merchant's ship-from address | `plan-shipments.md` |
+| 6a-2 | Booking a paid order's label against the fake carrier under each duplicate guard, quotes from the ship-from's country, the staff shipments page, the label through the orders API | `plan-shipments.md` |
 
 The checks that run after every change (ruff, pyright strict, vulture,
 `npx tsc`, the ast-grep rules, pytest with the fuzzers) are in
@@ -24,15 +25,15 @@ The checks that run after every change (ruff, pyright strict, vulture,
 
 ## Next, in this order
 
-Slice 5 is done and 6a-1 is built. Then the slices of the whole flow
+Slice 5 is done and 6a is built. Then the slices of the whole flow
 (`plan-architecture.md` §2), each designed first where it adds tables or
 message shapes:
 
 6. Shipments against the fake carrier in every mode
-   (`plan-shipments.md` §1): 6a-1, what checkout refuses, is built;
-   next 6a-2, booking a label on `order_paid`; then 6b, tracking and
-   milestones; then 6c, the echo flow retired, and with it the echo
-   ignores of the `typed-ids` ast-grep rule.
+   (`plan-shipments.md` §1): 6a, what checkout refuses and booking a
+   label on `order_paid`, is built; next 6b, tracking and milestones;
+   then 6c, the echo flow retired, and with it the echo ignores of the
+   `typed-ids` ast-grep rule.
 7. Carrier invoice import and its ledger entries.
 8. Returns and refunds, chargebacks (`plan-psp-integration.md` §5).
 9. Payout release and payout runs against the fake rail

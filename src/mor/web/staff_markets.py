@@ -34,9 +34,9 @@ from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 import mor.markets.fx
 from mor.audit import Actor, ActorKind
+from mor.carriers.accounts import carrier_account
 from mor.carriers.prices import (
     NoCarrierAccount,
-    carrier_account,
     live_prices,
     request_shipping_price,
 )
@@ -245,7 +245,9 @@ async def quote_page(request: Request, database_url: str, now: datetime) -> Resp
             lookup = await _lookup_for(conn, market, order.check)
             check = order.check
             if order.parcel is not None:
-                prices = await held_prices(conn, market, check.country, order.parcel)
+                prices = await held_prices(
+                    conn, market, check.origin, check.country, order.parcel
+                )
                 quote = _quote(market, check, order.parcel, on, now, lookup, prices)
                 if isinstance(quote, InputsMissing):
                     for question in quote.price_asks:
@@ -365,8 +367,14 @@ def _quote(
         quantity=1,
         unit_price=order.goods,
     )
+    # The goods' origin stands in for where they ship from.
     request = QuoteRequest(
-        destination=order.country, lines=(line,), parcel=parcel, on=on, now=now
+        origin=order.origin,
+        destination=order.country,
+        lines=(line,),
+        parcel=parcel,
+        on=on,
+        now=now,
     )
     lookups: dict[RateQuestion, VendorLookup] = {}
     if lookup is not None and order.hs_code is not None:

@@ -25,8 +25,10 @@ from psycopg.types.enum import EnumInfo, register_enum
 
 from mor.audit import ActorKind
 from mor.bank.port import BankProvider
+from mor.carriers.port import Incoterm
 from mor.carriers.records import (
     CarrierProvider,
+    CarrierTrackingMode,
     PriceExpiry,
     PricePartKind,
     PriceState,
@@ -92,6 +94,13 @@ from mor.settlement.records import (
     ReadPhase,
     Reconciliation,
 )
+from mor.shipments.records import (
+    BookingState,
+    CarrierOperation,
+    DocumentKind,
+    ShipmentFailure,
+    TrackingStatus,
+)
 
 
 DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
@@ -105,7 +114,9 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("carrier_price_part", PricePartKind),
     ("checkout_session_state", SessionState),
     ("consumer_name", ConsumerName),
+    ("carrier_operation", CarrierOperation),
     ("carrier_provider", CarrierProvider),
+    ("carrier_tracking_mode", CarrierTrackingMode),
     ("currency", Currency),
     ("duplicate_guard", DuplicateGuard),
     ("duties_paid", DutiesPaid),
@@ -121,6 +132,7 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("echo_vendor_status", VendorStatus),
     ("fee_component", FeeComponent),
     ("fuel_applies", FuelApplies),
+    ("incoterm", Incoterm),
     ("invoice_section", InvoiceSection),
     ("landed_band", Band),
     ("landed_base", Base),
@@ -162,6 +174,10 @@ DATABASE_ENUMS: tuple[tuple[str, type[StrEnum]], ...] = (
     ("settlement_line_state", LineState),
     ("settlement_line_type", LineType),
     ("settlement_reconciliation", Reconciliation),
+    ("shipment_booking_state", BookingState),
+    ("shipment_document_kind", DocumentKind),
+    ("shipment_failure", ShipmentFailure),
+    ("shipment_tracking_status", TrackingStatus),
     ("shipping_price_state", PriceState),
     ("surcharge_basis", SurchargeBasis),
     ("surcharge_trigger", SurchargeTrigger),

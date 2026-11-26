@@ -28,6 +28,7 @@ import mor.payments.inbound
 import mor.probe.flow
 import mor.settlement.fetch
 import mor.settlement.store
+import mor.shipments.flow
 from mor.checkout.sessions import lock_session
 from mor.config import Environment
 from mor.db.connect import Connection
@@ -75,6 +76,8 @@ from mor.messaging.facts import (
     QuoteInputsArrivedV1,
     SettlementLineReceivedV1,
     SettlementPayoutReportedV1,
+    ShipmentBookingRetriedV1,
+    ShipmentCreatedV1,
     ShippingPriceFoundV1,
     ShippingPriceNeededV1,
     ShippingPriceNeedsPersonV1,
@@ -198,6 +201,21 @@ async def run_effect(
                 prepare=mor.bank.fetch.prepare_fetch,
                 call=mor.bank.fetch.read_page,
                 complete=mor.bank.fetch.complete_fetch,
+            )
+        case ConsumerName.CARRIER_BOOK:
+            match fact:
+                case ShipmentCreatedV1(shipment_id=shipment_id) | (
+                    ShipmentBookingRetriedV1(shipment_id=shipment_id)
+                ):
+                    pass
+                case _:
+                    raise WrongFact(f"carrier_book got {fact!r}")
+            return await run_steps(
+                run,
+                shipment_id,
+                prepare=mor.shipments.flow.prepare_book,
+                call=mor.shipments.flow.call_carrier,
+                complete=mor.shipments.flow.complete_book,
             )
         # Transitional, with the echo flow (docs/plan-messaging.md §9).
         case ConsumerName.ECHO_SEND:
@@ -392,3 +410,8 @@ async def run_local(
                 conn, bank_account_id
             )
             return await mor.bank.matching.match_account(conn, bank_account, now)
+        case ConsumerName.SHIPMENT_CREATE:
+            order_id = expect(fact, OrderPaidV1).order_id
+            paid_order = await lock_order(conn, order_id)
+            assert paid_order is not None, f"no order {order_id}"
+            return await mor.shipments.flow.create_shipment(conn, paid_order, now)

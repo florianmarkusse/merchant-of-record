@@ -40,9 +40,12 @@ from mor.ids import (
     QuoteId,
     SettlementLineId,
     SettlementPayoutId,
+    ShipmentId,
     ShippingPriceLookupId,
+    TrackingNumber,
 )
 from mor.psp.port import PspEventKind
+from mor.shipments.records import ShipmentFailure
 
 
 class AggregateType(StrEnum):
@@ -60,6 +63,7 @@ class AggregateType(StrEnum):
     SETTLEMENT_LINE = "settlement_line"
     SETTLEMENT_PAYOUT = "settlement_payout"
     BANK_ACCOUNT = "bank_account"
+    SHIPMENT = "shipment"
 
 
 class MessageType(StrEnum):
@@ -117,6 +121,11 @@ class MessageType(StrEnum):
     BANK_STATEMENT_DUE = "bank_statement_due"
     BANK_INBOX_STORED = "bank_inbox_stored"
     BANK_ENTRY_RECEIVED = "bank_entry_received"
+    SHIPMENT_CREATED = "shipment_created"
+    SHIPMENT_LABEL_BOOKED = "shipment_label_booked"
+    SHIPMENT_LABEL_FAILED = "shipment_label_failed"
+    SHIPMENT_NEEDS_PERSON = "shipment_needs_person"
+    SHIPMENT_BOOKING_RETRIED = "shipment_booking_retried"
 
 
 @dataclass(frozen=True)
@@ -628,6 +637,64 @@ class BankEntryReceivedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=Tru
     bank_entry_id: BankEntryId
 
 
+class ShipmentCreatedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A paid order's shipment exists, its customs lines frozen: book its
+    label (docs/plan-shipments.md §6)."""
+
+    message_type: ClassVar[MessageType] = MessageType.SHIPMENT_CREATED
+    schema_version: ClassVar[int] = 1
+
+    shipment_id: ShipmentId
+    order_id: OrderId
+
+
+class ShipmentLabelBookedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """One label is kept, its documents stored. Tracking starts from it
+    (6b)."""
+
+    message_type: ClassVar[MessageType] = MessageType.SHIPMENT_LABEL_BOOKED
+    schema_version: ClassVar[int] = 1
+
+    shipment_id: ShipmentId
+    order_id: OrderId
+    tracking_number: TrackingNumber
+
+
+class ShipmentLabelFailedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """No label: the carrier refused, or we could not ask it. A person
+    takes it from the staff page."""
+
+    message_type: ClassVar[MessageType] = MessageType.SHIPMENT_LABEL_FAILED
+    schema_version: ClassVar[int] = 1
+
+    shipment_id: ShipmentId
+    order_id: OrderId
+    failure: ShipmentFailure
+
+
+class ShipmentNeedsPersonV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A booking whose answer was lost on a carrier that promises nothing
+    about a resend, and the carrier does not show it; or an answer we
+    could not read. A person decides."""
+
+    message_type: ClassVar[MessageType] = MessageType.SHIPMENT_NEEDS_PERSON
+    schema_version: ClassVar[int] = 1
+
+    shipment_id: ShipmentId
+    order_id: OrderId
+
+
+class ShipmentBookingRetriedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A person asked to book a failed or stuck shipment again; the person
+    is the fact's actor."""
+
+    message_type: ClassVar[MessageType] = MessageType.SHIPMENT_BOOKING_RETRIED
+    schema_version: ClassVar[int] = 1
+
+    shipment_id: ShipmentId
+    order_id: OrderId
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -680,6 +747,11 @@ type Fact = (
     | BankStatementDueV1
     | BankInboxStoredV1
     | BankEntryReceivedV1
+    | ShipmentCreatedV1
+    | ShipmentLabelBookedV1
+    | ShipmentLabelFailedV1
+    | ShipmentNeedsPersonV1
+    | ShipmentBookingRetriedV1
 )
 
 
@@ -774,6 +846,14 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | BankEntryReceivedV1(bank_account_id=bank_account_id)
         ):
             return Aggregate(AggregateType.BANK_ACCOUNT, bank_account_id)
+        case (
+            ShipmentCreatedV1(shipment_id=shipment_id)
+            | ShipmentLabelBookedV1(shipment_id=shipment_id)
+            | ShipmentLabelFailedV1(shipment_id=shipment_id)
+            | ShipmentNeedsPersonV1(shipment_id=shipment_id)
+            | ShipmentBookingRetriedV1(shipment_id=shipment_id)
+        ):
+            return Aggregate(AggregateType.SHIPMENT, shipment_id)
 
 
 def encode(fact: Fact) -> bytes:
@@ -903,6 +983,16 @@ def decode(
             decoded = _decode(payload, BankInboxStoredV1)
         case MessageType.BANK_ENTRY_RECEIVED:
             decoded = _decode(payload, BankEntryReceivedV1)
+        case MessageType.SHIPMENT_CREATED:
+            decoded = _decode(payload, ShipmentCreatedV1)
+        case MessageType.SHIPMENT_LABEL_BOOKED:
+            decoded = _decode(payload, ShipmentLabelBookedV1)
+        case MessageType.SHIPMENT_LABEL_FAILED:
+            decoded = _decode(payload, ShipmentLabelFailedV1)
+        case MessageType.SHIPMENT_NEEDS_PERSON:
+            decoded = _decode(payload, ShipmentNeedsPersonV1)
+        case MessageType.SHIPMENT_BOOKING_RETRIED:
+            decoded = _decode(payload, ShipmentBookingRetriedV1)
     if isinstance(decoded, str):
         return UndecodableFact(
             message_type=message_type,

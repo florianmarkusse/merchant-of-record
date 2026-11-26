@@ -30,7 +30,7 @@ from mor.quote.build import (
 )
 from mor.quote.shipping import NotOffered, NotOfferedReason
 from mor.tax.line_rates import RateNeeded
-from tests.quote.fixtures import quote_market
+from tests.quote.fixtures import SHIPPING, quote_market
 
 
 ON = date(2026, 11, 18)
@@ -80,7 +80,12 @@ def _amounts(quote: Quote, rate_card: str) -> dict[str, int]:
 
 def test_an_order_above_the_border_limit_adds_tax_and_the_duty_paid_fee() -> None:
     request = QuoteRequest(
-        destination=CountryCode("SG"), lines=(_line(50000),), parcel=BOX, on=ON, now=NOW
+        origin=CountryCode("VN"),
+        destination=CountryCode("SG"),
+        lines=(_line(50000),),
+        parcel=BOX,
+        on=ON,
+        now=NOW,
     )
     quote = _quote(build_quote(quote_market(), request, {}, {}))
     # Worked by hand: SGD 500.00; fees 3% and 5%; 1 kg at SGD 30.00,
@@ -107,11 +112,41 @@ def test_an_order_above_the_border_limit_adds_tax_and_the_duty_paid_fee() -> Non
     assert option.fuel_stale_since == date(2026, 11, 15)
 
 
+def test_only_services_leaving_from_the_ship_from_are_offered() -> None:
+    # The economy service leaves from TH instead of VN.
+    services = SHIPPING["services"].replace(
+        "eco,carrier,Economy,VN,", "eco,carrier,Economy,TH,"
+    )
+    market = quote_market({"services": services})
+    offered: dict[str, list[str]] = {}
+    for origin in ("VN", "TH", "MY"):
+        request = QuoteRequest(
+            origin=CountryCode(origin),
+            destination=CountryCode("SG"),
+            lines=(_line(10000),),
+            parcel=BOX,
+            on=ON,
+            now=NOW,
+        )
+        result = build_quote(market, request, {}, {})
+        keys: list[str] = []
+        if isinstance(result, Quote):
+            for option in result.options:
+                keys.append(option.key)
+        offered[origin] = keys
+    assert offered == {"VN": ["exp_card"], "TH": ["eco_card"], "MY": []}
+
+
 def test_below_the_limit_nothing_is_due_and_every_card_is_offered_cheapest_first() -> (
     None
 ):
     request = QuoteRequest(
-        destination=CountryCode("SG"), lines=(_line(10000),), parcel=BOX, on=ON, now=NOW
+        origin=CountryCode("VN"),
+        destination=CountryCode("SG"),
+        lines=(_line(10000),),
+        parcel=BOX,
+        on=ON,
+        now=NOW,
     )
     quote = _quote(build_quote(quote_market(), request, {}, {}))
     cards: list[str] = []
@@ -129,7 +164,12 @@ def test_duty_and_tax_are_shared_over_the_lines_by_their_value() -> None:
         build_quote(
             quote_market(),
             QuoteRequest(
-                destination=CountryCode("SG"), lines=lines, parcel=BOX, on=ON, now=NOW
+                origin=CountryCode("VN"),
+                destination=CountryCode("SG"),
+                lines=lines,
+                parcel=BOX,
+                on=ON,
+                now=NOW,
             ),
             {},
             {},
@@ -151,6 +191,7 @@ def test_duty_and_tax_are_shared_over_the_lines_by_their_value() -> None:
 def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
     market = quote_market(duty_sources="TH,vendor,acme,\n")
     request = QuoteRequest(
+        origin=CountryCode("VN"),
         destination=CountryCode("TH"),
         lines=(_line(5000, Currency.USD),),
         parcel=BOX,
@@ -208,6 +249,7 @@ def test_a_card_offered_in_vendor_mode_waits_for_the_vendors_rate() -> None:
 
 def test_a_line_without_the_hs_code_its_duty_needs_is_refused() -> None:
     request = QuoteRequest(
+        origin=CountryCode("VN"),
         destination=CountryCode("TH"),
         lines=(_line(5000, Currency.USD, hs=None),),
         parcel=BOX,
@@ -224,6 +266,7 @@ def test_a_closed_country_or_a_missing_fee_rule_is_refused() -> None:
     closed = build_quote(
         quote_market(),
         QuoteRequest(
+            origin=CountryCode("VN"),
             destination=CountryCode("DE"),
             lines=(_line(5000),),
             parcel=BOX,
@@ -241,7 +284,12 @@ def test_a_closed_country_or_a_missing_fee_rule_is_refused() -> None:
         }
     )
     request = QuoteRequest(
-        destination=CountryCode("SG"), lines=(_line(5000),), parcel=BOX, on=ON, now=NOW
+        origin=CountryCode("VN"),
+        destination=CountryCode("SG"),
+        lines=(_line(5000),),
+        parcel=BOX,
+        on=ON,
+        now=NOW,
     )
     assert build_quote(no_margin, request, {}, {}) == NoFeeRule(FeeComponent.MOR_MARGIN)
 
@@ -251,6 +299,7 @@ def test_a_quote_names_the_placeholder_fee_rules_it_used() -> None:
         build_quote(
             quote_market(),
             QuoteRequest(
+                origin=CountryCode("VN"),
                 destination=CountryCode("SG"),
                 lines=(_line(5000),),
                 parcel=BOX,

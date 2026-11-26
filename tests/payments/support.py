@@ -32,6 +32,7 @@ from mor.ids import (
 from mor.markets.store import load_market
 from mor.merchants.classifications import classify
 from mor.merchants.records import KybState
+from mor.merchants.ship_from import set_ship_from
 from mor.merchants.store import create_merchant, set_kyb_state
 from mor.messaging.guard import DuplicateGuard
 from mor.messaging.routing import ConsumerName
@@ -50,7 +51,7 @@ from mor.psp.port import (
     StatusMode,
 )
 from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, wire
-from tests.quote.fixtures import quote_market
+from tests.quote.fixtures import WAREHOUSE, quote_market
 
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -113,6 +114,7 @@ async def make_shop(
         seller = await create_merchant(
             conn, "Test Shop Co.", "Test Shop", CountryCode("VN"), 100, ACTOR, NOW
         )
+        await set_ship_from(conn, seller.id, WAREHOUSE, ACTOR, NOW)
         await set_kyb_state(conn, seller.id, KybState.APPROVED, ACTOR, NOW)
         account = await create_psp_account(
             conn,
@@ -156,9 +158,10 @@ async def quoted_session(
     price: Money,
     now: datetime = NOW,
     after_payment: AfterPayment = AfterPayment.OUR_PAGE,
+    buyer: dict[str, str] = SG_ADDRESS,
 ) -> tuple[CheckoutSessionId, str]:
-    """A session quoted for the Singapore address: its id and the
-    cheapest option's key."""
+    """A session quoted for a Singapore address (`buyer`'s form fields):
+    its id and the cheapest option's key."""
     async with await connect(url) as conn:
         classification_id = await classify(conn, merchant_id, SKU, HS_CODE, ACTOR, now)
         session = await create_session(
@@ -175,7 +178,7 @@ async def quoted_session(
             ACTOR,
             now,
         )
-        address = parse_address(SG_ADDRESS, frozenset({CountryCode("SG")}))
+        address = parse_address(buyer, frozenset({CountryCode("SG")}))
         assert not isinstance(address, dict), address
         await submit_address(conn, session.id, address, ENV, now)
         await conn.commit()
@@ -216,13 +219,14 @@ async def with_setup(
     body: Callable[[Setup], Awaitable[None]],
     price: Money = SGD_PRICE,
     after_payment: AfterPayment = AfterPayment.OUR_PAGE,
+    buyer: dict[str, str] = SG_ADDRESS,
 ) -> None:
     clock = [NOW]
     wired = wire(url, lambda: clock[0])
     try:
         shop = await make_shop(url, wired.control, wiring)
         session_id, option = await quoted_session(
-            url, shop.merchant_id, price, NOW, after_payment
+            url, shop.merchant_id, price, NOW, after_payment, buyer
         )
         await body(
             Setup(

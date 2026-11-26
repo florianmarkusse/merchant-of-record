@@ -163,6 +163,7 @@ class PriceMissing:
 
 def offers(
     market: MarketSet,
+    origin: CountryCode,
     destination: CountryCode,
     categories: frozenset[str],
     parcel: Parcel,
@@ -173,12 +174,12 @@ def offers(
     prices: dict[PriceQuestion, PriceHeld],
     now: datetime,
 ) -> list[Offer | NotOffered | PriceMissing]:
-    """Every service routed to the destination, priced, not offered or
-    waiting for the carrier, in route order. `goods_exact` is the goods
+    """Every service routed to the destination from the origin, priced, not
+    offered or waiting for the carrier, in route order. `goods_exact` is the goods
     value in the quote currency, for a surcharge on value; `prices` what we
     hold from carriers, compared with `now`."""
     result: list[Offer | NotOffered | PriceMissing] = []
-    for route in routes_to(market, destination):
+    for route in routes_from(market, origin, destination):
         match route.source:
             case PriceSource.OWN_TABLE:
                 result.append(
@@ -227,6 +228,19 @@ def routes_to(market: MarketSet, destination: CountryCode) -> list[ShippingRoute
     ordered = list(chosen.values())
     ordered.sort(key=lambda route: route.key)
     return ordered
+
+
+def routes_from(
+    market: MarketSet, origin: CountryCode, destination: CountryCode
+) -> list[ShippingRoute]:
+    """The routes to the destination whose service leaves from `origin`,
+    where the merchant's parcels leave from: a service from elsewhere
+    could not carry them (docs/plan-shipments.md §4)."""
+    leaving: list[ShippingRoute] = []
+    for route in routes_to(market, destination):
+        if _service(market, route.service).origin == origin:
+            leaving.append(route)
+    return leaving
 
 
 def price_question(

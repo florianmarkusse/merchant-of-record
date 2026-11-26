@@ -60,6 +60,7 @@ from mor.ids import (
     ShippingPriceLookupId,
 )
 from mor.markets.store import load_in_force
+from mor.merchants.ship_from import ship_from_in_force
 from mor.messaging.facts import (
     CheckoutSessionExpiredV1,
     CheckoutSessionExpiryDueV1,
@@ -147,7 +148,10 @@ type RefreshResult = Attempt | NoSession | SessionOver | NotRefreshable
 
 
 def _quote_request(
-    session: CheckoutSession, country: CountryCode, now: datetime
+    session: CheckoutSession,
+    ship_from: CountryCode,
+    country: CountryCode,
+    now: datetime,
 ) -> QuoteRequest:
     lines: list[QuoteLine] = []
     for line in session.lines:
@@ -161,6 +165,7 @@ def _quote_request(
             )
         )
     return QuoteRequest(
+        origin=ship_from,
         destination=country,
         lines=tuple(lines),
         parcel=session.parcel,
@@ -253,10 +258,16 @@ async def _attempt(
     loaded = await load_in_force(conn)
     assert loaded is not None, "an address is only taken with market data loaded"
     market = loaded.market
-    request = _quote_request(session, country, now)
+    # A session opens only for a merchant with one, and the rows are
+    # append-only.
+    ship_from = await ship_from_in_force(conn, session.merchant_id)
+    assert ship_from is not None, f"no ship-from for {session.merchant_id}"
+    request = _quote_request(session, ship_from.country, country, now)
     for _ in range(MAX_BUILD_ROUNDS):
         lookups = await held_lookups(conn, market, request)
-        prices = await held_prices(conn, market, country, request.parcel)
+        prices = await held_prices(
+            conn, market, request.origin, country, request.parcel
+        )
         result = build_quote(market, request, lookups, prices)
         match result:
             case Quote():

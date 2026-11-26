@@ -12,10 +12,9 @@ import pytest
 
 from mor.audit import Actor, ActorKind
 from mor.carriers import registry
+from mor.carriers.accounts import carrier_account, create_carrier_account
 from mor.carriers.prices import (
     NoCarrierAccount,
-    carrier_account,
-    create_carrier_account,
     read_price,
     request_shipping_price,
     set_price_rule,
@@ -75,7 +74,7 @@ async def _with_setup(url: str, body: Callable[[Setup], Awaitable[None]]) -> Non
                 CarrierCode("carrier"),
                 CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/carrier/acct",
+                "http://mor/_fake/carrier/keyed/acct",
                 VENDOR_TIMEOUT,
                 VALID_FOR,
                 PriceExpiry.CARRIER_FIRST,

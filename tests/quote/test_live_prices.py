@@ -67,7 +67,12 @@ def _request(minor: int, parcel: Parcel = BOX) -> QuoteRequest:
         unit_price=Money(minor, Currency.SGD),
     )
     return QuoteRequest(
-        destination=CountryCode("SG"), lines=(line,), parcel=parcel, on=ON, now=NOW
+        origin=CountryCode("VN"),
+        destination=CountryCode("SG"),
+        lines=(line,),
+        parcel=parcel,
+        on=ON,
+        now=NOW,
     )
 
 

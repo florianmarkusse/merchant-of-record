@@ -58,8 +58,8 @@ from mor.bank.accounts import (
 )
 from mor.bank.fetch import start_reading
 from mor.bank.port import BankAccount, BankProvider
-from mor.carriers.prices import carrier_account, create_carrier_account
-from mor.carriers.records import CarrierProvider, PriceExpiry
+from mor.carriers.accounts import carrier_account, create_carrier_account
+from mor.carriers.records import CarrierProvider, CarrierTrackingMode, PriceExpiry
 from mor.checkout.addresses import Address
 from mor.config import Environment, Settings, load_settings
 from mor.db.connect import Connection, connect
@@ -69,7 +69,6 @@ from mor.echo.flow import create_echo_account
 from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
 from mor.ids import CarrierCode, CountryCode, HsCode, MerchantId, MerchantSku
-from mor.markets.records import PriceSource
 from mor.markets.store import latest_load, read_market
 from mor.merchants.classifications import classifications_in_force, classify
 from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, KybState, NewKey
@@ -229,40 +228,95 @@ async def seed_duty_vendors(
     return created
 
 
+# Every booking guard and tracking mode the fake carrier offers, spread
+# over the seeded carriers in turn (docs/plan-shipments.md §2), so the test
+# setup exercises each.
+CARRIER_WIRINGS = (
+    (DuplicateGuard.VENDOR_CONSTRAINT, CarrierTrackingMode.PUSH_FAT),
+    (DuplicateGuard.COMPENSABLE, CarrierTrackingMode.POLL),
+    (DuplicateGuard.NONE, CarrierTrackingMode.PUSH_THIN),
+    (DuplicateGuard.VENDOR_CONSTRAINT, CarrierTrackingMode.POLL),
+    (DuplicateGuard.COMPENSABLE, CarrierTrackingMode.PUSH_THIN),
+    (DuplicateGuard.NONE, CarrierTrackingMode.PUSH_FAT),
+    (DuplicateGuard.VENDOR_CONSTRAINT, CarrierTrackingMode.PUSH_THIN),
+    (DuplicateGuard.COMPENSABLE, CarrierTrackingMode.PUSH_FAT),
+    (DuplicateGuard.NONE, CarrierTrackingMode.POLL),
+)
+CARRIER_WEBHOOK_SECRET = "whsec-carrier-sandbox"
+
+
+def carrier_flavour(guard: DuplicateGuard) -> str:
+    """The fake carrier's flavour that keeps the guard's promise
+    (`mor.fakes.carrier`)."""
+    match guard:
+        case DuplicateGuard.VENDOR_CONSTRAINT:
+            return "keyed"
+        case DuplicateGuard.COMPENSABLE:
+            return "cancellable"
+        case DuplicateGuard.NONE:
+            return "plain"
+
+
+@dataclass(frozen=True, kw_only=True)
+class SeededCarrier:
+    carrier: CarrierCode
+    book_guard: DuplicateGuard
+    tracking_mode: CarrierTrackingMode
+    created: bool
+
+
 async def seed_carriers(
     conn: Connection, settings: Settings
-) -> list[CarrierCode] | SeedInProd:
-    """An account at the fake carrier for every carrier a live route in the
-    market data in force names and this database lacks; the carriers
-    created. Never commits."""
+) -> list[SeededCarrier] | SeedInProd:
+    """An account at the fake carrier for every carrier a route in the
+    market data in force names, made if missing; the wirings go round
+    `CARRIER_WIRINGS` in carrier order. Never commits."""
     if settings.environment == Environment.PROD:
         return SeedInProd()
     load = await latest_load(conn)
     if load is None:
         return []
     market = await read_market(conn, load.id)
-    created: list[CarrierCode] = []
+    routed: set[CarrierCode] = set()
     for route in market.routes:
-        if route.source != PriceSource.CARRIER_API:
-            continue
         for service in market.services:
-            if service.code != route.service:
-                continue
-            carrier = service.carrier
-            if carrier in created or await carrier_account(conn, carrier) is not None:
-                continue
-            await create_carrier_account(
-                conn,
-                carrier,
-                CarrierProvider.FAKE,
-                ProviderAccountKind.FAKE,
-                f"{settings.self_url}/_fake/carrier/sandbox-{carrier}",
-                TIMEOUT,
-                PRICE_VALID_FOR,
-                PriceExpiry.CARRIER_FIRST,
+            if service.code == route.service:
+                routed.add(service.carrier)
+    seeded: list[SeededCarrier] = []
+    for number, carrier in enumerate(sorted(routed)):
+        existing = await carrier_account(conn, carrier)
+        if existing is not None:
+            seeded.append(
+                SeededCarrier(
+                    carrier=carrier,
+                    book_guard=existing.book_guard,
+                    tracking_mode=existing.tracking_mode,
+                    created=False,
+                )
             )
-            created.append(carrier)
-    return created
+            continue
+        guard, mode = CARRIER_WIRINGS[number % len(CARRIER_WIRINGS)]
+        await create_carrier_account(
+            conn,
+            carrier,
+            CarrierProvider.FAKE,
+            ProviderAccountKind.FAKE,
+            f"{settings.self_url}/_fake/carrier/{carrier_flavour(guard)}"
+            f"/sandbox-{carrier}",
+            TIMEOUT,
+            PRICE_VALID_FOR,
+            PriceExpiry.CARRIER_FIRST,
+            book_guard=guard,
+            tracking_mode=mode,
+            poll_interval=POLL_INTERVAL,
+            webhook_secret=CARRIER_WEBHOOK_SECRET,
+        )
+        seeded.append(
+            SeededCarrier(
+                carrier=carrier, book_guard=guard, tracking_mode=mode, created=True
+            )
+        )
+    return seeded
 
 
 PSP_GUARDS = (DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)
@@ -508,7 +562,13 @@ async def _main() -> int:
             created += 1
     print(f"{len(seeded)} echo accounts, {created} new; webhooks subscribed")
     print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
-    print(f"carrier accounts created: {', '.join(carriers) or 'none'}")
+    for seeded_carrier in carriers:
+        made = "new" if seeded_carrier.created else "kept"
+        print(
+            f"carrier {seeded_carrier.carrier}: books under"
+            f" {seeded_carrier.book_guard}, tracks by"
+            f" {seeded_carrier.tracking_mode} ({made})"
+        )
     print(f"{len(psps)} fake PSP accounts set up; default route: {DEFAULT_PSP}")
     print(f"{len(banks)} fake bank accounts, one per currency")
     if key is not None:

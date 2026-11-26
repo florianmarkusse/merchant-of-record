@@ -30,6 +30,7 @@ from mor.web import (
     staff_classifications,
     staff_markets,
     staff_settlement,
+    staff_shipments,
     webhooks,
 )
 from mor.web.staff_layout import STATIC_DIR
@@ -75,6 +76,9 @@ def make_app(
 
     async def api_get_order(request: Request) -> Response:
         return await api.get_order(request, settings)
+
+    async def api_get_order_label(request: Request) -> Response:
+        return await api.get_order_label(request, settings)
 
     async def api_get_merchant(request: Request) -> Response:
         return await api.get_merchant(request, settings)
@@ -163,6 +167,12 @@ def make_app(
     async def staff_classify(request: Request) -> Response:
         return await staff_classifications.set_code(request, url, clock())
 
+    async def staff_shipments_page(request: Request) -> Response:
+        return await staff_shipments.page(request, url)
+
+    async def staff_book_again(request: Request) -> Response:
+        return await staff_shipments.book(request, url, clock())
+
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
         Route("/webhooks/psp/{account_id}", psp_webhook, methods=["POST"]),
@@ -175,6 +185,7 @@ def make_app(
         ),
         Route("/v1/estimates", api_create_estimate, methods=["POST"]),
         Route("/v1/orders/{order_id}", api_get_order, methods=["GET"]),
+        Route("/v1/orders/{order_id}/label", api_get_order_label, methods=["GET"]),
         Route("/v1/merchant", api_get_merchant, methods=["GET"]),
         Route("/v1/merchant/settings", api_merchant_settings, methods=["POST"]),
         # The buyer's checkout page: its link is its own bearer token.
@@ -240,6 +251,12 @@ def make_app(
                     methods=["GET"],
                 ),
                 Route("/staff/classifications", staff_classify, methods=["POST"]),
+                Route("/staff/shipments", staff_shipments_page, methods=["GET"]),
+                Route(
+                    "/staff/shipments/{shipment_id}/book",
+                    staff_book_again,
+                    methods=["POST"],
+                ),
                 Route("/staff/bank", staff_bank_accounts, methods=["GET"]),
                 Route("/staff/bank/{account_id}", staff_bank_account, methods=["GET"]),
                 Route(

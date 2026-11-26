@@ -3,6 +3,8 @@ an express card in SGD that is duty-paid and adds fuel, and an economy
 card in VND that is not duty-paid and includes fuel, both into SG and TH.
 Built by text, as the files are; every number is made up."""
 
+from mor.checkout.addresses import Address
+from mor.ids import CountryCode
 from mor.markets.records import MarketSet
 from mor.markets.source import parse
 from tests.markets.fixtures import (
@@ -13,6 +15,21 @@ from tests.markets.fixtures import (
     shipping_texts,
 )
 
+
+# Where a test merchant's parcels leave from: VN, where every service of
+# the set starts. Made up.
+WAREHOUSE = Address(
+    name="Test Shop Warehouse",
+    email="warehouse@shop.example",
+    phone_dial_code="+84",
+    phone_number="281234567",
+    line1="1 Example Street",
+    line2=None,
+    city="Thu Duc",
+    region="Ho Chi Minh City",
+    postcode=None,
+    country=CountryCode("VN"),
+)
 
 TH_HS = "TH,6109,duty,,,,30,,secondary,WTO,https://example.test,,,\n"
 FX = FX_ROWS + "EUR,THB,37.459,2026-11-06,verified,ECB,,\n"

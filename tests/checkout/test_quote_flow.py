@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
-from mor.carriers.prices import create_carrier_account
+from mor.carriers.accounts import create_carrier_account
 from mor.carriers.records import CarrierProvider, Parcel, PriceExpiry
 from mor.checkout import addresses
 from mor.checkout.flow import QUOTE_VALID_FOR
@@ -41,6 +41,7 @@ from mor.markets.records import MarketSet
 from mor.markets.store import load_market
 from mor.merchants.classifications import classify
 from mor.merchants.records import KeyEnv, KybState
+from mor.merchants.ship_from import set_ship_from
 from mor.merchants.store import create_api_key, create_merchant, set_kyb_state
 from mor.messaging.worker import drain_once
 from mor.money.amount import Money
@@ -48,7 +49,7 @@ from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
 from mor.quote.build import Quote, QuoteLine, QuoteRequest, build_quote
 from tests.helpers import ENV, VENDOR_TIMEOUT, Wired, count_rows, wire
-from tests.quote.fixtures import live_market, quote_market
+from tests.quote.fixtures import WAREHOUSE, live_market, quote_market
 
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -123,6 +124,7 @@ async def _with_setup(
         seller = await create_merchant(
             conn, "Test Shop Co.", "Test Shop", CountryCode("VN"), 100, ACTOR, NOW
         )
+        await set_ship_from(conn, seller.id, WAREHOUSE, ACTOR, NOW)
         await set_kyb_state(conn, seller.id, KybState.APPROVED, ACTOR, NOW)
         key = await create_api_key(conn, seller.id, KeyEnv.TEST, NOW)
         classification_id = await classify(conn, seller.id, SKU, hs_code, ACTOR, NOW)
@@ -145,7 +147,7 @@ async def _with_setup(
             CarrierCode("carrier"),
             CarrierProvider.FAKE,
             ProviderAccountKind.FAKE,
-            "http://mor/_fake/carrier/acct",
+            "http://mor/_fake/carrier/keyed/acct",
             VENDOR_TIMEOUT,
             timedelta(hours=24),
             PriceExpiry.CARRIER_FIRST,
@@ -209,6 +211,7 @@ def test_an_address_gets_a_stored_quote_and_the_page_shows_four_lines(
         built = build_quote(
             quote_market(),
             QuoteRequest(
+                origin=CountryCode("VN"),
                 destination=CountryCode("SG"),
                 lines=(
                     QuoteLine(

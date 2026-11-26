@@ -49,6 +49,10 @@ PspRequestId = NewType("PspRequestId", uuid.UUID)
 OrderId = NewType("OrderId", uuid.UUID)
 InvoiceId = NewType("InvoiceId", uuid.UUID)
 
+# Shipments
+ShipmentId = NewType("ShipmentId", uuid.UUID)
+CarrierRequestId = NewType("CarrierRequestId", uuid.UUID)
+
 # Settlement
 SettlementLineId = NewType("SettlementLineId", uuid.UUID)
 SettlementPayoutId = NewType("SettlementPayoutId", uuid.UUID)
@@ -79,6 +83,10 @@ PspPayoutId = NewType("PspPayoutId", str)
 PspLineId = NewType("PspLineId", str)
 PspEventId = NewType("PspEventId", str)
 
+# The carrier's ids for a label it made
+TrackingNumber = NewType("TrackingNumber", str)
+ExportDeclarationNo = NewType("ExportDeclarationNo", str)
+
 # The bank's id for an entry it shows
 BankTransactionId = NewType("BankTransactionId", str)
 
@@ -86,3 +94,4 @@ BankTransactionId = NewType("BankTransactionId", str)
 JournalKey = NewType("JournalKey", str)  # journal_entry.idempotency_key
 ApiIdempotencyKey = NewType("ApiIdempotencyKey", str)  # a merchant's header
 PspIdempotencyKey = NewType("PspIdempotencyKey", str)  # what we send the PSP
+CarrierIdempotencyKey = NewType("CarrierIdempotencyKey", str)  # to a carrier

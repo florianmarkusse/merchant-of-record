@@ -95,3 +95,19 @@ async def ship_from_in_force(
             (merchant_id,),
         )
         return await cur.fetchone()
+
+
+async def read_ship_from(
+    conn: Connection, ship_from_id: MerchantShipFromId
+) -> ShipFrom | None:
+    """One row, in force or not: a shipment names the one it was made with."""
+    async with conn.cursor(row_factory=class_row(ShipFrom)) as cur:
+        await cur.execute(
+            """
+            SELECT id, merchant_id, name, email, phone_dial_code, phone_number,
+                   line1, line2, city, region, postcode, country, created_at
+            FROM merchant_ship_from WHERE id = %s
+            """,
+            (ship_from_id,),
+        )
+        return await cur.fetchone()

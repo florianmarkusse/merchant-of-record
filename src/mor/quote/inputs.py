@@ -18,16 +18,21 @@ from mor.duties.records import LookupState, VendorLookup
 from mor.ids import CountryCode, DutyLookupId, ShippingPriceLookupId
 from mor.markets.records import DutyMode, MarketSet, PriceSource
 from mor.quote.build import InputsMissing, QuoteRequest
-from mor.quote.shipping import price_question, routes_to
+from mor.quote.shipping import price_question, routes_from
 from mor.tax.line_rates import duty_source_for
 
 
 async def held_prices(
-    conn: Connection, market: MarketSet, destination: CountryCode, parcel: Parcel
+    conn: Connection,
+    market: MarketSet,
+    origin: CountryCode,
+    destination: CountryCode,
+    parcel: Parcel,
 ) -> dict[PriceQuestion, PriceHeld]:
-    """What we hold from carriers for every live route to the destination."""
+    """What we hold from carriers for every live route from the origin to
+    the destination."""
     prices: dict[PriceQuestion, PriceHeld] = {}
-    for route in routes_to(market, destination):
+    for route in routes_from(market, origin, destination):
         if route.source != PriceSource.CARRIER_API:
             continue
         for service in market.services:

@@ -21,6 +21,7 @@ MENU = (
     ("/staff/markets/data", "Market data"),
     ("/staff/markets/sessions", "Sessions"),
     ("/staff/classifications", "Classifications"),
+    ("/staff/shipments", "Shipments"),
     ("/staff/settlement", "Settlement"),
     ("/staff/bank", "Bank"),
 )

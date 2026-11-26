@@ -31,6 +31,7 @@ def _offers(
     found: dict[str, Offer | NotOffered] = {}
     for offer in offers(
         market,
+        CountryCode("VN"),
         CountryCode("SG"),
         frozenset({category}),
         parcel,

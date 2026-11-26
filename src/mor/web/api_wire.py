@@ -31,7 +31,15 @@ from mor.checkout.records import (
     SoldLine,
 )
 from mor.dates import format_instant
-from mor.ids import CountryCode, HsCode, MerchantSku, OrderId, ServiceCode
+from mor.ids import (
+    CarrierCode,
+    CountryCode,
+    HsCode,
+    MerchantSku,
+    OrderId,
+    ServiceCode,
+    TrackingNumber,
+)
 from mor.markets.records import MarketSet
 from mor.merchants.classifications import SkuClassification
 from mor.merchants.records import KybState, Merchant
@@ -44,7 +52,9 @@ from mor.public_ids import (
     order_public_id,
     quote_public_id,
     session_public_id,
+    shipment_public_id,
 )
+from mor.shipments.records import BookingState, Shipment, TrackingStatus
 
 
 # --- what comes in -----------------------------------------------------------------
@@ -546,6 +556,19 @@ class AddressOut(msgspec.Struct, frozen=True, kw_only=True):
     country: CountryCode
 
 
+class ShipmentOut(msgspec.Struct, frozen=True, kw_only=True):
+    """The order's parcel (docs/plan-shipments.md §6): once `labelled`, its
+    label is at `label_url` (a PDF, with the merchant's key)."""
+
+    id: str
+    booking: BookingState
+    tracking: TrackingStatus
+    carrier: CarrierCode
+    service: ServiceCode
+    tracking_number: TrackingNumber | None
+    label_url: str | None
+
+
 class OrderOut(msgspec.Struct, frozen=True, kw_only=True):
     id: str
     object: str
@@ -560,6 +583,32 @@ class OrderOut(msgspec.Struct, frozen=True, kw_only=True):
     ship_to: AddressOut
     invoice_number: str | None  # once issued, moments after payment
     order_url: str  # the buyer's order page, with the invoice
+    shipment: ShipmentOut | None  # made moments after payment
+
+
+def _shipment_out(shipment: Shipment, self_url: str) -> ShipmentOut:
+    label_url: str | None = None
+    match shipment.booking_state:
+        case BookingState.LABELLED:
+            label_url = (
+                f"{self_url}/v1/orders/{order_public_id(shipment.order_id)}/label"
+            )
+        case (
+            BookingState.BOOKING
+            | BookingState.DEDUPLICATING
+            | BookingState.LABEL_FAILED
+            | BookingState.NEEDS_PERSON
+        ):
+            pass
+    return ShipmentOut(
+        id=shipment_public_id(shipment.id),
+        booking=shipment.booking_state,
+        tracking=shipment.tracking_status,
+        carrier=shipment.carrier,
+        service=shipment.service,
+        tracking_number=shipment.tracking_number,
+        label_url=label_url,
+    )
 
 
 def order_out(
@@ -568,6 +617,7 @@ def order_out(
     quote: MadeQuote,
     address: Address,
     invoice_number: str | None,
+    shipment: Shipment | None,
     self_url: str,
 ) -> bytes:
     option = quote.options[order.option_no]
@@ -605,6 +655,7 @@ def order_out(
         ),
         invoice_number=invoice_number,
         order_url=f"{self_url}/o/{order.buyer_token}",
+        shipment=None if shipment is None else _shipment_out(shipment, self_url),
     )
     return msgspec.json.encode(out)
 

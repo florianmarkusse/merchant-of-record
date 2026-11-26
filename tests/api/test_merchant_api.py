@@ -12,9 +12,8 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
-from mor.carriers.prices import create_carrier_account
+from mor.carriers.accounts import create_carrier_account
 from mor.carriers.records import CarrierProvider, PriceExpiry
-from mor.checkout.addresses import Address
 from mor.config import Environment, Settings
 from mor.db.connect import connect
 from mor.ids import CarrierCode, CountryCode, HsCode, MerchantSku
@@ -29,7 +28,7 @@ from mor.provider_accounts import ProviderAccountKind
 from mor.public_ids import merchant_public_id
 from mor.web.main import make_app
 from tests.helpers import ENV, VENDOR_TIMEOUT, count_rows, wire
-from tests.quote.fixtures import live_market, quote_market
+from tests.quote.fixtures import WAREHOUSE, live_market, quote_market
 
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -49,18 +48,6 @@ LINE = {
     "merchant_sku": "LIN-01",
 }
 UNCLASSIFIED_LINE = LINE | {"merchant_sku": "NEW-01"}
-WAREHOUSE = Address(
-    name="Test Shop Warehouse",
-    email="warehouse@shop.example",
-    phone_dial_code="+84",
-    phone_number="281234567",
-    line1="1 Example Street",
-    line2=None,
-    city="Thu Duc",
-    region="Ho Chi Minh City",
-    postcode=None,
-    country=CountryCode("VN"),
-)
 SESSION = {
     "lines": [LINE],
     "parcel": PARCEL,
@@ -478,7 +465,7 @@ def test_a_live_price_is_fetched_once_while_the_merchant_waits(
                 CarrierCode("carrier"),
                 CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/carrier/acct",
+                "http://mor/_fake/carrier/keyed/acct",
                 VENDOR_TIMEOUT,
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,
@@ -529,7 +516,7 @@ def test_new_lookups_over_the_daily_limit_are_not_asked(database_url: str) -> No
                 CarrierCode("carrier"),
                 CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/carrier/acct",
+                "http://mor/_fake/carrier/keyed/acct",
                 VENDOR_TIMEOUT,
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,

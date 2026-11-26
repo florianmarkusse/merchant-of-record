@@ -123,6 +123,7 @@ def test_every_estimate_option_is_its_parts_summed(
     destination: CountryCode, order: list[QuoteLine], parcel: Parcel, prod: bool
 ) -> None:
     request = QuoteRequest(
+        origin=CountryCode("VN"),
         destination=destination,
         lines=tuple(order),
         parcel=parcel,

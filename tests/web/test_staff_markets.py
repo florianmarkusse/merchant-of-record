@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 
 from mor.audit import Actor, ActorKind
-from mor.carriers.prices import create_carrier_account
+from mor.carriers.accounts import create_carrier_account
 from mor.carriers.records import CarrierProvider, PriceExpiry
 from mor.config import Environment, Settings
 from mor.db.connect import connect
@@ -356,7 +356,7 @@ def test_a_live_route_is_priced_by_asking_the_carrier_from_the_page(
                 CarrierCode("carrier"),
                 CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/carrier/acct",
+                "http://mor/_fake/carrier/keyed/acct",
                 timedelta(seconds=5),
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,

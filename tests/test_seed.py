@@ -6,7 +6,7 @@ import asyncio
 from datetime import UTC, datetime
 
 from mor.audit import Actor, ActorKind
-from mor.carriers.prices import carrier_account
+from mor.carriers.accounts import carrier_account
 from mor.carriers.records import PriceExpiry
 from mor.config import Environment, Settings
 from mor.db.connect import connect
@@ -138,7 +138,7 @@ def test_a_seeded_push_account_receives_the_vendors_events(database_url: str) ->
     asyncio.run(body())
 
 
-def test_each_carrier_on_a_live_route_gets_one_account_at_the_fake(
+def test_each_routed_carrier_gets_one_account_at_the_fake(
     database_url: str,
 ) -> None:
     async def body() -> None:
@@ -156,9 +156,12 @@ def test_each_carrier_on_a_live_route_gets_one_account_at_the_fake(
             again = await seed_carriers(conn, settings)
             account = await carrier_account(conn, CarrierCode("carrier"))
             await conn.commit()
-        assert first == ["carrier"] and again == []
+        assert not isinstance(first, SeedInProd)
+        assert not isinstance(again, SeedInProd)
+        assert [seeded.created for seeded in first] == [True]
+        assert [seeded.created for seeded in again] == [False]
         assert account is not None
-        assert account.base_url == "http://mor/_fake/carrier/sandbox-carrier"
+        assert account.base_url == "http://mor/_fake/carrier/keyed/sandbox-carrier"
         assert account.price_expiry == PriceExpiry.CARRIER_FIRST
 
     asyncio.run(body())

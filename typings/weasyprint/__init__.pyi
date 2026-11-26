@@ -1,5 +1,6 @@
-# The part of WeasyPrint's API we call (src/mor/web/invoice_pdf.py): it
-# ships no types, and pyright is strict. Checked against WeasyPrint 70.0.
+# The part of WeasyPrint's API we call (src/mor/web/invoice_pdf.py, and the
+# fake carrier's PDFs in src/mor/fakes/carrier.py): it ships no types, and
+# pyright is strict. Checked against WeasyPrint 70.0.
 
 from collections.abc import Sequence
 

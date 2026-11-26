@@ -34,7 +34,7 @@ from hypothesis.stateful import (
 )
 
 from mor.audit import Actor, ActorKind
-from mor.carriers.prices import create_carrier_account
+from mor.carriers.accounts import create_carrier_account
 from mor.carriers.records import CarrierProvider, Parcel, PriceExpiry
 from mor.checkout.addresses import Address
 from mor.checkout.flow import QUOTE_VALID_FOR, refresh_quote, submit_address
@@ -58,6 +58,7 @@ from mor.ids import (
 )
 from mor.markets.store import load_market
 from mor.merchants.classifications import classify
+from mor.merchants.ship_from import set_ship_from
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import (
     Candidate,
@@ -80,7 +81,7 @@ from tests.helpers import (
     empty_tables,
     wire,
 )
-from tests.quote.fixtures import live_market
+from tests.quote.fixtures import WAREHOUSE, live_market
 
 
 T0 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -380,12 +381,13 @@ class QuoteFlow(RuleBasedStateMachine):
             seller = await create_merchant(
                 conn, "Fuzz Shop Co.", "Fuzz Shop", CountryCode("VN"), 100, ACTOR, T0
             )
+            await set_ship_from(conn, seller.id, WAREHOUSE, ACTOR, T0)
             await create_carrier_account(
                 conn,
                 CarrierCode("carrier"),
                 CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/carrier/acct",
+                "http://mor/_fake/carrier/keyed/acct",
                 VENDOR_TIMEOUT,
                 timedelta(hours=6),
                 PriceExpiry.CARRIER_FIRST,

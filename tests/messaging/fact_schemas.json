@@ -1123,6 +1123,144 @@
     },
     "$ref": "#/$defs/SettlementPayoutReportedV1"
   },
+  "shipment_booking_retried/v1": {
+    "$defs": {
+      "ShipmentBookingRetriedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "shipment_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipment_id",
+          "order_id"
+        ],
+        "title": "ShipmentBookingRetriedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShipmentBookingRetriedV1"
+  },
+  "shipment_created/v1": {
+    "$defs": {
+      "ShipmentCreatedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "shipment_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipment_id",
+          "order_id"
+        ],
+        "title": "ShipmentCreatedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShipmentCreatedV1"
+  },
+  "shipment_label_booked/v1": {
+    "$defs": {
+      "ShipmentLabelBookedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "shipment_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "tracking_number": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipment_id",
+          "order_id",
+          "tracking_number"
+        ],
+        "title": "ShipmentLabelBookedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShipmentLabelBookedV1"
+  },
+  "shipment_label_failed/v1": {
+    "$defs": {
+      "ShipmentFailure": {
+        "enum": [
+          "address_refused",
+          "customs_refused",
+          "no_carrier_account",
+          "refused",
+          "ship_from_elsewhere"
+        ],
+        "title": "ShipmentFailure"
+      },
+      "ShipmentLabelFailedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "failure": {
+            "$ref": "#/$defs/ShipmentFailure"
+          },
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "shipment_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipment_id",
+          "order_id",
+          "failure"
+        ],
+        "title": "ShipmentLabelFailedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShipmentLabelFailedV1"
+  },
+  "shipment_needs_person/v1": {
+    "$defs": {
+      "ShipmentNeedsPersonV1": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "shipment_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipment_id",
+          "order_id"
+        ],
+        "title": "ShipmentNeedsPersonV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShipmentNeedsPersonV1"
+  },
   "shipping_price_found/v1": {
     "$defs": {
       "ShippingPriceFoundV1": {

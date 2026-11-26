@@ -25,6 +25,7 @@ from psycopg.rows import class_row
 
 from mor.audit import Actor, ActorKind
 from mor.carriers import registry
+from mor.carriers.accounts import carrier_account
 from mor.carriers.port import (
     CarrierPrice,
     NotServed,
@@ -32,7 +33,6 @@ from mor.carriers.port import (
 )
 from mor.carriers.records import (
     CarrierAccount,
-    CarrierProvider,
     FinishedLookup,
     OwnPrice,
     Parcel,
@@ -47,7 +47,6 @@ from mor.carriers.records import (
 from mor.config import Environment
 from mor.db.connect import Connection
 from mor.ids import (
-    CarrierAccountId,
     CarrierCode,
     CountryCode,
     MarketLoadId,
@@ -66,7 +65,6 @@ from mor.messaging.store import append_fact
 from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.money.rounding import RoundingMode, round_fraction
-from mor.provider_accounts import ProviderAccountKind
 from mor.quote.shipping import own_card_price
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
 
@@ -94,18 +92,6 @@ class PriceCall:
 
 
 @dataclass(frozen=True, kw_only=True)
-class _AccountRow:
-    id: CarrierAccountId
-    carrier: CarrierCode
-    provider: CarrierProvider
-    kind: ProviderAccountKind
-    base_url: str
-    timeout_ms: int
-    price_valid_for_s: int
-    price_expiry: PriceExpiry
-
-
-@dataclass(frozen=True, kw_only=True)
 class _LookupRow:
     id: ShippingPriceLookupId
     carrier: CarrierCode
@@ -130,65 +116,6 @@ class _LookupRow:
 
 
 # --- accounts ---------------------------------------------------------------
-
-
-async def create_carrier_account(
-    conn: Connection,
-    carrier: CarrierCode,
-    provider: CarrierProvider,
-    kind: ProviderAccountKind,
-    base_url: str,
-    timeout: timedelta,
-    price_valid_for: timedelta,
-    price_expiry: PriceExpiry,
-) -> CarrierAccountId:
-    account_id = CarrierAccountId(uuid.uuid7())
-    await conn.execute(
-        """
-        INSERT INTO carrier_account
-          (id, carrier, provider, kind, base_url, timeout_ms, price_valid_for_s,
-           price_expiry)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """,
-        (
-            account_id,
-            carrier,
-            provider,
-            kind,
-            base_url,
-            int(timeout.total_seconds() * 1000),
-            int(price_valid_for.total_seconds()),
-            price_expiry,
-        ),
-    )
-    return account_id
-
-
-async def carrier_account(
-    conn: Connection, carrier: CarrierCode
-) -> CarrierAccount | None:
-    async with conn.cursor(row_factory=class_row(_AccountRow)) as cur:
-        await cur.execute(
-            """
-            SELECT id, carrier, provider, kind, base_url, timeout_ms,
-                   price_valid_for_s, price_expiry
-            FROM carrier_account WHERE carrier = %s
-            """,
-            (carrier,),
-        )
-        row = await cur.fetchone()
-    if row is None:
-        return None
-    return CarrierAccount(
-        id=row.id,
-        carrier=row.carrier,
-        provider=row.provider,
-        kind=row.kind,
-        base_url=row.base_url,
-        timeout=timedelta(milliseconds=row.timeout_ms),
-        price_valid_for=timedelta(seconds=row.price_valid_for_s),
-        price_expiry=row.price_expiry,
-    )
 
 
 async def set_price_rule(

@@ -332,17 +332,21 @@ are `plan-architecture.md` §7 to §9. On top of them:
 - **Line data**: as sessions carry it today, plus box size,
   `product_category` (the product gate, §2), `food_contact` and
   `wood_species` (`07-keycaps-ceramics-lacquer.md`).
-- **Shipment states**: `created → label_requested → labelled → picked_up
-  → in_transit → delivered`, with `label_failed`, `cancelled`,
-  `held_at_customs`, `returning_to_sender`, `returned_to_sender` and
-  `lost`. **Return states**: `requested → approved → label_issued →
-  in_transit → received → refunded`, with `rejected` and
-  `refunded_without_return`.
+- **Shipment states**: two machines, as `plan-shipments.md` §5 has
+  them. Booking, which we drive: `booking → labelled`, with
+  `deduplicating`, `label_failed` and `needs_person`. Tracking, derived
+  from the carrier's events: `none`, `picked_up`, `in_transit`,
+  `held_at_customs`, `delivered`, `returning`, `returned`, `lost`.
+  Cancelling a shipment comes with refunds (slice 8). **Return states**:
+  `requested → approved → label_issued → in_transit → received →
+  refunded`, with `rejected` and `refunded_without_return`.
 - **Facts**: `shipment_created`, `shipment_label_booked`,
-  `shipment_label_failed`, `shipment_picked_up`, `shipment_delivered`,
-  `shipment_held_at_customs`, `shipment_lost`, `carrier_invoice_imported`,
-  `return_requested`, `return_approved`, `return_received`,
-  `refund_requested`, `registration_threshold_approaching`.
+  `shipment_label_failed`, `shipment_needs_person`,
+  `shipment_booking_retried`, one per tracking milestone
+  (`shipment_delivered`, … `plan-shipments.md` §7),
+  `carrier_invoice_imported`, `return_requested`, `return_approved`,
+  `return_received`, `refund_requested`,
+  `registration_threshold_approaching`.
 - DHL's export declaration number is stored on every shipment (§5: the
   re-import of a return).
 

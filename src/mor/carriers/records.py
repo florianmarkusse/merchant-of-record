@@ -1,5 +1,6 @@
-"""What we ask a carrier for a price and what we hold of its answers, as
-plain records the pure quote reads (docs/plan-quote.md §4, 4c-2)."""
+"""Carrier accounts with their capabilities, what we ask a carrier for a
+price and what we hold of its answers, as plain records the pure quote
+reads (docs/plan-quote.md §4, 4c-2; docs/plan-shipments.md §2)."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -13,6 +14,7 @@ from mor.ids import (
     ServiceCode,
     ShippingPriceLookupId,
 )
+from mor.messaging.guard import DuplicateGuard
 from mor.money.amount import Money
 from mor.provider_accounts import ProviderAccountKind
 
@@ -54,8 +56,20 @@ class PriceExpiry(StrEnum):
     OWN_PERIOD = "own_period"  # ours, whatever the carrier said
 
 
+class CarrierTrackingMode(StrEnum):
+    """How the carrier tells us what happens to a parcel; matches
+    `carrier_tracking_mode`. Used from 6b on (docs/plan-shipments.md §7)."""
+
+    PUSH_FAT = "push_fat"  # signed webhooks carrying the events
+    PUSH_THIN = "push_thin"  # webhooks saying only that there is news
+    POLL = "poll"  # we fetch pages of events
+
+
 @dataclass(frozen=True, kw_only=True)
 class CarrierAccount:
+    """One account per carrier. Its capabilities are data, so feature code
+    switches on them, never on the provider (docs/plan-shipments.md §2)."""
+
     id: CarrierAccountId
     carrier: CarrierCode
     provider: CarrierProvider
@@ -64,6 +78,8 @@ class CarrierAccount:
     timeout: timedelta
     price_valid_for: timedelta
     price_expiry: PriceExpiry
+    book_guard: DuplicateGuard
+    tracking_mode: CarrierTrackingMode
 
 
 class PricePartKind(StrEnum):

@@ -188,7 +188,12 @@ def test_any_order_on_the_synthetic_set_quotes_consistently_or_is_refused(
     destination: CountryCode, order: list[QuoteLine], parcel: Parcel, on: date
 ) -> None:
     request = QuoteRequest(
-        destination=destination, lines=tuple(order), parcel=parcel, on=on, now=NOW
+        origin=CountryCode("VN"),
+        destination=destination,
+        lines=tuple(order),
+        parcel=parcel,
+        on=on,
+        now=NOW,
     )
     result = build_quote(SYNTHETIC, request, _lookups((destination,)), {})
     if isinstance(result, Quote):
@@ -205,7 +210,12 @@ def test_any_order_on_the_research_files_quotes_consistently_or_is_refused(
     destination: CountryCode, order: list[QuoteLine], parcel: Parcel, on: date
 ) -> None:
     request = QuoteRequest(
-        destination=destination, lines=tuple(order), parcel=parcel, on=on, now=NOW
+        origin=CountryCode("VN"),
+        destination=destination,
+        lines=tuple(order),
+        parcel=parcel,
+        on=on,
+        now=NOW,
     )
     result = build_quote(RESEARCH, request, RESEARCH_LOOKUPS, {})
     if isinstance(result, Quote):
@@ -267,6 +277,7 @@ def test_any_carrier_price_quotes_consistently_with_each_part_charged(
         parcel=parcel,
     )
     request = QuoteRequest(
+        origin=CountryCode("VN"),
         destination=destination,
         lines=tuple(order),
         parcel=parcel,

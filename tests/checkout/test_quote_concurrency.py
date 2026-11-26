@@ -15,7 +15,8 @@ from datetime import UTC, datetime, timedelta
 
 import mor.carriers.prices
 from mor.audit import Actor, ActorKind
-from mor.carriers.prices import PriceCall, create_carrier_account
+from mor.carriers.accounts import create_carrier_account
+from mor.carriers.prices import PriceCall
 from mor.carriers.records import CarrierProvider, Parcel, PriceExpiry
 from mor.checkout.addresses import Address
 from mor.checkout.flow import Waiting, submit_address
@@ -32,6 +33,7 @@ from mor.ids import (
 )
 from mor.markets.store import load_market
 from mor.merchants.classifications import classify
+from mor.merchants.ship_from import set_ship_from
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import finish_delivery
 from mor.messaging.routing import ConsumerName
@@ -45,7 +47,7 @@ from mor.money.amount import Money
 from mor.money.currency import Currency
 from mor.provider_accounts import ProviderAccountKind
 from tests.helpers import ENV, wire
-from tests.quote.fixtures import live_market
+from tests.quote.fixtures import WAREHOUSE, live_market
 
 
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
@@ -79,12 +81,13 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
             seller = await create_merchant(
                 conn, "Test Shop Co.", "Test Shop", CountryCode("VN"), 100, ACTOR, NOW
             )
+            await set_ship_from(conn, seller.id, WAREHOUSE, ACTOR, NOW)
             await create_carrier_account(
                 conn,
                 CarrierCode("carrier"),
                 CarrierProvider.FAKE,
                 ProviderAccountKind.FAKE,
-                "http://mor/_fake/carrier/acct",
+                "http://mor/_fake/carrier/keyed/acct",
                 timedelta(seconds=2),
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,

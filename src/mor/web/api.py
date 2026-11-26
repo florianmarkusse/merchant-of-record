@@ -58,6 +58,8 @@ from mor.quote.inputs import (
     new_asks,
 )
 from mor.quote.refusals import Refusal, offered_in, refusal_of
+from mor.shipments.records import DocumentKind
+from mor.shipments.store import merchant_document, order_shipment
 from mor.web.api_estimates import estimate_out, refusal_error
 from mor.web.api_wire import (
     SHIP_FROM_MISSING,
@@ -226,10 +228,38 @@ async def get_order(request: Request, settings: Settings) -> Response:
         address = await read_address(conn, order.address_id)
         assert address is not None
         tax_invoice = await invoice_for_order(conn, order.id)
+        shipment = await order_shipment(conn, order.id)
     number = None if tax_invoice is None else tax_invoice.number_text
     return json_response(
-        200, order_out(order, session, quote, address, number, settings.self_url)
+        200,
+        order_out(order, session, quote, address, number, shipment, settings.self_url),
     )
+
+
+async def get_order_label(request: Request, settings: Settings) -> Response:
+    """The merchant's own order's shipping label, a PDF, once booked
+    (docs/plan-shipments.md §6). Before that, or for another merchant's
+    order, a 404."""
+    not_found = ApiError(
+        status=404,
+        type=ErrorType.NOT_FOUND,
+        code="not_found",
+        message="no label for this order yet",
+        param="id",
+    )
+    async with await connect(settings.database_url) as conn:
+        auth = await _authenticated(conn, request, settings)
+        if auth is None:
+            return error_response(AUTH_FAILED)
+        order_id = parse_order_id(request.path_params["order_id"])
+        if order_id is None:
+            return error_response(not_found)
+        label = await merchant_document(
+            conn, auth.merchant.id, order_id, DocumentKind.LABEL
+        )
+    if label is None:
+        return error_response(not_found)
+    return Response(label.body, media_type=label.content_type)
 
 
 async def get_merchant(request: Request, settings: Settings) -> Response:
@@ -282,7 +312,8 @@ async def create_estimate(
         market = await market_in_force(conn)
         if market is None:
             return error_response(NO_MARKET)
-        if await ship_from_in_force(conn, auth.merchant.id) is None:
+        ship_from = await ship_from_in_force(conn, auth.merchant.id)
+        if ship_from is None:
             return error_response(SHIP_FROM_MISSING)
         classifications = await classifications_of(
             conn, auth.merchant.id, line_skus(decoded.lines)
@@ -302,6 +333,7 @@ async def create_estimate(
                 )
             )
         quote_request = QuoteRequest(
+            origin=ship_from.country,
             destination=decoded.country,
             lines=tuple(quote_lines),
             parcel=parcel_of(decoded.parcel),
@@ -310,7 +342,11 @@ async def create_estimate(
         )
         lookups = await held_lookups(conn, market, quote_request)
         prices = await held_prices(
-            conn, market, quote_request.destination, quote_request.parcel
+            conn,
+            market,
+            quote_request.origin,
+            quote_request.destination,
+            quote_request.parcel,
         )
         result = build_quote(market, quote_request, lookups, prices)
         match result:

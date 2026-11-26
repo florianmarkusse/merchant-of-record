@@ -66,7 +66,8 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 # fuzzer about 0.4 s an example, so about 40 minutes, its guard 60m
 # (25-Nov-2026). The browser smoke suite (tests_browser, its own database
 # and server on port 8742; no Hypothesis, so its budget is unused) about
-# 15 s (25-Nov-2026). Every
+# 15 s (25-Nov-2026). The shipment fuzzer about 0.3 s an example, so about
+# 20 minutes (26-Nov-2026). Every
 # test file using Hypothesis must be in a target: tests/test_soak_targets.py
 # fails otherwise.
 TARGETS=(
@@ -78,6 +79,7 @@ TARGETS=(
   "payment-flow|6000|45m|tests/flow/test_payment_flow_fuzz.py"
   "order-flow|6000|45m|tests/flow/test_order_flow_fuzz.py"
   "settlement-flow|6000|60m|tests/flow/test_settlement_flow_fuzz.py"
+  "shipment-flow|4000|40m|tests/flow/test_shipment_flow_fuzz.py"
   "browser-smoke|1|10m|tests_browser"
   "properties|100000|30m|tests/money tests/echo/test_events.py tests/messaging/test_facts.py tests/markets/test_markets.py tests/tax/test_tax_paths.py tests/tax/test_duty_modes.py tests/quote/test_quote_properties.py tests/api/test_api_properties.py tests/checkout/test_addresses.py tests/payments/test_payment_properties.py tests/settlement/test_settlement_properties.py tests/bank/test_bank_properties.py"
 )
