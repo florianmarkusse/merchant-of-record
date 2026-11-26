@@ -22,7 +22,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Literal, assert_never
 
-import htpy as h
+import htpy
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -1988,17 +1988,17 @@ def status_class(status: str) -> str:
     return "st-na" if status == "n/a" else f"st-{status}"
 
 
-def chip(status: Status, text: str | None = None) -> h.Element:
-    return h.span(class_=f"chip {status_class(status)}")[
+def chip(status: Status, text: str | None = None) -> htpy.Element:
+    return htpy.span(class_=f"chip {status_class(status)}")[
         text if text is not None else STATUS_LABEL[status]
     ]
 
 
-def source_link(row: Row) -> h.Node:
+def source_link(row: Row) -> htpy.Node:
     label = row.get("source", "") or "source"
     url = row.get("source_url", "")
     if url:
-        return h.a(href=url)[label]
+        return htpy.a(href=url)[label]
     return label
 
 
@@ -2018,124 +2018,126 @@ def fact_title(resolved: Resolved) -> str:
     return "\n".join(parts)
 
 
-def section_legend(data: Data) -> h.Element:
+def section_legend(data: Data) -> htpy.Element:
     counts = status_counts(data)
-    chips: list[h.Node] = []
+    chips: list[htpy.Node] = []
     for status in STATUSES:
         chips.append(chip(status, f"{STATUS_LABEL[status]}: {counts[status]}"))
-    return h.p[chips]
+    return htpy.p[chips]
 
 
-def section_overview(data: Data) -> h.Element:
+def section_overview(data: Data) -> htpy.Element:
     topics = by_key(data.rows("topics"), "topic")
-    head = h.tr[
-        h.th["Code"],
-        h.th["Country"],
-        h.th["Market status"],
-        [h.th[topics[t]["label"]] for t in OVERVIEW_TOPICS],
+    head = htpy.tr[
+        htpy.th["Code"],
+        htpy.th["Country"],
+        htpy.th["Market status"],
+        [htpy.th[topics[t]["label"]] for t in OVERVIEW_TOPICS],
     ]
-    body: list[h.Node] = []
+    body: list[htpy.Node] = []
     for country in researched_countries(data):
         code = country["iso2"]
         facts = resolve_facts(data, code)
-        cells: list[h.Node] = []
+        cells: list[htpy.Node] = []
         for topic in OVERVIEW_TOPICS:
             resolved = overview_fact(facts, topic)
             if resolved is None:
-                cells.append(h.td(class_="cell")[""])
+                cells.append(htpy.td(class_="cell")[""])
                 continue
             row = resolved.fact
             cells.append(
-                h.td(
+                htpy.td(
                     class_=f"cell {status_class(row['status'])}",
                     title=fact_title(resolved),
                 )[
                     row["value"] or STATUS_LABEL[as_status(row["status"])],
-                    h.div(class_="via")[f"via {resolved.via}"]
+                    htpy.div(class_="via")[f"via {resolved.via}"]
                     if resolved.via
                     else None,
                 ]
             )
         body.append(
-            h.tr[
-                h.td[h.a(href=f"#c-{code}")[code]],
-                h.td[country["name"]],
-                h.td[
+            htpy.tr[
+                htpy.td[htpy.a(href=f"#c-{code}")[code]],
+                htpy.td[country["name"]],
+                htpy.td[
                     country["market_status"],
-                    h.div(class_="via")[country["status_note"]],
+                    htpy.div(class_="via")[country["status_note"]],
                 ],
                 cells,
             ]
         )
-    return h.section[
-        h.h2(id="overview")["Researched countries"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="overview")["Researched countries"],
+        htpy.p(class_="muted")[
             "General facts per country (no product category). Hover a cell for its "
             "source; the code links to all facts. "
             "Facts set on a group (EU, ASEAN, GCC) show where they come from."
         ],
-        h.div(class_="scroll")[h.table[h.thead[head], h.tbody[body]]],
+        htpy.div(class_="scroll")[htpy.table[htpy.thead[head], htpy.tbody[body]]],
     ]
 
 
-def section_details(data: Data) -> h.Element:
+def section_details(data: Data) -> htpy.Element:
     topics = by_key(data.rows("topics"), "topic")
     order = {row["topic"]: i for i, row in enumerate(data.rows("topics"))}
-    blocks: list[h.Node] = []
+    blocks: list[htpy.Node] = []
     for country in researched_countries(data):
         code = country["iso2"]
         facts = resolve_facts(data, code)
         keys = sorted(facts, key=lambda k: (order.get(k[0], 99), k[1], k[2]))
-        rows: list[h.Node] = []
+        rows: list[htpy.Node] = []
         for key in keys:
             resolved = facts[key]
             row = resolved.fact
             topic, category, origin = key
             rows.append(
-                h.tr[
-                    h.td[topics[topic]["label"]],
-                    h.td[category or "all", f" · from {origin}" if origin else ""],
-                    h.td(class_=status_class(row["status"]))[
+                htpy.tr[
+                    htpy.td[topics[topic]["label"]],
+                    htpy.td[category or "all", f" · from {origin}" if origin else ""],
+                    htpy.td(class_=status_class(row["status"]))[
                         row["value"] or STATUS_LABEL[as_status(row["status"])]
                     ],
-                    h.td[
+                    htpy.td[
                         STATUS_LABEL[as_status(row["status"])],
-                        h.div(class_="via")[f"via {resolved.via}"]
+                        htpy.div(class_="via")[f"via {resolved.via}"]
                         if resolved.via
                         else None,
                     ],
-                    h.td[source_link(row), h.div(class_="via")[row["research_ref"]]],
-                    h.td[row["question"]],
-                    h.td[row["notes"]],
+                    htpy.td[
+                        source_link(row), htpy.div(class_="via")[row["research_ref"]]
+                    ],
+                    htpy.td[row["question"]],
+                    htpy.td[row["notes"]],
                 ]
             )
         blocks.append(
-            h.details(id=f"c-{code}")[
-                h.summary[
+            htpy.details(id=f"c-{code}")[
+                htpy.summary[
                     f"{code} · {country['name']} ",
-                    h.span(class_="ms")[
+                    htpy.span(class_="ms")[
                         f"{country['market_status']} · {len(keys)} facts"
                     ],
                 ],
-                h.div(class_="scroll")[
-                    h.table[
-                        h.thead[
-                            h.tr[
-                                h.th["Topic"],
-                                h.th["Category"],
-                                h.th["Value"],
-                                h.th["Status"],
-                                h.th["Source"],
-                                h.th["Question"],
-                                h.th["Notes"],
+                htpy.div(class_="scroll")[
+                    htpy.table[
+                        htpy.thead[
+                            htpy.tr[
+                                htpy.th["Topic"],
+                                htpy.th["Category"],
+                                htpy.th["Value"],
+                                htpy.th["Status"],
+                                htpy.th["Source"],
+                                htpy.th["Question"],
+                                htpy.th["Notes"],
                             ]
                         ],
-                        h.tbody[rows],
+                        htpy.tbody[rows],
                     ]
                 ],
             ]
         )
-    return h.section[h.h2(id="details")["All facts per country"], blocks]
+    return htpy.section[htpy.h2(id="details")["All facts per country"], blocks]
 
 
 QUESTION_LINKED_TABLES = (
@@ -2254,179 +2256,185 @@ def question_trail(questions: list[Row]) -> list[str]:
     return lines
 
 
-def section_todo(data: Data, today: date) -> h.Element:
-    rows: list[h.Node] = []
+def section_todo(data: Data, today: date) -> htpy.Element:
+    rows: list[htpy.Node] = []
     for item in todo_items(data, today):
         q = item.question
-        due: h.Node = date_text(q["due_on"])
+        due: htpy.Node = date_text(q["due_on"])
         if item.overdue:
-            due = [date_text(q["due_on"]), h.div[chip("unverified", "overdue")]]
-        status: h.Node = q["status"]
+            due = [date_text(q["due_on"]), htpy.div[chip("unverified", "overdue")]]
+        status: htpy.Node = q["status"]
         if q["sent_on"]:
-            status = [q["status"], h.div(class_="via")[date_text(q["sent_on"])]]
+            status = [q["status"], htpy.div(class_="via")[date_text(q["sent_on"])]]
         rows.append(
-            h.tr[
-                h.td[PRIORITY_LABEL[q["priority"]]],
-                h.td(class_="num")[due],
-                h.td[q["question"]],
-                h.td[q["to"]],
-                h.td[h.strong[q["subject"]], h.div(class_="via")[q["text"]]],
-                h.td[status],
-                h.td[q["blocked_by"]],
-                h.td(class_="num")[str(item.waiting)],
+            htpy.tr[
+                htpy.td[PRIORITY_LABEL[q["priority"]]],
+                htpy.td(class_="num")[due],
+                htpy.td[q["question"]],
+                htpy.td[q["to"]],
+                htpy.td[htpy.strong[q["subject"]], htpy.div(class_="via")[q["text"]]],
+                htpy.td[status],
+                htpy.td[q["blocked_by"]],
+                htpy.td(class_="num")[str(item.waiting)],
             ]
         )
-    return h.section[
-        h.h2(id="todo")["To do"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="todo")["To do"],
+        htpy.p(class_="muted")[
             "Open questions (draft or sent), most urgent first: priority, then due "
             "date. 'Now' is needed for the next decisions, 'Before launch' before "
             "the first live order, 'Later' for later markets. 'Rows' counts the "
             "data rows the answer would settle. Set priority, due_on and "
             "blocked_by in questions.csv."
         ],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[
-                        h.th["Priority"],
-                        h.th(class_="num")["Due"],
-                        h.th["Id"],
-                        h.th["To"],
-                        h.th["Question"],
-                        h.th["Status"],
-                        h.th["Blocked by"],
-                        h.th(class_="num")["Rows"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Priority"],
+                        htpy.th(class_="num")["Due"],
+                        htpy.th["Id"],
+                        htpy.th["To"],
+                        htpy.th["Question"],
+                        htpy.th["Status"],
+                        htpy.th["Blocked by"],
+                        htpy.th(class_="num")["Rows"],
                     ]
                 ],
-                h.tbody[rows],
+                htpy.tbody[rows],
             ]
         ],
     ]
 
 
-def section_contacts(data: Data) -> h.Element:
-    rows: list[h.Node] = []
+def section_contacts(data: Data) -> htpy.Element:
+    rows: list[htpy.Node] = []
     for contact in contacts(data):
         p = contact.provider
-        name: h.Node = h.a(href=p["website"])[p["name"]] if p["website"] else p["name"]
-        trail: list[h.Node] = []
+        name: htpy.Node = (
+            htpy.a(href=p["website"])[p["name"]] if p["website"] else p["name"]
+        )
+        trail: list[htpy.Node] = []
         for line in question_trail(contact.questions):
-            trail.append(h.div[line])
+            trail.append(htpy.div[line])
         rows.append(
-            h.tr[
-                h.td[name, h.div(class_="via")[p["provider"]]],
-                h.td[p["kind"]],
-                h.td[p["relationship"]],
-                h.td(class_="num")[date_text(contact.last_sent)],
-                h.td[trail],
-                h.td[contact.next_step],
+            htpy.tr[
+                htpy.td[name, htpy.div(class_="via")[p["provider"]]],
+                htpy.td[p["kind"]],
+                htpy.td[p["relationship"]],
+                htpy.td(class_="num")[date_text(contact.last_sent)],
+                htpy.td[trail],
+                htpy.td[contact.next_step],
             ]
         )
-    return h.section[
-        h.h2(id="contacts")["Contacts"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="contacts")["Contacts"],
+        htpy.p(class_="muted")[
             "One row per provider: our relationship (providers.csv), the questions "
             "that name it (questions.csv, column providers) and the next step, "
             "taken from its most urgent open question."
         ],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[
-                        h.th["Provider"],
-                        h.th["Kind"],
-                        h.th["Relationship"],
-                        h.th(class_="num")["Last sent"],
-                        h.th["Questions"],
-                        h.th["Next step"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Provider"],
+                        htpy.th["Kind"],
+                        htpy.th["Relationship"],
+                        htpy.th(class_="num")["Last sent"],
+                        htpy.th["Questions"],
+                        htpy.th["Next step"],
                     ]
                 ],
-                h.tbody[rows],
+                htpy.tbody[rows],
             ]
         ],
     ]
 
 
-def section_questions(data: Data) -> h.Element:
+def section_questions(data: Data) -> htpy.Element:
     waiting = rows_waiting(data)
-    rows: list[h.Node] = []
+    rows: list[htpy.Node] = []
     for row in data.rows("questions"):
         rows.append(
-            h.tr[
-                h.td[row["question"]],
-                h.td[row["kind"]],
-                h.td[row["status"], h.div(class_="via")[date_text(row["sent_on"])]],
-                h.td[row["to"]],
-                h.td[h.strong[row["subject"]], h.div[row["text"]]],
-                h.td(class_="num")[str(waiting.get(row["question"], 0))],
-                h.td[row["answer"]],
+            htpy.tr[
+                htpy.td[row["question"]],
+                htpy.td[row["kind"]],
+                htpy.td[
+                    row["status"], htpy.div(class_="via")[date_text(row["sent_on"])]
+                ],
+                htpy.td[row["to"]],
+                htpy.td[htpy.strong[row["subject"]], htpy.div[row["text"]]],
+                htpy.td(class_="num")[str(waiting.get(row["question"], 0))],
+                htpy.td[row["answer"]],
             ]
         )
-    return h.section[
-        h.h2(id="questions")["Open questions"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="questions")["Open questions"],
+        htpy.p(class_="muted")[
             "Emails to send, adviser questions and pages to look up again. 'Rows' "
             "counts the table rows that point to the question."
         ],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[
-                        h.th["Id"],
-                        h.th["Kind"],
-                        h.th["Status"],
-                        h.th["To"],
-                        h.th["Question"],
-                        h.th(class_="num")["Rows"],
-                        h.th["Answer"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Id"],
+                        htpy.th["Kind"],
+                        htpy.th["Status"],
+                        htpy.th["To"],
+                        htpy.th["Question"],
+                        htpy.th(class_="num")["Rows"],
+                        htpy.th["Answer"],
                     ]
                 ],
-                h.tbody[rows],
+                htpy.tbody[rows],
             ]
         ],
     ]
 
 
-def section_compare(data: Data, today: date) -> h.Element:
+def section_compare(data: Data, today: date) -> htpy.Element:
     cards = current_cards(data, today)
-    blocks: list[h.Node] = []
+    blocks: list[htpy.Node] = []
     for weight in COMPARE_WEIGHTS:
-        head = h.tr[
-            h.th["Country"], [h.th(class_="num")[c["rate_card"]] for c in cards]
+        head = htpy.tr[
+            htpy.th["Country"], [htpy.th(class_="num")[c["rate_card"]] for c in cards]
         ]
-        rows: list[h.Node] = []
+        rows: list[htpy.Node] = []
         for country in compare_countries(data):
-            cells: list[h.Node] = []
+            cells: list[htpy.Node] = []
             for card in cards:
                 mapping = current_zone(data, card, country["iso2"], today)
                 if mapping is None:
-                    cells.append(h.td(class_="num")[""])
+                    cells.append(htpy.td(class_="num")[""])
                     continue
                 zone = mapping["zone"]
                 rate = rate_for(data, card["rate_card"], zone, weight)
                 if rate is None:
-                    cells.append(h.td(class_="num")[""])
+                    cells.append(htpy.td(class_="num")[""])
                     continue
                 status = worst(
                     (as_status(card["status"]), as_status(mapping["status"]))
                 )
                 cells.append(
-                    h.td(
+                    htpy.td(
                         class_=f"num {status_class(status)}",
                         title=f"zone {zone}: {price_text(rate, card['currency'])}",
                     )[usd_text(rate, card["currency"])]
                 )
-            rows.append(h.tr[h.td[f"{country['iso2']} {country['name']}"], cells])
+            rows.append(htpy.tr[htpy.td[f"{country['iso2']} {country['name']}"], cells])
         blocks.append(
-            h.details[
-                h.summary[f"{weight} kg"],
-                h.div(class_="scroll")[h.table[h.thead[head], h.tbody[rows]]],
+            htpy.details[
+                htpy.summary[f"{weight} kg"],
+                htpy.div(class_="scroll")[
+                    htpy.table[htpy.thead[head], htpy.tbody[rows]]
+                ],
             ]
         )
-    return h.section[
-        h.h2(id="compare")["Price per country and weight"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="compare")["Price per country and weight"],
+        htpy.p(class_="muted")[
             "Freight only, before fuel, duty-paid fee, other surcharges and any "
             "discount. "
             f"{usd_rate_note()}. A blank cell means the card has no price at that "
@@ -2474,15 +2482,15 @@ def coverage_gaps(data: Data, cards: list[Row], today: date) -> list[tuple[Row, 
     return gaps
 
 
-def section_older(data: Data, today: date) -> h.Element:
-    rows: list[h.Node] = []
+def section_older(data: Data, today: date) -> htpy.Element:
+    rows: list[htpy.Node] = []
     for card in data.rows("rate_cards"):
         ended = ended_on(card, today)
         if ended is not None:
             rows.append(
-                h.tr[
-                    h.td[card["rate_card"]],
-                    h.td[f"ended {date_text(ended)}; left out of every comparison"],
+                htpy.tr[
+                    htpy.td[card["rate_card"]],
+                    htpy.td[f"ended {date_text(ended)}; left out of every comparison"],
                 ]
             )
             continue
@@ -2497,71 +2505,74 @@ def section_older(data: Data, today: date) -> h.Element:
                 }
             )
             rows.append(
-                h.tr[
-                    h.td[card["rate_card"]],
-                    h.td[
+                htpy.tr[
+                    htpy.td[card["rate_card"]],
+                    htpy.td[
                         f"replaced by {newer['rate_card']} where that card has a "
                         f"price ({' '.join(places)}); still compared elsewhere"
                     ],
                 ]
             )
-    return h.section[
-        h.h2(id="older")["Older offers"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="older")["Older offers"],
+        htpy.p(class_="muted")[
             "Cards past their valid_until or effective_to date, and cards a newer "
             "card supersedes. The comparisons show only current offers; the rate "
             "cards section below still lists every card."
         ],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[h.tr[h.th["Rate card"], h.th["Why it is not compared"]]],
-                h.tbody[rows or h.tr[h.td(colspan="2")["none"]]],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[htpy.th["Rate card"], htpy.th["Why it is not compared"]]
+                ],
+                htpy.tbody[rows or htpy.tr[htpy.td(colspan="2")["none"]]],
             ]
         ],
     ]
 
 
-def section_all_in(data: Data, today: date) -> h.Element:
+def section_all_in(data: Data, today: date) -> htpy.Element:
     cards = all_in_cards(data, today)
     express = [c for c in cards if c["rate_card"] in BREAK_EVEN_CARDS]
-    blocks: list[h.Node] = []
+    blocks: list[htpy.Node] = []
     for scenario in data.rows("scenarios"):
         grid = all_in_grid(data, scenario, cards, today)
-        head = h.tr[
-            h.th["Destination"], [h.th(class_="num")[c["rate_card"]] for c in cards]
+        head = htpy.tr[
+            htpy.th["Destination"],
+            [htpy.th(class_="num")[c["rate_card"]] for c in cards],
         ]
-        rows: list[h.Node] = []
-        even_rows: list[h.Node] = []
+        rows: list[htpy.Node] = []
+        even_rows: list[htpy.Node] = []
         for code, results in zip(ALL_IN_DESTINATIONS, grid, strict=True):
-            cells: list[h.Node] = []
+            cells: list[htpy.Node] = []
             for result in results:
                 if result is None:
-                    cells.append(h.td(class_="num")[""])
+                    cells.append(htpy.td(class_="num")[""])
                     continue
                 cells.append(
-                    h.td(
+                    htpy.td(
                         class_=f"num {status_class(result.status)}",
                         title=all_in_title(result),
                     )[all_in_text(result)]
                 )
-            rows.append(h.tr[h.td[country_label(data, code)], cells])
+            rows.append(htpy.tr[htpy.td[country_label(data, code)], cells])
 
             best = cheapest_benchmark(results, data)
-            even_cells: list[h.Node] = []
+            even_cells: list[htpy.Node] = []
             for card in express:
                 result = results[cards.index(card)]
                 if result is None or best is None:
-                    even_cells.append(h.td(class_="num")[""])
+                    even_cells.append(htpy.td(class_="num")[""])
                     continue
                 even_cells.append(
-                    h.td(class_="num", title=all_in_title(result))[
+                    htpy.td(class_="num", title=all_in_title(result))[
                         discount_text(break_even(result, best))
                     ]
                 )
             even_rows.append(
-                h.tr[
-                    h.td[country_label(data, code)],
-                    h.td(title=all_in_title(best) if best else "")[
+                htpy.tr[
+                    htpy.td[country_label(data, code)],
+                    htpy.td(title=all_in_title(best) if best else "")[
                         f"{best.card['rate_card']} {all_in_text(best)}"
                         if best
                         else "none usable"
@@ -2571,32 +2582,37 @@ def section_all_in(data: Data, today: date) -> h.Element:
             )
         goods = money(int(scenario["goods_value_minor"]), scenario["currency"])
         blocks.append(
-            h.details[
-                h.summary[
+            htpy.details[
+                htpy.summary[
                     f"{scenario['label']}: {scenario['weight_kg']} kg, goods {goods}"
                 ],
-                h.div(class_="scroll")[h.table[h.thead[head], h.tbody[rows]]],
-                h.div(style="padding:8px 10px")[
-                    h.strong["Freight discount the express list cards need"],
+                htpy.div(class_="scroll")[
+                    htpy.table[htpy.thead[head], htpy.tbody[rows]]
+                ],
+                htpy.div(style="padding:8px 10px")[
+                    htpy.strong["Freight discount the express list cards need"],
                     " to match the cheapest usable economy line (hover for parts)",
                 ],
-                h.div(class_="scroll")[
-                    h.table[
-                        h.thead[
-                            h.tr[
-                                h.th["Destination"],
-                                h.th["Cheapest usable economy line"],
-                                [h.th(class_="num")[c["rate_card"]] for c in express],
+                htpy.div(class_="scroll")[
+                    htpy.table[
+                        htpy.thead[
+                            htpy.tr[
+                                htpy.th["Destination"],
+                                htpy.th["Cheapest usable economy line"],
+                                [
+                                    htpy.th(class_="num")[c["rate_card"]]
+                                    for c in express
+                                ],
                             ]
                         ],
-                        h.tbody[even_rows],
+                        htpy.tbody[even_rows],
                     ]
                 ],
             ]
         )
-    return h.section[
-        h.h2(id="all-in")["All-in cost per parcel"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="all-in")["All-in cost per parcel"],
+        htpy.p(class_="muted")[
             "List price per parcel for a B2C delivery to a home address, duty-paid "
             "where the service can do it: freight at the card's next weight break, "
             "fuel (also on the fees it applies to), the fees charged on every "
@@ -2611,31 +2627,31 @@ def section_all_in(data: Data, today: date) -> h.Element:
             "part is converted to US$ and then summed, display only. "
             f"{usd_rate_note()}."
         ],
-        h.ul(class_="muted")[
-            h.li[
+        htpy.ul(class_="muted")[
+            htpy.li[
                 "≥: a part is missing (e.g. fuel or a duty-paid fee not known), "
                 "so the total is a lower bound."
             ],
-            h.li[
+            htpy.li[
                 "DAP: duty or tax is due at the border and the service does not "
                 "pay it, so the buyer would pay at the door. Not usable for us "
                 "as merchant of record."
             ],
-            h.li[
+            htpy.li[
                 "DDP?: duty or tax may be due and the service's duty-paid terms "
                 "are unknown."
             ],
-            h.li[
+            htpy.li[
                 "incl. VAT: the card's prices include Vietnamese VAT, unlike most "
                 "others; shown as quoted, not adjusted. Where a card's prices "
                 "include fuel, the fuel part is zero."
             ],
-            h.li[
+            htpy.li[
                 "Cell colour is the worst status among the parts and the border "
                 "rule. The billed weight is the greater of the actual and the "
                 "volumetric weight of the reference box."
             ],
-            h.li[
+            htpy.li[
                 "Discount: the share off freight (fuel follows net freight, fees "
                 "stay) at which the express list price equals the cheapest "
                 "economy line that is published (verified or secondary), "
@@ -2644,15 +2660,15 @@ def section_all_in(data: Data, today: date) -> h.Element:
             ],
         ],
         blocks,
-        h.h3["Reference destinations without a price"],
-        h.ul(class_="muted")[
+        htpy.h3["Reference destinations without a price"],
+        htpy.ul(class_="muted")[
             [
-                h.li[f"{card['rate_card']}: {missing}"]
+                htpy.li[f"{card['rate_card']}: {missing}"]
                 for card, missing in coverage_gaps(data, cards, today)
             ]
-            or h.li["none"]
+            or htpy.li["none"]
         ],
-        h.h3["Border rules used"],
+        htpy.h3["Border rules used"],
         section_border_rules(data),
     ]
 
@@ -2710,9 +2726,9 @@ def payers_of(result: AllIn, charges: tuple[Charge, ...]) -> list[Payer]:
     return payers
 
 
-def sum_cell(items: list[Item], suffix: str = "") -> h.Element:
+def sum_cell(items: list[Item], suffix: str = "") -> htpy.Element:
     if not items:
-        return h.td(class_="num")["–"]
+        return htpy.td(class_="num")["–"]
     total = Fraction(0)
     complete = True
     for item in items:
@@ -2724,7 +2740,7 @@ def sum_cell(items: list[Item], suffix: str = "") -> h.Element:
     if all(item.cents is None for item in items):
         text = "?"
     status = worst(item.status for item in items)
-    return h.td(
+    return htpy.td(
         class_=f"num {status_class(status)}", title="\n".join(item_lines(items))
     )[f"{text} {suffix}".strip()]
 
@@ -2750,12 +2766,12 @@ LANDED_COLUMNS: tuple[str, ...] = (
 )
 
 
-def section_landed(data: Data, today: date) -> h.Element:
+def section_landed(data: Data, today: date) -> htpy.Element:
     cards = all_in_cards(data, today)
-    blocks: list[h.Node] = []
+    blocks: list[htpy.Node] = []
     for scenario in data.rows("scenarios"):
         grid = all_in_grid(data, scenario, cards, today)
-        rows: list[h.Node] = []
+        rows: list[htpy.Node] = []
         for code, results in zip(ALL_IN_DESTINATIONS, grid, strict=True):
             first = True
             for result in results:
@@ -2764,9 +2780,9 @@ def section_landed(data: Data, today: date) -> h.Element:
                 duty_payers = payers_of(result, DUTY_CHARGES)
                 tax_payers = payers_of(result, TAX_CHARGES)
                 rows.append(
-                    h.tr(class_="group-start" if first else None)[
-                        h.td[country_label(data, code) if first else ""],
-                        h.td[result.card["rate_card"]],
+                    htpy.tr(class_="group-start" if first else None)[
+                        htpy.td[country_label(data, code) if first else ""],
+                        htpy.td[result.card["rate_card"]],
                         sum_cell(part_items(result, ("freight",))),
                         sum_cell(part_items(result, ("fuel",))),
                         sum_cell(part_items(result, ("fee",))),
@@ -2779,12 +2795,12 @@ def section_landed(data: Data, today: date) -> h.Element:
                             landed_items(result, TAX_CHARGES),
                             " ".join(PAYER_SHORT[p] for p in tax_payers),
                         ),
-                        h.td(
+                        htpy.td(
                             class_=f"num {status_class(result.status)}",
                             title=all_in_title(result),
                         )[all_in_text(result)],
-                        h.td(class_=f"num {status_class(landed_status(result))}")[
-                            h.strong[landed_total_text(result)]
+                        htpy.td(class_=f"num {status_class(landed_status(result))}")[
+                            htpy.strong[landed_total_text(result)]
                         ],
                     ]
                 )
@@ -2794,36 +2810,36 @@ def section_landed(data: Data, today: date) -> h.Element:
             f"{scenario['length_cm']}×{scenario['width_cm']}×{scenario['height_cm']} cm"
         )
         blocks.append(
-            h.details[
-                h.summary[
+            htpy.details[
+                htpy.summary[
                     f"{scenario['label']}: {scenario['weight_kg']} kg, {size}, "
                     f"{scenario['category'] or 'any category'}, goods {goods}"
                 ],
-                h.div(class_="scroll")[
-                    h.table[
-                        h.thead[
-                            h.tr[
-                                h.th["Destination"],
-                                h.th["Rate card"],
-                                [h.th(class_="num")[c] for c in LANDED_COLUMNS],
+                htpy.div(class_="scroll")[
+                    htpy.table[
+                        htpy.thead[
+                            htpy.tr[
+                                htpy.th["Destination"],
+                                htpy.th["Rate card"],
+                                [htpy.th(class_="num")[c] for c in LANDED_COLUMNS],
                             ]
                         ],
-                        h.tbody[rows],
+                        htpy.tbody[rows],
                     ]
                 ],
             ]
         )
-    return h.section[
-        h.h2(id="landed")["Landed cost per parcel"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="landed")["Landed cost per parcel"],
+        htpy.p(class_="muted")[
             "The all-in carrier price split into its parts, plus the duties, "
             "customs fees and taxes on the parcel from landed_rates.csv, for the "
             "reference parcels' product category. Amounts in US$, exact until "
             "rounded for display. Hover a cell for its parts, notes and status. "
             f"{usd_rate_note()}."
         ],
-        h.ul(class_="muted")[
-            h.li[
+        htpy.ul(class_="muted")[
+            htpy.li[
                 "Who pays: checkout = we collect it from the buyer at checkout "
                 "through the country's seller scheme and pay it ourselves; "
                 "carrier = collected at the border and billed to us by a "
@@ -2831,7 +2847,7 @@ def section_landed(data: Data, today: date) -> h.Element:
                 "by a duties-unpaid service (not usable for us as merchant of "
                 "record); ? = the service's duty-paid terms are unknown."
             ],
-            h.li[
+            htpy.li[
                 "Duties and taxes use one figure per destination and category "
                 "(see each row's note for the end of a range taken). Free-trade "
                 "preferences (ATIGA, EVFTA, ...) are not assumed. Taxes are "
@@ -2839,7 +2855,7 @@ def section_landed(data: Data, today: date) -> h.Element:
                 "the carrier's freight and fuel stand in for the shipping the "
                 "buyer pays."
             ],
-            h.li[
+            htpy.li[
                 "Landed total: carrier total plus every duty, fee and tax, "
                 "whoever pays it. ≥: a part is missing, so it is a lower bound."
             ],
@@ -2848,8 +2864,8 @@ def section_landed(data: Data, today: date) -> h.Element:
     ]
 
 
-def section_border_rules(data: Data) -> h.Element:
-    rows: list[h.Node] = []
+def section_border_rules(data: Data) -> htpy.Element:
+    rows: list[htpy.Node] = []
     for row in data.rows("border_charges"):
         limit = (
             money(int(row["above_minor"]), row["currency"])
@@ -2857,106 +2873,108 @@ def section_border_rules(data: Data) -> h.Element:
             else ""
         )
         rows.append(
-            h.tr[
-                h.td[row["country"]],
-                h.td[row["category"]],
-                h.td[row["rule"]],
-                h.td(class_="num")[limit],
-                h.td[row["basis"]],
-                h.td(class_=status_class(row["status"]))[
+            htpy.tr[
+                htpy.td[row["country"]],
+                htpy.td[row["category"]],
+                htpy.td[row["rule"]],
+                htpy.td(class_="num")[limit],
+                htpy.td[row["basis"]],
+                htpy.td(class_=status_class(row["status"]))[
                     STATUS_LABEL[as_status(row["status"])]
                 ],
-                h.td[source_link(row)],
-                h.td[row["question"]],
-                h.td[row["notes"]],
+                htpy.td[source_link(row)],
+                htpy.td[row["question"]],
+                htpy.td[row["notes"]],
             ]
         )
-    return h.div(class_="scroll")[
-        h.table[
-            h.thead[
-                h.tr[
-                    h.th["Place"],
-                    h.th["Category"],
-                    h.th["Duty or tax at the border"],
-                    h.th(class_="num")["Above"],
-                    h.th["Value tested"],
-                    h.th["Status"],
-                    h.th["Source"],
-                    h.th["Question"],
-                    h.th["Notes"],
+    return htpy.div(class_="scroll")[
+        htpy.table[
+            htpy.thead[
+                htpy.tr[
+                    htpy.th["Place"],
+                    htpy.th["Category"],
+                    htpy.th["Duty or tax at the border"],
+                    htpy.th(class_="num")["Above"],
+                    htpy.th["Value tested"],
+                    htpy.th["Status"],
+                    htpy.th["Source"],
+                    htpy.th["Question"],
+                    htpy.th["Notes"],
                 ]
             ],
-            h.tbody[rows],
+            htpy.tbody[rows],
         ]
     ]
 
 
-def section_carriers(data: Data) -> h.Element:
+def section_carriers(data: Data) -> htpy.Element:
     providers = data.rows("providers")
     services = data.rows("services")
     provider_rows = [
-        h.tr[
-            h.td[p["provider"]],
-            h.td[h.a(href=p["website"])[p["name"]] if p["website"] else p["name"]],
-            h.td[p["kind"]],
-            h.td[p["relationship"]],
-            h.td[p["notes"]],
+        htpy.tr[
+            htpy.td[p["provider"]],
+            htpy.td[
+                htpy.a(href=p["website"])[p["name"]] if p["website"] else p["name"]
+            ],
+            htpy.td[p["kind"]],
+            htpy.td[p["relationship"]],
+            htpy.td[p["notes"]],
         ]
         for p in providers
     ]
     service_rows = [
-        h.tr[
-            h.td[s["service"]],
-            h.td[s["name"]],
-            h.td[s["origin"]],
-            h.td[s["tier"]],
-            h.td[s["ddp"]],
-            h.td(class_="num")[s["volumetric_divisor"]],
-            h.td(class_="num")[s["weight_step_kg"]],
-            h.td(class_=status_class(s["status"]))[
+        htpy.tr[
+            htpy.td[s["service"]],
+            htpy.td[s["name"]],
+            htpy.td[s["origin"]],
+            htpy.td[s["tier"]],
+            htpy.td[s["ddp"]],
+            htpy.td(class_="num")[s["volumetric_divisor"]],
+            htpy.td(class_="num")[s["weight_step_kg"]],
+            htpy.td(class_=status_class(s["status"]))[
                 STATUS_LABEL[as_status(s["status"])]
             ],
-            h.td[source_link(s), h.div(class_="via")[s["research_ref"]]],
-            h.td[s["question"]],
-            h.td[s["notes"]],
+            htpy.td[source_link(s), htpy.div(class_="via")[s["research_ref"]]],
+            htpy.td[s["question"]],
+            htpy.td[s["notes"]],
         ]
         for s in services
     ]
-    return h.section[
-        h.h2(id="carriers")["Providers and services"],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[
-                        h.th["Id"],
-                        h.th["Provider"],
-                        h.th["Kind"],
-                        h.th["Our contact"],
-                        h.th["Notes"],
+    return htpy.section[
+        htpy.h2(id="carriers")["Providers and services"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Id"],
+                        htpy.th["Provider"],
+                        htpy.th["Kind"],
+                        htpy.th["Our contact"],
+                        htpy.th["Notes"],
                     ]
                 ],
-                h.tbody[provider_rows],
+                htpy.tbody[provider_rows],
             ]
         ],
-        h.h3["Services"],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[
-                        h.th["Id"],
-                        h.th["Service"],
-                        h.th["Origin"],
-                        h.th["Tier"],
-                        h.th["DDP"],
-                        h.th(class_="num")["Divisor"],
-                        h.th(class_="num")["Step kg"],
-                        h.th["Status"],
-                        h.th["Source"],
-                        h.th["Question"],
-                        h.th["Notes"],
+        htpy.h3["Services"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Id"],
+                        htpy.th["Service"],
+                        htpy.th["Origin"],
+                        htpy.th["Tier"],
+                        htpy.th["DDP"],
+                        htpy.th(class_="num")["Divisor"],
+                        htpy.th(class_="num")["Step kg"],
+                        htpy.th["Status"],
+                        htpy.th["Source"],
+                        htpy.th["Question"],
+                        htpy.th["Notes"],
                     ]
                 ],
-                h.tbody[service_rows],
+                htpy.tbody[service_rows],
             ]
         ],
     ]
@@ -2983,8 +3001,8 @@ def offer_text(card: Row) -> str:
     return "; ".join(parts) + "." if parts else ""
 
 
-def section_rate_cards(data: Data) -> h.Element:
-    blocks: list[h.Node] = []
+def section_rate_cards(data: Data) -> htpy.Element:
+    blocks: list[htpy.Node] = []
     for card in data.rows("rate_cards"):
         name = card["rate_card"]
         currency = card["currency"]
@@ -2996,34 +3014,35 @@ def section_rate_cards(data: Data) -> h.Element:
                 members.setdefault(row["zone"], []).append(row["destination"])
                 if row["status"] != "verified":
                     assumed.append(row)
-        rows: list[h.Node] = []
+        rows: list[htpy.Node] = []
         for weight in weights_of(data, name):
-            cells: list[h.Node] = []
+            cells: list[htpy.Node] = []
             for zone in zones:
                 rate = rate_for(data, name, zone, weight)
                 if rate is None:
-                    cells.append(h.td(class_="num")[""])
+                    cells.append(htpy.td(class_="num")[""])
                     continue
                 cells.append(
-                    h.td(class_="num", title=usd_text(rate, currency))[
+                    htpy.td(class_="num", title=usd_text(rate, currency))[
                         price_text(rate, currency).split(" ", 1)[1]
                     ]
                 )
-            rows.append(h.tr[h.th(class_="num")[f"{weight} kg"], cells])
+            rows.append(htpy.tr[htpy.th(class_="num")[f"{weight} kg"], cells])
         zone_rows = [
-            h.tr[h.td[zone], h.td[" ".join(members.get(zone, []))]] for zone in members
+            htpy.tr[htpy.td[zone], htpy.td[" ".join(members.get(zone, []))]]
+            for zone in members
         ]
         blocks.append(
-            h.details[
-                h.summary[
+            htpy.details[
+                htpy.summary[
                     f"{name} ",
-                    h.span(class_="ms")[
+                    htpy.span(class_="ms")[
                         f"{card['kind']} · {currency} · "
                         f"{STATUS_LABEL[as_status(card['status'])]}"
                     ],
                 ],
-                h.div(style="padding:8px 10px")[
-                    h.p[
+                htpy.div(style="padding:8px 10px")[
+                    htpy.p[
                         chip(as_status(card["status"])),
                         (
                             f" Valid {date_text(card['effective_from']) or '?'} to "
@@ -3036,28 +3055,28 @@ def section_rate_cards(data: Data) -> h.Element:
                         f" · {card['research_ref']}",
                         f" · question {card['question']}" if card["question"] else "",
                     ],
-                    h.p(class_="muted")[card["notes"]] if card["notes"] else None,
+                    htpy.p(class_="muted")[card["notes"]] if card["notes"] else None,
                 ],
-                h.div(class_="scroll")[
-                    h.table[
-                        h.thead[
-                            h.tr[
-                                h.th(class_="num")[currency],
-                                [h.th(class_="num")[f"zone {z}"] for z in zones],
+                htpy.div(class_="scroll")[
+                    htpy.table[
+                        htpy.thead[
+                            htpy.tr[
+                                htpy.th(class_="num")[currency],
+                                [htpy.th(class_="num")[f"zone {z}"] for z in zones],
                             ]
                         ],
-                        h.tbody[rows],
+                        htpy.tbody[rows],
                     ]
                 ],
-                h.div(class_="scroll")[
-                    h.table[
-                        h.thead[h.tr[h.th["Zone"], h.th["Destinations"]]],
-                        h.tbody[zone_rows],
+                htpy.div(class_="scroll")[
+                    htpy.table[
+                        htpy.thead[htpy.tr[htpy.th["Zone"], htpy.th["Destinations"]]],
+                        htpy.tbody[zone_rows],
                     ]
                 ],
-                h.ul(class_="muted")[
+                htpy.ul(class_="muted")[
                     [
-                        h.li[
+                        htpy.li[
                             chip(as_status(row["status"])),
                             f" {row['destination']} → zone {row['zone']}",
                             f": {row['notes']}" if row["notes"] else "",
@@ -3069,17 +3088,17 @@ def section_rate_cards(data: Data) -> h.Element:
                 else None,
             ]
         )
-    return h.section[
-        h.h2(id="rates")["Rate cards"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="rates")["Rate cards"],
+        htpy.p(class_="muted")[
             "Amounts in the card's currency; hover for the US$ equivalent."
         ],
         blocks,
     ]
 
 
-def section_surcharges(data: Data) -> h.Element:
-    rows: list[h.Node] = []
+def section_surcharges(data: Data) -> htpy.Element:
+    rows: list[htpy.Node] = []
     for s in data.rows("surcharges"):
         amount = ""
         if s["rate_percent"]:
@@ -3096,52 +3115,52 @@ def section_surcharges(data: Data) -> h.Element:
         if s["min_amount_minor"]:
             amount = f"{amount}, min {money(int(s['min_amount_minor']), s['currency'])}"
         rows.append(
-            h.tr[
-                h.td[s["service"]],
-                h.td[s["rate_card"] or "all"],
-                h.td[s["surcharge"]],
-                h.td[s["basis"]],
-                h.td(class_="num")[amount or "?"],
-                h.td[s["trigger"]],
-                h.td[s["destinations"]],
-                h.td[s["fuel_applies"]],
-                h.td[s["applies_when"]],
-                h.td(class_=status_class(s["status"]))[
+            htpy.tr[
+                htpy.td[s["service"]],
+                htpy.td[s["rate_card"] or "all"],
+                htpy.td[s["surcharge"]],
+                htpy.td[s["basis"]],
+                htpy.td(class_="num")[amount or "?"],
+                htpy.td[s["trigger"]],
+                htpy.td[s["destinations"]],
+                htpy.td[s["fuel_applies"]],
+                htpy.td[s["applies_when"]],
+                htpy.td(class_=status_class(s["status"]))[
                     STATUS_LABEL[as_status(s["status"])]
                 ],
-                h.td[source_link(s)],
-                h.td[s["question"]],
-                h.td[s["notes"]],
+                htpy.td[source_link(s)],
+                htpy.td[s["question"]],
+                htpy.td[s["notes"]],
             ]
         )
-    return h.section[
-        h.h2(id="surcharges")["Surcharges"],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[
-                        h.th["Service"],
-                        h.th["Rate card"],
-                        h.th["Surcharge"],
-                        h.th["Basis"],
-                        h.th(class_="num")["Amount"],
-                        h.th["Charged"],
-                        h.th["Destinations"],
-                        h.th["Fuel on it"],
-                        h.th["When"],
-                        h.th["Status"],
-                        h.th["Source"],
-                        h.th["Question"],
-                        h.th["Notes"],
+    return htpy.section[
+        htpy.h2(id="surcharges")["Surcharges"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Service"],
+                        htpy.th["Rate card"],
+                        htpy.th["Surcharge"],
+                        htpy.th["Basis"],
+                        htpy.th(class_="num")["Amount"],
+                        htpy.th["Charged"],
+                        htpy.th["Destinations"],
+                        htpy.th["Fuel on it"],
+                        htpy.th["When"],
+                        htpy.th["Status"],
+                        htpy.th["Source"],
+                        htpy.th["Question"],
+                        htpy.th["Notes"],
                     ]
                 ],
-                h.tbody[rows],
+                htpy.tbody[rows],
             ]
         ],
     ]
 
 
-def section_transit(data: Data) -> h.Element:
+def section_transit(data: Data) -> htpy.Element:
     services: list[str] = []
     destinations: list[str] = []
     cell: dict[tuple[str, str], Row] = {}
@@ -3151,98 +3170,101 @@ def section_transit(data: Data) -> h.Element:
         if row["destination"] not in destinations:
             destinations.append(row["destination"])
         cell[(row["destination"], row["service"])] = row
-    rows: list[h.Node] = []
+    rows: list[htpy.Node] = []
     for dest in destinations:
-        cells: list[h.Node] = []
+        cells: list[htpy.Node] = []
         for service in services:
             row = cell.get((dest, service))
             if row is None:
-                cells.append(h.td(class_="num")[""])
+                cells.append(htpy.td(class_="num")[""])
                 continue
             label = STATUS_LABEL[as_status(row["status"])]
             title = f"{label}. {row['source']}. {row['notes']}".strip()
             cells.append(
-                h.td(class_=f"num {status_class(row['status'])}", title=title)[
+                htpy.td(class_=f"num {status_class(row['status'])}", title=title)[
                     f"{row['days_min']}–{row['days_max']}"
                 ]
             )
-        rows.append(h.tr[h.td[dest], cells])
+        rows.append(htpy.tr[htpy.td[dest], cells])
     restriction_rows = [
-        h.tr[
-            h.td[r["service"]],
-            h.td[r["category"]],
-            h.td[r["rule"]],
-            h.td(class_=status_class(r["status"]))[
+        htpy.tr[
+            htpy.td[r["service"]],
+            htpy.td[r["category"]],
+            htpy.td[r["rule"]],
+            htpy.td(class_=status_class(r["status"]))[
                 STATUS_LABEL[as_status(r["status"])]
             ],
-            h.td[r["notes"]],
-            h.td[r["research_ref"]],
+            htpy.td[r["notes"]],
+            htpy.td[r["research_ref"]],
         ]
         for r in data.rows("service_restrictions")
     ]
-    return h.section[
-        h.h2(id="transit")["Transit days"],
-        h.p(class_="muted")[
+    return htpy.section[
+        htpy.h2(id="transit")["Transit days"],
+        htpy.p(class_="muted")[
             "Business days door to door from HCMC or Hanoi. Destinations are "
             "countries or research regions (see groups.csv)."
         ],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[h.th["Destination"], [h.th(class_="num")[s] for s in services]]
-                ],
-                h.tbody[rows],
-            ]
-        ],
-        h.h3["Restrictions per product category"],
-        h.div(class_="scroll")[
-            h.table[
-                h.thead[
-                    h.tr[
-                        h.th["Service"],
-                        h.th["Category"],
-                        h.th["Rule"],
-                        h.th["Status"],
-                        h.th["Notes"],
-                        h.th["Source"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Destination"],
+                        [htpy.th(class_="num")[s] for s in services],
                     ]
                 ],
-                h.tbody[restriction_rows],
+                htpy.tbody[rows],
+            ]
+        ],
+        htpy.h3["Restrictions per product category"],
+        htpy.div(class_="scroll")[
+            htpy.table[
+                htpy.thead[
+                    htpy.tr[
+                        htpy.th["Service"],
+                        htpy.th["Category"],
+                        htpy.th["Rule"],
+                        htpy.th["Status"],
+                        htpy.th["Notes"],
+                        htpy.th["Source"],
+                    ]
+                ],
+                htpy.tbody[restriction_rows],
             ]
         ],
     ]
 
 
-def section_all_countries(data: Data) -> h.Element:
+def section_all_countries(data: Data) -> htpy.Element:
     rows = [
-        h.tr[
-            h.td[c["iso2"]],
-            h.td[c["iso3"]],
-            h.td[c["name"]],
-            h.td[c["subregion"] or c["region"]],
-            h.td[c["currency"]],
-            h.td[c["market_status"]],
-            h.td[c["status_note"]],
+        htpy.tr[
+            htpy.td[c["iso2"]],
+            htpy.td[c["iso3"]],
+            htpy.td[c["name"]],
+            htpy.td[c["subregion"] or c["region"]],
+            htpy.td[c["currency"]],
+            htpy.td[c["market_status"]],
+            htpy.td[c["status_note"]],
         ]
         for c in data.rows("countries")
     ]
-    return h.section[
-        h.details(id="countries")[
-            h.summary[f"All {len(rows)} countries (ISO 3166-1)"],
-            h.div(class_="scroll")[
-                h.table[
-                    h.thead[
-                        h.tr[
-                            h.th["ISO2"],
-                            h.th["ISO3"],
-                            h.th["Name"],
-                            h.th["Region"],
-                            h.th["Currency"],
-                            h.th["Status"],
-                            h.th["Note"],
+    return htpy.section[
+        htpy.details(id="countries")[
+            htpy.summary[f"All {len(rows)} countries (ISO 3166-1)"],
+            htpy.div(class_="scroll")[
+                htpy.table[
+                    htpy.thead[
+                        htpy.tr[
+                            htpy.th["ISO2"],
+                            htpy.th["ISO3"],
+                            htpy.th["Name"],
+                            htpy.th["Region"],
+                            htpy.th["Currency"],
+                            htpy.th["Status"],
+                            htpy.th["Note"],
                         ]
                     ],
-                    h.tbody[rows],
+                    htpy.tbody[rows],
                 ]
             ],
         ]
@@ -3250,38 +3272,38 @@ def section_all_countries(data: Data) -> h.Element:
 
 
 def build_html(data: Data, today: date) -> str:
-    page = h.html(lang="en")[
-        h.head[
-            h.meta(charset="utf-8"),
-            h.meta(name="viewport", content="width=device-width, initial-scale=1"),
-            h.title["Markets Data"],
-            h.style[CSS],
+    page = htpy.html(lang="en")[
+        htpy.head[
+            htpy.meta(charset="utf-8"),
+            htpy.meta(name="viewport", content="width=device-width, initial-scale=1"),
+            htpy.title["Markets Data"],
+            htpy.style[CSS],
         ],
-        h.body[
-            h.main[
-                h.h1["Markets and logistics data"],
-                h.p(class_="muted")[
+        htpy.body[
+            htpy.main[
+                htpy.h1["Markets and logistics data"],
+                htpy.p(class_="muted")[
                     f"Generated {date_text(today.isoformat())} from "
                     "docs/markets/*.csv by scripts/markets.py. "
                     "Do not edit this page; edit the CSVs. "
                     "Origin: Vietnam. Plan: docs/plan-markets-data.md."
                 ],
                 section_legend(data),
-                h.nav[
-                    h.a(href="#overview")["Overview"],
-                    h.a(href="#todo")["To do"],
-                    h.a(href="#contacts")["Contacts"],
-                    h.a(href="#details")["Facts per country"],
-                    h.a(href="#questions")["Open questions"],
-                    h.a(href="#compare")["Price comparison"],
-                    h.a(href="#all-in")["All-in cost"],
-                    h.a(href="#landed")["Landed cost"],
-                    h.a(href="#older")["Older offers"],
-                    h.a(href="#carriers")["Providers"],
-                    h.a(href="#rates")["Rate cards"],
-                    h.a(href="#surcharges")["Surcharges"],
-                    h.a(href="#transit")["Transit"],
-                    h.a(href="#countries")["All countries"],
+                htpy.nav[
+                    htpy.a(href="#overview")["Overview"],
+                    htpy.a(href="#todo")["To do"],
+                    htpy.a(href="#contacts")["Contacts"],
+                    htpy.a(href="#details")["Facts per country"],
+                    htpy.a(href="#questions")["Open questions"],
+                    htpy.a(href="#compare")["Price comparison"],
+                    htpy.a(href="#all-in")["All-in cost"],
+                    htpy.a(href="#landed")["Landed cost"],
+                    htpy.a(href="#older")["Older offers"],
+                    htpy.a(href="#carriers")["Providers"],
+                    htpy.a(href="#rates")["Rate cards"],
+                    htpy.a(href="#surcharges")["Surcharges"],
+                    htpy.a(href="#transit")["Transit"],
+                    htpy.a(href="#countries")["All countries"],
                 ],
                 section_overview(data),
                 section_todo(data, today),

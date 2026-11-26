@@ -1,5 +1,0 @@
-id: strftime-only-in-dates
-valid:
-  - format_moment(now)
-invalid:
-  - now.strftime("%d-%b-%Y")

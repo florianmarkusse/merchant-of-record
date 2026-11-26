@@ -97,8 +97,10 @@ this project.
 - Checks: the shared hooks run them, vulture (from `[tool.vulture]`) and
   `npx tsc` (from `tsconfig.json`) included; vulture's reviewed false
   positives are in `vulture_whitelist.py`. A rule ruff cannot say becomes an
-  ast-grep rule (`ast-grep/rules/`, examples in `ast-grep/rule-tests/`;
-  `uv run ast-grep scan` shows its cases). A failing check says why.
+  ast-grep rule: in the conventions' `ast-grep/` when it holds for every
+  project (the hook runs those everywhere), otherwise here
+  (`ast-grep/rules/`, examples in `ast-grep/rule-tests/`; `uv run ast-grep
+  scan` shows its cases). A failing check says why.
   `typings/` holds stubs for the untyped parts we call (WeasyPrint, for
   the invoice PDF; it also needs Pango from the system). `scripts/` holds
   PEP 723 scripts with their own dependencies (`uv run scripts/markets.py

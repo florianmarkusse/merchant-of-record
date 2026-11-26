@@ -1,4 +1,5 @@
-# Rules ruff cannot say (AGENTS.md, Checks). Run by
+# This project's rules ruff cannot say (AGENTS.md, Checks); the shared
+# ones live in ~/Desktop/conventions/ast-grep/. Run by
 # tests/test_ast_grep_rules.py: `ast-grep scan` must find nothing, and each
 # rule's examples in ast-grep/rule-tests/ must hold (`ast-grep test`).
 ruleDirs:
