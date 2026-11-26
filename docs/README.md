@@ -31,9 +31,11 @@ message shapes:
 
 6. Shipments against the fake carrier in every mode
    (`plan-shipments.md` §1): 6a, what checkout refuses and booking a
-   label on `order_paid`, is built; next 6b, tracking and milestones;
-   then 6c, the echo flow retired, and with it the echo ignores of the
-   `typed-ids` ast-grep rule.
+   label on `order_paid`, is built; next 6b, tracking and milestones
+   (its eight steps are in `plan-shipments.md` §1; the fake's tracking
+   first, its design confirmed before building); then 6c, the echo flow
+   retired, and with it the echo ignores of the `typed-ids` ast-grep
+   rule.
 7. Carrier invoice import and its ledger entries.
 8. Returns and refunds, chargebacks (`plan-psp-integration.md` §5).
 9. Payout release and payout runs against the fake rail

@@ -28,10 +28,39 @@ entries.
   commercial invoice stored, a refused booking, cancelling the extra
   labels a `compensable` resend made, a staff shipments page, the label
   through the orders API.
-- **6b: tracking (next).** The carrier inbox in every mode (fat and thin
-  webhooks, polling), shipment events, the status derived from the set of
-  events, milestones and their facts, the order page and orders API
-  showing them.
+- **6b: tracking (next).** What 6a-2 left for it: `tracking_mode`,
+  `poll_interval_s` and `webhook_secret` are on every carrier account and
+  the seed spreads the modes, but nothing reads them; `tracking_status`
+  is on every shipment and stays `none`; `shipment_label_booked` has no
+  consumer yet. 6b builds, in this order:
+  1. The fake carrier's tracking: a script per shipment (delivered, or
+     `LOST` / `RETURN` from the request), `A/events/release` (one event
+     or `all`), `A/tracking?cursor`, webhook subscriptions with signed
+     fat and thin pushes, and the tracking faults (a push twice, a bad
+     signature, events out of order) (§3).
+  2. `carrier_inbox` (`psp_inbox`'s shape) and the webhook route per
+     account; `carrier_inbox_decode`, one `carrier_event_received` per
+     event, a thin webhook as `shipment_events_wanted`; an event for a
+     tracking number the account never booked as a
+     `carrier_event_unmatched` row (§7).
+  3. `shipment_event` (once per carrier event id), the pure
+     `derive_status` with its `delivery_withdrawn` rule, and
+     `shipment_event_apply` under the shipment lock (§7).
+  4. `shipment_milestone` (once per milestone) and the seven milestone
+     facts (§7, §8).
+  5. Polling: `shipment_tracking_start` on `shipment_label_booked`,
+     `shipment_poll_due` and `carrier_poll`, ending at `returned`,
+     `lost`, or the return window's close (§7).
+  6. `return_window_days` per buyer country in market data, a
+     `placeholder` until the consumer law adviser answers (prod refuses
+     a placeholder), and `return_window_ends_at` on the shipment (§7).
+  7. The order page and the orders API showing the tracking status and
+     milestones; the staff shipments page and the unmatched events; the
+     browser smoke suite checking the order page (§9).
+  8. The fuzzer's tracking actions, checks and reach milestones, and the
+     `derive_status` and decoder properties in a soak target (§9).
+  It adds tables and message shapes, so its design is confirmed first:
+  §7 is the draft.
 - **6c: the echo flow retired.** Its code, routes, fuzzer machine and
   `typed-ids` ignores go; its tables are dropped, its enum values stay
   (`plan-messaging.md` §9). The shipment machine takes over its reach
