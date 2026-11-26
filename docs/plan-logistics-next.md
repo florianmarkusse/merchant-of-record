@@ -49,7 +49,7 @@ cards:
 
 Save every quote in `docs/markets/sources/<provider>/`.
 
-### 3. Build an all-in cost comparison (done 07-Nov-2026)
+### 3. Build an all-in cost comparison (done)
 
 `markets.html#all-in` and the `All-in` sheet: per reference parcel
 (`scenarios.csv`: 0.25, 0.5, 1, 2, 5 kg at US$25, 40, 60, 100, 200),
@@ -79,7 +79,7 @@ What it shows (list prices, fuel of 09-Nov-2026):
 Not modelled yet: volumetric weight (actual weight is assumed), remote
 areas, returns, discounts (no quotes yet).
 
-### 4. Check product rules per carrier (partly done 07-Nov-2026)
+### 4. Check product rules per carrier (partly done)
 
 `service_restrictions.csv` now has DHL (VN pages), FedEx and UPS (from the
 VN rate PDFs; their web pages block automated reads) and VIO. Findings:

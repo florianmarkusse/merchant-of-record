@@ -1,6 +1,6 @@
 # Markets, the tax path, prices, the quote and the checkout (slice 4)
 
-Status: built (17-Nov to 19-Nov-2026). Applies `plan-architecture.md` §8
+Status: built. Applies `plan-architecture.md` §8
 with the tax path rule of `plan-logistics.md` §4: market data in the
 database, duty rates and carrier prices from switchable sources,
 `build_quote`, merchants and the API, and the buyer's checkout up to a
@@ -39,7 +39,7 @@ quote it can pay (the pay step is `plan-payments.md` §4).
 - Only the structured files feed quoting: `countries`, `border_charges`,
   `landed_rates`, `categories`, and the rate files in 4c. `facts.csv`
   stays prose for people.
-- **Versioned loads** (decided 17-Nov-2026). A `load` that finds any
+- **Versioned loads**. A `load` that finds any
   difference writes a complete new set of rows, tagged with the load's id,
   the git commit and who loaded it; loading identical files writes nothing
   (a hash of the normalised content decides). Inside a set each row keeps
@@ -51,16 +51,16 @@ quote it can pay (the pay step is `plan-payments.md` §4).
   or deletion becomes a special case. After slice 4 the admin page saves
   through the same function, as a new load with the person as actor.
 - `effective_from` is a date, compared with the quote moment's date in
-  UTC for now (decided 17-Nov-2026). A law starts at local midnight, so on
+  UTC for now. A law starts at local midnight, so on
   the switch day a buyer far east of UTC may get the old rule for some
   hours; per-country (and per-region: AU, US) time zones come later.
 - `landed_rates.csv` is what quotes use for tax and duty, with each row's
   own band (always, up to or above a limit) and collector (border or
-  seller), as plan-markets-data decided on 14-Nov-2026;
+  seller), as `plan-markets-data.md` sets out;
   `border_charges.csv` stays a research view. Only countries with market
   status `open` quote; `conditional` ones (the UK, waiting on our VAT
   registration) stay closed with their reason until marked `open`.
-- **Categories are a table, not an enum** (decided 17-Nov-2026): they
+- **Categories are a table, not an enum**: they
   grow with the data (a row in `categories.csv` now, the admin page
   later), rate and restriction rows reference them by foreign key, and no
   code branches on a particular category. Sets that change only with the
@@ -78,8 +78,7 @@ quote it can pay (the pay step is `plan-payments.md` §4).
   from its date, whether its rate or its limit changed: that is how a law
   change is entered. `EU` and other groups are told apart from countries
   by the countries file, not by their shape.
-- **No import tax row means closed, not tax-free** (decided 18-Nov-2026,
-  following §6: fail closed). An open country needs at least one
+- **No import tax row means closed, not tax-free** (following §6: fail closed). An open country needs at least one
   `import_tax` row for the category; a country that truly charges none
   gets an explicit 0% row with its source. Missing
   duty rows are not the same: duty comes per HS code from the duty source
@@ -87,7 +86,7 @@ quote it can pay (the pay step is `plan-payments.md` §4).
 - The staff page (§5b) shows this for step 4a: `/staff/markets`. A country whose
   quoting values include anything weaker is closed at checkout with the
   reason "rules not confirmed yet".
-- **A rule change is a non-event** (decided 17-Nov-2026: governments
+- **A rule change is a non-event** (governments
   change limits and rates at short notice):
   - one edit and one command: `load` first prints what would change
     (added, superseded, unchanged per table) and writes only when told;
@@ -100,7 +99,7 @@ quote it can pay (the pay step is `plan-payments.md` §4).
 
 ## 3. The tax path and duty (4b)
 
-Decided 18-Nov-2026: the rule, the rates per HS code and the staff form
+Two parts: the rule, the rates per HS code and the staff form
 (4b-1, `src/mor/tax/`), and the duty vendor flow (4b-2,
 `src/mor/duties/`).
 
@@ -128,7 +127,7 @@ Decided 18-Nov-2026: the rule, the rates per HS code and the staff form
   before an any-origin row. VAT falls back to the category row's rate
   when no HS row matches; duty never falls back: no rate refuses the
   quote with "duty rate needed".
-- **Trade agreements, structured** (decided 18-Nov-2026: not free text).
+- **Trade agreements, structured** (not free text).
   A preferential row names its agreement (ATIGA, EVFTA, RCEP: data) and a
   set of conditions from a closed list: `origin_statement`,
   `certificate_of_origin`, `exporter_registration`, `direct_shipment`,
@@ -137,8 +136,8 @@ Decided 18-Nov-2026: the rule, the rates per HS code and the staff form
   missing. Which conditions a product or merchant meets is recorded with
   the merchant records (4d); until then none is met, so no preference
   applies.
-- **Seller-collected tax per country** needs no code of its own yet
-  (decided 18-Nov-2026): limits, bases and rates are data. A jurisdiction
+- **Seller-collected tax per country** needs no code of its own yet:
+  limits, bases and rates are data. A jurisdiction
   module (`tax/gb.py`) is written when we approach our first registration,
   for what data cannot say (how the UK measures its £135, how it rounds
   VAT), from verified sources. The general rule is tested with a
@@ -146,7 +145,7 @@ Decided 18-Nov-2026: the rule, the rates per HS code and the staff form
   registrations table and apply from their date, with no code change.
 - Duty and VAT rates per (destination, origin, HS code) come from our
   own rows, a vendor, or both, by a mode per country (4b-2 below).
-- **VND** (decided 18-Nov-2026): the State Bank of Vietnam's daily
+- **VND**: the State Bank of Vietnam's daily
   reference rate replaces the research estimate, as the ECB rates do for
   other currencies (25,600 per US$ on 10-Nov-2026, as reported by
   VietnamPlus: `secondary`, so usable).
@@ -162,7 +161,7 @@ exact. The tests check why a path was chosen, not only which: a limit
 outside its own `up_to` band once passed a test that checked only "not
 due".
 
-### 4b-2: duty and VAT rates from vendors (decided 18-Nov-2026)
+### 4b-2: duty and VAT rates from vendors
 
 **What a real vendor gives** (Zonos docs, read 18-Nov-2026: the
 import-duty page, the calculate page, the landed cost object and the
@@ -183,8 +182,8 @@ idempotency keys or about storing its answers for later orders.
   and its note. A Zonos module would send a one-item cart.
 - **Duty and VAT from the same answer** (VAT is in the same Zonos call, so
   it costs nothing extra).
-- **Answers are always reused** for later orders of the same combination
-  (decided 18-Nov-2026). If a vendor's terms forbid it, this becomes a
+- **Answers are always reused** for later orders of the same combination.
+  If a vendor's terms forbid it, this becomes a
   setting on its account; nothing else changes.
 - **Several vendors**: each is a module behind the port, picked by one
   registry with an exhaustive `match`. Adding one is a module, a
@@ -309,7 +308,7 @@ meets an answered lookup.
   country, the parts sum to the total in minor units, the merchant gets
   exactly its price, and no float or `Decimal` appears.
 
-### 4c: decided 18-Nov-2026
+### 4c: the design
 
 4c is built in two steps: **4c-1** our own tables, the fee rules,
 `build_quote` and the full breakdown on the staff page; **4c-2** the
@@ -362,7 +361,7 @@ negative, the duty-paid fee only with something at the border, cheapest
 first. Not built yet: a product gate per country and category (no data
 for it beyond the services' restrictions) and several parcels per order.
 
-### 4c-2: live carrier prices (decided 19-Nov-2026)
+### 4c-2: live carrier prices
 
 **What a real carrier gives** (read 19-Nov-2026). DHL Express's rates call
 (`/mydhlapi/rates`) and FedEx's (`rate/v1/rates/quotes`) take origin,
@@ -434,7 +433,7 @@ in which a request inserts just after another was answered costs one
 extra read, and nothing else.
 
 **How long a price is used is a setting per account, not stored on the
-answer** (decided 19-Nov-2026: reusing a price the carrier calls expired
+answer** (reusing a price the carrier calls expired
 may be fine for some carriers, so it must be a switch, not impossible).
 The lookup stores what happened: `finished_at` and the carrier's
 `carrier_valid_until` (or none). `carrier_account` holds the rule:
@@ -520,7 +519,7 @@ prices against our cards, differences first.
   catch: a second request while one is open, using an expired answer, a
   call counted after it is made, and parts that don't sum accepted.
 
-**Decided 19-Nov-2026**: DHL Express Worldwide goes to OCEANIA through
+DHL Express Worldwide goes to OCEANIA through
 `carrier_api`, marked placeholder, so the test setup and the staff page
 exercise it (no research country there quotes yet: AU's rules are not
 confirmed, NZ has no import tax recorded); every other lane stays on our
@@ -537,7 +536,7 @@ every input is stored the handler quotes in its transaction; otherwise
 `quote_requested`, workers fetch what is missing, and the page waits
 until `quote_made` or `quote_refused`. No handler calls a vendor.
 
-### 4d-1: merchants, API keys, sessions and estimates (decided 19-Nov-2026)
+### 4d-1: merchants, API keys, sessions and estimates
 
 Applies `plan-architecture.md` §4 and §8.
 
@@ -678,7 +677,7 @@ not exist.
 - The new property files join a target in `deploy/soak.sh`, as
   `tests/test_soak_targets.py` requires.
 
-**Decided 19-Nov-2026:**
+**Decisions:**
 
 1. **The parcel is required** on every session and estimate: prices
    depend on the volumetric weight, and a box we guessed would misprice.
@@ -718,7 +717,7 @@ Six planted bugs were each caught by a test, including a refusal after
 the key's claim not rolled back: psycopg commits on a clean exit, which
 would have committed a key with no response.
 
-### 4d-2: the stored quote, its waiting flow and the buyer pages (decided 19-Nov-2026)
+### 4d-2: the stored quote, its waiting flow and the buyer pages
 
 Applies `plan-architecture.md` §2 (stage 2), §4 and §8 ("Waiting").
 
@@ -880,7 +879,7 @@ lookup outcome facts, `quote_build`, and `checkout_session_expire`.
     - no lookup was asked twice.
 - The new fuzzer joins a soak target.
 
-**The address form** (decided 19-Nov-2026): name, email, phone, two
+**The address form**: name, email, phone, two
 address lines, city, region, postcode and country, all at once, so the
 buyer enters them once. Fruggals was the model
 (`~/Desktop/fruggals/src/addresses.py`): a pure parser, the phone's dial
@@ -923,8 +922,8 @@ Open:
 
 ## 5b. The staff page
 
-A staff page, `/staff/markets`, shows what each step decides, and grows
-(decided 17-Nov-2026): the loads and each country's answer (open, or
+A staff page, `/staff/markets`, shows what each step decides, and grows:
+the loads and each country's answer (open, or
 closed with the reason, and the rates in force), the tax paths and the
 duty decision for an order, the full price breakdown, and the sessions
 and quotes made. It is a staff tool, not a sandbox one: it becomes the
@@ -953,10 +952,10 @@ Until staff sign-in exists it is mounted only outside prod, reached on
 loopback like the sandbox page. Staff sign-in (staff accounts, password
 plus a second factor, sessions with a SameSite cookie, the cross-site
 check on every POST, the person recorded as actor) is a slice of its own,
-before the first prod deploy (decided 17-Nov-2026); the page is mounted in
+before the first prod deploy; the page is mounted in
 prod behind it, unchanged.
 
-## 6. Decisions of 17-Nov-2026
+## 6. Decisions
 
 1. **A quote relies on `verified` and `secondary` values only.** A
    country whose quoting values include `unverified`, `estimate`,

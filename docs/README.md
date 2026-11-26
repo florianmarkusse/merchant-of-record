@@ -71,7 +71,7 @@ Slices of their own, placed when needed:
   test that each list names every field), or a documented exception.
   No ast-grep rule until decided.
 - The payment fuzzer could meet an earlier attempt's end again while a
-  second attempt is open, which once hid a bug; a reach milestone for it
+  second attempt is open, a case that can hide a bug; a reach milestone for it
   would show the soak reaching it.
 
 ## Decisions waiting on people

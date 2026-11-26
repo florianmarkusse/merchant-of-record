@@ -1,6 +1,6 @@
 # Payments, the order, the invoice and settlement (slice 5)
 
-Status: built, 5a to 5c-3 (19-Nov to 25-Nov-2026) (§1).
+Status: built, 5a to 5c-3 (§1).
 
 Applies `plan-architecture.md` §2 (stages 3 and 4), §4, §5, §6 and §9
 (the capture entry) to payments against the fake PSP. Slice 4 left the
@@ -14,24 +14,24 @@ payouts to merchants (slice 9), merchant webhooks and emails to buyers
 
 ## 1. Steps
 
-- **5a: pay** (built 19-Nov-2026). The fake PSP in every mode but
+- **5a: pay** (built). The fake PSP in every mode but
   settlement, the `psp` port, registry and fake client, accounts and
   routing rows, the `payment_attempt` aggregate, the method and pay steps
   on the buyer pages (redirect and QR), waiting without reloads, the
   order row and the capture's ledger entry.
-- **5b: the invoice and the order** (built 20-Nov-2026). Invoice rows
+- **5b: the invoice and the order** (built). Invoice rows
   with a gapless number, rendered as HTML and as PDF, the buyer's order
   page, the orders API, the KYB gate.
-- **5c-1: settlement** (built 20-Nov-2026, reworked 23-Nov-2026 to what
-  real PSPs send): settlement by file and by API from the fake, the real
+- **5c-1: settlement** (built to what real PSPs
+  send): settlement by file and by API from the fake, the real
   PSP fee clearing the estimate, each payout reconciled with its lines
   (§7).
-- **5c-2: the bank statement** (built 25-Nov-2026): a fake bank and
+- **5c-2: the bank statement** (built): a fake bank and
   the import of its transactions, every entry booked, each PSP payout
   matched to its credit, which moves it from `payout_in_transit` to
   `bank`; a payout whose credit arrived but whose lines do not add up is
   flagged on the staff settlement page (§7, the bank statement).
-- **5c-3: the browser side** (built 25-Nov-2026): the fake's card
+- **5c-3: the browser side** (built): the fake's card
   fields (the first PSP JavaScript, under the CSP the app sends) and the
   Playwright smoke suite (§4, card fields; `plan-architecture.md` §10).
 
@@ -150,7 +150,7 @@ has no web settings), sets the session `paying`, appends
 `payment_attempt_created`, commits and answers 303 to `/c/{session}`. A
 double submit finds the session already `paying` and changes nothing.
 
-**One open attempt per session** (decided 19-Nov-2026), guarded by a
+**One open attempt per session**, guarded by a
 partial unique index on `payment_attempt (session_id)` over the states
 that are not final. "Pay another way" on the waiting page appends
 `payment_cancel_wanted`; the session returns to `quoted` only once the
@@ -161,8 +161,7 @@ unique index allows one `captured` attempt per session: a capture the
 PSP reports anyway (it broke its own cancel) becomes `needs_person`, for
 a refund in slice 8.
 
-**Capture at once after authorisation**, on every account (decided
-19-Nov-2026): we are the seller, the total is final, and the buyer's bank
+**Capture at once after authorisation**, on every account: we are the seller, the total is final, and the buyer's bank
 sees one charge. Capturing at label booking would guard against a
 merchant that never ships, but holds expire in 7 days at several PSPs,
 and QR methods cannot hold at all.
@@ -196,7 +195,7 @@ and QR methods cannot hold at all.
 - The buyer's return from the hosted page proves nothing: the page shows
   "waiting" until the webhook or poll has decided.
 
-**Card fields** (5c-3, decided 25-Nov-2026). Real PSPs put the card
+**Card fields** (5c-3). Real PSPs put the card
 form on the merchant's page inside their own iframe: Stripe's Payment
 Element mounts from `js.stripe.com` with a `client_secret` made by the
 server, and `confirmPayment` sends the browser to `return_url`, whose
@@ -276,7 +275,7 @@ merchant's currency (say USD), per currency its lines use:
   quote's market load) explains it. When the goods are priced in the
   quote's own currency the two `fx_position` lines are skipped and
   `merchant_payable` is credited directly.
-- **Sub-unit remainders stay on the quote parts** (decided 19-Nov-2026):
+- **Sub-unit remainders stay on the quote parts**:
   every part already stores its exact value, its rounded amount and its
   named mode. The ledger holds whole minor units only, so the entry books
   the rounded parts, which sum to the total by the quote's own property;
@@ -291,7 +290,7 @@ merchant's currency (say USD), per currency its lines use:
 
 ## 6. The invoice, the order page and the merchant
 
-**KYB** (decided 19-Nov-2026: minimal now, the KYB process itself a later
+**KYB** (minimal now, the KYB process itself a later
 slice):
 
 - `merchant_kyb_state` enum `pending`, `approved`, `suspended`;
@@ -303,7 +302,7 @@ slice):
   (`uv run python -m mor.merchants kyb mer_… approved`) until staff
   sign-in exists, then by a staff page. The seed approves its merchants.
 - The gate applies in every environment, so the code that guards prod is
-  the code under test (decided 20-Nov-2026). The pay step reads
+  the code under test. The pay step reads
   `kyb_state` with `FOR SHARE` under the session lock and refuses a new
   attempt unless `approved`; the CLI's change takes the row `FOR UPDATE`,
   so a suspension and a pay cannot cross. The buyer sees "This shop
@@ -311,15 +310,14 @@ slice):
   already open runs to its end.
 
 **The merchant's own settings** go through the API with its key, not the
-CLI (decided 20-Nov-2026): `POST /v1/merchant/settings` sets
+CLI: `POST /v1/merchant/settings` sets
 `support_email` (or null), with `settings_changed_at` and its actor on
 `merchant`. Plain settings, not financial state, so no history table. The
 dashboard later calls the same code. Settings that hold for every
 checkout live on the merchant; what can differ per checkout lives on the
 session.
 
-**Where the buyer lands after paying is per session** (decided
-19-Nov-2026, per session 20-Nov-2026, as Stripe sets its success URL per
+**Where the buyer lands after paying is per session** (as Stripe sets its success URL per
 session): `after_payment` is a field of the create-session body next to
 `return_url`, stored on `checkout_session`, never a query parameter on
 the buyer's link, which the buyer can edit. `/c/{session}` in state
@@ -350,8 +348,7 @@ uses.
   `invoice_series (code, next_number)` holds only its counter, a row made
   on the series' first use (insert, a conflict means it exists), so a new
   series needs no migration and survives the test setup emptying every
-  table. Today one series, `INV`, for the placeholder entity (decided
-  19-Nov-2026: one gapless series per selling entity; per-country series
+  table. Today one series, `INV`, for the placeholder entity (one gapless series per selling entity; per-country series
   if an adviser says a country needs its own). `series_for(entity,
   buyer_country)` picks it; a per-country series is an entry in `SERIES`
   and in `SERIES_BY_COUNTRY`, and credit notes (slice 8) are a series of
@@ -476,7 +473,7 @@ once whatever order it arrives in and however often:
 Pages are not one of them: a page is how far our reader got through a
 list. So nothing depends on the order of pages, lines and payouts.
 
-**Modes** (decided 23-Nov-2026: Stripe's and Adyen's shapes now;
+**Modes** (Stripe's and Adyen's shapes now;
 Xendit's balance shape with the first Xendit module):
 
 - `api`, Stripe's shape: `GET A/payouts?after=` lists payout ids, oldest
@@ -575,8 +572,7 @@ Cr psp_clearing:{account}        the same
 
 The PSP says the money left it; it is not in our bank until the bank's
 statement shows it. The bank match moves it from `payout_in_transit` to
-`bank:{bank account}` (below), and only `bank` is money we pay merchants from (decided
-20-Nov-2026: a payout to a merchant must never spend money that is not in
+`bank:{bank account}` (below), and only `bank` is money we pay merchants from (a payout to a merchant must never spend money that is not in
 our bank yet).
 
 **Reconciling a payout** (`settlement_payout_reconcile`, local, on each
@@ -597,7 +593,7 @@ by coincidence and then reopens is reversed by a new entry, never edited.
 A line in another currency than its payout is left out of the sum, so
 the payout stays open and shows it.
 
-**An open difference is shown, not raised** (decided 23-Nov-2026). Open
+**An open difference is shown, not raised**. Open
 is normal for a while (lines are listed after the payout, pages arrive
 one by one, a balance transfer waits for the next batch), so the staff
 settlement page lists open payouts with the difference and how long it
@@ -624,14 +620,14 @@ line_id, kind, detail, created_at)` and `settlement_exception_resolved
 (exception_id unique, note, actor, resolved_at)`, append-only.
 
 **Resolving an exception** records that a person looked, with a note, on
-the staff page, and books nothing (decided 20-Nov-2026: typed
+the staff page, and books nothing (typed
 corrections, a write-off or an attribution to the merchant, would guess
 at cases no real PSP has shown us yet; staff work happens in the
 browser). Like the other staff POSTs it is mounted outside prod only
 until staff sign-in exists, and guarded against cross-site posts. The
 sandbox page has "cut a settlement" per account, with a fault to pick.
 
-**Settlement currency** (decided 20-Nov-2026): a batch settles in the
+**Settlement currency**: a batch settles in the
 captured currency only, as most SEA acquirers pay local currency into a
 local account. A PSP that converts at settlement is a new capability
 value, with the PSP's rate as an FX ledger event, added with the first
@@ -644,8 +640,7 @@ clears it between settlement and the merchant's payout (slice 9).
 
 A PSP's payout is only a claim until our bank shows the credit. 5c-2
 reads our bank accounts, books every entry they show, and matches each
-payout to its credit, which moves it from `payout_in_transit` to `bank`
-(decided 25-Nov-2026).
+payout to its credit, which moves it from `payout_in_transit` to `bank`.
 
 **What real banks offer** (read 25-Nov-2026): an end-of-day statement
 (ISO 20022 camt.053, or the older MT940) as a file, and more and more a
@@ -722,8 +717,7 @@ Cr bank_suspense:{bank account}   the same
 So the ledger's `bank` follows the bank's own balance from the first
 read, and `bank_suspense` holds whatever is not explained yet.
 
-**The cursor is a position, never a transaction id** (decided
-25-Nov-2026, found by the fuzzer): a bank that lists a transaction twice
+**The cursor is a position, never a transaction id**: a bank that lists a transaction twice
 makes "after this id" ambiguous, and the fake once skipped a credit that
 came between the two listings. Business Account Insight pages by an
 opaque `nextPageKey`, and so does the fake.
@@ -735,12 +729,10 @@ unmatched credit and unmatched payout of the account:
 - a credit and a payout match when the payout's id is a whole token of
   the credit's remittance text, the payout's destination is this account,
   and each is the other's only candidate. Two candidates on either side
-  match nothing: a person picks. Never by amount alone (decided
-  25-Nov-2026);
+  match nothing: a person picks. Never by amount alone;
 - the amount need not agree. What arrived is matched; a shortfall (a
   correspondent bank's charge) or an excess stays in
-  `payout_in_transit`, shown on the payout, with no write-off (decided
-  25-Nov-2026);
+  `payout_in_transit`, shown on the payout, with no write-off;
 - the match, keyed `bank-match:{bank account}:{entry id}`, moves what
   arrived:
 
@@ -755,7 +747,7 @@ unmatched credit and unmatched payout of the account:
 
 **A person links** a credit no rule matched to a payout of the same
 account and currency on the staff page, booking the same entry with the
-person as actor (decided 25-Nov-2026: the correction has one meaning, so
+person as actor (the correction has one meaning, so
 it books). Any other entry (a debit we did not make, a credit nobody
 announced) gets a note, booking nothing; it stays in `bank_suspense`.
 
@@ -879,7 +871,7 @@ without it.
 ## 11. Open
 
 - **Buyer emails and merchant webhooks** come together as one `notify`
-  slice, with a fake mailbox under `/_fake/` (decided 19-Nov-2026). Until
+  slice, with a fake mailbox under `/_fake/`. Until
   then the order link is shown only after paying, and `order_url` in the
   API.
 - The deploy script must install Pango for WeasyPrint on the server.

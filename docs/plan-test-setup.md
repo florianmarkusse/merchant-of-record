@@ -1,6 +1,6 @@
 # The test setup
 
-Status: built 17-Nov-2026 (slice 3) on the laptop; the deploy waits for a
+Status: built (slice 3) on the laptop; the deploy waits for a
 VPS (§1). A running copy with `ENVIRONMENT=test`: web (with the fakes
 under `/_fake/`) and worker, its own database with synthetic data only,
 where every flow can be walked by hand in every mode and the long fuzz
@@ -8,8 +8,8 @@ runs happen (`plan-architecture.md` §6).
 
 ## 1. Where it runs
 
-- **On the developer's laptop for now** (decided 17-Nov-2026: there is no
-  server yet). Web on `127.0.0.1:8741`, bound to loopback only, so
+- **On the developer's laptop for now** (there is no server
+  yet). Web on `127.0.0.1:8741`, bound to loopback only, so
   nothing is reachable from outside and the page needs no login yet.
 - Database `mor_sandbox`, never `mor_dev` (local development) or
   `mor_test` (dropped by every pytest run). The soak uses `mor_soak`.
@@ -29,8 +29,8 @@ runs happen (`plan-architecture.md` §6).
   them at the dev server's own address").
 - Two processes, as in prod: the server and `python -m
   mor.messaging.worker`. On the laptop they run as systemd user units.
-- Outside prod both restart when a `.py` file under `src/` changes
-  (19-Nov-2026): the server through uvicorn's `--reload` (with an app
+- Outside prod both restart when a `.py` file under `src/` changes:
+  the server through uvicorn's `--reload` (with an app
   factory, `create_app`), the worker under `watchfiles.run_process`. A
   restart is a crash the worker is built to survive. A reload does not
   migrate, load markets or seed: run those by hand after a change that
@@ -65,7 +65,7 @@ it exists in prod.
 
 ## 5. Nightly soak
 
-`deploy/soak.sh` (built 17-Nov-2026), run by a systemd user timer
+`deploy/soak.sh`, run by a systemd user timer
 (`deploy/mor-soak.timer`, 02:00, `Persistent=true`, so a night the laptop
 was off runs at the next start; niced and on idle I/O, since that start
 may be while it is in use):
@@ -101,9 +101,8 @@ may be while it is in use):
 - A run that ends any other way (stopped, killed, the script failing)
   sends one message on its way out, naming the target it was in. The
   systemd unit has no time limit of its own; the targets' guards bound
-  the run. A unit limit that went stale cut every run short before its
-  alerts for five nights (21-Nov-2026 to 25-Nov-2026), so nothing waits
-  for the end of the run to alert.
+  the run, since a unit limit can go stale and cut a run short before
+  its alerts; nothing waits for the end of the run to alert.
 - `deploy/soak.sh test-alert` sends one test message; `SOAK_QUICK=1`,
   `SOAK_DRY_ALERT=1` and `SOAK_REF=<commit>` are for checking the soak
   itself.

@@ -30,7 +30,7 @@ component needs it, on the payment step.
 ## 2. Ways a merchant can sell through us
 
 Ordered by how much work it is for the merchant. **Every channel is a thin
-client of the same public API** (decided 04-Nov-2026): it creates a
+client of the same public API**: it creates a
 checkout session, sends the buyer to the same hosted checkout and reacts
 to the same webhooks. Tax, landed cost, invoicing and the seller identity
 therefore always come from the core. A new channel is a small adapter,
@@ -47,8 +47,7 @@ tax and owns the order (§6).
    order through the API. The same shape as Stripe Checkout or Paddle.
 3. **Platform plugins.** Shopify or another platform, which call option 2
    underneath.
-4. **Embedded checkout** inside the merchant's site. Not in v1 (decided
-   04-Nov-2026: v1 is API sessions plus payment links). Later it would be
+4. **Embedded checkout** inside the merchant's site. Not in v1 (v1 is API sessions plus payment links). Later it would be
    our own address, quote and payment steps in an iframe, so the price
    build-up and the seller line still come from us. It needs JavaScript
    and a strict `frame-ancestors` policy per merchant domain.
@@ -71,18 +70,18 @@ PaymentLink  { id, merchant_id, lines: [LineInput], quantity_rule, active,
 `ItemData` is what a session line carries today (name, unit price,
 `merchant_sku`, customs description, origin country, weight, HS code).
 
-- **No required catalog** (decided 04-Nov-2026: a mandatory catalog is
+- **No required catalog** (a mandatory catalog is
   too restrictive). The merchant's server sends the lines with their
   price and customs data on each checkout, like Stripe's inline
   `price_data`; this is how sessions work today. The price is trusted
   because a secret-key call creates the session; prices never come from
   the browser.
-- **Inline or by reference** (decided 04-Nov-2026). Each line is either
+- **Inline or by reference**. Each line is either
   full inline data or a `product_id`. A stored `Product` is the same data
   under an id: it saves resending the customs data and gives one place to
   correct it. Both resolve to the session's line snapshot at creation, so
   a later product edit never changes what was sold.
-- **Payment links need no product** (decided 04-Nov-2026). A link is a
+- **Payment links need no product**. A link is a
   saved checkout template with its own lines, inline or by reference.
   Lines by reference follow product edits (a new price applies without a
   new URL). Inline lines are frozen until the link is edited.
@@ -124,8 +123,7 @@ Still to build:
 
 ## 5. Buyer pages: what is decided for what comes next
 
-- **Branding: the merchant's, ours nearly invisible** (decided
-  04-Nov-2026: our brand confuses buyers). The merchant's name, logo and
+- **Branding: the merchant's, ours nearly invisible** (our brand confuses buyers). The merchant's name, logo and
   accent colour carry every buyer page. Ours appears only where law or the
   card networks require it:
   1. one small line at checkout and in the terms, "Sold and invoiced by
@@ -146,14 +144,14 @@ Still to build:
 - **Mobile first.** Most SEA buyers use phones, often mid-range Android
   devices on mobile data. Server-rendered pages, little JS and small
   images suit that.
-- **Buyer support is split by topic** (decided 04-Nov-2026). The
+- **Buyer support is split by topic**. The
   **merchant** answers product, shipping, delivery and return questions,
   under our policy for response times and refunds. **We** answer charge,
   invoice, tax and payment questions, and own disputes and chargebacks.
   Legally we are the seller, so buyers must be able to reach us. One
   contact route on every buyer page and on the invoice sends each
   question to the right side by topic.
-- **Return policy is a merchant setting** (decided 04-Nov-2026: it depends
+- **Return policy is a merchant setting** (it depends
   on what the seller wants), per buyer country:
   ```
   ReturnPolicy { window_days, destination, conditions }
@@ -163,13 +161,12 @@ Still to build:
   minimum; the system enforces that floor from the per-country rules.
   `refund_without_return` suits cheap items whose return shipping costs
   more than the goods.
-- **The merchant pays return shipping** (decided 04-Nov-2026), deducted
+- **The merchant pays return shipping**, deducted
   from the next payout. If the balance cannot cover it, the reserve does,
   or the balance goes negative and the merchant is invoiced. Where
   consumer law forbids charging the buyer (defective goods), the buyer is
   not charged; it is still the merchant's cost.
-- **Cross-border labels go through our carrier partners in v1** (decided
-  04-Nov-2026). Only then do we get DDP duty billing, our SG/MY tax
+- **Cross-border labels go through our carrier partners in v1**. Only then do we get DDP duty billing, our SG/MY tax
   registration numbers on the declaration (otherwise buyers can be taxed
   twice), and delivery events for payout timing. Later, an "own carrier"
   mode for routes where the merchant's carrier can do DDP with our

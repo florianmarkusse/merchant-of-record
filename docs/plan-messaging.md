@@ -1,7 +1,7 @@
 # Messaging: facts, deliveries, the worker and the consumers
 
-Status: built (slice 2, 16-Nov to 17-Nov-2026; the consumer table and
-unordered deliveries 23-Nov to 24-Nov-2026). How the outbox, the worker
+Status: built (slice 2, with the consumer table and unordered
+deliveries). How the outbox, the worker
 and every consumer work. `plan-architecture.md` §4 and §5 give the lock
 design and the duplicate guards this builds on.
 
@@ -130,11 +130,11 @@ locks must die with it, so never a pooled one):
   candidates, so at many workers most lock attempts return `busy`:
   correct, but wasted round trips. If it ever shows, start each worker at
   a random offset or split aggregates by a hash of the id.
-- **Why no ordering** (decided 23-Nov-2026): per consumer and aggregate
-  order guaranteed nothing a consumer relied on (each already took facts
-  in any order, and order across consumers was never kept), while a
-  delivery scheduled for later held back every later one, and one that
-  raised held back everything behind it.
+- **Why no ordering**: per consumer and aggregate order would guarantee
+  nothing a consumer relies on (each takes facts in any order, and order
+  across consumers is not kept), while a delivery scheduled for later
+  would hold back every later one, and one that raised everything behind
+  it.
 
 ## 5. The consumer table and local consumers
 
@@ -211,9 +211,9 @@ client, the environment, the delivery and `now`.
 
 - **No row lock is held across a vendor call, by design**: no code holds
   a connection and the HTTP client at once except `run_steps`. The call
-  function gets no connection; the steps get no HTTP client. A runtime
-  check (every registry call asserting no open transaction) was dropped:
-  with this shape it has nothing left to catch.
+  function gets no connection; the steps get no HTTP client. There is no
+  runtime check that a registry call has no open transaction: with this
+  shape it would have nothing to catch.
 - **Why the commit before the call**: it separates "we are about to ask"
   from "the vendor answered", so a crash cannot be mistaken for a call
   never made. A `sent` request with no result is an earlier run that died
@@ -279,8 +279,8 @@ file            ─▶ effect consumer: fetch the file   ┘    + fact <port>_in
 - **Store first, decode later.** Every mode stores the raw bytes, commits
   and stops; a webhook then answers 200. A decoder bug never loses an
   event: the raw row stays, and a fixed decoder re-runs it.
-- **The duplicate guard is the vendor's id, never the bytes** (decided
-  17-Nov-2026). Every event has the vendor's event id, and the unique key
+- **The duplicate guard is the vendor's id, never the bytes**. Every
+  event has the vendor's event id, and the unique key
   on (aggregate, vendor event id) records it once, whatever mode brought
   it. Every notice carries an id too (a thin one the id of the event
   behind it), a report file has its name, which is also our cursor, and a
@@ -297,8 +297,8 @@ file            ─▶ effect consumer: fetch the file   ┘    + fact <port>_in
   out-of-order arrival cannot corrupt it, and a late earlier event emits
   no milestone backwards. The milestone's unique key is a second guard
   behind the row lock.
-- **Any event can be recorded by hand, whatever the mode** (decided
-  17-Nov-2026): a person who sees on the vendor's site that something
+- **Any event can be recorded by hand, whatever the mode**: a
+  person who sees on the vendor's site that something
   happened records it as themselves. It enters at the same fact as a
   decoded vendor event (source `manual`), so it goes through the same
   apply step, key, status and milestones.
@@ -406,8 +406,8 @@ One provider per duplicate guard:
 
 ## 11. Decisions kept, with the reason
 
-- **The inbox is kept** although `outbox_delivery` could dedupe alone
-  (decided 16-Nov-2026): the duplicate check goes through it exactly as
+- **The inbox is kept** although `outbox_delivery` could dedupe alone:
+  the duplicate check goes through it exactly as
   it would with a broker delivering instead of our table, so moving to a
   broker changes only the transport. Cost: one small insert per handled
   delivery.

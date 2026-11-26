@@ -1,6 +1,6 @@
 # Architecture: the whole flow, with logistics in detail
 
-Status: design confirmed 15-Nov-2026. Where the build stands and what
+Status: design confirmed. Where the build stands and what
 comes next is `docs/README.md`; each slice's detail is in its own plan.
 
 This is the one design for the whole flow: checkout, tax and duty,
@@ -75,7 +75,7 @@ no database and no environment; `now` is an argument.
 
 ## 3. Layout
 
-Language (decided 05-Nov-2026): Python with pyright strict. The team is
+Language: Python with pyright strict. The team is
 fast in it, its libraries cover PSP crypto, JWE, PDF and PostgreSQL, and
 pyright strict checks closed sets and exhaustive `match`. C was ruled out
 because an internet-facing payment service parses untrusted input all day
@@ -155,7 +155,7 @@ Rules:
   sees the new state. A payment captured for a stored quote is always
   honoured, even if the capture arrives after the quote's time: the buyer
   paid a price we showed.
-- **No expiring keys of our own** (decided 15-Nov-2026). Merchant
+- **No expiring keys of our own**. Merchant
   idempotency keys, vendor event keys and request keys are kept for good.
   A replay next year is still recognised.
 
@@ -208,8 +208,7 @@ provider, declares which guard it has, as capability data:
 | `compensable` | nothing, but a duplicate costs nothing and can be undone (a label that is never handed over) | send again; a duplicate shows up as two results for one reference, and the extra one is cancelled |
 | `none` | nothing, and a duplicate moves money or cannot be undone | never send again automatically. Lookups only: found means complete it; still not found goes to the exceptions list for a person |
 
-- `none` is the default where a provider promises nothing (decided
-  15-Nov-2026): a stuck request waits for a person.
+- `none` is the default where a provider promises nothing: a stuck request waits for a person.
 - A key the vendor honours only for a window (1 hour at Mollie, 14 days
   at Adyen) counts as `none`, not as `vendor_constraint`: trusting it
   would put a clock comparison back in the guard. The cost is small: it
@@ -236,7 +235,7 @@ systems. So the provider's help is needed in exactly one case: the call
 was sent and no answer came back.
 
 **Inbound: one path for every mode.** Event-driven where the vendor
-offers it, polling or files where it does not (decided 15-Nov-2026). The
+offers it, polling or files where it does not. The
 mode (`push`, a thin push, `poll`, `file`) is capability data per provider
 and channel, never a branch in feature code. Every mode stores the raw
 body in that port's inbox, commits and stops; a consumer decodes it into
@@ -288,7 +287,7 @@ connection, as a real third party would.
 - In pytest and in the fuzzer the fake is called in-process through
   httpx's ASGI transport: no sockets, offline, fast.
 - Outside `prod` the fakes' routes are part of the web app itself, under
-  `/_fake/` (decided 15-Nov-2026, so local development stays one web
+  `/_fake/` (so local development stays one web
   server and one worker, with no third process to start). The worker
   reaches them at the dev server's own address, and the fake posts its
   webhooks back to the same server. In `prod` the routes are not in the
@@ -316,7 +315,7 @@ connection, as a real third party would.
 **Environments.** `ENVIRONMENT` is `dev`, `test` or `prod`.
 
 - Merchants test in a separate sandbox deployment (`ENVIRONMENT=test`,
-  its own database), never with test keys on prod (decided 17-Nov-2026).
+  its own database), never with test keys on prod.
   Reasons: prod holds only live data, so no record needs a live/test
   flag and no test payment can reach a live report or payout; and the
   fakes never ship to prod. The cost: the sandbox is something merchants
@@ -325,7 +324,7 @@ connection, as a real third party would.
 - Every account row says whether it is `fake`, `sandbox` (a vendor's own
   test API) or `live`, and the registry refuses an account whose kind the
   environment does not allow: `dev` takes fakes only, `test` fakes and
-  vendor sandboxes, `prod` live accounts only (decided 19-Nov-2026). A
+  vendor sandboxes, `prod` live accounts only. A
   CHECK makes a fake provider's account always `fake`, so the kind check
   alone keeps the fakes out of prod.
 - A vendor sandbox account on the test setup is routed only to merchants
@@ -338,7 +337,7 @@ connection, as a real third party would.
   scripted into every fault. Contract tests against a vendor's sandbox
   are run by hand with an explicit flag, never by `pytest`.
 
-**Every integration mode has a fake** (decided 15-Nov-2026: the fakes and
+**Every integration mode has a fake** (the fakes and
 the test setup must exercise every way a provider can be wired, not one
 happy shape). A mode here is any capability value that changes which code
 runs. The fake for each port offers all of them, each as its own account
@@ -397,7 +396,7 @@ One table per thing, typed columns, enum types for every closed set. The
 customs snapshot is real columns plus a `shipment_customs_line` table, not
 a serialized blob.
 
-**One shipment per order in v1** (decided 15-Nov-2026). Several boxes on
+**One shipment per order in v1**. Several boxes on
 one waybill can come later; true splits are out: a split needs the boxes
 known before payment, can change the tax owed, pays the duty-paid minimum
 twice, and needs "partly delivered" rules for status, payout and returns.
@@ -429,7 +428,7 @@ buyer field missing (KR customs code), parcel over a service's limits.
 
 `build_quote` only ever sees prices and rates as plain inputs. Where each
 input comes from is routing data, switchable per lane without a deploy
-(decided 15-Nov-2026: shipping price and duty rates are swappable like
+(shipping price and duty rates are swappable like
 any provider).
 
 **Shipping price: a source per service and lane.**
@@ -474,14 +473,14 @@ a duty rate for a new product in a new country), the handler records
 page refreshes itself until `quote_made` or `quote_refused` exists. So no
 handler calls a vendor.
 
-A buyer may wait a little for a fresh landed price (decided 15-Nov-2026).
+A buyer may wait a little for a fresh landed price.
 The same wait happens whenever a stored input can no longer be used: a
 rate row was superseded, a live price's `valid_until` passed, or routing
 changed the source. Later, popular products can be kept warm in the
 background so their buyers rarely wait: the scheduled refresh above, run
 per product and destination instead of per source.
 
-**How the buyer's price is built** (decided 15-Nov-2026: the merchant
+**How the buyer's price is built** (the merchant
 names the price it wants for the product and receives exactly that; we
 add everything else on top, openly):
 
@@ -498,7 +497,7 @@ add everything else on top, openly):
 - Our fee is part of what the buyer pays us for the goods, so by default
   it is inside the taxable amount and the customs value. Whether any
   country lets it sit outside is an adviser question, not assumed.
-- **The fee is a rule in data** (decided 15-Nov-2026: a percentage at
+- **The fee is a rule in data** (a percentage at
   the start, with a fixed amount or both possible per merchant without a
   code change):
 
@@ -513,8 +512,7 @@ add everything else on top, openly):
   fixed amount in another currency than the quote's is converted with
   the quote's stored FX rate. Changing a merchant's fee is one new row,
   entered on an admin page.
-- **The fee is several named components, not one "MoR fee"** (decided
-  15-Nov-2026: costs we pass through are shown as what they are, so the
+- **The fee is several named components, not one "MoR fee"** (costs we pass through are shown as what they are, so the
   merchant can see how a price came to be). A closed set, each with its
   own rule row and its own ledger account:
 
@@ -524,8 +522,7 @@ add everything else on top, openly):
 
   The merchant's build-up lists each one per country. The buyer still
   sees them inside the item price.
-- **A pass-through cost is an estimate at the quote** (decided
-  15-Nov-2026: on top for the buyer, so the merchant still receives
+- **A pass-through cost is an estimate at the quote** (on top for the buyer, so the merchant still receives
   exactly its price). The buyer's total is fixed when the quote is made, but
   the PSP's real fee is only known at settlement and depends on the
   payment method, which the buyer picks after the quote. So the quote
@@ -536,10 +533,9 @@ add everything else on top, openly):
   method instead would change the total after the quote, and charging a
   buyer extra for a payment method is restricted in several countries
   (to be checked per country, not assumed).
-- **Merchant prices are tax-exclusive in v1** (decided 15-Nov-2026:
-  simplest for the merchant, which names one price and gets it). There is
+- **Merchant prices are tax-exclusive in v1** (simplest for the merchant, which names one price and gets it). There is
   no tax-inclusive option.
-- **What the buyer sees** (decided 15-Nov-2026): four lines only, items,
+- **What the buyer sees**: four lines only, items,
   shipping, duties and taxes, and the total, with our fee inside the item
   price. The fee is stored as its own amount on the quote whatever is
   shown, so showing it as a line later is a change to one page. Reasons
@@ -639,7 +635,7 @@ shipment already cleared (carriers re-bill weeks later), is not an error:
 it becomes a `carrier_invoice_exception` row for a person, or a further
 entry on the same shipment.
 
-**Who bears a difference** (decided 15-Nov-2026). The carrier account is
+**Who bears a difference**. The carrier account is
 ours, so we always pay the bill. Each difference between quote and bill
 then opens a `variance_case`:
 
@@ -738,9 +734,8 @@ of those steps. The fuzzer explores the orders; shrinking gives the
 shortest failing one.
 
 **Reach: deep enough to matter.** A green fuzzer says little about states
-its runs never reach (measured 20-Nov-2026: 59% of the then single
-payment machine's runs never made a payment attempt, none had a declined
-payment). Depth comes from structure, not search:
+its runs never reach, and one random machine for a whole flow rarely
+reaches the deep ones. Depth comes from structure, not search:
 
 - Machines split by stage, the later one starting deep: the order machine
   starts from one to three payments the buyer approved, with everything
@@ -767,12 +762,9 @@ plus what its actions met) and writes a reach table to
 more, a milestone reached by fewer than 1 run in 200 fails the test, so a
 drop in reach alerts like a bug.
 
-`hypothesis.target()` was tried and dropped (20-Nov-2026): one score made
-each run climb toward whatever it found first and starved the rest
-(captured payments 2.5% on one seed, 60% on another; needs-a-person 60%
-or 0.3%), one label per milestone did no better, and Hypothesis's own
-optimiser crashed on one seed. Without it every milestone is reached on
-every seed.
+`hypothesis.target()` is not used: one score makes each run climb toward
+whatever it finds first and starves the rest, and one label per milestone
+does no better. Structure reaches every milestone without it.
 
 **Layer 3: real concurrency**, a smaller suite. Several worker tasks and
 handlers on separate connections against the same rows, checking the same
@@ -790,15 +782,12 @@ tests that the locks do what layer 2 assumes.
   the laptop on demand. Failures go into the Hypothesis example database,
   so the next plain `pytest` replays them. A found failure is then pinned
   as an `@example` in the test and committed.
-- Plain Hypothesis (MPL-2.0) is the fuzzer (decided 15-Nov-2026:
-  HypoFuzz allows non-commercial use only, and "any use within a
+- Plain Hypothesis (MPL-2.0) is the fuzzer (HypoFuzz allows non-commercial use only, and "any use within a
   commercial organization, including internal tooling or testing" needs a
   paid licence). Hypothesis is random rather than coverage-guided, so it
   finds less per hour; the tests need no change if a coverage-guided
   runner is added later.
-- Browser tests came with the checkout's card fields (decided
-  17-Nov-2026, built 25-Nov-2026): pages are tested at the HTTP edge
-  (request in, page and rows out), and the checkout, the first page with
+- Browser tests: pages are tested at the HTTP edge (request in, page and rows out), and the checkout, the first page with
   a PSP's JavaScript and where a broken browser path loses a payment,
   also in a Playwright smoke suite (`tests_browser/`): its own database,
   server and worker; card fields approved, declined then paid again, 3-D
@@ -823,8 +812,8 @@ Notes on the rules:
   only, because the library offers no other form.
 - Hypothesis test functions are synchronous. Each test owns one event
   loop and runs our async steps on it.
-- A step's outcome depends only on the draws, never on the wall clock
-  (decided 20-Nov-2026): Hypothesis replays a prefix of draws and expects
+- A step's outcome depends only on the draws, never on the wall clock:
+  Hypothesis replays a prefix of draws and expects
   the same states. The fakes' "timed out after the work" is a `hang` they
   are given (`mor.fakes.hang`): served, a real one-minute sleep; in the
   in-process wiring (`tests/helpers.py` `wire`), a transport timeout at

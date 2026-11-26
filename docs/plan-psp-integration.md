@@ -11,8 +11,8 @@ ledger entries are described there.
 - **Legal entity**: a Singapore entity or a Dutch BV, not decided (§10).
   It matters a lot: local SEA methods and the SEA-native PSPs fit an SG
   entity much better, and licensing differs (§9).
-- **Goods**: physical goods from launch (decided 04-Nov-2026: VN and SEA
-  merchants mostly sell physical goods); digital goods are in scope too,
+- **Goods**: physical goods from launch (VN and SEA merchants mostly
+  sell physical goods); digital goods are in scope too,
   with the digital-services rules for foreign sellers.
 - **Launch**: merchants in Vietnam first, selling to buyers in other SEA
   countries.
@@ -30,7 +30,7 @@ ledger entries are described there.
     to our entity and needs the matching documents from us (a contract, a
     self-billed invoice or statement per payout) for its own VN export VAT
     and corporate income tax. Needs advice.
-- **No orchestration vendor or switching layer** (decided 04-Nov-2026): one
+- **No orchestration vendor or switching layer**: one
   module per PSP behind one port, and routing rows (`plan-payments.md` §3).
 - **Saved cards and subscriptions**: probably in scope, with tokens bound
   to the PSP that issued them (§4).
@@ -145,7 +145,7 @@ Tokens belong to the PSP that issued them. Switching cards between PSPs is
 easy for one-off payments and hard for stored cards and subscriptions.
 Options, from cheapest to most costly:
 
-1. **Accept lock-in for stored cards** (chosen for v1, 04-Nov-2026). New
+1. **Accept lock-in for stored cards** (chosen for v1). New
    cards follow routing, and old tokens stay where they are. The exit path
    is the PCI-compliant card data export that large PSPs offer on request,
    from one PCI DSS Level 1 provider to another; we never handle the data
@@ -213,7 +213,7 @@ ledger accounts, not flags.
 | Checks | Beneficiary validation, status per transfer | More of it on us |
 | Cost | Fee per payout plus FX margin | Cheaper at scale |
 
-**Our own bank for v1** (decided 04-Nov-2026): weekly batched USD SWIFT
+**Our own bank for v1**: weekly batched USD SWIFT
 wires from our entity to each merchant's VN bank, with the instruction
 file generated from the ledger by a `bank_file` rail module.
 

@@ -12,8 +12,7 @@ Inputs: `docs/research-logistics.md`, `docs/research-product-compliance.md`
 
 ## 1. How it works: one order from start to finish
 
-The first carrier is **DHL or FedEx, decided on quotes** (§2, decided
-06-Nov-2026). DHL is used in this walkthrough; FedEx works the same way.
+The first carrier is **DHL or FedEx, decided on quotes** (§2). DHL is used in this walkthrough; FedEx works the same way.
 
 **The idea in one sentence:** we have one DHL Express account. Every
 parcel goes out on it with "duties and taxes paid by shipper", and our
@@ -63,16 +62,14 @@ duty, §4). That is the whole tax logic of v1 (§4).
    returns a pair: the indirect-tax path (`NotDue`, `SellerCollected` or
    `BorderPaid`) and the duty path (`NotDue` or `BorderPaid`) (§4).
 3. **Duty source.** A vendor API (Zonos in estimate mode at about US$2 per
-   order; Easyship Taxes & Duties was ruled out on 10-Nov-2026 because it has
+   order; Easyship Taxes & Duties is ruled out because it has
    no tax records for parcels shipping from Vietnam) behind the duty
    port, with a fake. Used only when either path is `BorderPaid`.
-4. **One integrator module: DHL or FedEx, decided on quotes** (decided
-   06-Nov-2026). Rates, shipment with label and commercial invoice
+4. **One integrator module: DHL or FedEx, decided on quotes**. Rates, shipment with label and commercial invoice
    (duties billed to us), pickup, tracking (DHL by polling, FedEx by
    signed webhooks), return label, invoice import. Plus the fake
    carrier, which stays the default in dev and tests.
-   - **Express and a cheaper service where the carrier has one** (decided
-     06-Nov-2026: express is not always what the buyer prefers). DHL VN
+   - **Express and a cheaper service where the carrier has one** (express is not always what the buyer prefers). DHL VN
      sells only Express Worldwide. FedEx sells International Priority and
      the cheaper International Connect Plus (FICP) and International
      Economy. So FedEx gives two choices per lane in one contract, which
@@ -118,8 +115,7 @@ review), NG, and every comprehensively sanctioned country.
 
 ## 4. The tax path rule
 
-Indirect tax and import duty are decided separately (decided 08-Nov-2026:
-seller schemes cover only VAT/GST, never duty. A cheap order can have its
+Indirect tax and import duty are decided separately (seller schemes cover only VAT/GST, never duty. A cheap order can have its
 VAT collected by us and still owe duty at the border, e.g. an EU order
 under IOSS that pays the €3 flat duty, so one order needs both answers).
 
@@ -174,8 +170,7 @@ needed) also escape the €3 is UNVERIFIED. The choice between IOSS and
 border VAT in the EU is therefore per product origin, not only per order
 value, and stays open until the entity decision.
 
-**Which services an order may use** follows from its `TaxPaths` (decided
-08-Nov-2026: customs charges whoever declares the parcel at the
+**Which services an order may use** follows from its `TaxPaths` (customs charges whoever declares the parcel at the
 destination and holds it until paid, so on a duties-unpaid (DAP) line the
 buyer is billed at the door, and from VN we cannot pay each country's
 customs ourselves; a duty-paid service is exactly that arrangement. But
@@ -215,7 +210,7 @@ buyer must never get a bill at the door. DHL VN's duty-paid fee is
 currently about US$23 per shipment (VND 600,000 or 2% of duties,
 whichever is higher), which is heavy on an US$80 order.
 
-Found 06-Nov-2026 while checking whether US$23 is competitive:
+Whether US$23 is competitive (checked 06-Nov-2026):
 
 - **It is DHL's normal fee, not a Vietnam penalty.** Other origins pay the
   same: US 2% with a US$17 minimum, Ireland 2% with an €18 minimum.
@@ -297,7 +292,7 @@ its own return rules. The merchant can be more generous, never less.
 
 | Reason | Refund | Return transport |
 |---|---|---|
-| Withdrawal within 14 days | everything paid, duties and tax included | DHL return label on our account to the merchant in VN, cost deducted from the merchant's payout (decided 04-Nov-2026). Or the merchant's policy says "keep it" (refund without return) |
+| Withdrawal within 14 days | everything paid, duties and tax included | DHL return label on our account to the merchant in VN, cost deducted from the merchant's payout. Or the merchant's policy says "keep it" (refund without return) |
 | Defective, not as described, not delivered | everything paid | as above, never charged to the buyer |
 | Change of mind after 14 days | per the merchant's policy | per the merchant's policy |
 
@@ -388,7 +383,7 @@ UNVERIFIED and all need an adviser before launch. Payment licences are in
 | **EU** | product-safety responsible person (GPSR); packaging EPR in DE (before the first parcel) and in each country as sales start; textile EPR in FR and NL | IOSS (optional; removes border VAT on orders up to €150); EUDR operator for wooden goods from 30-Dec-2026 |
 | **US** | none to sell. As importer of record (if chosen): CBP importer number (Form 5106) and a bond, unless DHL's duty-paid covers it; CPSC eFiling data per product | state sales tax per state at economic nexus (often US$100k a year) |
 
-**Filing and paying the tax we collect** (decided 12-Nov-2026: we only
+**Filing and paying the tax we collect** (we only
 file where an order is `SellerCollected`. For `BorderPaid` orders DHL pays
 customs and invoices us, so DHL is the remitter and we only reconcile):
 
