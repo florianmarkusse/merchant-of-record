@@ -34,16 +34,18 @@ ADDRESS = {
 SESSION = {
     "lines": [
         {
-            "name": "Linen shirt",
+            "name": "Cotton T-shirt",
             "quantity": 2,
             "unit_price": {"amount_minor": 2500, "currency": "SGD"},
             "category": "apparel",
             "customs": {
-                "description": "Men's linen shirt, woven",
+                "description": "Cotton T-shirt, knitted",
                 "origin_country": "VN",
                 "weight_g": 300,
                 "hs_code": "610910",
             },
+            # The seed classifies it (src/mor/seed.py, SANDBOX_SKUS).
+            "merchant_sku": "SANDBOX-TEE",
         }
     ],
     "parcel": {"weight_g": 1000, "length_mm": 200, "width_mm": 150, "height_mm": 100},

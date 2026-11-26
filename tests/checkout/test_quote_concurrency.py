@@ -27,9 +27,11 @@ from mor.ids import (
     CheckoutSessionId,
     CountryCode,
     HsCode,
+    MerchantSku,
     ShippingPriceLookupId,
 )
 from mor.markets.store import load_market
+from mor.merchants.classifications import classify
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import finish_delivery
 from mor.messaging.routing import ConsumerName
@@ -87,17 +89,23 @@ def test_a_price_finishing_while_an_address_is_quoted_is_never_missed(
                 timedelta(hours=24),
                 PriceExpiry.CARRIER_FIRST,
             )
+            sku = MerchantSku("LIN-01")
+            hs_code = HsCode("610910")
             line = SoldLine(
                 name="Linen shirt",
                 quantity=1,
                 unit_price=Money(2500, Currency.SGD),
                 category="apparel",
-                merchant_sku=None,
+                merchant_sku=sku,
                 customs=Customs(
                     description="Linen shirt",
                     origin_country=CountryCode("VN"),
                     weight_g=300,
-                    hs_code=HsCode("610910"),
+                    hs_code=hs_code,
+                    merchant_hs_code=None,
+                ),
+                classification_id=await classify(
+                    conn, seller.id, sku, hs_code, ACTOR, NOW
                 ),
             )
             for _ in range(2):

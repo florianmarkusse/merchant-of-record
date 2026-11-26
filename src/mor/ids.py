@@ -23,6 +23,8 @@ from typing import NewType
 
 # Merchants
 MerchantId = NewType("MerchantId", uuid.UUID)
+MerchantShipFromId = NewType("MerchantShipFromId", uuid.UUID)
+SkuClassificationId = NewType("SkuClassificationId", uuid.UUID)
 
 # Provider accounts, one kind per vendor port
 PspAccountId = NewType("PspAccountId", uuid.UUID)
@@ -69,6 +71,7 @@ GroupCode = NewType("GroupCode", str)  # a group of countries: `EU`, `ASEAN`
 CarrierCode = NewType("CarrierCode", str)  # `dhl_express`
 ServiceCode = NewType("ServiceCode", str)  # a carrier's service
 HsCode = NewType("HsCode", str)  # digits only, 2 to 10: a code or a prefix
+MerchantSku = NewType("MerchantSku", str)  # the merchant's own product code
 
 # The PSP's ids for what it reports
 PspPaymentId = NewType("PspPaymentId", str)

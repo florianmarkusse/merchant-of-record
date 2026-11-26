@@ -29,9 +29,17 @@ from mor.checkout.records import (
 )
 from mor.checkout.sessions import create_session, session_by_id
 from mor.db.connect import connect
-from mor.ids import CarrierCode, CheckoutSessionId, CountryCode, HsCode
+from mor.ids import (
+    CarrierCode,
+    CheckoutSessionId,
+    CountryCode,
+    HsCode,
+    MerchantSku,
+    SkuClassificationId,
+)
 from mor.markets.records import MarketSet
 from mor.markets.store import load_market
+from mor.merchants.classifications import classify
 from mor.merchants.records import KeyEnv, KybState
 from mor.merchants.store import create_api_key, create_merchant, set_kyb_state
 from mor.messaging.worker import drain_once
@@ -46,19 +54,28 @@ from tests.quote.fixtures import live_market, quote_market
 NOW = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 ACTOR = Actor(ActorKind.SYSTEM, "test")
 PARCEL = Parcel(weight_g=1000, length_mm=200, width_mm=150, height_mm=100)
-LINE = SoldLine(
-    name="Linen shirt",
-    quantity=2,
-    unit_price=Money(2500, Currency.SGD),
-    category="apparel",
-    merchant_sku="LIN-01",
-    customs=Customs(
-        description="Men's linen shirt, woven",
-        origin_country=CountryCode("VN"),
-        weight_g=300,
-        hs_code=HsCode("610910"),
-    ),
-)
+SKU = MerchantSku("LIN-01")
+KNITTED_SHIRT = HsCode("610910")
+
+
+def _line(classification_id: SkuClassificationId, hs_code: HsCode) -> SoldLine:
+    return SoldLine(
+        name="Linen shirt",
+        quantity=2,
+        unit_price=Money(2500, Currency.SGD),
+        category="apparel",
+        merchant_sku=SKU,
+        customs=Customs(
+            description="Men's linen shirt, woven",
+            origin_country=CountryCode("VN"),
+            weight_g=300,
+            hs_code=hs_code,
+            merchant_hs_code=None,
+        ),
+        classification_id=classification_id,
+    )
+
+
 SG_ADDRESS = {
     addresses.NAME: "Tan Mei Ling",
     addresses.EMAIL: "mei@example.test",
@@ -97,7 +114,7 @@ async def _with_setup(
     url: str,
     body: Callable[[Setup], Awaitable[None]],
     market: MarketSet | None = None,
-    line: SoldLine = LINE,
+    hs_code: HsCode = KNITTED_SHIRT,
 ) -> None:
     clock = [NOW]
     wired = wire(url, lambda: clock[0])
@@ -108,11 +125,12 @@ async def _with_setup(
         )
         await set_kyb_state(conn, seller.id, KybState.APPROVED, ACTOR, NOW)
         key = await create_api_key(conn, seller.id, KeyEnv.TEST, NOW)
+        classification_id = await classify(conn, seller.id, SKU, hs_code, ACTOR, NOW)
         session = await create_session(
             conn,
             seller.id,
             SessionDraft(
-                lines=(line,),
+                lines=(_line(classification_id, hs_code),),
                 parcel=PARCEL,
                 merchant_reference="order-1",
                 return_url="https://shop.example/thanks",
@@ -275,7 +293,7 @@ def test_a_refused_quote_says_why_in_buyer_words(database_url: str) -> None:
         response = await _post(setup, "/address", TH_ADDRESS)
         assert response.status_code == 303
         page = _words((await setup.wired.control.get(setup.page)).text)
-        assert "This order can't be priced for that country yet." in page
+        assert "We can't work out the duties for that country right now." in page
         assert "Where should we send it?" in page
         assert (
             await count_rows(
@@ -284,21 +302,8 @@ def test_a_refused_quote_says_why_in_buyer_words(database_url: str) -> None:
             == 1
         )
 
-    no_hs = SoldLine(
-        name=LINE.name,
-        quantity=LINE.quantity,
-        unit_price=LINE.unit_price,
-        category=LINE.category,
-        merchant_sku=LINE.merchant_sku,
-        customs=Customs(
-            description="Men's linen shirt, woven",
-            origin_country=CountryCode("VN"),
-            weight_g=300,
-            hs_code=None,
-        ),
-    )
-    market = quote_market(duty_sources="TH,vendor,acme,\n")
-    asyncio.run(_with_setup(database_url, body, market, no_hs))
+    # TH has a duty rate for chapter 61 only; a woven shirt has none.
+    asyncio.run(_with_setup(database_url, body, None, HsCode("620520")))
 
 
 def test_the_page_waits_while_the_carriers_price_is_fetched(

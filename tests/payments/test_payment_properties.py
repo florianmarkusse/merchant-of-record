@@ -18,12 +18,15 @@ from mor.ids import (
     CheckoutAddressId,
     CheckoutSessionId,
     CountryCode,
+    HsCode,
     MarketLoadId,
     MerchantId,
+    MerchantSku,
     PaymentAttemptId,
     PspAccountId,
     QuoteId,
     ServiceCode,
+    SkuClassificationId,
 )
 from mor.invoices.lines import invoice_lines
 from mor.invoices.records import InvoiceSection
@@ -127,13 +130,16 @@ def _paid_quotes(draw: strategies.DrawFn) -> tuple[MadeQuote, tuple[SoldLine, ..
                 quantity=quantity,
                 unit_price=price,
                 category="apparel",
-                merchant_sku=None,
+                merchant_sku=MerchantSku(f"ITEM-{number}"),
                 customs=Customs(
                     description="Item",
                     origin_country=CountryCode("VN"),
                     weight_g=100,
-                    hs_code=None,
+                    hs_code=HsCode("610910"),
+                    merchant_hs_code=None,
                 ),
+                # Pure: no row stands behind it.
+                classification_id=SkuClassificationId(uuid.uuid7()),
             )
         )
         goods.append(

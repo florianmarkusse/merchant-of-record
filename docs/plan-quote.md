@@ -604,8 +604,13 @@ bits).
 - Body: `lines`, `parcel`, `merchant_reference?`, `return_url`,
   `cancel_url`, `after_payment?` (`plan-payments.md` §6).
 - Each line: `name`, `quantity`, `unit_price {amount_minor, currency}`,
-  `category`, `merchant_sku?`, and `customs {description, origin_country,
-  weight_g, hs_code?}`.
+  `category`, `merchant_sku`, and `customs {description, origin_country,
+  weight_g, hs_code?}` (the merchant's code, a hint). Answered with each
+  line's `classification {hs_code}`, ours (`plan-shipments.md` §4).
+- Refused before anything is stored: a merchant without a ship-from
+  address (422 `ship_from_missing`), a category we do not sell yet
+  (`category_not_offered`), a SKU we have not classified
+  (`classification_needed`).
 - `tax_behavior` is not accepted: v1 is exclusive only.
 - Lines may be priced in different currencies; the quote already converts
   each one.
@@ -692,11 +697,11 @@ not exist.
    is our side (checked 19-Nov-2026 in trade guidance, not in law: which
    party is importer of record per country is an adviser question). So a
    merchant's HS code is a hint: each line requires a category from our
-   closed list; a merchant's `hs_code` is stored as the merchant's and
-   used for now; our own classification per `merchant_sku`, by a vendor
-   or a person, comes later, stored once per SKU. A line with no HS code
-   is priced where our rows need none; a country whose duty mode needs
-   the code refuses it with 422 `classification_needed`.
+   closed list (only `apparel` is offered for now) and a `merchant_sku`;
+   the merchant's `hs_code` is stored as theirs. The quote uses our
+   classification of the SKU, set by staff before it is sold; a SKU we
+   have not classified is refused with 422 `classification_needed`
+   (`plan-shipments.md` §4).
 3. **Estimates take no `Idempotency-Key`** (they change nothing but
    deduplicated asks) and answer `estimate_pending` with `Retry-After`
    while inputs are fetched. Two limits:
@@ -970,9 +975,9 @@ prod behind it, unchanged.
 
 3. **Product category on each line**: the merchant tells us the
    category (from our closed list: product gate, tax rate, border rule)
-   and the HS code (duty rate); classification stays ours (§5). Where a
-   merchant cannot, staff classify the merchant's stored product by
-   hand, recorded as a staff action; nothing is guessed automatically.
+   and its own HS code as a hint; classification stays ours (§5): staff
+   classify each SKU by hand before it is sold, recorded as a staff
+   action (`plan-shipments.md` §4); nothing is guessed automatically.
 
 4. **FX**: the buyer pays in their currency, so every quote needs a
    rate. For now an `fx_rate` table filled by the loader (ECB reference

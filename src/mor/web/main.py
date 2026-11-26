@@ -27,6 +27,7 @@ from mor.web import (
     order_pages,
     sandbox,
     staff_bank,
+    staff_classifications,
     staff_markets,
     staff_settlement,
     webhooks,
@@ -156,6 +157,12 @@ def make_app(
     async def staff_bank_note(request: Request) -> Response:
         return await staff_bank.note_on_entry(request, url, clock())
 
+    async def staff_classifications_page(request: Request) -> Response:
+        return await staff_classifications.page(request, url)
+
+    async def staff_classify(request: Request) -> Response:
+        return await staff_classifications.set_code(request, url, clock())
+
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
         Route("/webhooks/psp/{account_id}", psp_webhook, methods=["POST"]),
@@ -227,6 +234,12 @@ def make_app(
                     staff_settlement_payout_note,
                     methods=["POST"],
                 ),
+                Route(
+                    "/staff/classifications",
+                    staff_classifications_page,
+                    methods=["GET"],
+                ),
+                Route("/staff/classifications", staff_classify, methods=["POST"]),
                 Route("/staff/bank", staff_bank_accounts, methods=["GET"]),
                 Route("/staff/bank/{account_id}", staff_bank_account, methods=["GET"]),
                 Route(

@@ -5,7 +5,7 @@ describe the design as it is now: when something changes, the plan it
 changes is rewritten and the decisions it overturns are updated, never
 amended by a newer page. Git holds the history.
 
-Status as of 25-Nov-2026.
+Status as of 26-Nov-2026.
 
 ## Built
 
@@ -16,6 +16,7 @@ Status as of 25-Nov-2026.
 | 3 | The test setup on the laptop and the nightly soak | `plan-test-setup.md` |
 | 4 | Market data, the tax path, duty rates and carrier prices from switchable sources, `build_quote`, merchants and the API, the buyer's checkout up to a quote | `plan-quote.md`, `plan-markets-data.md` |
 | 5a–5c-3 | Payments against the fake PSP in every mode, the order, the invoice, settlement with each payout reconciled, the bank: every entry booked, each payout matched to its credit; card fields, the CSP the app sends, the browser smoke suite | `plan-payments.md` |
+| 6a-1 | What checkout refuses: apparel only, our classification per SKU and its staff page, the merchant's ship-from address | `plan-shipments.md` |
 
 The checks that run after every change (ruff, pyright strict, vulture,
 `npx tsc`, the ast-grep rules, pytest with the fuzzers) are in
@@ -23,12 +24,13 @@ The checks that run after every change (ruff, pyright strict, vulture,
 
 ## Next, in this order
 
-Slice 5 is done. Then the slices of the whole flow
+Slice 5 is done and 6a-1 is built. Then the slices of the whole flow
 (`plan-architecture.md` §2), each designed first where it adds tables or
 message shapes:
 
-6. Shipments against the fake carrier in every mode: booking, tracking,
-   milestones (`plan-architecture.md` §7, §9; `plan-logistics.md`). The
+6. Shipments against the fake carrier in every mode: what checkout
+   refuses (apparel only, our classification per SKU, the ship-from
+   address), booking, tracking, milestones (`plan-shipments.md`). The
    echo flow is retired with it, and with it the echo ignores of the
    `typed-ids` ast-grep rule.
 7. Carrier invoice import and its ledger entries.
@@ -100,6 +102,11 @@ Slices of their own, placed when needed:
 
 - `plan-test-setup.md`, `plan-quote.md`, `plan-markets-data.md`,
   `plan-payments.md`.
+
+**Designed, being built**:
+
+- `plan-shipments.md`: slice 6, what checkout refuses, booking,
+  tracking and milestones.
 
 **Input for slices not built yet**:
 

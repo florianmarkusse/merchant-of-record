@@ -85,9 +85,9 @@ PaymentLink  { id, merchant_id, lines: [LineInput], quantity_rule, active,
   saved checkout template with its own lines, inline or by reference.
   Lines by reference follow product edits (a new price applies without a
   new URL). Inline lines are frozen until the link is edited.
-- **An HS code suggested once is reused**: with a `merchant_sku`, a code
-  we suggested and the merchant confirmed applies to later sessions with
-  that SKU.
+- **A SKU is classified once**: every line carries a `merchant_sku`,
+  and our code for it (`plan-shipments.md` §4) applies to every later
+  session with that SKU until we change it.
 - **Restricted-goods screening is automatic** at session creation and
   again at the quote, once the buyer country is known; a blocked line is
   a typed refusal, not a manual review.
@@ -95,7 +95,8 @@ PaymentLink  { id, merchant_id, lines: [LineInput], quantity_rule, active,
 ## 4. The rest of the merchant API
 
 The conventions are built (`plan-quote.md` §5): JSON under `/v1/`,
-additive changes only within v1; secret keys per merchant and
+additive changes only within v1 once the first merchant integrates
+(until then v1 may still break); secret keys per merchant and
 environment (`sk_{environment}_…`), stored hashed, shown once; a required
 `Idempotency-Key` on every POST, kept for good; money as
 `{ "amount_minor", "currency" }`; one error shape with a closed set of

@@ -29,7 +29,9 @@ from mor.ids import (
     CountryCode,
     HsCode,
     MerchantId,
+    MerchantSku,
     QuoteId,
+    SkuClassificationId,
 )
 from mor.messaging.facts import CheckoutSessionCreatedV1, CheckoutSessionExpiryDueV1
 from mor.messaging.store import append_fact
@@ -78,8 +80,8 @@ async def create_session(
             INSERT INTO checkout_session_line
               (session_id, line_no, name, quantity, unit_price_minor, currency,
                category, merchant_sku, customs_description, origin_country,
-               weight_g, hs_code)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               weight_g, merchant_hs_code, classification_id, hs_code)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 session_id,
@@ -93,6 +95,8 @@ async def create_session(
                 line.customs.description,
                 line.customs.origin_country,
                 line.customs.weight_g,
+                line.customs.merchant_hs_code,
+                line.classification_id,
                 line.customs.hs_code,
             ),
         )
@@ -155,11 +159,13 @@ class _LineRow:
     unit_price_minor: int
     currency: Currency
     category: str
-    merchant_sku: str | None
+    merchant_sku: MerchantSku
     customs_description: str
     origin_country: CountryCode
     weight_g: int
-    hs_code: HsCode | None
+    merchant_hs_code: HsCode | None
+    classification_id: SkuClassificationId
+    hs_code: HsCode
 
 
 async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession | None:
@@ -170,7 +176,7 @@ async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession
             """
             SELECT name, quantity, unit_price_minor, currency, category,
                    merchant_sku, customs_description, origin_country, weight_g,
-                   hs_code
+                   merchant_hs_code, classification_id, hs_code
             FROM checkout_session_line WHERE session_id = %s ORDER BY line_no
             """,
             (row.id,),
@@ -190,7 +196,9 @@ async def _session(conn: Connection, row: _SessionRow | None) -> CheckoutSession
                     origin_country=line.origin_country,
                     weight_g=line.weight_g,
                     hs_code=line.hs_code,
+                    merchant_hs_code=line.merchant_hs_code,
                 ),
+                classification_id=line.classification_id,
             )
         )
     return CheckoutSession(

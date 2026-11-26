@@ -49,8 +49,15 @@ from mor.checkout.records import (
 from mor.checkout.sessions import create_session
 from mor.db.connect import Connection, connect
 from mor.db.fetch import one_value
-from mor.ids import CarrierCode, CheckoutSessionId, CountryCode, HsCode
+from mor.ids import (
+    CarrierCode,
+    CheckoutSessionId,
+    CountryCode,
+    HsCode,
+    MerchantSku,
+)
 from mor.markets.store import load_market
+from mor.merchants.classifications import classify
 from mor.merchants.store import create_merchant
 from mor.messaging.delivery import (
     Candidate,
@@ -383,6 +390,9 @@ class QuoteFlow(RuleBasedStateMachine):
                 timedelta(hours=6),
                 PriceExpiry.CARRIER_FIRST,
             )
+            sku = MerchantSku("LIN-01")
+            hs_code = HsCode("610910")
+            classification_id = await classify(conn, seller.id, sku, hs_code, ACTOR, T0)
             sessions: list[CheckoutSessionId] = []
             for parcel in PARCELS:
                 line = SoldLine(
@@ -390,13 +400,15 @@ class QuoteFlow(RuleBasedStateMachine):
                     quantity=1,
                     unit_price=Money(2500, Currency.SGD),
                     category="apparel",
-                    merchant_sku=None,
+                    merchant_sku=sku,
                     customs=Customs(
                         description="Linen shirt",
                         origin_country=CountryCode("VN"),
                         weight_g=300,
-                        hs_code=HsCode("610910"),
+                        hs_code=hs_code,
+                        merchant_hs_code=None,
                     ),
+                    classification_id=classification_id,
                 )
                 session = await create_session(
                     conn,

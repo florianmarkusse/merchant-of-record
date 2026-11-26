@@ -24,6 +24,7 @@ from mor.db.connect import Connection, connect
 from mor.ids import ApiIdempotencyKey, CountryCode
 from mor.invoices.store import invoice_for_order
 from mor.markets.store import market_in_force
+from mor.merchants.classifications import classifications_of
 from mor.merchants.idempotency import (
     Claimed,
     KeyReused,
@@ -32,6 +33,7 @@ from mor.merchants.idempotency import (
     store_response,
 )
 from mor.merchants.records import Authenticated
+from mor.merchants.ship_from import ship_from_in_force
 from mor.merchants.store import (
     authenticate,
     key_env,
@@ -58,6 +60,7 @@ from mor.quote.inputs import (
 from mor.quote.refusals import Refusal, offered_in, refusal_of
 from mor.web.api_estimates import estimate_out, refusal_error
 from mor.web.api_wire import (
+    SHIP_FROM_MISSING,
     ApiError,
     ErrorType,
     EstimateIn,
@@ -66,6 +69,7 @@ from mor.web.api_wire import (
     decode,
     error_response,
     json_response,
+    line_skus,
     merchant_out,
     order_out,
     parcel_of,
@@ -145,7 +149,13 @@ async def create_checkout_session(
         if market is None:
             await conn.rollback()
             return error_response(NO_MARKET)
-        draft = session_draft(market, decoded)
+        if await ship_from_in_force(conn, merchant_id) is None:
+            await conn.rollback()
+            return error_response(SHIP_FROM_MISSING)
+        classifications = await classifications_of(
+            conn, merchant_id, line_skus(decoded.lines)
+        )
+        draft = session_draft(market, classifications, decoded)
         if isinstance(draft, ApiError):
             await conn.rollback()
             return error_response(draft)
@@ -272,7 +282,12 @@ async def create_estimate(
         market = await market_in_force(conn)
         if market is None:
             return error_response(NO_MARKET)
-        lines = sold_lines(market, decoded.lines)
+        if await ship_from_in_force(conn, auth.merchant.id) is None:
+            return error_response(SHIP_FROM_MISSING)
+        classifications = await classifications_of(
+            conn, auth.merchant.id, line_skus(decoded.lines)
+        )
+        lines = sold_lines(market, classifications, decoded.lines)
         if isinstance(lines, ApiError):
             return error_response(lines)
         quote_lines: list[QuoteLine] = []

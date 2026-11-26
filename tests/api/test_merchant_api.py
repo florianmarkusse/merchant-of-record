@@ -6,7 +6,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 import httpx2
@@ -14,15 +14,19 @@ import httpx2
 from mor.audit import Actor, ActorKind
 from mor.carriers.prices import create_carrier_account
 from mor.carriers.records import CarrierProvider, PriceExpiry
+from mor.checkout.addresses import Address
 from mor.config import Environment, Settings
 from mor.db.connect import connect
-from mor.ids import CarrierCode, CountryCode
-from mor.markets.records import MarketSet
+from mor.ids import CarrierCode, CountryCode, HsCode, MerchantSku
+from mor.markets.records import Category, MarketSet
 from mor.markets.store import load_market
+from mor.merchants.classifications import classify
 from mor.merchants.records import KeyEnv, Merchant
+from mor.merchants.ship_from import set_ship_from
 from mor.merchants.store import create_api_key, create_merchant, revoke_api_key
 from mor.messaging.worker import drain_once
 from mor.provider_accounts import ProviderAccountKind
+from mor.public_ids import merchant_public_id
 from mor.web.main import make_app
 from tests.helpers import ENV, VENDOR_TIMEOUT, count_rows, wire
 from tests.quote.fixtures import live_market, quote_market
@@ -42,14 +46,21 @@ LINE = {
         "weight_g": 300,
         "hs_code": "610910",
     },
+    "merchant_sku": "LIN-01",
 }
-NO_HS_LINE = LINE | {
-    "customs": {
-        "description": "Men's linen shirt, woven",
-        "origin_country": "VN",
-        "weight_g": 300,
-    }
-}
+UNCLASSIFIED_LINE = LINE | {"merchant_sku": "NEW-01"}
+WAREHOUSE = Address(
+    name="Test Shop Warehouse",
+    email="warehouse@shop.example",
+    phone_dial_code="+84",
+    phone_number="281234567",
+    line1="1 Example Street",
+    line2=None,
+    city="Thu Duc",
+    region="Ho Chi Minh City",
+    postcode=None,
+    country=CountryCode("VN"),
+)
 SESSION = {
     "lines": [LINE],
     "parcel": PARCEL,
@@ -70,12 +81,20 @@ async def _shop(
     market: MarketSet | None = None,
     daily_vendor_asks: int = 100,
     name: str = "Test Shop",
+    ships_from: bool = True,
 ) -> Shop:
+    """A merchant with a key; unless told otherwise, its ship-from address
+    set and LINE's SKU classified as the merchant's own code says."""
     async with await connect(url) as conn:
         if market is not None:
             await load_market(conn, market, "test", ACTOR, NOW)
         seller = await create_merchant(
             conn, f"{name} Co.", name, CountryCode("VN"), daily_vendor_asks, ACTOR, NOW
+        )
+        if ships_from:
+            await set_ship_from(conn, seller.id, WAREHOUSE, ACTOR, NOW)
+        await classify(
+            conn, seller.id, MerchantSku("LIN-01"), HsCode("610910"), ACTOR, NOW
         )
         key = await create_api_key(conn, seller.id, KeyEnv.TEST, NOW)
         await conn.commit()
@@ -173,7 +192,7 @@ def test_a_session_is_stored_as_sent_and_read_back(database_url: str) -> None:
         assert session["merchant"] == f"mer_{shop.merchant.id.hex}"
         assert session["created_at"] == "2026-11-18T09:30:00Z"
         assert session["expires_at"] == "2026-11-19T09:30:00Z"
-        assert session["lines"] == [LINE | {"merchant_sku": None}]
+        assert session["lines"] == [LINE | {"classification": {"hs_code": "610910"}}]
         assert session["parcel"] == PARCEL
         assert session["merchant_reference"] == "order-1042"
 
@@ -428,10 +447,10 @@ def test_an_estimate_is_refused_with_the_reason(database_url: str) -> None:
         cases = (
             (_estimate(CountryCode("ZZ")), 422, "country_not_supported", "country"),
             (
-                _estimate(CountryCode("TH"), NO_HS_LINE),
+                _estimate(CountryCode("TH"), UNCLASSIFIED_LINE),
                 422,
                 "classification_needed",
-                None,
+                "lines[0].merchant_sku",
             ),
         )
         for request, status, code, param in cases:
@@ -441,8 +460,7 @@ def test_an_estimate_is_refused_with_the_reason(database_url: str) -> None:
             assert response.status_code == status, response.text
             error = _error(response)
             assert error["code"] == code
-            if param is not None:
-                assert error["param"] == param
+            assert error["param"] == param
         assert await count_rows(database_url, "SELECT count(*) FROM duty_lookup") == 0
 
     asyncio.run(body())
@@ -532,3 +550,159 @@ def test_new_lookups_over_the_daily_limit_are_not_asked(database_url: str) -> No
         assert await count_rows(database_url, lookups) == 0
 
     asyncio.run(body())
+
+
+def test_a_merchant_without_a_ship_from_address_cannot_sell(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        shop = await _shop(database_url, quote_market(), ships_from=False)
+        session = await _call(
+            database_url, "POST", "/v1/checkout_sessions", shop.key, SESSION, "k-1"
+        )
+        assert session.status_code == 422, session.text
+        assert _error(session)["code"] == "ship_from_missing"
+        estimate = await _call(
+            database_url,
+            "POST",
+            "/v1/estimates",
+            shop.key,
+            _estimate(CountryCode("SG")),
+        )
+        assert estimate.status_code == 422, estimate.text
+        assert _error(estimate)["code"] == "ship_from_missing"
+        assert (
+            await count_rows(database_url, "SELECT count(*) FROM checkout_session") == 0
+        )
+
+    asyncio.run(body())
+
+
+def test_a_category_we_do_not_sell_yet_is_refused(database_url: str) -> None:
+    async def body() -> None:
+        market = replace(
+            quote_market(),
+            categories=(
+                Category("apparel", "Apparel"),
+                Category("ceramics", "Ceramics"),
+            ),
+        )
+        shop = await _shop(database_url, market)
+        ceramics = SESSION | {"lines": [LINE | {"category": "ceramics"}]}
+        refused = await _call(
+            database_url, "POST", "/v1/checkout_sessions", shop.key, ceramics, "k-1"
+        )
+        assert refused.status_code == 422, refused.text
+        error = _error(refused)
+        assert error["code"] == "category_not_offered"
+        assert error["param"] == "lines[0].category"
+
+    asyncio.run(body())
+
+
+def test_a_sku_we_have_not_classified_is_refused_until_staff_classify_it(
+    database_url: str,
+) -> None:
+    async def body() -> None:
+        shop = await _shop(database_url, quote_market())
+        new = SESSION | {"lines": [UNCLASSIFIED_LINE]}
+        refused = await _call(
+            database_url, "POST", "/v1/checkout_sessions", shop.key, new, "k-1"
+        )
+        assert refused.status_code == 422, refused.text
+        error = _error(refused)
+        assert error["code"] == "classification_needed"
+        assert error["param"] == "lines[0].merchant_sku"
+
+        # The merchant said 610910; we decide a woven shirt is 620520.
+        classified = await _staff_classify(
+            database_url, shop.merchant, "NEW-01", "6205.20"
+        )
+        assert classified.status_code == 303
+        page = await _call(database_url, "GET", "/staff/classifications", None)
+        assert "NEW-01" in page.text and "620520" in page.text
+
+        sold = await _call(
+            database_url, "POST", "/v1/checkout_sessions", shop.key, new, "k-1"
+        )
+        assert sold.status_code == 201, sold.text
+        [line] = sold.json()["lines"]
+        assert line["customs"]["hs_code"] == "610910"
+        assert line["classification"] == {"hs_code": "620520"}
+
+    asyncio.run(body())
+
+
+def test_a_new_code_leaves_lines_already_sold_as_they_were(database_url: str) -> None:
+    async def body() -> None:
+        shop = await _shop(database_url, quote_market())
+        first = await _call(
+            database_url, "POST", "/v1/checkout_sessions", shop.key, SESSION, "k-1"
+        )
+        assert first.status_code == 201, first.text
+        await _staff_classify(database_url, shop.merchant, "LIN-01", "620520")
+        second = await _call(
+            database_url, "POST", "/v1/checkout_sessions", shop.key, SESSION, "k-2"
+        )
+        assert second.status_code == 201, second.text
+        read = await _call(
+            database_url,
+            "GET",
+            f"/v1/checkout_sessions/{first.json()['id']}",
+            shop.key,
+        )
+        assert read.json()["lines"][0]["classification"] == {"hs_code": "610910"}
+        assert second.json()["lines"][0]["classification"] == {"hs_code": "620520"}
+
+    asyncio.run(body())
+
+
+def test_staff_refuse_a_code_that_is_not_one(database_url: str) -> None:
+    async def body() -> None:
+        shop = await _shop(database_url, quote_market())
+        response = await _staff_classify(database_url, shop.merchant, "NEW-01", "61")
+        assert response.status_code == 303
+        assert "not+classified" in response.headers["location"]
+        cross_site = await _staff_classify(
+            database_url, shop.merchant, "NEW-01", "610910", "https://evil.example"
+        )
+        assert cross_site.status_code == 403
+        assert (
+            await count_rows(
+                database_url,
+                "SELECT count(*) FROM sku_classification WHERE merchant_sku = 'NEW-01'",
+            )
+            == 0
+        )
+
+    asyncio.run(body())
+
+
+async def _staff_classify(
+    url: str,
+    seller: Merchant,
+    sku: str,
+    hs_code: str,
+    origin: str = "http://mor",
+) -> httpx2.Response:
+    app = make_app(
+        Settings(
+            environment=Environment.TEST,
+            database_url=url,
+            self_url="http://mor",
+            fake_psp_origin="http://psp.mor",
+        ),
+        None,
+        lambda: NOW,
+    )
+    transport = httpx2.ASGITransport(app=app)
+    async with httpx2.AsyncClient(transport=transport) as client:
+        return await client.post(
+            "http://mor/staff/classifications",
+            data={
+                "merchant": merchant_public_id(seller.id),
+                "sku": sku,
+                "hs_code": hs_code,
+            },
+            headers={"origin": origin},
+        )

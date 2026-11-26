@@ -32,7 +32,9 @@ every fake PSP account paying out each currency into it, on both sides
 
 A synthetic merchant, "Sandbox Shop", with an API key for this
 environment: the key is printed when it is created, and only then
-(docs/plan-quote.md §5, 4d-1).
+(docs/plan-quote.md §5, 4d-1); a made-up ship-from address in VN and
+our codes for its SKUs SANDBOX-TEE and SANDBOX-SHIRT
+(docs/plan-shipments.md §4).
 
 Transitional with the echo flow: the seed grows a merchant per mode
 combination as the real ports arrive (plan-architecture.md §6).
@@ -58,6 +60,7 @@ from mor.bank.fetch import start_reading
 from mor.bank.port import BankAccount, BankProvider
 from mor.carriers.prices import carrier_account, create_carrier_account
 from mor.carriers.records import CarrierProvider, PriceExpiry
+from mor.checkout.addresses import Address
 from mor.config import Environment, Settings, load_settings
 from mor.db.connect import Connection, connect
 from mor.duties.lookups import create_vendor_account, vendor_account
@@ -65,10 +68,12 @@ from mor.duties.port import DutyProvider
 from mor.echo.flow import create_echo_account
 from mor.echo.port import EchoProvider, EventMode
 from mor.echo.reports import start_report_schedule
-from mor.ids import CarrierCode, CountryCode, MerchantId
+from mor.ids import CarrierCode, CountryCode, HsCode, MerchantId, MerchantSku
 from mor.markets.records import PriceSource
 from mor.markets.store import latest_load, read_market
+from mor.merchants.classifications import classifications_in_force, classify
 from mor.merchants.records import DEFAULT_DAILY_VENDOR_ASKS, KybState, NewKey
+from mor.merchants.ship_from import set_ship_from, ship_from_in_force
 from mor.merchants.store import (
     create_api_key,
     create_merchant,
@@ -512,6 +517,24 @@ async def _main() -> int:
 
 
 SANDBOX_MERCHANT = ("Sandbox Shop Co., Ltd.", "Sandbox Shop")
+# Made up: where the Sandbox Shop ships from, and its SKUs as we classify
+# them (docs/plan-shipments.md §4).
+SANDBOX_SHIP_FROM = Address(
+    name="Sandbox Shop Warehouse",
+    email="warehouse@sandbox-shop.example",
+    phone_dial_code="+84",
+    phone_number="281234567",
+    line1="1 Example Street",
+    line2=None,
+    city="Thu Duc",
+    region="Ho Chi Minh City",
+    postcode="700000",
+    country=CountryCode("VN"),
+)
+SANDBOX_SKUS = (
+    (MerchantSku("SANDBOX-TEE"), HsCode("610910")),  # cotton T-shirt, knitted
+    (MerchantSku("SANDBOX-SHIRT"), HsCode("620520")),  # men's cotton shirt, woven
+)
 
 
 async def seed_merchant(
@@ -542,6 +565,12 @@ async def seed_merchant(
     if not approved:
         # The sandbox's KYB is at once (docs/plan-payments.md §6).
         await set_kyb_state(conn, merchant_id, KybState.APPROVED, SEEDER, now)
+    if await ship_from_in_force(conn, merchant_id) is None:
+        await set_ship_from(conn, merchant_id, SANDBOX_SHIP_FROM, SEEDER, now)
+    classified = await classifications_in_force(conn, merchant_id)
+    for sku, hs_code in SANDBOX_SKUS:
+        if sku not in classified:
+            await classify(conn, merchant_id, sku, hs_code, SEEDER, now)
     if await merchant_has_key(conn, merchant_id):
         return None
     return await create_api_key(conn, merchant_id, key_env(settings.environment), now)

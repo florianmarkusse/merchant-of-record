@@ -13,12 +13,18 @@ from mor.ids import (
     CountryCode,
     HsCode,
     MerchantId,
+    MerchantSku,
     QuoteId,
+    SkuClassificationId,
 )
 from mor.money.amount import Money
 
 
 SESSION_LIFETIME = timedelta(hours=24)
+
+# The only category we sell until the product gate is built
+# (docs/plan-shipments.md §12); the others stay in the market data.
+OFFERED_CATEGORIES = frozenset({"apparel"})
 
 
 class SessionState(StrEnum):
@@ -61,20 +67,23 @@ class Customs:
     description: str
     origin_country: CountryCode
     weight_g: int  # one unit's
-    hs_code: HsCode | None  # the merchant's: a hint, classification is ours
+    hs_code: HsCode  # ours: what we price and declare
+    merchant_hs_code: HsCode | None  # the merchant's, as sent: only a hint
 
 
 @dataclass(frozen=True, kw_only=True)
 class SoldLine:
-    """A line as the merchant sent it, snapshotted: a later change on the
-    merchant's side never changes what was sold."""
+    """A line as the merchant sent it, under our classification of its
+    SKU, snapshotted: a later change on the merchant's side, or a
+    reclassification, never changes what was sold."""
 
     name: str
     quantity: int
     unit_price: Money  # tax-exclusive
     category: str
-    merchant_sku: str | None
+    merchant_sku: MerchantSku
     customs: Customs
+    classification_id: SkuClassificationId  # gave `customs.hs_code`
 
 
 @dataclass(frozen=True, kw_only=True)

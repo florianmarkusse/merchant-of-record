@@ -21,6 +21,7 @@ from mor.carriers.records import Parcel
 from mor.checkout.addresses import Address
 from mor.checkout.quotes import MadeQuote, RefusedQuote, StoredQuote
 from mor.checkout.records import (
+    OFFERED_CATEGORIES,
     AfterPayment,
     CheckoutSession,
     Customs,
@@ -30,8 +31,9 @@ from mor.checkout.records import (
     SoldLine,
 )
 from mor.dates import format_instant
-from mor.ids import CountryCode, HsCode, OrderId, ServiceCode
+from mor.ids import CountryCode, HsCode, MerchantSku, OrderId, ServiceCode
 from mor.markets.records import MarketSet
+from mor.merchants.classifications import SkuClassification
 from mor.merchants.records import KybState, Merchant
 from mor.money.amount import Money
 from mor.money.currency import Currency
@@ -70,7 +72,8 @@ class LineIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=Tr
     unit_price: MoneyIn
     category: Annotated[str, Meta(min_length=1, max_length=100)]
     customs: CustomsIn
-    merchant_sku: Annotated[str, Meta(min_length=1, max_length=200)] | None = None
+    # Required: we classify per SKU (docs/plan-shipments.md §4).
+    merchant_sku: Annotated[MerchantSku, Meta(min_length=1, max_length=200)]
 
 
 class ParcelIn(msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True):
@@ -119,6 +122,8 @@ type ErrorCode = Literal[
     "idempotency_key_missing",
     "currency_not_supported",
     "unknown_category",
+    "category_not_offered",
+    "ship_from_missing",
     "authentication_failed",
     "idempotency_key_reused",
     "not_found",
@@ -235,11 +240,28 @@ def _currency(code: str, param: str) -> Currency | ApiError:
     )
 
 
+def line_skus(lines: list[LineIn]) -> list[MerchantSku]:
+    skus: list[MerchantSku] = []
+    for line in lines:
+        skus.append(line.merchant_sku)
+    return skus
+
+
+SHIP_FROM_MISSING = ApiError(
+    status=422,
+    type=ErrorType.INVALID_REQUEST,
+    code="ship_from_missing",
+    message="we have no ship-from address for this merchant: ask us to set one",
+)
+
+
 def sold_lines(
-    market: MarketSet, lines: list[LineIn]
+    market: MarketSet,
+    classifications: dict[MerchantSku, SkuClassification],
+    lines: list[LineIn],
 ) -> tuple[SoldLine, ...] | ApiError:
-    """The lines as our records, each category one of ours (answer 2 of
-    19-Nov-2026: categories are a closed list; classification is ours)."""
+    """The lines as our records: each category one of ours and offered,
+    each SKU classified by us (docs/plan-shipments.md §4)."""
     categories: set[str] = set()
     for category in market.categories:
         categories.add(category.category)
@@ -256,6 +278,26 @@ def sold_lines(
                 message=f"{line.category!r} is not one of our categories",
                 param=f"lines[{number}].category",
             )
+        if line.category not in OFFERED_CATEGORIES:
+            return ApiError(
+                status=422,
+                type=ErrorType.INVALID_REQUEST,
+                code="category_not_offered",
+                message=f"we do not sell {line.category!r} yet",
+                param=f"lines[{number}].category",
+            )
+        classification = classifications.get(line.merchant_sku)
+        if classification is None:
+            return ApiError(
+                status=422,
+                type=ErrorType.INVALID_REQUEST,
+                code="classification_needed",
+                message=(
+                    f"we have not classified SKU {line.merchant_sku!r}: "
+                    "ask us to before selling it"
+                ),
+                param=f"lines[{number}].merchant_sku",
+            )
         customs = line.customs
         sold.append(
             SoldLine(
@@ -268,8 +310,10 @@ def sold_lines(
                     description=customs.description,
                     origin_country=customs.origin_country,
                     weight_g=customs.weight_g,
-                    hs_code=customs.hs_code,
+                    hs_code=classification.hs_code,
+                    merchant_hs_code=customs.hs_code,
                 ),
+                classification_id=classification.id,
             )
         )
     return tuple(sold)
@@ -284,8 +328,12 @@ def parcel_of(parcel: ParcelIn) -> Parcel:
     )
 
 
-def session_draft(market: MarketSet, request: SessionIn) -> SessionDraft | ApiError:
-    lines = sold_lines(market, request.lines)
+def session_draft(
+    market: MarketSet,
+    classifications: dict[MerchantSku, SkuClassification],
+    request: SessionIn,
+) -> SessionDraft | ApiError:
+    lines = sold_lines(market, classifications, request.lines)
     if isinstance(lines, ApiError):
         return lines
     return SessionDraft(
@@ -314,7 +362,11 @@ class CustomsOut(msgspec.Struct, frozen=True, kw_only=True):
     description: str
     origin_country: CountryCode
     weight_g: int
-    hs_code: HsCode | None
+    hs_code: HsCode | None  # the merchant's, as sent
+
+
+class ClassificationOut(msgspec.Struct, frozen=True, kw_only=True):
+    hs_code: HsCode  # ours: what we price and declare
 
 
 class LineOut(msgspec.Struct, frozen=True, kw_only=True):
@@ -322,8 +374,9 @@ class LineOut(msgspec.Struct, frozen=True, kw_only=True):
     quantity: int
     unit_price: MoneyOut
     category: str
-    merchant_sku: str | None
+    merchant_sku: MerchantSku
     customs: CustomsOut
+    classification: ClassificationOut
 
 
 class ParcelOut(msgspec.Struct, frozen=True, kw_only=True):
@@ -460,8 +513,9 @@ def _lines_out(sold: tuple[SoldLine, ...]) -> list[LineOut]:
                     description=customs.description,
                     origin_country=customs.origin_country,
                     weight_g=customs.weight_g,
-                    hs_code=customs.hs_code,
+                    hs_code=customs.merchant_hs_code,
                 ),
+                classification=ClassificationOut(hs_code=customs.hs_code),
             )
         )
     return lines

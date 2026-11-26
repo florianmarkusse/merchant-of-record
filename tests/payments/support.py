@@ -21,8 +21,16 @@ from mor.checkout.quotes import MadeQuote, read_quote
 from mor.checkout.records import AfterPayment, Customs, SessionDraft, SoldLine
 from mor.checkout.sessions import create_session, session_by_id
 from mor.db.connect import connect
-from mor.ids import CheckoutSessionId, CountryCode, HsCode, MerchantId
+from mor.ids import (
+    CheckoutSessionId,
+    CountryCode,
+    HsCode,
+    MerchantId,
+    MerchantSku,
+    SkuClassificationId,
+)
 from mor.markets.store import load_market
+from mor.merchants.classifications import classify
 from mor.merchants.records import KybState
 from mor.merchants.store import create_merchant, set_kyb_state
 from mor.messaging.guard import DuplicateGuard
@@ -60,19 +68,25 @@ SG_ADDRESS = {
 }
 
 
-def line(price: Money) -> SoldLine:
+SKU = MerchantSku("LIN-01")
+HS_CODE = HsCode("610910")
+
+
+def line(price: Money, classification_id: SkuClassificationId) -> SoldLine:
     return SoldLine(
         name="Linen shirt",
         quantity=2,
         unit_price=price,
         category="apparel",
-        merchant_sku="LIN-01",
+        merchant_sku=SKU,
         customs=Customs(
             description="Men's linen shirt, woven",
             origin_country=CountryCode("VN"),
             weight_g=300,
-            hs_code=HsCode("610910"),
+            hs_code=HS_CODE,
+            merchant_hs_code=None,
         ),
+        classification_id=classification_id,
     )
 
 
@@ -146,11 +160,12 @@ async def quoted_session(
     """A session quoted for the Singapore address: its id and the
     cheapest option's key."""
     async with await connect(url) as conn:
+        classification_id = await classify(conn, merchant_id, SKU, HS_CODE, ACTOR, now)
         session = await create_session(
             conn,
             merchant_id,
             SessionDraft(
-                lines=(line(price),),
+                lines=(line(price, classification_id),),
                 parcel=PARCEL,
                 merchant_reference="order-1",
                 return_url="https://shop.example/thanks",
