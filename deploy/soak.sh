@@ -27,8 +27,18 @@
 # SOAK_REF=<commit> tests that commit instead of `main`.
 set -euo pipefail
 
-# A user unit starts with a minimal PATH; uv lives in ~/.local/bin.
+# A user unit starts with a minimal PATH; uv lives in ~/.local/bin, and
+# node and npm (for `npm ci` and the browser suite's tsc) come from nvm,
+# whose script puts its default version on PATH. nvm.sh does not run
+# under `set -u` or `set -e`, so both are off while it loads.
 export PATH="${HOME}/.local/bin:${PATH}"
+NVM_SCRIPT="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+if [ -s "$NVM_SCRIPT" ]; then
+  set +eu
+  # shellcheck source=/dev/null
+  source "$NVM_SCRIPT"
+  set -eu
+fi
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # The worktree the soak tests in, and its logs: outside the repo.
@@ -110,6 +120,10 @@ prepare_checkout() {
     git -C "$REPO" worktree add --detach "$CHECKOUT" "${SOAK_REF:-main}" >/dev/null
   fi
   git -C "$CHECKOUT" checkout --quiet --detach "${SOAK_REF:-main}"
+  if ! command -v npm >/dev/null; then
+    CURRENT="preparing the checkout: npm not on PATH (nvm missing?)"
+    return 127
+  fi
   (cd "$CHECKOUT" && uv sync --quiet && npm ci --silent)
 }
 
