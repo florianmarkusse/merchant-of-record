@@ -5,7 +5,7 @@ describe the design as it is now: when something changes, the plan it
 changes is rewritten and the decisions it overturns are updated, never
 amended by a newer page. Git holds the history.
 
-Status as of 26-Nov-2026.
+Status as of 27-Nov-2026.
 
 ## Built
 
@@ -31,9 +31,10 @@ message shapes:
 
 6. Shipments against the fake carrier in every mode
    (`plan-shipments.md` §1): 6a, what checkout refuses and booking a
-   label on `order_paid`, is built; next 6b, tracking and milestones
-   (its eight steps are in `plan-shipments.md` §1; the fake's tracking
-   first, its design confirmed before building); then 6c, the echo flow
+   label on `order_paid`, is built; 6b, tracking and milestones, is
+   being built (its eight steps are in `plan-shipments.md` §1; step 1,
+   the fake's tracking, is done; step 2, the carrier inbox, is next);
+   then 6c, the echo flow
    retired, and with it the echo ignores of the `typed-ids` ast-grep
    rule.
 7. Carrier invoice import and its ledger entries.

@@ -1,7 +1,7 @@
 # Shipments: booking, tracking and milestones (slice 6)
 
-Status: 6a-1 and 6a-2 are built (§4, §6); 6b, tracking, is next, then
-6c.
+Status: 6a-1 and 6a-2 are built (§4, §6); 6b, tracking, is being built
+(step 1, the fake's tracking, is done), then 6c.
 
 Applies `plan-architecture.md` §5, §6, §7 and §9 (booking, tracking) to
 shipments against the fake carrier in every mode. Slice 5 left a paid
@@ -33,11 +33,11 @@ entries.
   the seed spreads the modes, but nothing reads them; `tracking_status`
   is on every shipment and stays `none`; `shipment_label_booked` has no
   consumer yet. 6b builds, in this order:
-  1. The fake carrier's tracking: a script per shipment (delivered, or
-     `LOST` / `RETURN` from the request), `A/events/release` (one event
-     or `all`), `A/tracking?cursor`, webhook subscriptions with signed
-     fat and thin pushes, and the tracking faults (a push twice, a bad
-     signature, events out of order) (§3).
+  1. The fake carrier's tracking (built): a script per label (delivered,
+     or `LOST` / `RETURN` / `WITHDRAW` from the request),
+     `A/events/release` (the next step, a named later one, or `all`),
+     `A/tracking?tracking_number`, webhook subscriptions with signed fat
+     and thin pushes, redelivery, and the tracking faults (§3).
   2. `carrier_inbox` (`psp_inbox`'s shape) and the webhook route per
      account; `carrier_inbox_decode`, one `carrier_event_received` per
      event, a thin webhook as `shipment_events_wanted`; an event for a
@@ -104,10 +104,15 @@ GET  A/shipments?reference  every label with our reference, live or
 POST A/shipments/{tn}/cancel   `cancellable` only
 POST /_fake/carrier/faults  {"operation", "fault"}: script the next call
                             of `rate`, `book`, `find` or `cancel` to fail
-6b adds:
-GET  A/tracking?cursor      one page of events (poll, thin webhooks)
-POST A/events/release       next event of a shipment's script (dev page,
-                            CLI, fuzzer); `all` plays the whole script
+POST A/webhooks             {"url", "secret", "payload": fat | thin}
+POST A/events/release       {"tracking_number", "step"?, "all"?, "push"?}:
+                            the label's next event, a named later step
+                            (out of order) or the rest of its script
+                            (dev page, fuzzer), pushed at once if
+                            subscribed
+POST A/events/redeliver     push again the events whose push failed
+GET  A/tracking?tracking_number   every released event of one label
+                            (the poll, and what a thin push points at)
 ```
 
 `A` is `/_fake/carrier/{flavour}/{account}`, the flavour one of `keyed`,
@@ -115,10 +120,20 @@ POST A/events/release       next event of a shipment's script (dev page,
 scenario comes from values in the request: a receiver whose first address
 line starts with `REFUSE` is a refused address (a postcode is checked by
 format at checkout, so it cannot carry the word), an item description
-starting `REFUSE` is refused customs data; from 6b `LOST` and `RETURN`
-pick those scripts, anything else is delivered. Faults: a 500 before or
-after the work, a timeout after the work; from 6b a webhook sent twice or
-with a bad signature, events released out of order. Its labels, numbered
+starting `REFUSE` is refused customs data. The first address line also
+picks the label's tracking script: `LOST`, `RETURN`, `WITHDRAW` (a
+delivery corrected, then delivered again), anything else delivered
+(`SCRIPTS` in `mor.fakes.carrier`). The events carry the carrier's own
+codes (`customs_hold`, `customs_released`, `delivery_corrected`, …), which
+our decoder maps to tracking statuses. Each step occurred a fixed time
+after booking whenever it is released, so a step released out of turn
+arrives out of order. A fat push carries the event, a thin one its id and
+tracking number; both are signed (HMAC-SHA256 over the body,
+`Carrier-Signature`). Polling is per tracking number, as a shipment is
+polled on its own, never through an account-wide cursor. Faults: a 500
+before or after the work, a timeout after the work (`track` takes a 500
+or a timeout); per release a push sent twice or with a bad signature, and
+a step released out of turn. Its labels, numbered
 from a sequence, are rows per reference: the fuzzer's proof that nothing
 was booked twice. Its PDFs are one-page WeasyPrint renders of its own
 markup.
@@ -286,8 +301,9 @@ shipment_event_apply (local, shipment lock): the event once
 shipment_label_booked ─▶ shipment_tracking_start: on a `poll` account,
     the first shipment_poll_due
 shipment_poll_due ┐
-shipment_events_wanted ┴▶ carrier_poll (effect): fetch one page into the
-    inbox; on a scheduled poll, schedule the next unless polling is over
+shipment_events_wanted ┴▶ carrier_poll (effect): fetch the shipment's
+    events by its tracking number into the inbox; on a scheduled poll,
+    schedule the next unless polling is over
 ```
 
 `carrier_inbox` has `psp_inbox`'s shape: the body hash only says "these
@@ -299,7 +315,12 @@ page, not a raise.
 `derive_status(events: frozenset[CarrierEvent]) -> TrackingStatus`, pure:
 the highest-ranked status among the events wins, except that a
 `delivery_withdrawn` event voids every `delivered` event that occurred
-before it. Milestones: `picked_up`, `held_at_customs`, `delivered`,
+before it. Open, to settle when step 3 is designed: a rank alone keeps
+a shipment `held_at_customs` after customs release it, and cannot follow
+a hold, a release and a second hold. The candidate rule: the terminal
+statuses (`delivered`, `returned`, `lost`) win by rank, otherwise the
+latest event by occurrence time decides, ties broken by the carrier's
+event id, so the result still depends on the set alone. Milestones: `picked_up`, `held_at_customs`, `delivered`,
 `delivery_withdrawn`, `returning`, `returned`, `lost`, one fact type each
 (`shipment_delivered`, …), so a consumer subscribes to the one it needs
 (slice 9 takes `shipment_delivered`). A milestone is never removed: a
