@@ -26,6 +26,19 @@ carrier-side accounts as a path segment
                                  "surcharge_minor", "valid_until"}: set a price
     POST /_fake/carrier/faults  {"fault", "operation"}: script the next
                                  call of an operation to fail
+    POST A/webhooks             {"url", "secret", "payload": fat|thin}:
+                                 subscribe the account to pushed events
+    POST A/events/release       {"tracking_number", "step"?, "all"?,
+                                 "push"?: once|twice|bad_signature}
+         200 {"released": [{"event", "push"}]}: the label's next event, a
+         named later step (out of order), or the rest of its script; each
+         pushed signed at once if the account is subscribed
+         409 {"error": "script_done" | "already_released" |
+              "label_cancelled"}
+    POST A/events/redeliver     {"all"?}: push again the events whose push
+                                 failed (or every event), newest first
+    GET  A/tracking?tracking_number   {"tracking_number", "events"}: every
+                                 released event of a label, in release order
 
 Flavours: `keyed` books once per Idempotency-Key, for good, and answers a
 repeat with the first label; `cancellable` books every request and lets a
@@ -33,7 +46,14 @@ label be cancelled; `plain` books every request and cancels nothing.
 
 The scenario comes from values in the request: a receiver whose first
 address line starts with `REFUSE` is a refused address, an item whose
-description starts with `REFUSE` refused customs data.
+description starts with `REFUSE` refused customs data. The first address
+line also picks the script of tracking events the label plays (`SCRIPTS`):
+`LOST`, `RETURN` or `WITHDRAW` (a delivery corrected, then delivered
+again), anything else delivered. Each step occurred a fixed time after
+booking (`STEP_GAP`), whenever it is released, so a step released out of
+turn arrives out of order. Events are released by a call, never by a
+timer. A fat push carries the event, a thin one its id and tracking
+number, signed with HMAC-SHA256 over the body in `Carrier-Signature`.
 
 The billed weight is the greater of the actual and the volumetric weight
 (L x W x H / 5000 in cm³), rounded up to the next half kilo. Every rate
@@ -45,15 +65,18 @@ WeasyPrint renders of its own markup.
 """
 
 import asyncio
+import hashlib
+import hmac
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import htpy
+import httpx2
 import msgspec
 import psycopg
-from psycopg.rows import TupleRow
+from psycopg.rows import TupleRow, class_row
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -68,7 +91,7 @@ from mor.fakes.hang import Hang
 
 type Flavour = Literal["keyed", "cancellable", "plain"]
 FLAVOURS: tuple[Flavour, ...] = ("keyed", "cancellable", "plain")
-type Operation = Literal["rate", "book", "find", "cancel"]
+type Operation = Literal["rate", "book", "find", "cancel", "track"]
 type Fault = Literal[
     "fail_500",
     "fail_500_after_work",
@@ -104,8 +127,62 @@ OPERATION_FAULTS: dict[Operation, tuple[Fault, ...]] = {
     "book": ("fail_500", "fail_500_after_work", "timeout_after_work"),
     "find": ("fail_500", "timeout_after_work"),
     "cancel": ("fail_500", "fail_500_after_work", "timeout_after_work"),
+    "track": ("fail_500", "timeout_after_work"),
 }
 REFUSE = "REFUSE"
+
+type Script = Literal["delivered", "lost", "return", "withdrawn"]
+# The carrier's own event codes, not our tracking statuses: our decoder
+# maps them (docs/plan-shipments.md §7).
+type EventCode = Literal[
+    "picked_up",
+    "in_transit",
+    "customs_hold",
+    "customs_released",
+    "out_for_delivery",
+    "delivered",
+    "delivery_corrected",
+    "lost",
+    "return_started",
+    "returned",
+]
+SCRIPTS: dict[Script, tuple[EventCode, ...]] = {
+    "delivered": (
+        "picked_up",
+        "in_transit",
+        "customs_hold",
+        "customs_released",
+        "out_for_delivery",
+        "delivered",
+    ),
+    "lost": ("picked_up", "in_transit", "lost"),
+    "return": (
+        "picked_up",
+        "in_transit",
+        "customs_hold",
+        "return_started",
+        "returned",
+    ),
+    "withdrawn": (
+        "picked_up",
+        "in_transit",
+        "delivered",
+        "delivery_corrected",
+        "out_for_delivery",
+        "delivered",
+    ),
+}
+# The address line prefix that picks a script other than `delivered`.
+SCRIPT_PREFIXES: tuple[tuple[str, Script], ...] = (
+    ("LOST", "lost"),
+    ("RETURN", "return"),
+    ("WITHDRAW", "withdrawn"),
+)
+# Step i of a script occurred (i + 1) gaps after the label was booked.
+STEP_GAP = timedelta(hours=2)
+SIGNATURE_HEADER = "Carrier-Signature"
+type PushHow = Literal["once", "twice", "bad_signature"]
+type Push = Literal["not_subscribed", "delivered", "failed"]
 
 VOLUMETRIC_DIVISOR = 5000  # cm³ per kg
 LONG_PAST = datetime(2000, 1, 1, tzinfo=UTC)
@@ -215,7 +292,69 @@ class FindAnswer(msgspec.Struct, frozen=True):
     shipments: list[FoundAnswer]
 
 
+class WebhookBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    url: str
+    secret: str
+    payload: Literal["fat", "thin"]
+
+
+class ReleaseBody(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True
+):
+    tracking_number: str
+    step: int | None = None
+    all: bool = False
+    push: PushHow = "once"
+
+
+class RedeliverBody(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    all: bool = False
+
+
+class TrackEvent(msgspec.Struct, frozen=True, kw_only=True):
+    id: str
+    tracking_number: str
+    reference: str
+    code: str
+    occurred_at: datetime
+
+
+class FatWebhook(msgspec.Struct, frozen=True):
+    events: list[TrackEvent]
+
+
+class ThinWebhook(msgspec.Struct, frozen=True):
+    id: str
+    tracking_number: str
+
+
+class Released(msgspec.Struct, frozen=True):
+    event: TrackEvent
+    push: Push
+
+
+class ReleaseAnswer(msgspec.Struct, frozen=True):
+    released: list[Released]
+
+
+class TrackingAnswer(msgspec.Struct, frozen=True):
+    tracking_number: str
+    events: list[TrackEvent]
+
+
 type FakeConnection = psycopg.AsyncConnection[TupleRow]
+
+
+def sign(secret: str, body: bytes) -> str:
+    """The signature the fake sends, HMAC-SHA256 over the raw body, hex."""
+    return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+
+def script_of(receiver_line1: str) -> Script:
+    for prefix, script in SCRIPT_PREFIXES:
+        if receiver_line1.startswith(prefix):
+            return script
+    return "delivered"
 
 
 async def _connect(database_url: str) -> FakeConnection:
@@ -560,8 +699,8 @@ async def handle_book(
             INSERT INTO carrier_shipment
               (tracking_number, flavour, account, reference, idempotency_key,
                service, origin, destination, export_declaration_no, state,
-               label, commercial_invoice, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'live', %s, %s, %s)
+               script, label, commercial_invoice, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'live', %s, %s, %s, %s)
             ON CONFLICT (account, idempotency_key) WHERE flavour = 'keyed'
             DO NOTHING
             RETURNING tracking_number
@@ -576,6 +715,7 @@ async def handle_book(
                 body.shipper.country,
                 body.receiver.country,
                 export_declaration_no,
+                script_of(body.receiver.line1),
                 label_pdf,
                 invoice_pdf,
                 clock(),
@@ -694,9 +834,333 @@ async def handle_cancel(request: Request, database_url: str, hang: Hang) -> Resp
     return JSONResponse({"state": "cancelled"})
 
 
-def make_app(database_url: str, clock: Callable[[], datetime], hang: Hang) -> Starlette:
-    """`clock` is the vendor's own time, shared with tests as the other
-    fakes'."""
+# --- tracking -------------------------------------------------------------
+
+
+async def handle_subscribe(request: Request, database_url: str) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    try:
+        body = msgspec.json.decode(await request.body(), type=WebhookBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        await conn.execute(
+            """
+            INSERT INTO carrier_webhook (flavour, account, url, secret, payload)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (flavour, account) DO UPDATE
+            SET url = excluded.url, secret = excluded.secret,
+                payload = excluded.payload
+            """,
+            (
+                flavour,
+                request.path_params["account"],
+                body.url,
+                body.secret,
+                body.payload,
+            ),
+        )
+        await conn.commit()
+    return Response(status_code=204)
+
+
+@dataclass(frozen=True)
+class _WebhookRow:
+    url: str
+    secret: str
+    payload: str
+
+
+async def _webhook(
+    conn: FakeConnection, flavour: Flavour, account: str
+) -> _WebhookRow | None:
+    async with conn.cursor(row_factory=class_row(_WebhookRow)) as cur:
+        await cur.execute(
+            """
+            SELECT url, secret, payload::text FROM carrier_webhook
+            WHERE flavour = %s AND account = %s
+            """,
+            (flavour, account),
+        )
+        return await cur.fetchone()
+
+
+async def _push(
+    webhook: _WebhookRow,
+    event: TrackEvent,
+    how: PushHow,
+    outgoing: httpx2.AsyncClient,
+) -> Push:
+    if webhook.payload == "thin":
+        body = msgspec.json.encode(ThinWebhook(event.id, event.tracking_number))
+    else:
+        body = msgspec.json.encode(FatWebhook([event]))
+    signature = sign(webhook.secret, body)
+    if how == "bad_signature":
+        signature = sign(webhook.secret + "-wrong", body)
+    delivered = True
+    for _ in range(2 if how == "twice" else 1):
+        try:
+            response = await outgoing.post(
+                webhook.url,
+                content=body,
+                headers={
+                    SIGNATURE_HEADER: signature,
+                    "Content-Type": "application/json",
+                },
+            )
+            if response.status_code != 200:
+                delivered = False
+        except httpx2.TransportError:
+            delivered = False
+    return "delivered" if delivered else "failed"
+
+
+@dataclass(frozen=True, kw_only=True)
+class _LabelRow:
+    reference: str
+    state: str
+    script: str
+    created_at: datetime
+    released: list[int]
+
+
+def _script(text: str) -> Script:
+    for script in SCRIPTS:
+        if script == text:
+            return script
+    raise AssertionError(f"unknown script {text!r}")
+
+
+@dataclass(frozen=True, kw_only=True)
+class _EventRow:
+    id: str
+    tracking_number: str
+    reference: str
+    code: str
+    occurred_at: datetime
+
+
+def _event(row: _EventRow) -> TrackEvent:
+    return TrackEvent(
+        id=row.id,
+        tracking_number=row.tracking_number,
+        reference=row.reference,
+        code=row.code,
+        occurred_at=row.occurred_at,
+    )
+
+
+def _steps_to_release(
+    body: ReleaseBody, script: Script, released: list[int]
+) -> list[int] | JSONResponse:
+    """The script steps this release plays, in order, or why none."""
+    unreleased: list[int] = []
+    for step in range(len(SCRIPTS[script])):
+        if step not in released:
+            unreleased.append(step)
+    if body.step is not None:
+        if body.step < 0 or body.step >= len(SCRIPTS[script]):
+            return _error(400, "no_such_step")
+        if body.step in released:
+            return _error(409, "already_released")
+        return [body.step]
+    if not unreleased:
+        return _error(409, "script_done")
+    if body.all:
+        return unreleased
+    return [unreleased[0]]
+
+
+async def handle_release(
+    request: Request,
+    database_url: str,
+    clock: Callable[[], datetime],
+    outgoing: httpx2.AsyncClient,
+) -> Response:
+    """Release events and commit them before pushing, so a thin push's
+    fetch finds them."""
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    account = request.path_params["account"]
+    try:
+        body = msgspec.json.decode(await request.body(), type=ReleaseBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    if body.all and body.step is not None:
+        return _error(400, "step_or_all")
+    async with await _connect(database_url) as conn:
+        async with conn.cursor(row_factory=class_row(_LabelRow)) as cur:
+            await cur.execute(
+                """
+                SELECT s.reference, s.state::text AS state,
+                       s.script::text AS script, s.created_at,
+                       array(SELECT step FROM carrier_track_event e
+                             WHERE e.tracking_number = s.tracking_number)
+                         AS released
+                FROM carrier_shipment s
+                WHERE s.flavour = %s AND s.account = %s
+                  AND s.tracking_number = %s
+                FOR UPDATE
+                """,
+                (flavour, account, body.tracking_number),
+            )
+            label = await cur.fetchone()
+        if label is None:
+            return _error(404, "unknown_tracking_number")
+        if label.state == "cancelled":
+            return _error(409, "label_cancelled")
+        script = _script(label.script)
+        steps = _steps_to_release(body, script, label.released)
+        if isinstance(steps, JSONResponse):
+            return steps
+        webhook = await _webhook(conn, flavour, account)
+        events: list[TrackEvent] = []
+        for step in steps:
+            event = TrackEvent(
+                id=await _new_id(conn, "TE"),
+                tracking_number=body.tracking_number,
+                reference=label.reference,
+                code=SCRIPTS[script][step],
+                occurred_at=label.created_at + STEP_GAP * (step + 1),
+            )
+            # `failed` until pushed, so a crash before the push leaves it
+            # to a redelivery.
+            await conn.execute(
+                """
+                INSERT INTO carrier_track_event
+                  (id, tracking_number, step, code, occurred_at, released_at,
+                   push)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    event.id,
+                    event.tracking_number,
+                    step,
+                    event.code,
+                    event.occurred_at,
+                    clock(),
+                    "not_subscribed" if webhook is None else "failed",
+                ),
+            )
+            events.append(event)
+        await conn.commit()
+        released: list[Released] = []
+        for event in events:
+            push: Push = "not_subscribed"
+            if webhook is not None:
+                push = await _push(webhook, event, body.push, outgoing)
+                await conn.execute(
+                    "UPDATE carrier_track_event SET push = %s WHERE id = %s",
+                    (push, event.id),
+                )
+                await conn.commit()
+            released.append(Released(event, push))
+    return Response(
+        msgspec.json.encode(ReleaseAnswer(released)), media_type="application/json"
+    )
+
+
+async def handle_redeliver(
+    request: Request, database_url: str, outgoing: httpx2.AsyncClient
+) -> Response:
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    account = request.path_params["account"]
+    raw = await request.body()
+    try:
+        body = msgspec.json.decode(raw or b"{}", type=RedeliverBody)
+    except msgspec.DecodeError:
+        return _error(400, "invalid_body")
+    async with await _connect(database_url) as conn:
+        webhook = await _webhook(conn, flavour, account)
+        if webhook is None:
+            return _error(409, "not_subscribed")
+        async with conn.cursor(row_factory=class_row(_EventRow)) as cur:
+            await cur.execute(
+                """
+                SELECT e.id, e.tracking_number, s.reference, e.code, e.occurred_at
+                FROM carrier_track_event e
+                JOIN carrier_shipment s USING (tracking_number)
+                WHERE s.flavour = %s AND s.account = %s
+                  AND (%s OR e.push = 'failed')
+                ORDER BY e.seq DESC
+                """,
+                (flavour, account, body.all),
+            )
+            rows = await cur.fetchall()
+        delivered = 0
+        # Newest first: an older event arrives after a newer one.
+        for row in rows:
+            push = await _push(webhook, _event(row), "once", outgoing)
+            await conn.execute(
+                "UPDATE carrier_track_event SET push = %s WHERE id = %s",
+                (push, row.id),
+            )
+            await conn.commit()
+            if push == "delivered":
+                delivered += 1
+    return JSONResponse({"redelivered": delivered})
+
+
+async def handle_tracking(request: Request, database_url: str, hang: Hang) -> Response:
+    """Every released event of one label, in release order: the poll, and
+    what a thin push points at."""
+    flavour = _flavour(request)
+    if flavour is None:
+        return _error(404, "unknown_flavour")
+    tracking_number = request.query_params.get("tracking_number")
+    if not tracking_number:
+        return _error(400, "tracking_number_required")
+    async with await _connect(database_url) as conn:
+        fault = await _take_fault(conn, "track")
+        await conn.commit()
+        if fault == "fail_500":
+            return _error(500, "internal_error")
+        known = await conn.execute(
+            """
+            SELECT 1 FROM carrier_shipment
+            WHERE flavour = %s AND account = %s AND tracking_number = %s
+            """,
+            (flavour, request.path_params["account"], tracking_number),
+        )
+        if await known.fetchone() is None:
+            return _error(404, "unknown_tracking_number")
+        async with conn.cursor(row_factory=class_row(_EventRow)) as cur:
+            await cur.execute(
+                """
+                SELECT e.id, e.tracking_number, s.reference, e.code, e.occurred_at
+                FROM carrier_track_event e
+                JOIN carrier_shipment s USING (tracking_number)
+                WHERE e.tracking_number = %s
+                ORDER BY e.seq
+                """,
+                (tracking_number,),
+            )
+            rows = await cur.fetchall()
+    events: list[TrackEvent] = []
+    for row in rows:
+        events.append(_event(row))
+    if fault == "timeout_after_work":
+        await hang()
+    return Response(
+        msgspec.json.encode(TrackingAnswer(tracking_number, events)),
+        media_type="application/json",
+    )
+
+
+def make_app(
+    database_url: str,
+    outgoing: httpx2.AsyncClient,
+    clock: Callable[[], datetime],
+    hang: Hang,
+) -> Starlette:
+    """`outgoing` carries its webhooks; `clock` is the vendor's own time,
+    shared with tests as the other fakes'."""
 
     async def ask(request: Request) -> Response:
         return await handle_ask(request, database_url, clock, hang)
@@ -716,6 +1180,18 @@ def make_app(database_url: str, clock: Callable[[], datetime], hang: Hang) -> St
     async def cancel(request: Request) -> Response:
         return await handle_cancel(request, database_url, hang)
 
+    async def subscribe(request: Request) -> Response:
+        return await handle_subscribe(request, database_url)
+
+    async def release(request: Request) -> Response:
+        return await handle_release(request, database_url, clock, outgoing)
+
+    async def redeliver(request: Request) -> Response:
+        return await handle_redeliver(request, database_url, outgoing)
+
+    async def tracking(request: Request) -> Response:
+        return await handle_tracking(request, database_url, hang)
+
     account = "/_fake/carrier/{flavour}/{account}"
     return Starlette(
         routes=[
@@ -729,5 +1205,9 @@ def make_app(database_url: str, clock: Callable[[], datetime], hang: Hang) -> St
                 cancel,
                 methods=["POST"],
             ),
+            Route(f"{account}/webhooks", subscribe, methods=["POST"]),
+            Route(f"{account}/events/release", release, methods=["POST"]),
+            Route(f"{account}/events/redeliver", redeliver, methods=["POST"]),
+            Route(f"{account}/tracking", tracking, methods=["GET"]),
         ]
     )

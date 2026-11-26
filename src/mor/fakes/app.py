@@ -30,7 +30,9 @@ def make_app(
     routes: list[BaseRoute] = []
     routes.extend(mor.fakes.echo.make_app(database_url, outgoing, hang).routes)
     routes.extend(mor.fakes.duty.make_app(database_url, clock, hang).routes)
-    routes.extend(mor.fakes.carrier.make_app(database_url, clock, hang).routes)
+    routes.extend(
+        mor.fakes.carrier.make_app(database_url, outgoing, clock, hang).routes
+    )
     routes.extend(mor.fakes.psp.make_app(database_url, outgoing, clock, hang).routes)
     routes.extend(mor.fakes.bank.make_app(database_url, clock, hang).routes)
     return Starlette(routes=routes)
