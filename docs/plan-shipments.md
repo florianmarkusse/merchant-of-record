@@ -47,7 +47,27 @@ entries.
      The seed subscribes each pushing account at the fake.
   3. `shipment_event` (once per carrier event id), the pure
      `derive_status` with its `delivery_withdrawn` rule, and
-     `shipment_event_apply` under the shipment lock (§7).
+     `shipment_event_apply` under the shipment lock (§7). Next. What
+     it starts from:
+     - `carrier_event_received` has no consumer yet; its facts pile up as
+       records. It carries `shipment_id`, `carrier_event_id`, `kind`
+       (`ShipmentEventKind`), `carrier_code`, `occurred_at`, `inbox_id`.
+     - The same event comes more than once by design: a page fetched
+       again, a push and a page, both sides of the match
+       (`carrier_event_match`). `UNIQUE (shipment_id, carrier_event_id)`
+       is the guard, insert first and a conflict is `Stale`.
+     - Only a labelled shipment gets events: its tracking number is set
+       in the same transaction as `labelled` and `shipment_label_booked`
+       (`_labelled` in `mor.shipments.flow`), and the decoder matches by
+       it. The apply step may still assert the state under its lock.
+     - `ShipmentEventKind` is a Python `StrEnum` only so far; the
+       `shipment_event` table makes it a database enum (`mor.db.enums`,
+       `tests/db/test_enums.py`).
+     - `derive_status` must decide the open rule below (customs
+       release, `other`), takes our recorded events, not the port's
+       `CarrierEvent`, and writes `tracking_status` on `shipment`.
+     - The fuzzer's drain check grows: each status equals
+       `derive_status` of the released events (§9).
   4. `shipment_milestone` (once per milestone) and the seven milestone
      facts (§7, §8).
   5. Polling: `shipment_tracking_start` on `shipment_label_booked`,
@@ -352,7 +372,8 @@ An unmatched row is never updated: whether its label became ours is read
 from `shipment`, and the staff page (step 7) lists those still naming no
 shipment, such as a cancelled extra label's.
 
-`derive_status(events: frozenset[CarrierEvent]) -> TrackingStatus`, pure:
+`derive_status(events: frozenset[ShipmentEvent]) -> TrackingStatus`, pure,
+over the events recorded for the shipment:
 the highest-ranked status among the events wins, except that a
 `delivery_withdrawn` event voids every `delivered` event that occurred
 before it. Open, to settle when step 3 is designed: a rank alone keeps
@@ -360,7 +381,10 @@ a shipment `held_at_customs` after customs release it, and cannot follow
 a hold, a release and a second hold. The candidate rule: the terminal
 statuses (`delivered`, `returned`, `lost`) win by rank, otherwise the
 latest event by occurrence time decides, ties broken by the carrier's
-event id, so the result still depends on the set alone. Milestones: `picked_up`, `held_at_customs`, `delivered`,
+event id, so the result still depends on the set alone. Under it
+`customs_released` maps to `in_transit`, and `other` is never the latest
+event that decides (it is skipped, so a weather note never moves a
+status). Milestones: `picked_up`, `held_at_customs`, `delivered`,
 `delivery_withdrawn`, `returning`, `returned`, `lost`, one fact type each
 (`shipment_delivered`, …), so a consumer subscribes to the one it needs
 (slice 9 takes `shipment_delivered`). A milestone is never removed: a
@@ -433,9 +457,15 @@ with it.
   before its label was ours, matched, a match before the label, both
   sides matching, an extra label's event kept unmatched, the push
   faults, a page, and crashes and redelivery in both new consumers.
-  Serial orders cannot reach a decoder that looks before the label
-  commits and stores after: `tests/shipments/test_carrier_inbox.py`
-  holds that transaction open on a second connection.
+  The match has three cases, by when the decoder looks up the tracking
+  number and when each side commits: it looks after the label committed
+  (it matches directly); it looks and commits before the label (the
+  label's match takes the event); it looks before the label commits and
+  commits after (only the stored event's own match takes it). The
+  fuzzer runs one transaction at a time, so it reaches the first two
+  only; `tests/shipments/test_carrier_inbox.py` holds the decoder's
+  transaction open on a second connection for the third. A planted bug
+  on each side fails the test for its case.
 - Steps 3, 4 and 8 add: after draining, each milestone at most once and
   each status equal to `derive_status` of the events the fake released;
   reach milestones `delivered` and `delivery_withdrawn`; the decoder

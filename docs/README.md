@@ -35,7 +35,8 @@ message shapes:
    label on `order_paid`, is built; 6b, tracking and milestones, is
    being built (its eight steps are in `plan-shipments.md` §1; steps 1
    and 2, the fake's tracking and the carrier inbox, are done; step 3,
-   events and `derive_status`, is next);
+   events and `derive_status`, is next, its starting context and the
+   open status rule in `plan-shipments.md` §1 and §7);
    then 6c, the echo flow
    retired, and with it the echo ignores of the `typed-ids` ast-grep
    rule.
