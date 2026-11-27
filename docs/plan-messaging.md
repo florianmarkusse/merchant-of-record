@@ -408,7 +408,9 @@ One provider per duplicate guard:
 - **Layer 3** (`tests/flow/test_concurrent_workers.py`): worker tasks on
   their own connections drain hundreds of probes and echo jobs at once,
   number invoices without a gap, and apply a webhook while a capture call
-  is out.
+  is out. Concurrent runs of the whole flows, for what serial orders
+  cannot show (a missing lock, unlocked reads, deadlocks, a webhook
+  during a step), are designed in `plan-architecture.md` §10.
 - **Each guard was checked by planting its bug**: no `handled_at` check,
   a consumer that is not idempotent, no advisory lock around an effect,
   guard `none` resending, duplicates never cancelled, no `sent` mark,

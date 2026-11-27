@@ -730,10 +730,24 @@ unhandled; clearing accounts are zero where every bill has arrived. The
 rules the payment, order and settlement machines share live in
 `tests/flow/payment_checks.py`.
 
-Why serial orders of steps are enough: every step is one transaction under
-its aggregate's lock, so any real concurrent run equals some serial order
-of those steps. The fuzzer explores the orders; shrinking gives the
-shortest failing one.
+What serial orders cover: a step that is one transaction under its
+aggregate's lock, reading only what that lock guards, runs the same
+concurrently as in some serial order, so the fuzzer explores the orders
+and shrinking gives the shortest failing one. They cannot show what
+depends on transactions overlapping, and layer 3 is for that:
+
+- a missing lock, or one taken on the wrong row or after the read (the
+  `Locked…` types and their ast-grep rule catch most of these statically,
+  not all);
+- a step that reads rows it does not lock (the decoders, the carrier and
+  bank matches, settlement looking up its attempt, the webhook routes):
+  what it sees depends on when the others commit (the carrier match's
+  third case, `plan-shipments.md` §9);
+- deadlocks between steps that lock two things (`settle_pending`: the
+  attempt, then its lines; the bank match: the account, then payouts);
+- web requests (webhooks, a person's Book again, a buyer paying) during
+  a worker's step, which the fuzzer runs as one action between steps;
+- two statements of one step seeing different commits.
 
 **Reach: deep enough to matter.** A green fuzzer says little about states
 its runs never reach, and one random machine for a whole flow rarely
@@ -768,11 +782,48 @@ drop in reach alerts like a bug.
 whatever it finds first and starves the rest, and one label per milestone
 does no better. Structure reaches every milestone without it.
 
-**Layer 3: real concurrency**, a smaller suite. Several worker tasks and
-handlers on separate connections against the same rows, checking the same
-end invariants and the lock claims themselves (two workers never hold one
-aggregate; a killed connection frees its lock at once). Not shrunk; it
-tests that the locks do what layer 2 assumes.
+**Layer 3: real concurrency.** Worker tasks and handlers on separate
+connections against the same rows. Two parts:
+
+- *Scenarios* (built, `tests/flow/test_concurrent_workers.py`): many
+  workers finish every probe and echo job once, number invoices without
+  a gap, and apply a webhook while a capture call is out; two workers
+  never hold one aggregate, and a killed connection frees its lock at
+  once. Pinned interleavings that matter, held open on a second
+  connection, sit beside their flow's tests
+  (`tests/shipments/test_carrier_inbox.py`, the match's third case).
+- *Concurrent flow runs* (designed, next in `README.md`):
+  `tests/concurrent/`, one run per flow that has a layer 2 machine with
+  money or a vendor in it: payment and order, settlement with the bank,
+  shipments with tracking. Each run builds many aggregates at once (say
+  twenty paid orders over two carrier accounts in different guards and
+  tracking modes), starts eight workers, each its own connection running
+  the real worker loop (`drain_once`), and a driver task that does the
+  vendors' and people's actions meanwhile: releases, pushes twice and
+  badly signed, redelivery, pages, settlement cuts and bank days, faults,
+  book again, a buyer paying. Pushes reach the app over HTTP, so a
+  webhook's transaction overlaps a worker's. Every await on the database
+  is a point where another task runs, so steps interleave statement by
+  statement. A monitor task runs layer 2's after-every-action checks
+  inside one `REPEATABLE READ` transaction at a time, so each sees one
+  moment. After the driver stops: drain with faults off, then layer 2's
+  drained checks (`payment_checks.py`, the label and tracking checks, the
+  settlement and bank checks, every entry balanced), and also no
+  delivery `Failed` (a deadlock, a serialization failure or an unexpected
+  unique violation raises, and a raise is a bug), no advisory lock held,
+  nothing unhandled.
+
+  Not Hypothesis: the interleaving is not reproducible, so there is
+  nothing to replay or shrink. The driver's script comes from a seed
+  (`random.Random(seed)`), printed and kept with a failure, so the
+  actions repeat even when the timing does not; a failure found is then
+  pinned as a two-connection test or a layer 2 `@example` where it can
+  be. `tests/concurrent/` is outside `tests/flow/`, where the
+  `fuzzed-code-varies-by-draws` rule refuses `random`. Its soak target
+  repeats runs for a time budget measured as for the others. Checked by
+  planting bugs the serial fuzzers miss: a lock dropped from a step,
+  `carrier_event_unmatched` routed to nothing, two locks taken in the
+  opposite order.
 
 **Running it.**
 

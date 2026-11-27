@@ -26,17 +26,29 @@ The checks that run after every change (ruff, pyright strict, vulture,
 
 ## Next, in this order
 
-Slice 5 is done and 6a is built. Then the slices of the whole flow
-(`plan-architecture.md` §2), each designed first where it adds tables or
-message shapes:
+Slice 5 is done, 6a is built and 6b is being built.
+
+First, before 6b step 3: **concurrent flow runs** (`plan-architecture.md`
+§10, layer 3). The serial fuzzers cannot show a missing lock, a step
+reading rows it does not lock, a deadlock, or a webhook landing inside a
+worker's step; the payment, settlement, bank and shipment flows have
+never run under real concurrency. Building it now means every later
+step is checked by it from the start, and what it finds is fixed while
+the flows are small. Order: shipments with tracking first (its matches
+take no lock by design), then settlement with the bank, then payment and
+order; a soak target with a measured budget; planted bugs to check it.
+
+Then the slices of the whole flow (`plan-architecture.md` §2), each
+designed first where it adds tables or message shapes:
 
 6. Shipments against the fake carrier in every mode
    (`plan-shipments.md` §1): 6a, what checkout refuses and booking a
    label on `order_paid`, is built; 6b, tracking and milestones, is
    being built (its eight steps are in `plan-shipments.md` §1; steps 1
    and 2, the fake's tracking and the carrier inbox, are done; step 3,
-   events and `derive_status`, is next, its starting context and the
-   open status rule in `plan-shipments.md` §1 and §7);
+   events and `derive_status`, comes after the concurrent flow runs, its
+   starting context and the open status rule in `plan-shipments.md` §1
+   and §7);
    then 6c, the echo flow
    retired, and with it the echo ignores of the `typed-ids` ast-grep
    rule.

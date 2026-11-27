@@ -47,8 +47,8 @@ entries.
      The seed subscribes each pushing account at the fake.
   3. `shipment_event` (once per carrier event id), the pure
      `derive_status` with its `delivery_withdrawn` rule, and
-     `shipment_event_apply` under the shipment lock (§7). Next. What
-     it starts from:
+     `shipment_event_apply` under the shipment lock (§7). Next, once
+     the concurrent flow runs exist (`README.md`). What it starts from:
      - `carrier_event_received` has no consumer yet; its facts pile up as
        records. It carries `shipment_id`, `carrier_event_id`, `kind`
        (`ShipmentEventKind`), `carrier_code`, `occurred_at`, `inbox_id`.
