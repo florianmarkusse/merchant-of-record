@@ -12,8 +12,6 @@ How a call ends:
 
 import asyncio
 import csv
-import hashlib
-import hmac
 import io
 from typing import Literal
 
@@ -38,6 +36,7 @@ from mor.echo.port import (
     VendorEvent,
 )
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
+from mor.vendor_inbox import hmac_sha256_signed
 
 
 class _Echo(msgspec.Struct, frozen=True):
@@ -171,10 +170,7 @@ class _FullWebhook(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 def verify_webhook(secret: str, body: bytes, signature: str | None) -> bool:
     """The vendor signs the raw body with HMAC-SHA256 (hex). Compared in
     constant time."""
-    if signature is None or secret == "":
-        return False
-    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    return hmac_sha256_signed(secret, body, signature)
 
 
 def decode_full_webhook(body: bytes) -> tuple[VendorEvent, ...] | UndecodableBody:

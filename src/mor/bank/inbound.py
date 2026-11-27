@@ -11,9 +11,7 @@ The guard against an entry booked twice is the bank's transaction id, never
 the body hash, which only means "these bytes are stored already".
 """
 
-import hashlib
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 
 from mor.audit import Actor, ActorKind
@@ -28,30 +26,16 @@ from mor.messaging.facts import BankEntryReceivedV1, BankInboxStoredV1
 from mor.messaging.outcome import Applied, ConsumerOutcome
 from mor.messaging.store import append_fact
 from mor.vendor_failures import UndecodableBody
+from mor.vendor_inbox import AlreadyStored, Stored, UndecodableInbox, body_sha256
 
 
 RECEIVER = Actor(ActorKind.SYSTEM, "bank_inbox")
 DECODER = Actor(ActorKind.SYSTEM, "bank_inbox_decode")
 
 
-class UndecodableInbox(Exception):
-    """Stored bytes the decoder cannot read. The raw row stays; the delivery
-    fails visibly and is retried, so a fixed decoder handles it later."""
-
-
-@dataclass(frozen=True)
-class Stored:
-    inbox_id: BankInboxId
-
-
-@dataclass(frozen=True)
-class AlreadyStored:
-    """The same bytes arrived before: nothing new was written."""
-
-
 async def store_inbox(
     conn: Connection, account_id: BankAccountId, body: bytes, now: datetime
-) -> Stored | AlreadyStored:
+) -> Stored[BankInboxId] | AlreadyStored:
     """Keep the raw bytes, nothing decoded, with the fact that starts the
     decoding. Insert, and a conflict means stored already. Never commits."""
     inbox_id = BankInboxId(uuid.uuid7())
@@ -62,7 +46,7 @@ async def store_inbox(
         ON CONFLICT (bank_account_id, body_sha256) DO NOTHING
         RETURNING id
         """,
-        (inbox_id, account_id, hashlib.sha256(body).hexdigest(), body, now),
+        (inbox_id, account_id, body_sha256(body), body, now),
     )
     if await cur.fetchone() is None:
         return AlreadyStored()

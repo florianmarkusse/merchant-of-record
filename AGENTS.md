@@ -31,7 +31,13 @@ and wins where the two differ.
     alone and never a clock (§5).
   - The duplicate guard for anything a vendor sends is the vendor's own
     id (event id, notice id, file name), never a hash of the bytes
-    (`docs/plan-messaging.md` §7).
+    (`docs/plan-messaging.md` §7). Every inbox has one shape, its shared
+    parts in `mor.vendor_inbox`.
+  - An event naming nothing of ours is a row, never a raise. Two records
+    that may arrive in either order (a bank credit and its payout, a
+    carrier event and its label) are each stored with a fact that runs
+    the match, so whichever commits second sees both; a pairing that must
+    be unique also takes a row lock (`docs/plan-messaging.md` §7).
   - Every provider account is `fake`, `sandbox` or `live`, and the
     registry refuses a kind the environment does not allow. The fakes
     are fake vendors over HTTP inside the dev web server, under `/_fake/`

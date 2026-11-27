@@ -17,6 +17,7 @@ from mor.audit import Actor
 from mor.db.connect import Connection
 from mor.ids import (
     PspAccountId,
+    PspEventId,
     PspPayoutId,
     SettlementExceptionId,
     SettlementPayoutId,
@@ -226,6 +227,33 @@ async def exceptions_of(
             LEFT JOIN settlement_exception_resolved r ON r.exception_id = x.id
             WHERE x.account_id = %s
             ORDER BY (r.exception_id IS NULL) DESC, x.created_at DESC, x.id DESC
+            """,
+            (account_id,),
+        )
+        return await cur.fetchall()
+
+
+@dataclass(frozen=True)
+class UnmatchedEvent:
+    """A PSP event naming no payment of the account: a PSP mistake, kept
+    for a person instead of failing its delivery."""
+
+    vendor_event_id: PspEventId
+    reference: str
+    recorded_at: datetime
+
+
+async def unmatched_events_of(
+    conn: Connection, account_id: PspAccountId
+) -> list[UnmatchedEvent]:
+    """The newest first."""
+    async with conn.cursor(row_factory=class_row(UnmatchedEvent)) as cur:
+        await cur.execute(
+            """
+            SELECT vendor_event_id, reference, recorded_at
+            FROM psp_event_unmatched
+            WHERE account_id = %s
+            ORDER BY recorded_at DESC, vendor_event_id DESC
             """,
             (account_id,),
         )

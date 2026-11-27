@@ -52,6 +52,7 @@ InvoiceId = NewType("InvoiceId", uuid.UUID)
 # Shipments
 ShipmentId = NewType("ShipmentId", uuid.UUID)
 CarrierRequestId = NewType("CarrierRequestId", uuid.UUID)
+CarrierInboxId = NewType("CarrierInboxId", uuid.UUID)
 
 # Settlement
 SettlementLineId = NewType("SettlementLineId", uuid.UUID)
@@ -83,9 +84,10 @@ PspPayoutId = NewType("PspPayoutId", str)
 PspLineId = NewType("PspLineId", str)
 PspEventId = NewType("PspEventId", str)
 
-# The carrier's ids for a label it made
+# The carrier's ids for a label it made and for what happens to it
 TrackingNumber = NewType("TrackingNumber", str)
 ExportDeclarationNo = NewType("ExportDeclarationNo", str)
+CarrierEventId = NewType("CarrierEventId", str)
 
 # The bank's id for an entry it shows
 BankTransactionId = NewType("BankTransactionId", str)

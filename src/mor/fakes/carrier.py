@@ -132,8 +132,8 @@ OPERATION_FAULTS: dict[Operation, tuple[Fault, ...]] = {
 REFUSE = "REFUSE"
 
 type Script = Literal["delivered", "lost", "return", "withdrawn"]
-# The carrier's own event codes, not our tracking statuses: our decoder
-# maps them (docs/plan-shipments.md §7).
+# The carrier's own event codes, not our event kinds: our provider module
+# maps them (`EVENT_KINDS` in mor.carriers.fake_client).
 type EventCode = Literal[
     "picked_up",
     "in_transit",

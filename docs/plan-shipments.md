@@ -1,7 +1,8 @@
 # Shipments: booking, tracking and milestones (slice 6)
 
 Status: 6a-1 and 6a-2 are built (§4, §6); 6b, tracking, is being built
-(step 1, the fake's tracking, is done), then 6c.
+(steps 1 and 2, the fake's tracking and the carrier inbox, are done), then
+6c.
 
 Applies `plan-architecture.md` §5, §6, §7 and §9 (booking, tracking) to
 shipments against the fake carrier in every mode. Slice 5 left a paid
@@ -38,27 +39,31 @@ entries.
      `A/events/release` (the next step, a named later one, or `all`),
      `A/tracking?tracking_number`, webhook subscriptions with signed fat
      and thin pushes, redelivery, and the tracking faults (§3).
-  2. `carrier_inbox` (`psp_inbox`'s shape) and the webhook route per
-     account; `carrier_inbox_decode`, one `carrier_event_received` per
-     event, a thin webhook as `shipment_events_wanted`; an event for a
-     tracking number the account never booked as a
-     `carrier_event_unmatched` row (§7).
+  2. The carrier inbox (built): `carrier_inbox` and the webhook route
+     per account; `carrier_inbox_decode`, one `carrier_event_received`
+     per event, a thin webhook as `shipment_events_wanted`; an event for
+     a tracking number no shipment has yet as a `carrier_event_unmatched`
+     row, matched by `carrier_event_match` once the label is ours (§7).
+     The seed subscribes each pushing account at the fake.
   3. `shipment_event` (once per carrier event id), the pure
      `derive_status` with its `delivery_withdrawn` rule, and
      `shipment_event_apply` under the shipment lock (§7).
   4. `shipment_milestone` (once per milestone) and the seven milestone
      facts (§7, §8).
   5. Polling: `shipment_tracking_start` on `shipment_label_booked`,
-     `shipment_poll_due` and `carrier_poll`, ending at `returned`,
-     `lost`, or the return window's close (§7).
+     `shipment_poll_due` and `carrier_poll` (which also takes
+     `shipment_events_wanted`), ending at `returned`, `lost`, or the
+     return window's close (§7).
   6. `return_window_days` per buyer country in market data, a
      `placeholder` until the consumer law adviser answers (prod refuses
      a placeholder), and `return_window_ends_at` on the shipment (§7).
   7. The order page and the orders API showing the tracking status and
-     milestones; the staff shipments page and the unmatched events; the
-     browser smoke suite checking the order page (§9).
-  8. The fuzzer's tracking actions, checks and reach milestones, and the
-     `derive_status` and decoder properties in a soak target (§9).
+     milestones; the staff shipments page and the unmatched events whose
+     tracking number still names no shipment; the browser smoke suite
+     checking the order page (§9).
+  8. The fuzzer's checks of statuses and milestones, and the
+     `derive_status` properties in a soak target (§9); its tracking
+     actions and the decoder properties came with step 2.
   It adds tables and message shapes, so its design is confirmed first:
   §7 is the draft.
 - **6c: the echo flow retired.** Its code, routes, fuzzer machine and
@@ -124,10 +129,10 @@ starting `REFUSE` is refused customs data. The first address line also
 picks the label's tracking script: `LOST`, `RETURN`, `WITHDRAW` (a
 delivery corrected, then delivered again), anything else delivered
 (`SCRIPTS` in `mor.fakes.carrier`). The events carry the carrier's own
-codes (`customs_hold`, `customs_released`, `delivery_corrected`, …), which
-our decoder maps to tracking statuses. Each step occurred a fixed time
-after booking whenever it is released, so a step released out of turn
-arrives out of order. A fat push carries the event, a thin one its id and
+codes (`customs_hold`, `customs_released`, `delivery_corrected`, …),
+which the provider module maps to our event kinds (§7). Each step
+occurred a fixed time after booking whenever it is released, so a step
+released out of turn arrives out of order. A fat push carries the event, a thin one its id and
 tracking number; both are signed (HMAC-SHA256 over the body,
 `Carrier-Signature`). Polling is per tracking number, as a shipment is
 polled on its own, never through an account-wide cursor. Faults: a 500
@@ -292,8 +297,15 @@ booking state, tracking status, carrier, service, tracking number,
 ```
 webhook (fat or thin) or poll page ─▶ carrier_inbox (raw, per account)
     + carrier_inbox_stored
-carrier_inbox_decode (local, per account): one carrier_event_received
-    per event; thin webhook → shipment_events_wanted
+carrier_inbox_decode (local, per account): each event to the shipment
+    whose label has its tracking number, as carrier_event_received; a
+    thin webhook → shipment_events_wanted; a tracking number no shipment
+    has yet → a carrier_event_unmatched row (once per carrier event id)
+    and its fact
+carrier_event_unmatched ┐
+shipment_label_booked   ┴▶ carrier_event_match (local): the stored
+    unmatched events of the tracking number, once a shipment has it,
+    sent on as the decoder would have
 shipment_event_apply (local, shipment lock): the event once
     (UNIQUE (shipment_id, carrier_event_id)), status = derive_status(all
     events), each newly reached milestone inserted once
@@ -306,11 +318,39 @@ shipment_events_wanted ┴▶ carrier_poll (effect): fetch the shipment's
     schedule the next unless polling is over
 ```
 
-`carrier_inbox` has `psp_inbox`'s shape: the body hash only says "these
-bytes are stored", the guard against a duplicate event is the carrier's
-event id. An event for a tracking number the account never booked is a
-vendor's doing, so it is a `carrier_event_unmatched` row on the staff
-page, not a raise.
+**The inbox.** `carrier_inbox` has `psp_inbox`'s shape, and what every
+inbox shares is in `mor.vendor_inbox` (`plan-messaging.md` §7): the body
+hash only says "these bytes are stored", which saves a stored row and a
+decode for every unchanged poll page; the guard against a duplicate
+event is the carrier's event id. `mode` is the account's tracking mode
+the bytes came by. The webhook route is `/webhooks/carrier/{account}`: an
+unknown or polling account is 404, a bad signature 401, anything else is
+stored raw and answered 200. The seed subscribes each pushing account at
+the fake, fat or thin by its mode.
+
+**Our event kinds.** Each provider module maps its carrier's codes onto
+one closed set, `ShipmentEventKind`: `picked_up`, `in_transit`,
+`held_at_customs`, `customs_released`, `delivered`,
+`delivery_withdrawn`, `returning`, `returned`, `lost`, and `other` for a
+code it does not know, kept with the carrier's own code
+(`carrier_code`), so a carrier adding a code never stops the events
+beside it. `derive_status` ignores `other`.
+
+**Matching.** An event names its label by tracking number, never by our
+reference: an extra label a `compensable` resend made carries our
+reference too, and its events are not the shipment's. An event can name
+a label before we know it is ours: the booking's answer was lost, or
+extra labels are being sorted out. As a bank credit and its payout do
+(`plan-payments.md` §7, the bank statement), both sides run the match:
+the unmatched row is committed with `carrier_event_unmatched`, the
+tracking number with `shipment_label_booked`, and each fact runs
+`carrier_event_match`, so whichever commits second sees both. Neither
+side locks: an event matched by both is sent on twice, and its id
+records it once. The match decodes the stored body again (the raw bytes
+stay the only source); a thin notice becomes one `shipment_events_wanted`.
+An unmatched row is never updated: whether its label became ours is read
+from `shipment`, and the staff page (step 7) lists those still naming no
+shipment, such as a cancelled extra label's.
 
 `derive_status(events: frozenset[CarrierEvent]) -> TrackingStatus`, pure:
 the highest-ranked status among the events wins, except that a
@@ -343,12 +383,15 @@ poll; what the poll finds is decided under the shipment lock.
 Facts: `shipment_created`, `shipment_label_booked`,
 `shipment_label_failed`, `shipment_needs_person`,
 `shipment_booking_retried`, `carrier_inbox_stored`,
-`carrier_event_received`, `shipment_events_wanted`, `shipment_poll_due`
-and the seven milestone facts. Consumers: `shipment_create`,
-`carrier_book`, `carrier_inbox_decode`, `shipment_event_apply`,
-`shipment_tracking_start`, `carrier_poll`. Ids are typed
-(`ShipmentId`, `CarrierRequestId`, `CarrierInboxId`), so the echo's
-`typed-ids` ignores go with it.
+`carrier_event_received`, `carrier_event_unmatched`,
+`shipment_events_wanted`, `shipment_poll_due` and the seven milestone
+facts. Consumers: `shipment_create`, `carrier_book`,
+`carrier_inbox_decode`, `carrier_event_match`, `shipment_event_apply`,
+`shipment_tracking_start`, `carrier_poll`. `carrier_inbox_stored` and
+`carrier_event_unmatched` belong to the carrier account, the rest to the
+shipment. Ids are typed (`ShipmentId`, `CarrierRequestId`,
+`CarrierInboxId`, `CarrierEventId`), so the echo's `typed-ids` ignores go
+with it.
 
 ## 9. Testing and fuzzing
 
@@ -372,11 +415,32 @@ and the seven milestone facts. Consumers: `shipment_create`,
   milestones: labelled under each guard, an extra label cancelled,
   `needs_person`, `label_failed`, booked again. Its soak target is
   `shipment-flow`.
-- 6b adds to the machine: release the next event, send it twice, release
-  out of order, a bad signature, clock jumps for polls; after draining,
-  each milestone at most once and each status equal to `derive_status`
-  of the events the fake released; reach milestones for each tracking
-  mode, `delivered` and `delivery_withdrawn`.
+- Tracking in the machine (6b step 2, built): setup draws the account's
+  tracking mode too; actions release a live label's next events, the
+  rest of its script or a later step out of turn, pushed once, twice or
+  badly signed; failed pushes are redelivered; a page is fetched for a
+  labelled shipment (thin and poll accounts, standing in for
+  `carrier_poll` until step 5); a booking's answer is lost and the
+  carrier pushes the label's first event before we know it, then either
+  nothing, the event decoded (its match still due), decoded and its
+  match run before the label, or decoded and the booking sent again
+  (both sides' matches due). After every action an event reaches a
+  shipment only if it is its kept label's (`tests/flow/tracking_checks.py`).
+  After draining, failed pushes redelivered and every kept label's page
+  fetched: every event the fake released for a kept label reached its
+  shipment, and under pushes every other label's event is kept
+  unmatched. Reach milestones: each tracking mode, an event pushed
+  before its label was ours, matched, a match before the label, both
+  sides matching, an extra label's event kept unmatched, the push
+  faults, a page, and crashes and redelivery in both new consumers.
+  Serial orders cannot reach a decoder that looks before the label
+  commits and stores after: `tests/shipments/test_carrier_inbox.py`
+  holds that transaction open on a second connection.
+- Steps 3, 4 and 8 add: after draining, each milestone at most once and
+  each status equal to `derive_status` of the events the fake released;
+  reach milestones `delivered` and `delivery_withdrawn`; the decoder
+  properties are in the `properties` soak target already
+  (`tests/carriers/test_carrier_properties.py`).
 - The browser smoke suite: the order page shows the tracking status.
 
 ## 10. Compliance touchpoints (named, not answered)

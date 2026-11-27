@@ -66,6 +66,108 @@
     },
     "$ref": "#/$defs/BankStatementDueV1"
   },
+  "carrier_event_received/v1": {
+    "$defs": {
+      "CarrierEventReceivedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "carrier_code": {
+            "type": "string"
+          },
+          "carrier_event_id": {
+            "type": "string"
+          },
+          "inbox_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/ShipmentEventKind"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "shipment_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipment_id",
+          "carrier_event_id",
+          "kind",
+          "carrier_code",
+          "occurred_at",
+          "inbox_id"
+        ],
+        "title": "CarrierEventReceivedV1",
+        "type": "object"
+      },
+      "ShipmentEventKind": {
+        "enum": [
+          "customs_released",
+          "delivered",
+          "delivery_withdrawn",
+          "held_at_customs",
+          "in_transit",
+          "lost",
+          "other",
+          "picked_up",
+          "returned",
+          "returning"
+        ],
+        "title": "ShipmentEventKind"
+      }
+    },
+    "$ref": "#/$defs/CarrierEventReceivedV1"
+  },
+  "carrier_event_unmatched/v1": {
+    "$defs": {
+      "CarrierEventUnmatchedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "carrier_account_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "tracking_number": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "carrier_account_id",
+          "tracking_number"
+        ],
+        "title": "CarrierEventUnmatchedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/CarrierEventUnmatchedV1"
+  },
+  "carrier_inbox_stored/v1": {
+    "$defs": {
+      "CarrierInboxStoredV1": {
+        "additionalProperties": false,
+        "properties": {
+          "carrier_account_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "inbox_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "carrier_account_id",
+          "inbox_id"
+        ],
+        "title": "CarrierInboxStoredV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/CarrierInboxStoredV1"
+  },
   "checkout_session_completed/v1": {
     "$defs": {
       "CheckoutSessionCompletedV1": {
@@ -1170,6 +1272,25 @@
       }
     },
     "$ref": "#/$defs/ShipmentCreatedV1"
+  },
+  "shipment_events_wanted/v1": {
+    "$defs": {
+      "ShipmentEventsWantedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "shipment_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shipment_id"
+        ],
+        "title": "ShipmentEventsWantedV1",
+        "type": "object"
+      }
+    },
+    "$ref": "#/$defs/ShipmentEventsWantedV1"
   },
   "shipment_label_booked/v1": {
     "$defs": {

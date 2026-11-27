@@ -11,14 +11,18 @@ from datetime import datetime
 from starlette.requests import Request
 from starlette.responses import Response
 
+import mor.carriers.registry
 import mor.payments.inbound
 import mor.psp.registry
+import mor.shipments.inbound
+from mor.carriers.accounts import read_carrier_account
+from mor.carriers.records import CarrierTrackingMode
 from mor.db.connect import connect
 from mor.echo import registry
 from mor.echo.fake_client import SIGNATURE_HEADER
 from mor.echo.inbound import inbound_account, store_inbox
 from mor.echo.port import EventMode
-from mor.ids import PspAccountId
+from mor.ids import CarrierAccountId, PspAccountId
 from mor.psp.accounts import read_psp_account
 from mor.psp.port import InboundMode, StatusMode
 
@@ -66,4 +70,29 @@ async def psp_webhook(request: Request, database_url: str, now: datetime) -> Res
         )
         await conn.commit()
     # Stored now or before: either way the PSP may stop sending it.
+    return Response(status_code=200)
+
+
+async def carrier_webhook(
+    request: Request, database_url: str, now: datetime
+) -> Response:
+    """A carrier's tracking webhook (docs/plan-shipments.md §7): verify,
+    store raw, 200. An account that polls takes no webhooks."""
+    try:
+        account_id = CarrierAccountId(uuid.UUID(request.path_params["account_id"]))
+    except ValueError:
+        return Response(status_code=404)
+    body = await request.body()
+    async with await connect(database_url) as conn:
+        account = await read_carrier_account(conn, account_id)
+        if account is None or account.tracking_mode == CarrierTrackingMode.POLL:
+            return Response(status_code=404)
+        signature = request.headers.get(mor.carriers.registry.signature_header(account))
+        if not mor.carriers.registry.verify_webhook(account, body, signature):
+            return Response(status_code=401)
+        await mor.shipments.inbound.store_inbox(
+            conn, account_id, account.tracking_mode, body, now
+        )
+        await conn.commit()
+    # Stored now or before: either way the carrier may stop sending it.
     return Response(status_code=200)

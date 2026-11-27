@@ -387,7 +387,8 @@ Tables and the constraint that does each guarding job:
 |---|---|---|
 | `shipment` | `(order_id, sequence)` | a second shipment for the same order step |
 | `carrier_request` | `(shipment_id, operation, number)`, and the idempotency key | a second booking after a crash |
-| `carrier_inbox` | `(account_id, vendor_event_key)` | a webhook or polled page stored twice |
+| `carrier_inbox` | `(account_id, body_sha256)` | the same bytes stored twice (the event's guard is `shipment_event`) |
+| `carrier_event_unmatched` | `(account_id, carrier_event_id)` | an event for a label not yet ours kept twice |
 | `shipment_event` | `(shipment_id, carrier_event_id)` | an event applied twice |
 | `shipment_milestone` | `(shipment_id, milestone)` | `shipment_delivered` emitted twice |
 | `carrier_invoice_line` | `(account_id, invoice_no, line_no)` | a bill line booked twice |

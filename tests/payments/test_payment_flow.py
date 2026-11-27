@@ -4,13 +4,17 @@ ledger and what the PSP did out. Every merchant, buyer and address here is
 made up."""
 
 import asyncio
+import hashlib
+import hmac
 import html
+import json
 import uuid
 from datetime import timedelta
 
 import psycopg
 import pytest
 
+import mor.psp.fake_client
 from mor.checkout.flow import QUOTE_VALID_FOR
 from mor.checkout.records import SESSION_LIFETIME
 from mor.db.connect import connect
@@ -29,6 +33,7 @@ from tests.payments.support import (
     ACTOR,
     FAT_SALE_KEYED,
     NOW,
+    SECRET,
     Setup,
     Wiring,
     attempts_of,
@@ -619,5 +624,62 @@ def test_a_webhook_for_an_unknown_account_is_refused(database_url: str) -> None:
             f"http://mor/webhooks/psp/{uuid.uuid7()}", content=b"{}"
         )
         assert response.status_code == 404
+
+    asyncio.run(with_setup(database_url, FAT_SALE_KEYED, body))
+
+
+def test_a_psp_event_naming_no_payment_is_kept_once_for_a_person(
+    database_url: str,
+) -> None:
+    async def body(setup: Setup) -> None:
+        account = setup.shop.account
+
+        async def post(reference: str) -> int:
+            body = json.dumps(
+                {
+                    "events": [
+                        {
+                            "id": "EV-STRAY",
+                            "payment_id": "PAY-STRAY",
+                            "reference": reference,
+                            "kind": "captured",
+                            "amount_minor": 5000,
+                            "currency": "SGD",
+                            "occurred_at": "2026-11-18T12:00:00Z",
+                        }
+                    ]
+                }
+            ).encode()
+            response = await setup.wired.control.post(
+                f"http://mor/webhooks/psp/{account.id}",
+                content=body,
+                headers={
+                    mor.psp.fake_client.SIGNATURE_HEADER: hmac.new(
+                        SECRET.encode(), body, hashlib.sha256
+                    ).hexdigest()
+                },
+            )
+            return response.status_code
+
+        # Not a payment of ours, then the same event naming another.
+        assert await post(str(uuid.uuid7())) == 200
+        assert await post("garbage") == 200
+        await drain(setup)
+        assert (
+            await count_rows(setup.url, "SELECT count(*) FROM psp_event_unmatched") == 1
+        )
+        assert (
+            await count_rows(
+                setup.url,
+                "SELECT count(*) FROM outbox_delivery"
+                " WHERE consumer = 'psp_inbox_decode' AND handled_at IS NULL",
+            )
+            == 0
+        )
+        assert await count_rows(setup.url, "SELECT count(*) FROM payment_event") == 0
+        page = await setup.wired.control.get(
+            f"http://mor/staff/settlement/{account.id}"
+        )
+        assert "EV-STRAY" in page.text
 
     asyncio.run(with_setup(database_url, FAT_SALE_KEYED, body))

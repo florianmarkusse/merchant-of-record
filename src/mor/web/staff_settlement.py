@@ -2,9 +2,9 @@
 docs/plan-payments.md §7): per PSP account its health
 figures (`psp_clearing` and `payout_in_transit` per currency), its payouts
 with whether each adds up to its lines yet (open ones first, with how long
-they have been open), and its exceptions, each open one with a form to
-resolve it with a note (question 10 of 20-Nov-2026). A note books
-nothing.
+they have been open), its exceptions, each open one with a form to
+resolve it with a note (question 10 of 20-Nov-2026), and the PSP's events
+that named no payment of ours. A note books nothing.
 
     GET  /staff/settlement                                   every account
     GET  /staff/settlement/{account}                         one account
@@ -45,11 +45,13 @@ from mor.settlement.review import (
     NoSuchException,
     PayoutRow,
     Resolved,
+    UnmatchedEvent,
     account_summaries,
     account_summary,
     exceptions_of,
     payouts_of,
     resolve_exception,
+    unmatched_events_of,
 )
 from mor.web.forms import read_form, same_origin
 from mor.web.staff_layout import money_text, staff_page
@@ -266,10 +268,37 @@ def _exception_rows(account_id: PspAccountId, found: list[ExceptionRow]) -> htpy
     ]
 
 
+def _unmatched_rows(unmatched: list[UnmatchedEvent]) -> htpy.Node:
+    if not unmatched:
+        return htpy.p(class_="muted")["None."]
+    rows: list[htpy.Node] = []
+    for event in unmatched:
+        rows.append(
+            htpy.tr[
+                htpy.td[event.vendor_event_id],
+                htpy.td[event.reference],
+                htpy.td[format_moment(event.recorded_at)],
+            ]
+        )
+    return htpy.div(class_="scroll")[
+        htpy.table(class_="data")[
+            htpy.thead[
+                htpy.tr[
+                    htpy.th["PSP's event id"],
+                    htpy.th["Reference it named"],
+                    htpy.th["Received"],
+                ]
+            ],
+            htpy.tbody[rows],
+        ]
+    ]
+
+
 def render_account(
     summary: AccountSummary,
     payouts: list[PayoutRow],
     found: list[ExceptionRow],
+    unmatched: list[UnmatchedEvent],
     note: str | None,
     now: datetime,
 ) -> str:
@@ -294,6 +323,13 @@ def render_account(
         _exception_rows(summary.id, found),
         htpy.h2["Payouts"],
         _payout_rows(summary.id, payouts, now),
+        htpy.h2["Events naming no payment"],
+        htpy.p(class_="muted")[
+            "Our payment exists before the PSP hears of it, so an event"
+            " naming none is the PSP's mistake: ask the PSP. Nothing was"
+            " booked for it."
+        ],
+        _unmatched_rows(unmatched),
     )
 
 
@@ -320,8 +356,9 @@ async def account_page(request: Request, database_url: str, now: datetime) -> Re
             return Response("no such account", status_code=404)
         payouts = await payouts_of(conn, account_id, PAYOUTS_SHOWN)
         found = await exceptions_of(conn, account_id)
+        unmatched = await unmatched_events_of(conn, account_id)
     note = request.query_params.get("note")
-    return HTMLResponse(render_account(summary, payouts, found, note, now))
+    return HTMLResponse(render_account(summary, payouts, found, unmatched, note, now))
 
 
 async def resolve(request: Request, database_url: str, now: datetime) -> Response:

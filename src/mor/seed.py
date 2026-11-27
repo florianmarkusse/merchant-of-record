@@ -58,8 +58,17 @@ from mor.bank.accounts import (
 )
 from mor.bank.fetch import start_reading
 from mor.bank.port import BankAccount, BankProvider
-from mor.carriers.accounts import carrier_account, create_carrier_account
-from mor.carriers.records import CarrierProvider, CarrierTrackingMode, PriceExpiry
+from mor.carriers.accounts import (
+    carrier_account,
+    create_carrier_account,
+    read_carrier_account,
+)
+from mor.carriers.records import (
+    CarrierAccount,
+    CarrierProvider,
+    CarrierTrackingMode,
+    PriceExpiry,
+)
 from mor.checkout.addresses import Address
 from mor.config import Environment, Settings, load_settings
 from mor.db.connect import Connection, connect
@@ -259,9 +268,7 @@ def carrier_flavour(guard: DuplicateGuard) -> str:
 
 @dataclass(frozen=True, kw_only=True)
 class SeededCarrier:
-    carrier: CarrierCode
-    book_guard: DuplicateGuard
-    tracking_mode: CarrierTrackingMode
+    account: CarrierAccount
     created: bool
 
 
@@ -286,17 +293,10 @@ async def seed_carriers(
     for number, carrier in enumerate(sorted(routed)):
         existing = await carrier_account(conn, carrier)
         if existing is not None:
-            seeded.append(
-                SeededCarrier(
-                    carrier=carrier,
-                    book_guard=existing.book_guard,
-                    tracking_mode=existing.tracking_mode,
-                    created=False,
-                )
-            )
+            seeded.append(SeededCarrier(account=existing, created=False))
             continue
         guard, mode = CARRIER_WIRINGS[number % len(CARRIER_WIRINGS)]
-        await create_carrier_account(
+        account_id = await create_carrier_account(
             conn,
             carrier,
             CarrierProvider.FAKE,
@@ -311,12 +311,41 @@ async def seed_carriers(
             poll_interval=POLL_INTERVAL,
             webhook_secret=CARRIER_WEBHOOK_SECRET,
         )
-        seeded.append(
-            SeededCarrier(
-                carrier=carrier, book_guard=guard, tracking_mode=mode, created=True
-            )
-        )
+        new_account = await read_carrier_account(conn, account_id)
+        assert new_account is not None
+        seeded.append(SeededCarrier(account=new_account, created=True))
     return seeded
+
+
+async def subscribe_carrier_webhooks(
+    http: httpx2.AsyncClient, settings: Settings, seeded: list[SeededCarrier]
+) -> FakeUnreachable | None:
+    """The carrier side: each pushing account's webhook registered at the
+    fake carrier, as on a carrier's dashboard (docs/plan-shipments.md §3).
+    Subscribing again replaces it."""
+    for seeded_carrier in seeded:
+        account = seeded_carrier.account
+        match account.tracking_mode:
+            case CarrierTrackingMode.PUSH_FAT:
+                payload = "fat"
+            case CarrierTrackingMode.PUSH_THIN:
+                payload = "thin"
+            case CarrierTrackingMode.POLL:
+                continue
+        try:
+            response = await http.post(
+                f"{account.base_url}/webhooks",
+                json={
+                    "url": f"{settings.self_url}/webhooks/carrier/{account.id}",
+                    "secret": account.webhook_secret,
+                    "payload": payload,
+                },
+            )
+        except httpx2.TransportError as error:
+            return FakeUnreachable(repr(error))
+        if response.status_code != 204:
+            return FakeUnreachable(f"status {response.status_code}")
+    return None
 
 
 PSP_GUARDS = (DuplicateGuard.VENDOR_CONSTRAINT, DuplicateGuard.NONE)
@@ -547,6 +576,8 @@ async def _main() -> int:
     async with httpx2.AsyncClient() as http:
         unreachable = await subscribe_webhooks(http, settings, seeded)
         if unreachable is None:
+            unreachable = await subscribe_carrier_webhooks(http, settings, carriers)
+        if unreachable is None:
             unreachable = await set_fake_duty_rates(http, settings)
         if unreachable is None:
             unreachable = await set_up_fake_psp(http, settings, psps)
@@ -564,10 +595,10 @@ async def _main() -> int:
     print(f"duty vendor accounts created: {', '.join(vendors) or 'none'}")
     for seeded_carrier in carriers:
         made = "new" if seeded_carrier.created else "kept"
+        account = seeded_carrier.account
         print(
-            f"carrier {seeded_carrier.carrier}: books under"
-            f" {seeded_carrier.book_guard}, tracks by"
-            f" {seeded_carrier.tracking_mode} ({made})"
+            f"carrier {account.carrier}: books under {account.book_guard},"
+            f" tracks by {account.tracking_mode} ({made})"
         )
     print(f"{len(psps)} fake PSP accounts set up; default route: {DEFAULT_PSP}")
     print(f"{len(banks)} fake bank accounts, one per currency")

@@ -32,6 +32,7 @@ class _AccountRow:
     price_expiry: PriceExpiry
     book_guard: DuplicateGuard
     tracking_mode: CarrierTrackingMode
+    webhook_secret: str
 
 
 def _account(row: _AccountRow) -> CarrierAccount:
@@ -46,6 +47,7 @@ def _account(row: _AccountRow) -> CarrierAccount:
         price_expiry=row.price_expiry,
         book_guard=row.book_guard,
         tracking_mode=row.tracking_mode,
+        webhook_secret=row.webhook_secret,
     )
 
 
@@ -99,7 +101,8 @@ async def carrier_account(
         await cur.execute(
             """
             SELECT id, carrier, provider, kind, base_url, timeout_ms,
-                   price_valid_for_s, price_expiry, book_guard, tracking_mode
+                   price_valid_for_s, price_expiry, book_guard, tracking_mode,
+                   webhook_secret
             FROM carrier_account WHERE carrier = %s
             """,
             (carrier,),
@@ -115,7 +118,8 @@ async def read_carrier_account(
         await cur.execute(
             """
             SELECT id, carrier, provider, kind, base_url, timeout_ms,
-                   price_valid_for_s, price_expiry, book_guard, tracking_mode
+                   price_valid_for_s, price_expiry, book_guard, tracking_mode,
+                   webhook_secret
             FROM carrier_account WHERE id = %s
             """,
             (account_id,),

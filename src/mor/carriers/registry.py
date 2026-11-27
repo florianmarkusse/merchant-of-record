@@ -9,13 +9,16 @@ from mor.carriers.port import (
     BookRequest,
     BookResult,
     CancelResult,
+    CarrierEvent,
     FindResult,
     QuoteRateResult,
+    ThinNotice,
 )
 from mor.carriers.records import CarrierAccount, CarrierProvider, PriceQuestion
 from mor.config import Environment
 from mor.ids import TrackingNumber
 from mor.provider_accounts import require_allowed
+from mor.vendor_failures import UndecodableBody
 
 
 async def quote_rate(
@@ -64,3 +67,37 @@ async def cancel(
     match account.provider:
         case CarrierProvider.FAKE:
             return await fake_client.cancel(http, account, tracking_number)
+
+
+# Tracking: what a carrier sends us is decoded on one path, whatever the
+# mode (docs/plan-shipments.md §7). Decoding is pure: no environment check,
+# the bytes are already ours.
+
+
+def signature_header(account: CarrierAccount) -> str:
+    match account.provider:
+        case CarrierProvider.FAKE:
+            return fake_client.SIGNATURE_HEADER
+
+
+def verify_webhook(account: CarrierAccount, body: bytes, signature: str | None) -> bool:
+    match account.provider:
+        case CarrierProvider.FAKE:
+            return fake_client.verify_webhook(account, body, signature)
+
+
+def decode_events(
+    account: CarrierAccount, body: bytes
+) -> tuple[CarrierEvent, ...] | UndecodableBody:
+    """A fat webhook's or a tracking page's events."""
+    match account.provider:
+        case CarrierProvider.FAKE:
+            return fake_client.decode_events(body)
+
+
+def decode_thin_webhook(
+    account: CarrierAccount, body: bytes
+) -> ThinNotice | UndecodableBody:
+    match account.provider:
+        case CarrierProvider.FAKE:
+            return fake_client.decode_thin_webhook(body)

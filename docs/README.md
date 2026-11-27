@@ -18,6 +18,7 @@ Status as of 27-Nov-2026.
 | 5a–5c-3 | Payments against the fake PSP in every mode, the order, the invoice, settlement with each payout reconciled, the bank: every entry booked, each payout matched to its credit; card fields, the CSP the app sends, the browser smoke suite | `plan-payments.md` |
 | 6a-1 | What checkout refuses: apparel only, our classification per SKU and its staff page, the merchant's ship-from address | `plan-shipments.md` |
 | 6a-2 | Booking a paid order's label against the fake carrier under each duplicate guard, quotes from the ship-from's country, the staff shipments page, the label through the orders API | `plan-shipments.md` |
+| 6b-1, 6b-2 | The fake carrier's tracking; the carrier inbox: webhooks stored raw, decoded into our event kinds, an event before its label is ours matched once it is; every inbox on one shared shape, and a PSP event naming no payment kept as a row | `plan-shipments.md`, `plan-messaging.md` §7 |
 
 The checks that run after every change (ruff, pyright strict, vulture,
 `npx tsc`, the ast-grep rules, pytest with the fuzzers) are in
@@ -32,8 +33,9 @@ message shapes:
 6. Shipments against the fake carrier in every mode
    (`plan-shipments.md` §1): 6a, what checkout refuses and booking a
    label on `order_paid`, is built; 6b, tracking and milestones, is
-   being built (its eight steps are in `plan-shipments.md` §1; step 1,
-   the fake's tracking, is done; step 2, the carrier inbox, is next);
+   being built (its eight steps are in `plan-shipments.md` §1; steps 1
+   and 2, the fake's tracking and the carrier inbox, are done; step 3,
+   events and `derive_status`, is next);
    then 6c, the echo flow
    retired, and with it the echo ignores of the `typed-ids` ast-grep
    rule.

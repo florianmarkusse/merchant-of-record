@@ -58,7 +58,8 @@ class PriceExpiry(StrEnum):
 
 class CarrierTrackingMode(StrEnum):
     """How the carrier tells us what happens to a parcel; matches
-    `carrier_tracking_mode`. Used from 6b on (docs/plan-shipments.md §7)."""
+    `carrier_tracking_mode`, which is also how a `carrier_inbox` row's bytes
+    came (docs/plan-shipments.md §7)."""
 
     PUSH_FAT = "push_fat"  # signed webhooks carrying the events
     PUSH_THIN = "push_thin"  # webhooks saying only that there is news
@@ -80,6 +81,7 @@ class CarrierAccount:
     price_expiry: PriceExpiry
     book_guard: DuplicateGuard
     tracking_mode: CarrierTrackingMode
+    webhook_secret: str  # what its pushes are signed with; "" when it polls
 
 
 class PricePartKind(StrEnum):

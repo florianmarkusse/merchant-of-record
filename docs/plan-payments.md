@@ -174,7 +174,7 @@ and QR methods cannot hold at all.
 | `payment_attempt_created` | `psp_payment_create` | effect | create at the PSP; `action_required` with the redirect or QR, or `declined` |
 | `payment_authorised` | `psp_payment_capture` | effect | capture the attempt's amount (authorise accounts only) |
 | `payment_cancel_wanted` | `psp_payment_cancel` | effect | cancel; `AlreadyFinal` applies the PSP's real state |
-| `psp_inbox_stored` | `psp_inbox_decode` | local | the stored webhook, poll page or thin pointer to our events |
+| `psp_inbox_stored` | `psp_inbox_decode` | local | the stored webhook, poll page or thin pointer to our events; an event naming no attempt of the account is a `psp_event_unmatched` row, once by the PSP's id, listed on the account's settlement page |
 | `payment_events_wanted` | `psp_payment_fetch` | effect | a thin webhook's fetch of the payment's state |
 | `psp_event_received` | `payment_event_apply` | local | lock the attempt, apply the event by the transition table |
 | `payment_poll_due` | `psp_payment_poll` | effect | fetch the state (poll accounts, and once at the action's expiry on every account) |

@@ -18,8 +18,6 @@ How a call ends:
 
 import asyncio
 import csv
-import hashlib
-import hmac
 import io
 from fractions import Fraction
 from typing import Literal
@@ -67,6 +65,7 @@ from mor.psp.port import (
     ThinNotice,
 )
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
+from mor.vendor_inbox import hmac_sha256_signed
 
 
 SIGNATURE_HEADER = "Psp-Signature"
@@ -357,12 +356,7 @@ async def fetch_events(
 
 
 def verify_webhook(account: PspAccount, body: bytes, signature: str | None) -> bool:
-    if signature is None:
-        return False
-    expected = hmac.new(
-        account.webhook_secret.encode("utf-8"), body, hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    return hmac_sha256_signed(account.webhook_secret, body, signature)
 
 
 def decode_events(body: bytes) -> tuple[PspEvent, ...] | UndecodableBody:
@@ -394,7 +388,7 @@ def decode_thin_webhook(body: bytes) -> ThinNotice | UndecodableBody:
         thin = msgspec.json.decode(body, type=_Thin)
     except msgspec.DecodeError as error:
         return UndecodableBody(str(error))
-    return ThinNotice(thin.reference)
+    return ThinNotice(PspEventId(thin.id), thin.reference)
 
 
 # --- settlement (docs/plan-payments.md §7) ----------------------

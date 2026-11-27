@@ -45,6 +45,8 @@ class ConsumerName(StrEnum):
     BANK_ENTRY_MATCH = "bank_entry_match"
     SHIPMENT_CREATE = "shipment_create"
     CARRIER_BOOK = "carrier_book"
+    CARRIER_INBOX_DECODE = "carrier_inbox_decode"
+    CARRIER_EVENT_MATCH = "carrier_event_match"
 
 
 # The two kinds, as types: the worker hands `handle` only a local consumer
@@ -70,6 +72,8 @@ type LocalConsumer = Literal[
     ConsumerName.BANK_INBOX_DECODE,
     ConsumerName.BANK_ENTRY_MATCH,
     ConsumerName.SHIPMENT_CREATE,
+    ConsumerName.CARRIER_INBOX_DECODE,
+    ConsumerName.CARRIER_EVENT_MATCH,
 ]
 type EffectConsumer = Literal[
     ConsumerName.ECHO_SEND,
@@ -208,6 +212,12 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             return (ConsumerName.BANK_ENTRY_MATCH,)
         case MessageType.SHIPMENT_CREATED | MessageType.SHIPMENT_BOOKING_RETRIED:
             return (ConsumerName.CARRIER_BOOK,)
+        case MessageType.CARRIER_INBOX_STORED:
+            return (ConsumerName.CARRIER_INBOX_DECODE,)
+        # An event may name a label before we know it is ours: the stored
+        # event and the label each run the match (docs/plan-shipments.md §7).
+        case MessageType.CARRIER_EVENT_UNMATCHED | MessageType.SHIPMENT_LABEL_BOOKED:
+            return (ConsumerName.CARRIER_EVENT_MATCH,)
         case (
             MessageType.ECHO_JOB_REFUSED
             | MessageType.ECHO_JOB_NEEDS_PERSON
@@ -227,11 +237,14 @@ def consumers_for(message_type: MessageType) -> tuple[ConsumerName, ...]:
             | MessageType.PAYMENT_ACTION_REQUIRED
             | MessageType.CHECKOUT_SESSION_COMPLETED
             | MessageType.INVOICE_ISSUED
-            # Records for now: tracking starts from a label (6b); a person
-            # reads the failed and stuck ones on the staff page.
-            | MessageType.SHIPMENT_LABEL_BOOKED
+            # Records for now: a person reads the failed and stuck ones on
+            # the staff page.
             | MessageType.SHIPMENT_LABEL_FAILED
             | MessageType.SHIPMENT_NEEDS_PERSON
+            # Records until their consumers come: applying an event (6b
+            # step 3) and fetching a shipment's events (step 5).
+            | MessageType.CARRIER_EVENT_RECEIVED
+            | MessageType.SHIPMENT_EVENTS_WANTED
         ):
             return ()
 
@@ -259,6 +272,8 @@ def consumer_kind(consumer: ConsumerName) -> Local | Effect:
             | ConsumerName.BANK_INBOX_DECODE
             | ConsumerName.BANK_ENTRY_MATCH
             | ConsumerName.SHIPMENT_CREATE
+            | ConsumerName.CARRIER_INBOX_DECODE
+            | ConsumerName.CARRIER_EVENT_MATCH
         ):
             return Local(consumer)
         case (

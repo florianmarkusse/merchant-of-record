@@ -19,12 +19,16 @@ from typing import ClassVar, Literal
 
 import msgspec
 
+from mor.carriers.port import ShipmentEventKind
 from mor.echo.port import EventKind
 from mor.echo.records import EchoEventSource
 from mor.ids import (
     BankAccountId,
     BankEntryId,
     BankInboxId,
+    CarrierAccountId,
+    CarrierEventId,
+    CarrierInboxId,
     CheckoutAddressId,
     CheckoutSessionId,
     DutyLookupId,
@@ -64,6 +68,7 @@ class AggregateType(StrEnum):
     SETTLEMENT_PAYOUT = "settlement_payout"
     BANK_ACCOUNT = "bank_account"
     SHIPMENT = "shipment"
+    CARRIER_ACCOUNT = "carrier_account"
 
 
 class MessageType(StrEnum):
@@ -126,6 +131,10 @@ class MessageType(StrEnum):
     SHIPMENT_LABEL_FAILED = "shipment_label_failed"
     SHIPMENT_NEEDS_PERSON = "shipment_needs_person"
     SHIPMENT_BOOKING_RETRIED = "shipment_booking_retried"
+    CARRIER_INBOX_STORED = "carrier_inbox_stored"
+    CARRIER_EVENT_RECEIVED = "carrier_event_received"
+    CARRIER_EVENT_UNMATCHED = "carrier_event_unmatched"
+    SHIPMENT_EVENTS_WANTED = "shipment_events_wanted"
 
 
 @dataclass(frozen=True)
@@ -695,6 +704,56 @@ class ShipmentBookingRetriedV1(msgspec.Struct, frozen=True, forbid_unknown_field
     order_id: OrderId
 
 
+class CarrierInboxStoredV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Raw bytes from a carrier (a webhook or a tracking page) were stored
+    (docs/plan-shipments.md §7)."""
+
+    message_type: ClassVar[MessageType] = MessageType.CARRIER_INBOX_STORED
+    schema_version: ClassVar[int] = 1
+
+    carrier_account_id: CarrierAccountId
+    inbox_id: CarrierInboxId
+
+
+class CarrierEventReceivedV1(
+    msgspec.Struct, frozen=True, forbid_unknown_fields=True, kw_only=True
+):
+    """One carrier event about a shipment's label, decoded from stored
+    bytes. It may come again (a page fetched twice, an unmatched event
+    matched by both sides): the carrier's id records it once."""
+
+    message_type: ClassVar[MessageType] = MessageType.CARRIER_EVENT_RECEIVED
+    schema_version: ClassVar[int] = 1
+
+    shipment_id: ShipmentId
+    carrier_event_id: CarrierEventId
+    kind: ShipmentEventKind
+    carrier_code: str
+    occurred_at: datetime
+    inbox_id: CarrierInboxId
+
+
+class CarrierEventUnmatchedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """An event for a tracking number no shipment of the account had when
+    it was decoded: stored to be matched once the label is ours."""
+
+    message_type: ClassVar[MessageType] = MessageType.CARRIER_EVENT_UNMATCHED
+    schema_version: ClassVar[int] = 1
+
+    carrier_account_id: CarrierAccountId
+    tracking_number: TrackingNumber
+
+
+class ShipmentEventsWantedV1(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """A thin webhook said the shipment's label has news, without saying
+    what: fetch its events."""
+
+    message_type: ClassVar[MessageType] = MessageType.SHIPMENT_EVENTS_WANTED
+    schema_version: ClassVar[int] = 1
+
+    shipment_id: ShipmentId
+
+
 type Fact = (
     ProbeStartedV1
     | ProbeEchoedV1
@@ -752,6 +811,10 @@ type Fact = (
     | ShipmentLabelFailedV1
     | ShipmentNeedsPersonV1
     | ShipmentBookingRetriedV1
+    | CarrierInboxStoredV1
+    | CarrierEventReceivedV1
+    | CarrierEventUnmatchedV1
+    | ShipmentEventsWantedV1
 )
 
 
@@ -852,8 +915,15 @@ def aggregate_of(fact: Fact) -> Aggregate:
             | ShipmentLabelFailedV1(shipment_id=shipment_id)
             | ShipmentNeedsPersonV1(shipment_id=shipment_id)
             | ShipmentBookingRetriedV1(shipment_id=shipment_id)
+            | CarrierEventReceivedV1(shipment_id=shipment_id)
+            | ShipmentEventsWantedV1(shipment_id=shipment_id)
         ):
             return Aggregate(AggregateType.SHIPMENT, shipment_id)
+        case (
+            CarrierInboxStoredV1(carrier_account_id=carrier_account_id)
+            | CarrierEventUnmatchedV1(carrier_account_id=carrier_account_id)
+        ):
+            return Aggregate(AggregateType.CARRIER_ACCOUNT, carrier_account_id)
 
 
 def encode(fact: Fact) -> bytes:
@@ -993,6 +1063,14 @@ def decode(
             decoded = _decode(payload, ShipmentNeedsPersonV1)
         case MessageType.SHIPMENT_BOOKING_RETRIED:
             decoded = _decode(payload, ShipmentBookingRetriedV1)
+        case MessageType.CARRIER_INBOX_STORED:
+            decoded = _decode(payload, CarrierInboxStoredV1)
+        case MessageType.CARRIER_EVENT_RECEIVED:
+            decoded = _decode(payload, CarrierEventReceivedV1)
+        case MessageType.CARRIER_EVENT_UNMATCHED:
+            decoded = _decode(payload, CarrierEventUnmatchedV1)
+        case MessageType.SHIPMENT_EVENTS_WANTED:
+            decoded = _decode(payload, ShipmentEventsWantedV1)
     if isinstance(decoded, str):
         return UndecodableFact(
             message_type=message_type,

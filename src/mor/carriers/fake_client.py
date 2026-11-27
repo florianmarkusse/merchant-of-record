@@ -1,6 +1,6 @@
-"""Client for the fake carrier (mor.fakes.carrier): its rate call and its
-labels, shaped like any real provider module: our records in, our result
-union out, never our database.
+"""Client for the fake carrier (mor.fakes.carrier): its rate call, its
+labels and its tracking events, shaped like any real provider module: our
+records in, our result union out, never our database.
 
 How a call ends:
 - connection refused or no such host: `Unavailable`, it never left;
@@ -9,6 +9,10 @@ How a call ends:
 - 404 `not_served` on a rate: `NotServed`; 422 on a booking: `BookRefused`;
 - anything else it does not document, parts that do not add up to the
   total, or a document that is not a PDF: `UndecodableBody`.
+
+Its webhooks are signed with HMAC-SHA256 over the raw body
+(`Carrier-Signature`); a fat one and a tracking page both carry `events`, a
+thin one an event's id and tracking number.
 """
 
 import asyncio
@@ -24,6 +28,7 @@ from mor.carriers.port import (
     BookResult,
     Cancelled,
     CancelResult,
+    CarrierEvent,
     FindResult,
     Found,
     FoundLabel,
@@ -32,6 +37,8 @@ from mor.carriers.port import (
     NotServed,
     Party,
     QuoteRateResult,
+    ShipmentEventKind,
+    ThinNotice,
     carrier_price,
 )
 from mor.carriers.records import (
@@ -41,9 +48,10 @@ from mor.carriers.records import (
     PriceQuestion,
 )
 from mor.dates import AwareDatetime, to_utc
-from mor.ids import ExportDeclarationNo, TrackingNumber
+from mor.ids import CarrierEventId, ExportDeclarationNo, TrackingNumber
 from mor.money.currency import Currency
 from mor.vendor_failures import OutcomeUnknown, Unavailable, UndecodableBody
+from mor.vendor_inbox import hmac_sha256_signed
 
 
 class _Part(msgspec.Struct, frozen=True):
@@ -317,3 +325,73 @@ async def cancel(
     if response.status_code != 200:
         return UndecodableBody(f"status {response.status_code}")
     return Cancelled()
+
+
+# --- tracking ---------------------------------------------------------------
+
+SIGNATURE_HEADER = "Carrier-Signature"
+
+# The fake's event codes in our words (`SCRIPTS` in mor.fakes.carrier). Out
+# for delivery is still in transit; a corrected delivery withdraws one.
+EVENT_KINDS: dict[str, ShipmentEventKind] = {
+    "picked_up": ShipmentEventKind.PICKED_UP,
+    "in_transit": ShipmentEventKind.IN_TRANSIT,
+    "customs_hold": ShipmentEventKind.HELD_AT_CUSTOMS,
+    "customs_released": ShipmentEventKind.CUSTOMS_RELEASED,
+    "out_for_delivery": ShipmentEventKind.IN_TRANSIT,
+    "delivered": ShipmentEventKind.DELIVERED,
+    "delivery_corrected": ShipmentEventKind.DELIVERY_WITHDRAWN,
+    "lost": ShipmentEventKind.LOST,
+    "return_started": ShipmentEventKind.RETURNING,
+    "returned": ShipmentEventKind.RETURNED,
+}
+
+
+class _TrackEvent(msgspec.Struct, frozen=True, kw_only=True):
+    id: str
+    tracking_number: str
+    code: str
+    occurred_at: AwareDatetime
+
+
+class _Events(msgspec.Struct, frozen=True):
+    """A fat webhook, or a tracking page (which also names its tracking
+    number)."""
+
+    events: list[_TrackEvent]
+
+
+class _Thin(msgspec.Struct, frozen=True):
+    id: str
+    tracking_number: str
+
+
+def verify_webhook(account: CarrierAccount, body: bytes, signature: str | None) -> bool:
+    return hmac_sha256_signed(account.webhook_secret, body, signature)
+
+
+def decode_events(body: bytes) -> tuple[CarrierEvent, ...] | UndecodableBody:
+    try:
+        decoded = msgspec.json.decode(body, type=_Events)
+    except msgspec.DecodeError as error:
+        return UndecodableBody(str(error))
+    events: list[CarrierEvent] = []
+    for raw in decoded.events:
+        events.append(
+            CarrierEvent(
+                carrier_event_id=CarrierEventId(raw.id),
+                tracking_number=TrackingNumber(raw.tracking_number),
+                kind=EVENT_KINDS.get(raw.code, ShipmentEventKind.OTHER),
+                carrier_code=raw.code,
+                occurred_at=to_utc(raw.occurred_at),
+            )
+        )
+    return tuple(events)
+
+
+def decode_thin_webhook(body: bytes) -> ThinNotice | UndecodableBody:
+    try:
+        thin = msgspec.json.decode(body, type=_Thin)
+    except msgspec.DecodeError as error:
+        return UndecodableBody(str(error))
+    return ThinNotice(CarrierEventId(thin.id), TrackingNumber(thin.tracking_number))

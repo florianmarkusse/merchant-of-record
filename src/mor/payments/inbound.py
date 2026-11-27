@@ -6,15 +6,18 @@
     psp_inbox_decode (per account): a thin notice becomes
         payment_events_wanted; events become one psp_event_received each;
         a settlement report or page becomes its batch and lines
-        (mor.settlement.store, docs/plan-payments.md §7)
+        (mor.settlement.store, docs/plan-payments.md §7); an event or notice
+        whose reference names no payment of the account is a
+        psp_event_unmatched row for a person, once by the PSP's event id
     payment_event_apply (per attempt): the event once, by the PSP's id,
         through the transition table
 
 The guard against a duplicate event is the PSP's event id; the body hash
-only means "these bytes are stored already" (decided 17-Nov-2026).
+only means "these bytes are stored already" (decided 17-Nov-2026). Our
+attempt exists before the PSP hears of it, so an event naming none is a
+PSP mistake that never matches later: recorded, never raised.
 """
 
-import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,7 +27,7 @@ from psycopg.rows import class_row
 from mor.audit import Actor, ActorKind
 from mor.db.connect import Connection
 from mor.db.fetch import one_row
-from mor.ids import PspAccountId, PspInboxId
+from mor.ids import PspAccountId, PspEventId, PspInboxId
 from mor.messaging.facts import (
     PaymentEventsWantedV1,
     PspEventReceivedV1,
@@ -43,32 +46,12 @@ from mor.psp.port import (
 )
 from mor.settlement.store import record_document
 from mor.vendor_failures import UndecodableBody
+from mor.vendor_inbox import AlreadyStored, Stored, UndecodableInbox, body_sha256
 
 
 RECEIVER = Actor(ActorKind.SYSTEM, "psp_inbox")
 DECODER = Actor(ActorKind.SYSTEM, "psp_inbox_decode")
 APPLIER = Actor(ActorKind.SYSTEM, "payment_event_apply")
-
-
-class UndecodableInbox(Exception):
-    """Stored bytes the decoder cannot read. The raw row stays; the delivery
-    fails visibly and is retried, so a fixed decoder handles it later."""
-
-
-class UnknownReference(Exception):
-    """An event for a payment this account never made. Only a PSP bug can
-    cause it; a person looks at the stored bytes."""
-
-
-@dataclass(frozen=True)
-class Stored:
-    inbox_id: PspInboxId
-
-
-@dataclass(frozen=True)
-class AlreadyStored:
-    """The same bytes arrived before (a webhook resent, a page fetched
-    again): nothing new was written."""
 
 
 async def store_inbox(
@@ -78,7 +61,7 @@ async def store_inbox(
     body: bytes,
     request_ref: str | None,
     now: datetime,
-) -> Stored | AlreadyStored:
+) -> Stored[PspInboxId] | AlreadyStored:
     """Keep the raw bytes, nothing decoded, with the fact that starts the
     decoding. `request_ref` is what we asked for, when the bytes do not say
     (the payout a page of lines belongs to); None for what the PSP sends
@@ -97,7 +80,7 @@ async def store_inbox(
             inbox_id,
             account_id,
             mode.value,
-            hashlib.sha256(body).hexdigest(),
+            body_sha256(body),
             body,
             request_ref,
             now,
@@ -162,7 +145,15 @@ async def decode_inbox(
             raise UndecodableInbox(f"inbox {inbox_id}: {notice.detail}")
         attempt_id = await attempt_of_account(conn, account_id, notice.reference)
         if attempt_id is None:
-            raise UnknownReference(f"inbox {inbox_id}: {notice.reference!r}")
+            await _unmatched(
+                conn,
+                account_id,
+                notice.vendor_event_id,
+                notice.reference,
+                inbox_id,
+                now,
+            )
+            return Applied()
         await append_fact(
             conn, PaymentEventsWantedV1(payment_attempt_id=attempt_id), DECODER, now
         )
@@ -174,7 +165,10 @@ async def decode_inbox(
     for event in events:
         attempt_id = await attempt_of_account(conn, account_id, event.reference)
         if attempt_id is None:
-            raise UnknownReference(f"inbox {inbox_id}: {event.reference!r}")
+            await _unmatched(
+                conn, account_id, event.vendor_event_id, event.reference, inbox_id, now
+            )
+            continue
         await append_fact(
             conn,
             PspEventReceivedV1(
@@ -191,6 +185,27 @@ async def decode_inbox(
             now,
         )
     return Applied()
+
+
+async def _unmatched(
+    conn: Connection,
+    account_id: PspAccountId,
+    vendor_event_id: PspEventId,
+    reference: str,
+    inbox_id: PspInboxId,
+    now: datetime,
+) -> None:
+    """An event naming no payment of the account, once by its id: the same
+    event in a later page or a resent webhook adds nothing."""
+    await conn.execute(
+        """
+        INSERT INTO psp_event_unmatched
+          (account_id, vendor_event_id, reference, inbox_id, recorded_at)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (account_id, vendor_event_id) DO NOTHING
+        """,
+        (account_id, vendor_event_id, reference, inbox_id, now),
+    )
 
 
 async def apply_event(

@@ -11,7 +11,6 @@ for every mode:
 Transitional with the echo flow; it rehearses shipment tracking.
 """
 
-import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -42,16 +41,12 @@ from mor.messaging.outcome import Applied, ConsumerOutcome, Stale
 from mor.messaging.store import append_fact
 from mor.provider_accounts import ProviderAccountKind
 from mor.vendor_failures import UndecodableBody
+from mor.vendor_inbox import AlreadyStored, Stored, UndecodableInbox, body_sha256
 
 
 DECODER = Actor(ActorKind.SYSTEM, "echo_inbox_decode")
 APPLIER = Actor(ActorKind.SYSTEM, "echo_event_apply")
 RECEIVER = Actor(ActorKind.SYSTEM, "echo_inbox")
-
-
-class UndecodableInbox(Exception):
-    """Stored bytes the decoder cannot read. The raw row stays; the delivery
-    fails visibly and is retried, so a fixed decoder handles it later."""
 
 
 class UnknownReference(Exception):
@@ -66,17 +61,6 @@ class InboundAccount:
     event_mode: EventMode
     webhook_secret: str
     poll_interval: timedelta
-
-
-@dataclass(frozen=True)
-class Stored:
-    inbox_id: uuid.UUID
-
-
-@dataclass(frozen=True)
-class AlreadyStored:
-    """The same bytes arrived before (a webhook resent, a page fetched
-    again); nothing new was written."""
 
 
 @dataclass(frozen=True)
@@ -132,7 +116,7 @@ async def store_inbox(
     mode: EventMode,
     body: bytes,
     now: datetime,
-) -> Stored | AlreadyStored:
+) -> Stored[uuid.UUID] | AlreadyStored:
     """Keep the raw bytes, nothing decoded, with the fact that starts the
     decoding, in the caller's transaction. The unique key decides
     "already stored": insert, and a conflict means it was. Never commits."""
@@ -148,7 +132,7 @@ async def store_inbox(
             inbox_id,
             account_id,
             mode.value,
-            hashlib.sha256(body).hexdigest(),
+            body_sha256(body),
             body,
             now,
         ),

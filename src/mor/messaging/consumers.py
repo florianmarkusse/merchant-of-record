@@ -29,6 +29,7 @@ import mor.probe.flow
 import mor.settlement.fetch
 import mor.settlement.store
 import mor.shipments.flow
+import mor.shipments.inbound
 from mor.checkout.sessions import lock_session
 from mor.config import Environment
 from mor.db.connect import Connection
@@ -44,6 +45,8 @@ from mor.messaging.facts import (
     BankEntryReceivedV1,
     BankInboxStoredV1,
     BankStatementDueV1,
+    CarrierEventUnmatchedV1,
+    CarrierInboxStoredV1,
     CheckoutSessionExpiryDueV1,
     DutyRateFoundV1,
     DutyRateNeededV1,
@@ -78,6 +81,7 @@ from mor.messaging.facts import (
     SettlementPayoutReportedV1,
     ShipmentBookingRetriedV1,
     ShipmentCreatedV1,
+    ShipmentLabelBookedV1,
     ShippingPriceFoundV1,
     ShippingPriceNeededV1,
     ShippingPriceNeedsPersonV1,
@@ -415,3 +419,28 @@ async def run_local(
             paid_order = await lock_order(conn, order_id)
             assert paid_order is not None, f"no order {order_id}"
             return await mor.shipments.flow.create_shipment(conn, paid_order, now)
+        case ConsumerName.CARRIER_INBOX_DECODE:
+            # Locks nothing: reads its inbox row, which never changes; each
+            # event's fact goes to a consumer that locks its shipment.
+            stored_carrier = expect(fact, CarrierInboxStoredV1)
+            return await mor.shipments.inbound.decode_inbox(conn, stored_carrier, now)
+        case ConsumerName.CARRIER_EVENT_MATCH:
+            # Locks nothing: each side runs it after its own commit, and the
+            # carrier's event id records an event sent twice once.
+            match fact:
+                case CarrierEventUnmatchedV1(
+                    carrier_account_id=carrier_account_id,
+                    tracking_number=tracking_number,
+                ):
+                    pass
+                case ShipmentLabelBookedV1(
+                    shipment_id=shipment_id, tracking_number=tracking_number
+                ):
+                    carrier_account_id = await mor.shipments.inbound.label_account(
+                        conn, shipment_id
+                    )
+                case _:
+                    raise WrongFact(f"carrier_event_match got {fact!r}")
+            return await mor.shipments.inbound.match_unmatched(
+                conn, carrier_account_id, tracking_number, now
+            )

@@ -221,8 +221,10 @@ class PspEvent:
 
 @dataclass(frozen=True)
 class ThinNotice:
-    """A thin webhook: which of our payments has news."""
+    """A thin webhook: which of our payments has news, and the id of the
+    event it announces."""
 
+    vendor_event_id: PspEventId
     reference: str
 
 

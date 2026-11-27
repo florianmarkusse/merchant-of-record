@@ -1,8 +1,8 @@
 """The carrier port: `quote_rate`, a live price (docs/plan-quote.md §4,
-4c-2), and booking a label: `book`, `find_by_reference` and `cancel`
-(docs/plan-shipments.md §6). Tracking comes in 6b
-(plan-architecture.md §7 lists every operation). Our records and result
-unions, no carrier words.
+4c-2); booking a label: `book`, `find_by_reference` and `cancel`
+(docs/plan-shipments.md §6); and tracking: what a carrier's webhook or
+tracking page says, decoded into our events (docs/plan-shipments.md §7).
+Our records and result unions, no carrier words.
 
 A carrier's rate call (DHL Express `/mydhlapi/rates`, FedEx
 `rate/v1/rates/quotes`) takes the service, origin, destination and a
@@ -20,6 +20,7 @@ from enum import StrEnum
 
 from mor.carriers.records import Parcel, PricePart
 from mor.ids import (
+    CarrierEventId,
     CarrierIdempotencyKey,
     CountryCode,
     ExportDeclarationNo,
@@ -176,3 +177,46 @@ class Cancelled:
 
 
 type CancelResult = Cancelled | CallFailure
+
+
+# --- tracking ---------------------------------------------------------------
+
+
+class ShipmentEventKind(StrEnum):
+    """What a carrier event says happened to a parcel, in our words. Each
+    provider module maps its carrier's codes onto these; a code it does not
+    know is `other`, kept with the carrier's own code, so a carrier adding
+    a code never stops the events beside it."""
+
+    PICKED_UP = "picked_up"
+    IN_TRANSIT = "in_transit"
+    HELD_AT_CUSTOMS = "held_at_customs"
+    CUSTOMS_RELEASED = "customs_released"
+    DELIVERED = "delivered"
+    DELIVERY_WITHDRAWN = "delivery_withdrawn"  # a delivery scan corrected
+    RETURNING = "returning"
+    RETURNED = "returned"
+    LOST = "lost"
+    OTHER = "other"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CarrierEvent:
+    """One event about one label, as a fat webhook or a tracking page
+    carries it. The carrier's id is the guard against recording it
+    twice."""
+
+    carrier_event_id: CarrierEventId
+    tracking_number: TrackingNumber
+    kind: ShipmentEventKind
+    carrier_code: str  # as the carrier names it
+    occurred_at: datetime
+
+
+@dataclass(frozen=True)
+class ThinNotice:
+    """A thin webhook: which label has news, and the id of the event it
+    announces. Its events are fetched by tracking number."""
+
+    carrier_event_id: CarrierEventId
+    tracking_number: TrackingNumber

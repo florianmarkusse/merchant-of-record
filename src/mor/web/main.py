@@ -65,6 +65,9 @@ def make_app(
     async def psp_webhook(request: Request) -> Response:
         return await webhooks.psp_webhook(request, url, clock())
 
+    async def carrier_webhook(request: Request) -> Response:
+        return await webhooks.carrier_webhook(request, url, clock())
+
     async def api_create_checkout_session(request: Request) -> Response:
         return await api.create_checkout_session(request, settings, clock())
 
@@ -176,6 +179,7 @@ def make_app(
     routes: list[BaseRoute] = [
         Route("/webhooks/echo/{account_id}", echo_webhook, methods=["POST"]),
         Route("/webhooks/psp/{account_id}", psp_webhook, methods=["POST"]),
+        Route("/webhooks/carrier/{account_id}", carrier_webhook, methods=["POST"]),
         # The merchant API, in every environment: each has its own keys.
         Route("/v1/checkout_sessions", api_create_checkout_session, methods=["POST"]),
         Route(

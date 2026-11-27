@@ -292,6 +292,19 @@ file            ─▶ effect consumer: fetch the file   ┘    + fact <port>_in
 - **Two hops**, because one step locks one aggregate: the inbox row
   belongs to the account (one webhook may carry events of several
   aggregates), each event to its aggregate.
+- **An event naming none of ours is a row, never a raise.** Where our
+  id reaches the vendor before it can send anything (the PSP's reference
+  is our attempt), an event naming none is the vendor's mistake: a row
+  for a person (`psp_event_unmatched`), once by the vendor's id, and the
+  delivery succeeds. Where the vendor's own id is the key and we learn it
+  only from its answer (a carrier's tracking number), an event can come
+  first: it is kept (`carrier_event_unmatched`) with a fact, and the
+  answer's fact runs the same match, so whichever side commits second
+  sees both, as for a bank credit and its payout. An event matched by
+  both sides is sent on twice and recorded once by its id.
+- **One shape for every inbox.** The tables, facts and decoding differ
+  per port; the results of storing, the undecodable failure and the
+  HMAC-SHA256 check are shared, in `mor.vendor_inbox`.
 - **Status is a pure function of the set of events**
   (`derive_status(frozenset[event])`), not of their order: duplicates and
   out-of-order arrival cannot corrupt it, and a late earlier event emits
